@@ -89,6 +89,36 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Menu size={18} />
             </button>
             <Link to="/" className="text-base font-bold tracking-tight">e-Dnevnik</Link>
+            
+            <div className="hidden lg:flex items-center gap-1 ml-6">
+               {selectedSchoolId && (
+                 <button 
+                   onClick={() => navigate('/select-school')}
+                   className="px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-[9px] font-black uppercase tracking-widest border border-white/20 transition-all active:scale-95"
+                   title="Promijeni školu"
+                 >
+                   Škola
+                 </button>
+               )}
+               {selectedClassId && (
+                 <button 
+                   onClick={() => navigate('/select-class')}
+                   className="px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-[9px] font-black uppercase tracking-widest border border-white/20 transition-all active:scale-95"
+                   title="Promijeni razred"
+                 >
+                   Razred
+                 </button>
+               )}
+               {userSchoolRoles.some(r => r.role === Role.PARENT) && (
+                 <button 
+                   onClick={() => navigate('/select-child')}
+                   className="px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-[9px] font-black uppercase tracking-widest border border-white/20 transition-all active:scale-95"
+                   title="Promijeni učenika"
+                 >
+                   Učenik
+                 </button>
+               )}
+            </div>
           </div>
 
           <div className="hidden lg:flex items-center h-full">
@@ -132,6 +162,61 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </header>
+
+      {/* Mobile Sidebar Overlay */}
+      {isMobileMenuOpen && (
+        <div className="lg:hidden fixed inset-0 z-[60] flex">
+          <div className="fixed inset-0 bg-black/50" onClick={() => setIsMobileMenuOpen(false)}></div>
+          <div className="relative w-72 h-full bg-[#005c8d] text-white flex flex-col shadow-xl animate-in slide-in-from-left duration-300">
+            <div className="p-4 border-b border-[#004a70] flex items-center justify-between">
+              <span className="font-bold uppercase tracking-tight">Izbornik</span>
+              <button onClick={() => setIsMobileMenuOpen(false)} className="p-1 hover:bg-[#004a70]"><LogOut size={20} className="rotate-180" /></button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto py-4">
+              <div className="px-4 mb-4">
+                <div className="text-[11px] font-bold leading-tight">{user?.name} {user?.surname}</div>
+                <div className="text-[9px] text-white/60 uppercase">{formattedRoles}</div>
+              </div>
+
+              <nav className="flex flex-col">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={cn(
+                      "px-4 py-3 text-[12px] font-bold uppercase tracking-wide border-l-4 transition-colors",
+                      location.pathname.startsWith(item.path) 
+                        ? "bg-[#004a70] border-white" 
+                        : "border-transparent hover:bg-[#004a70]"
+                    )}
+                  >
+                    {item.label}
+                  </Link>
+                ))}
+              </nav>
+
+              <div className="mt-8 border-t border-[#004a70] pt-4">
+                <div className="px-4 text-[10px] font-black uppercase text-white/40 mb-2 tracking-widest">Brza promjena</div>
+                {selectedSchoolId && (
+                  <button onClick={() => { navigate('/select-school'); setIsMobileMenuOpen(false); }} className="w-full px-4 py-3 text-left hover:bg-[#004a70] text-[11px] font-bold uppercase tracking-wider">Promijeni školu</button>
+                )}
+                {selectedClassId && (
+                  <button onClick={() => { navigate('/select-class'); setIsMobileMenuOpen(false); }} className="w-full px-4 py-3 text-left hover:bg-[#004a70] text-[11px] font-bold uppercase tracking-wider">Promijeni razred</button>
+                )}
+                {userSchoolRoles.some(r => r.role === Role.PARENT) && (
+                  <button onClick={() => { navigate('/select-child'); setIsMobileMenuOpen(false); }} className="w-full px-4 py-3 text-left hover:bg-[#004a70] text-[11px] font-bold uppercase tracking-wider">Promijeni učenika</button>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-[#004a70]">
+              <button onClick={handleLogout} className="w-full py-2 bg-red-600/20 hover:bg-red-600/40 text-red-100 rounded text-[10px] font-black uppercase tracking-widest border border-red-500/30">Odjava</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col max-w-[1400px] w-full mx-auto p-3 lg:p-4 mb-16 lg:mb-0">

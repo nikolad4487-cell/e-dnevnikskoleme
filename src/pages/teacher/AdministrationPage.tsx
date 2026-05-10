@@ -31,7 +31,7 @@ export default function AdministrationPage() {
     // Collect IDs of users who have a teaching or admin role globally or in the selected school
     const teacherIds = allUserSchoolRolesState
       .filter(r => 
-        ([Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.HOMEROOM].includes(r.role)) &&
+        ([Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.HOMEROOM, Role.DEPUTY].includes(r.role)) &&
         (!selectedSchoolId || r.schoolId === selectedSchoolId)
       )
       .map(r => r.userId);
@@ -1210,37 +1210,79 @@ export default function AdministrationPage() {
 
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar - Simple list */}
-        <div className="w-56 bg-[#f8f9fa] border-r border-gray-300 flex flex-col font-medium">
+        <div className="w-56 bg-[#f8f9fa] border-r border-gray-300 flex flex-col font-medium overflow-y-auto">
           {[
             { label: 'Administracija škole', tab: 'MENU' },
-            { label: 'Korisnici', tab: 'USERS' },
-            { label: 'Razredni odjeli', tab: 'CLASSES' },
-            { label: 'Učenici', tab: 'STUDENTS' },
-            { label: 'Predmeti', tab: 'SUBJECTS' },
-            { label: 'Dodjela nastavnika', tab: 'STAFF' },
-            { label: 'Nastavni planovi i satnica', tab: 'PLANNING' },
+            { label: 'Razredi i Odjeli', tab: 'CLASSES' },
+            { label: 'Korisnici i Uloge', tab: 'USERS' },
+            { label: 'Učenici u školi', tab: 'STUDENTS' },
+            { label: 'Predmeti (Globalno)', tab: 'SUBJECTS' },
+            { label: '--- RAZRED ---', tab: 'HEADER', disabled: true },
+            { label: 'Postavke razreda', tab: 'CLASS_DETAIL', hide: !effectiveClassId },
+            { label: 'Predmeti u razredu', tab: 'STAFF', hide: !effectiveClassId },
+            { label: 'Učenici u razredu', tab: 'STUDENTS', filterToClass: true, hide: !effectiveClassId },
+            { label: 'Predmeti učenika', tab: 'STUDENT_SUBJECTS_ENROLL', hide: !effectiveClassId },
+            { label: 'Satnica i raspored', tab: 'PLANNING', hide: !effectiveClassId },
+            { label: 'Opći prosjek', tab: 'OPCI_PROSJEK', hide: !effectiveClassId },
+            { label: '--- SUSTAV ---', tab: 'HEADER2', disabled: true },
             { label: 'Školska godina', tab: 'ROLLOVER' },
-            { label: 'Opći prosjek', tab: 'OPCI_PROSJEK' },
-            { label: 'Postavke škole', tab: 'SCHOOLS' },
-          ].map(opt => (
-            <button 
-              key={opt.tab}
-              onClick={() => setActiveTab(opt.tab as any)}
-              className={cn(
-                "px-4 py-2.5 text-[11px] text-left border-b border-gray-200 uppercase tracking-tight font-bold transition-colors",
-                activeTab === opt.tab ? "bg-white text-[#005c8d] border-r-4 border-r-[#005c8d]" : "text-gray-500 hover:bg-gray-100"
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
+            { label: 'Škole i Smjerovi', tab: 'SCHOOLS' },
+          ].map((opt, i) => {
+            if (opt.hide) return null;
+            if (opt.disabled) return <div key={i} className="px-4 py-2 text-[8px] font-black text-gray-400 uppercase tracking-widest bg-gray-50">{opt.label}</div>;
+            
+            return (
+              <button 
+                key={opt.tab}
+                onClick={() => {
+                  if (opt.tab === 'STUDENT_SUBJECTS_ENROLL') {
+                    navigate('/admin/student-predmeti');
+                  } else {
+                    setActiveTab(opt.tab as any)
+                  }
+                }}
+                className={cn(
+                  "px-4 py-2.5 text-[11px] text-left border-b border-gray-200 uppercase tracking-tight font-bold transition-colors",
+                  activeTab === opt.tab ? "bg-white text-[#005c8d] border-r-4 border-r-[#005c8d]" : "text-gray-500 hover:bg-gray-100"
+                )}
+              >
+                {opt.label}
+              </button>
+            );
+          })}
         </div>
 
         {/* Content */}
         <div className="flex-1 p-8 overflow-auto bg-white">
           {activeTab === 'MENU' && (
             <div className="max-w-4xl space-y-6">
-              <h1 className="text-xl font-bold text-gray-800 pb-2 border-b-2 border-gray-100">Administracija škole</h1>
+              <h1 className="text-xl font-bold text-gray-800 pb-2 border-b-2 border-gray-100">Administracija</h1>
+              
+              {effectiveClassId && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                  {[
+                    { label: 'Predmeti u razredu', tab: 'STAFF', icon: <BookOpen size={18}/> },
+                    { label: 'Učenici u razredu', tab: 'STUDENTS', icon: <Users size={18}/> },
+                    { label: 'Predmeti učenika', tab: 'STUDENT_SUBJECTS_ENROLL', icon: <Settings size={18}/> },
+                  ].map((btn) => (
+                    <button
+                      key={btn.tab}
+                      onClick={() => {
+                        if (btn.tab === 'STUDENT_SUBJECTS_ENROLL') {
+                          navigate('/admin/student-predmeti');
+                        } else {
+                          setActiveTab(btn.tab as any)
+                        }
+                      }}
+                      className="flex flex-col items-center justify-center p-6 bg-white border-2 border-[#005c8d] text-[#005c8d] hover:bg-blue-50 transition-all gap-2 shadow-sm rounded-sm active:scale-95"
+                    >
+                      {btn.icon}
+                      <span className="font-black uppercase text-[10px] tracking-widest">{btn.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4">
                 {[
                   { label: 'Korisnici', tab: 'USERS' },
@@ -1456,13 +1498,13 @@ export default function AdministrationPage() {
                             <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Nastavni program</label>
                             <select 
                               className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
-                              value={classDetailForm.program}
-                              onChange={e => setClassDetailForm({...classDetailForm, program: e.target.value})}
+                              value={classDetailForm.program_id}
+                              onChange={e => setClassDetailForm({...classDetailForm, program_id: e.target.value})}
                             >
                               <option value="">-- Odaberi --</option>
-                              <option value="Opća gimnazija">Opća gimnazija</option>
-                              <option value="Prirodoslovno-matematička">Prirodoslovno-matematička</option>
-                              <option value="Jezična gimnazija">Jezična gimnazija</option>
+                              {programs.filter(p => !selectedSchoolId || p.school_id === selectedSchoolId).map(p => (
+                                <option key={p.id} value={p.id}>{p.name}</option>
+                              ))}
                             </select>
                          </div>
                          <div className="space-y-1">
@@ -1941,8 +1983,11 @@ export default function AdministrationPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {students.sort((a,b) => a.surname.localeCompare(b.surname)).map(s => {
-                      const razred = classes.find(c => c.id === s.classId);
+                    {students
+                      .filter(s => !effectiveClassId || s.classId === effectiveClassId)
+                      .sort((a,b) => a.surname.localeCompare(b.surname))
+                      .map(s => {
+                        const razred = classes.find(c => c.id === s.classId);
                       return (
                         <tr key={s.id} className="hover:bg-gray-50">
                           <td className="px-4 py-2 border-r border-gray-200">
