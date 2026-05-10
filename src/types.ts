@@ -57,6 +57,8 @@ export type Class = {
   status: string;
   homeroomTeacherId: string;
   deputyTeacherId?: string;
+  homeroom?: User;
+  deputy?: User;
 };
 
 export type Subject = {

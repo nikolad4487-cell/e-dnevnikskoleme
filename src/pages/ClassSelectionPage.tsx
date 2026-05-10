@@ -57,7 +57,8 @@ export default function ClassSelectionPage() {
         .from('classes')
         .select(`
           *,
-          teacher:user_profiles!homeroom_teacher_id (name)
+          homeroom:user_profiles!classes_homeroom_teacher_id_fkey(name),
+          deputy:user_profiles!classes_deputy_teacher_id_fkey(name)
         `)
         .eq('school_id', selectedSchoolId);
 
@@ -96,7 +97,7 @@ export default function ClassSelectionPage() {
             yearName: cls.school_year,
             status: cls.status,
             homeroomTeacherId: cls.homeroom_teacher_id,
-            homeroomTeacherName: (cls.teacher as any)?.name || 'Nije dodijeljen',
+            homeroomTeacherName: (cls.homeroom as any)?.name || 'Nije dodijeljen',
             userRoleInClass: role as any
           } as any;
         });
@@ -136,7 +137,8 @@ export default function ClassSelectionPage() {
             school_id,
             school_year,
             homeroom_teacher_id,
-            teacher:user_profiles!homeroom_teacher_id (name)
+            homeroom:user_profiles!classes_homeroom_teacher_id_fkey(name),
+            deputy:user_profiles!classes_deputy_teacher_id_fkey(name)
           )
         `)
         .eq('student_id', studentId);
@@ -159,7 +161,7 @@ export default function ClassSelectionPage() {
             yearName: env.classes.school_year,
             status: env.status,
             homeroomTeacherId: env.classes.homeroom_teacher_id,
-            homeroomTeacherName: env.classes.teacher?.name || 'Nije dodijeljen',
+            homeroomTeacherName: env.classes.homeroom?.name || 'Nije dodijeljen',
             userRoleInClass: 'STUDENT'
           } as any);
         }

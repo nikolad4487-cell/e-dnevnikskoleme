@@ -163,13 +163,15 @@ const DashboardRedirect = () => {
   // Student: → /select-school
   // Parent: → /select-child
 
-  if (isParent) {
-    if (!selectedChildId) {
-      return <Navigate to="/select-child" replace />;
-    }
+  // 1. Parent flow (if not staff, they MUST select child first)
+  if (isParent && !isStaff && !selectedChildId) {
+    return <Navigate to="/select-child" replace />;
   }
 
+  // 2. Selection flow: School -> Class
   if (!selectedSchoolId) {
+    // Main admin goes to management if no school selected
+    if (isMainAdmin) return <Navigate to="/admin/schools" replace />;
     return <Navigate to="/select-school" replace />;
   }
 
@@ -178,7 +180,7 @@ const DashboardRedirect = () => {
     return <Navigate to="/select-class" replace />;
   }
 
-  // If everything selected, go to role-specific home
+  // 3. Final dashboard redirects
   if (isStaff) {
     return <Navigate to={`/class/${selectedClassId}`} replace />;
   }
@@ -238,7 +240,35 @@ const ClassStudentsPage = lazy(() => import('./pages/admin/ClassStudentsPage'));
 
 const ClassDashboardPage = lazy(() => import('./pages/teacher/ClassDashboardPage'));
 
+const APP_VERSION = '1.0.5';
+
 export default function App() {
+  console.log('[APP] Render');
+  if (typeof window !== 'undefined') {
+    (window as any).__renderCount = ((window as any).__renderCount || 0) + 1;
+    if ((window as any).__renderCount > 100) {
+      console.error('CRITICAL: Infinite render loop detected (>100 renders). Stopping auto-reload logic.');
+    }
+  }
+
+  useEffect(() => {
+    const lastVersion = localStorage.getItem('app_version');
+    const renderCount = (window as any).__renderCount || 0;
+    
+    // Only attempt version-based reload if we haven't rendered excessively
+    if (renderCount < 10) {
+      if (lastVersion && lastVersion !== APP_VERSION) {
+        console.log('[APP] Version mismatch, resetting...');
+        localStorage.clear();
+        sessionStorage.clear();
+        localStorage.setItem('app_version', APP_VERSION);
+        window.location.reload();
+      } else if (!lastVersion) {
+        localStorage.setItem('app_version', APP_VERSION);
+      }
+    }
+  }, []);
+
   return (
     <AuthProvider>
       <SelectionProvider>

@@ -93,10 +93,8 @@ export default function SchoolSelectionPage() {
 
     if (isAnyAdmin) {
       navigate('/admin/school-dashboard');
-    } else if (isOnlyStudentOrParent) {
-      navigate('/select-class');
     } else {
-      navigate('/teacher/imenik');
+      navigate('/select-class');
     }
   };
 

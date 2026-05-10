@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     console.log('[AUTH] Initializing AuthProvider...');
     
-    // 1. Force logout if app version changed
+    /* Temporarily disabled version check to fix infinite loop
     const storedVersion = localStorage.getItem('app_version');
     if (storedVersion && storedVersion !== APP_VERSION) {
       console.log('[AUTH] New version detected, performing full system reset.');
@@ -87,6 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     localStorage.setItem('app_version', APP_VERSION);
+    */
 
     let mounted = true;
     let lastLoadedUserId: string | null = null;
@@ -207,11 +208,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (profileError) throw profileError;
 
-      if (!profileRaw) {
+      let finalProfileRaw = profileRaw;
+
+      if (!finalProfileRaw) {
+        console.log('[AUTH] Profile missing, attempting auto-creation...');
+        const { data: { session } } = await supabase.auth.getSession();
+        const email = session?.user?.email;
+        const name = session?.user?.user_metadata?.name;
+
+        if (email) {
+          const res = await fetch('/api/ensure-profile', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ authUserId, email, name })
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            finalProfileRaw = data.profile;
+            console.log('[AUTH] Auto-creation successful:', finalProfileRaw.id);
+          } else {
+            const errData = await res.json();
+            console.error('[AUTH] Auto-creation failed:', errData.error);
+          }
+        }
+      }
+
+      if (!finalProfileRaw) {
         throw new Error('Profil nije pronađen. Kontaktirajte administratora za pomoć.');
       }
 
-      const profile = mappers.user(profileRaw);
+      const profile = mappers.user(finalProfileRaw);
 
       // 2. Fetch Roles (now that we have profile.id)
       const { data: rolesRaw, error: rolesError } = await supabase

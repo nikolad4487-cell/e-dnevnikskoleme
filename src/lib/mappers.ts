@@ -58,6 +58,8 @@ export const mappers = {
     status: raw.status,
     homeroomTeacherId: raw.homeroom_teacher_id,
     deputyTeacherId: raw.deputy_teacher_id,
+    homeroom: raw.homeroom ? mappers.user(raw.homeroom) : undefined,
+    deputy: raw.deputy ? mappers.user(raw.deputy) : undefined,
   }),
 
   subject: (raw: any) => ({

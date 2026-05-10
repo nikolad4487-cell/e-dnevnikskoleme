@@ -42,7 +42,8 @@ export default function ClassManagementPage() {
         .from('classes')
         .select(`
           *,
-          teacher:user_profiles (*)
+          homeroom:user_profiles!classes_homeroom_teacher_id_fkey(*),
+          deputy:user_profiles!classes_deputy_teacher_id_fkey(*)
         `)
         .eq('school_id', selectedSchoolId)
         .order('grade_level')
@@ -191,7 +192,7 @@ export default function ClassManagementPage() {
                 <td className="p-4 font-bold text-slate-600">{cls.school_year}</td>
                 <td className="p-4">
                   <span className="font-bold text-slate-700">
-                    {(cls as any).teacher?.name || '—'}
+                    {(cls as any).homeroom?.name || '—'}
                   </span>
                 </td>
                 <td className="p-4 text-right">

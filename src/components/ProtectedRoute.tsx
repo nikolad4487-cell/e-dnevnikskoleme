@@ -40,6 +40,24 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     );
 
     if (!isAllowed) {
+      if (location.pathname === '/') {
+        // We are at home and not allowed anywhere specifically?
+        // This is a weird state, probably roles not loaded or user has no roles.
+        return (
+          <div className="flex flex-col items-center justify-center h-screen bg-slate-50 p-6 text-center">
+             <h1 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tighter">Pristup ograničen</h1>
+             <p className="text-[12px] text-slate-500 font-bold uppercase tracking-widest max-w-xs mx-auto">
+               Vaš korisnički profil trenutno nema dodijeljene uloge za ovaj dio sustava.
+             </p>
+             <button 
+               onClick={() => window.location.href = '/login'}
+               className="mt-8 bg-[#005c8d] text-white px-8 py-3 font-black uppercase text-[10px] tracking-widest"
+             >
+               Povratak na prijavu
+             </button>
+          </div>
+        );
+      }
       return <Navigate to="/" replace />;
     }
   }

@@ -44,6 +44,73 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
+  // Ensure profile endpoint for missing profiles on login
+  app.post("/api/ensure-profile", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { authUserId, email, name } = req.body;
+
+      if (!authUserId || !email) {
+        return res.status(400).json({ error: "authUserId and email are required" });
+      }
+
+      console.log(`[ENSURE_PROFILE] Checking/Creating profile for ${email}...`);
+
+      const { data: existingProfile } = await supabaseAdmin
+        .from('user_profiles')
+        .select('*')
+        .eq('auth_user_id', authUserId)
+        .maybeSingle();
+
+      if (existingProfile) {
+        return res.json({ profile: existingProfile, created: false });
+      }
+
+      // Create profile
+      const { data: newProfile, error: createError } = await supabaseAdmin
+        .from('user_profiles')
+        .upsert({
+          auth_user_id: authUserId,
+          email,
+          name: name || email.split('@')[0],
+          is_first_login: true,
+          requires_password_change: false
+        }, { onConflict: 'auth_user_id' })
+        .select()
+        .single();
+
+      if (createError) throw createError;
+
+      // If this is the very first user in the system (or a specific email), grant them MAIN_ADMIN
+      const { count } = await supabaseAdmin.from('user_profiles').select('*', { count: 'exact', head: true });
+      
+      const shouldBeAdmin = (count <= 1) || email === 'nikolad4487@gmail.com' || email.endsWith('@eskole.me');
+      
+      if (shouldBeAdmin) {
+        const demoSchoolId = '00000000-0000-0000-0000-000000000001';
+        
+        // Ensure demo school exists
+        await supabaseAdmin.from('schools').upsert({ 
+          id: demoSchoolId, 
+          name: 'Demo škola', 
+          type: 'SECONDARY' 
+        }, { onConflict: 'id' });
+
+        await supabaseAdmin.from('user_school_roles').upsert({
+          user_id: newProfile.id,
+          school_id: demoSchoolId,
+          role: 'MAIN_ADMIN',
+          status: 'ACTIVE'
+        }, { onConflict: 'user_id,school_id,role' });
+      }
+
+      res.json({ profile: newProfile, created: true });
+    } catch (err: any) {
+      console.error("[ENSURE_PROFILE] Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Admin create user endpoint
   app.post("/api/admin/create-user", async (req, res) => {
     try {
@@ -229,6 +296,7 @@ async function startServer() {
 
       const demoUsers = [
         { email: 'nikola.duric@eskole.me', password: '123456', name: 'Nikola', surname: 'Đurić', roles: ['MAIN_ADMIN', 'TEACHER'] },
+        { email: 'nikolad4487@gmail.com', password: '123456', name: 'Nikola', surname: 'Dev', roles: ['MAIN_ADMIN', 'TEACHER'] },
         { email: 'marija.majdic@eskole.me', password: '123456', name: 'Marija', surname: 'Majdić', roles: ['TEACHER'] },
         { email: 'ivan.horvat@eskole.me', password: '123456', name: 'Ivan', surname: 'Horvat', roles: ['TEACHER', 'HOMEROOM'], homeroomClassId: 'class-1a' },
         { email: 'ana.kovac@eskole.me', password: '123456', name: 'Ana', surname: 'Kovač', roles: ['TEACHER', 'DEPUTY'], deputyClassId: 'class-1a' },
