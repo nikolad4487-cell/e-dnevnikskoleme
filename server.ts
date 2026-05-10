@@ -115,7 +115,7 @@ async function startServer() {
   app.post("/api/admin/create-user", async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized. Check your environment variables.");
-      const { email, password, name, surname, roles, schoolId, classId } = req.body;
+      const { email, password, name, surname, address, oib, roles, schoolId, classId } = req.body;
       
       // 1. Auth User
       const { data: existingUserList } = await supabaseAdmin.auth.admin.listUsers();
@@ -145,6 +145,8 @@ async function startServer() {
           auth_user_id: userId,
           email,
           name: `${name} ${surname}`,
+          address,
+          oib,
           is_first_login: true,
           requires_password_change: true
         }, { onConflict: 'auth_user_id' })
@@ -190,7 +192,9 @@ async function startServer() {
   app.post("/api/admin/update-user", async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
-      const { profileId, authUserId, email, name, surname, roles, schoolId } = req.body;
+      const { profileId, authUserId, email, name, surname, address, oib, roles, schoolId, status } = req.body;
+
+      console.log(`[ADMIN_UPDATE] Updating user ${email} (Profile ID: ${profileId})`);
 
       // Update Auth Email if changed
       if (authUserId && email) {
@@ -202,7 +206,9 @@ async function startServer() {
         .from('user_profiles')
         .update({
           email,
-          name: `${name} ${surname}`
+          name: `${name} ${surname}`,
+          address,
+          oib
         })
         .eq('id', profileId);
       
@@ -225,7 +231,7 @@ async function startServer() {
               user_id: profileId,
               school_id: schoolId,
               role: role,
-              status: 'ACTIVE'
+              status: status || 'ACTIVE'
             });
         }
       }
@@ -241,16 +247,25 @@ async function startServer() {
   app.post("/api/admin/delete-user", async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
-      const { profileId, schoolId } = req.body;
+      const { profileId, schoolId, softDelete } = req.body;
 
-      // Just remove roles for THIS school
-      const { error } = await supabaseAdmin
-        .from('user_school_roles')
-        .delete()
-        .eq('user_id', profileId)
-        .eq('school_id', schoolId);
-      
-      if (error) throw error;
+      if (softDelete) {
+        // Deactivate in this school
+        const { error } = await supabaseAdmin
+          .from('user_school_roles')
+          .update({ status: 'INACTIVE' })
+          .eq('user_id', profileId)
+          .eq('school_id', schoolId);
+        if (error) throw error;
+      } else {
+        // Just remove roles for THIS school
+        const { error } = await supabaseAdmin
+          .from('user_school_roles')
+          .delete()
+          .eq('user_id', profileId)
+          .eq('school_id', schoolId);
+        if (error) throw error;
+      }
 
       res.json({ success: true });
     } catch (err: any) {
@@ -274,11 +289,20 @@ async function startServer() {
       // 1. Create School
       await supabaseAdmin.from('schools').upsert({ id: demoSchoolId, name: 'Demo škola', type: 'SECONDARY' });
 
+      // 1.1 Create Programs
+      const demoPrograms = [
+        { id: 'prog-gym', school_id: demoSchoolId, name: 'Opća gimnazija', duration_years: 4 },
+        { id: 'prog-web', school_id: demoSchoolId, name: 'Web dizajner', duration_years: 4 },
+      ];
+      for (const prog of demoPrograms) {
+        await supabaseAdmin.from('programs').upsert(prog);
+      }
+
       // 2. Create Classes
       const demoClasses = [
-        { id: 'class-1a', school_id: demoSchoolId, name: '1.A', grade_level: 1, section: 'A', school_year: '2024/2025' },
-        { id: 'class-2b', school_id: demoSchoolId, name: '2.B', grade_level: 2, section: 'B', school_year: '2024/2025' },
-        { id: 'class-3c', school_id: demoSchoolId, name: '3.C', grade_level: 3, section: 'C', school_year: '2024/2025' },
+        { id: 'class-1a', school_id: demoSchoolId, name: '1.A', grade_level: 1, section: 'A', school_year: '2024/2025', program_id: 'prog-gym' },
+        { id: 'class-2b', school_id: demoSchoolId, name: '2.B', grade_level: 2, section: 'B', school_year: '2024/2025', program_id: 'prog-gym' },
+        { id: 'class-3c', school_id: demoSchoolId, name: '3.C', grade_level: 3, section: 'C', school_year: '2024/2025', program_id: 'prog-web' },
       ];
       for (const cls of demoClasses) {
         await supabaseAdmin.from('classes').upsert(cls);

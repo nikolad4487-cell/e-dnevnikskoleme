@@ -119,7 +119,7 @@ export default function ClassStudentsPage() {
         .upsert([{ 
           student_id: studentId,
           class_id: classId,
-          school_year: '2023/2024',
+          school_year: currentClass?.schoolYear || '2024/2025',
           status: 'ACTIVE'
         }], { onConflict: 'student_id,class_id' });
       
@@ -136,6 +136,7 @@ export default function ClassStudentsPage() {
           student_id: studentId,
           subject_id: a.subject_id,
           class_id: classId,
+          school_year: currentClass?.schoolYear || '2024/2025',
           status: 'ACTIVE'
         }));
         await supabase.from('student_subject_enrollments').upsert(enrollments, { onConflict: 'student_id,subject_id,class_id' });

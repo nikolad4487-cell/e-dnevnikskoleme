@@ -21,9 +21,12 @@ export default function ClassManagementPage() {
   const [name, setName] = useState('');
   const [gradeLevel, setGradeLevel] = useState(1);
   const [section, setSection] = useState('A');
-  const [schoolYear, setSchoolYear] = useState('2025/2026');
+  const [schoolYear, setSchoolYear] = useState('2024/2025');
   const [homeroomTeacherId, setHomeroomTeacherId] = useState('');
   const [deputyHomeroomTeacherId, setDeputyHomeroomTeacherId] = useState('');
+  const [programId, setProgramId] = useState('');
+  const [variant, setVariant] = useState<string>('Redovni');
+  const [programs, setPrograms] = useState<any[]>([]);
 
   useEffect(() => {
     if (!selectedSchoolId) {
@@ -65,6 +68,10 @@ export default function ClassManagementPage() {
       const uniqueTeachers = Array.from(new Set((teacherData || []).map(t => t.user))).filter(Boolean);
       setTeachers(uniqueTeachers as any[]);
 
+      // Fetch Programs
+      const { data: progData } = await supabase.from('programs').select('*').eq('school_id', selectedSchoolId);
+      setPrograms(progData || []);
+
     } catch (err: any) {
       toast.error('Greška pri učitavanju podataka');
       console.error(err);
@@ -79,17 +86,21 @@ export default function ClassManagementPage() {
       setName(cls.name);
       setGradeLevel(cls.gradeLevel || 1);
       setSection(cls.section || 'A');
-      setSchoolYear(cls.schoolYear || '2025/2026');
+      setSchoolYear(cls.schoolYear || '2024/2025');
       setHomeroomTeacherId(cls.homeroomTeacherId || '');
       setDeputyHomeroomTeacherId(cls.deputyTeacherId || '');
+      setProgramId(cls.programId || '');
+      setVariant(cls.variant || 'Redovni');
     } else {
       setEditingClass(null);
       setName('');
       setGradeLevel(1);
       setSection('A');
-      setSchoolYear('2025/2026');
+      setSchoolYear('2024/2025');
       setHomeroomTeacherId('');
       setDeputyHomeroomTeacherId('');
+      setProgramId('');
+      setVariant('Redovni');
     }
     setIsModalOpen(true);
   };
@@ -105,7 +116,9 @@ export default function ClassManagementPage() {
         school_id: selectedSchoolId,
         status: 'ACTIVE',
         homeroom_teacher_id: homeroomTeacherId || null,
-        deputy_teacher_id: deputyHomeroomTeacherId || null
+        deputy_teacher_id: deputyHomeroomTeacherId || null,
+        program_id: programId || null,
+        variant: variant
       };
 
       if (editingClass) {
@@ -297,6 +310,33 @@ export default function ClassManagementPage() {
                   className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
                   required
                 />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Program / Smjer</label>
+                <select 
+                  value={programId}
+                  onChange={e => setProgramId(e.target.value)}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
+                >
+                  <option value="">Nema programa...</option>
+                  {programs.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Varijanta nastave</label>
+                <select 
+                  value={variant}
+                  onChange={e => setVariant(e.target.value)}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
+                >
+                  <option value="Redovni">Redovni</option>
+                  <option value="Pošteni">Pošteni</option>
+                  <option value="Posebni">Posebni</option>
+                </select>
               </div>
 
               <div>

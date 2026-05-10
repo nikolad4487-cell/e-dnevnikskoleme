@@ -26,34 +26,9 @@ export default function LoginPage() {
   const displayError = error || authContextError;
 
   useEffect(() => {
-    // Attempt server-side seed on first load
-    const runSeeder = async () => {
-      const seederRun = sessionStorage.getItem('supabase_seeder_v4_attempted');
-      if (seederRun === 'true') return;
-      
-      setIsSeeding(true);
-      try {
-        console.log('[LOGIN] Triggering server-side seed (v4)...');
-        const res = await fetch('/api/seed', { method: 'POST' });
-        const data = await res.json();
-        console.log('[LOGIN] Seed response:', data);
-        if (data.error) {
-          console.warn('[LOGIN] Seeder reported errors:', data.details || data.error);
-          // Don't mark as attempted if it failed catastrophically
-          if (!data.details?.includes('upsert failed')) {
-            sessionStorage.setItem('supabase_seeder_v4_attempted', 'true');
-          }
-        } else {
-          sessionStorage.setItem('supabase_seeder_v4_attempted', 'true');
-        }
-      } catch (err) {
-        console.error('[LOGIN] Seed trigger failed:', err);
-      } finally {
-        setIsSeeding(false);
-      }
-    };
-    
-    runSeeder();
+    // Auto-seed disabled temporarily to prevent infinite loading/loops
+    // const runSeeder = async () => { ... }
+    console.log('[LOGIN] Auto-seeding is deactivated.');
   }, []);
 
   useEffect(() => {

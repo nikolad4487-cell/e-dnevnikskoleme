@@ -13,7 +13,8 @@ import {
   User as UserIcon,
   Filter,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Trash2
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -33,6 +34,8 @@ export default function UserManagementPage() {
   const [password, setPassword] = useState('Demo1234!');
   const [name, setName] = useState('');
   const [surname, setSurname] = useState('');
+  const [address, setAddress] = useState('');
+  const [oib, setOib] = useState('');
   const [selectedRoles, setSelectedRoles] = useState<Role[]>([Role.TEACHER]);
   const [submitting, setSubmitting] = useState(false);
 
@@ -51,6 +54,8 @@ export default function UserManagementPage() {
     const parts = user.name?.split(' ') || [];
     setName(parts[0] || '');
     setSurname(parts.slice(1).join(' ') || '');
+    setAddress(user.address || '');
+    setOib(user.oib || '');
     setSelectedRoles(user.roles);
     setIsModalOpen(true);
   };
@@ -60,6 +65,8 @@ export default function UserManagementPage() {
     setEmail('');
     setName('');
     setSurname('');
+    setAddress('');
+    setOib('');
     setSelectedRoles([Role.TEACHER]);
     setIsModalOpen(true);
   };
@@ -125,13 +132,18 @@ export default function UserManagementPage() {
         email,
         name,
         surname,
+        address,
+        oib,
         roles: selectedRoles,
-        schoolId: selectedSchoolId
+        schoolId: selectedSchoolId,
+        status: editingUser?.status || 'ACTIVE'
       } : {
         email,
         password,
         name,
         surname,
+        address,
+        oib,
         roles: selectedRoles,
         schoolId: selectedSchoolId
       };
@@ -155,17 +167,21 @@ export default function UserManagementPage() {
     }
   };
 
-  const handleDeleteUser = async (profileId: string) => {
-    if (!confirm('Jeste li sigurni da želite ukloniti ovog korisnika iz ove škole?')) return;
+  const handleDeleteUser = async (profileId: string, soft: boolean = true) => {
+    const msg = soft 
+      ? 'Jeste li sigurni da želite DEAKTIVIRATI ovog korisnika u ovoj školi? Povijesni podaci će ostati sačuvani.'
+      : 'Jeste li sigurni da želite trajno ukloniti uloge ovog korisnika u ovoj školi?';
+      
+    if (!confirm(msg)) return;
     try {
       const response = await fetch('/api/admin/delete-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId, schoolId: selectedSchoolId })
+        body: JSON.stringify({ profileId, schoolId: selectedSchoolId, softDelete: soft })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Neuspjelo brisanje');
-      toast.success('Korisnik uklonjen iz škole');
+      toast.success(soft ? 'Korisnik deaktiviran' : 'Korisnik uklonjen iz škole');
       fetchUsers();
     } catch (err: any) {
       toast.error(err.message);
@@ -285,8 +301,12 @@ export default function UserManagementPage() {
                     ))}
                   </div>
                 </td>
-                <td className="p-4 text-center text-emerald-500 font-black uppercase text-[9px] tracking-widest">
-                   <CheckCircle2 size={12} className="inline mr-1" /> Aktivan
+                <td className={`p-4 text-center font-black uppercase text-[9px] tracking-widest ${item.status === 'INACTIVE' ? 'text-red-400' : 'text-emerald-500'}`}>
+                   {item.status === 'INACTIVE' ? (
+                     <><XCircle size={12} className="inline mr-1" /> Neaktivan</>
+                   ) : (
+                     <><CheckCircle2 size={12} className="inline mr-1" /> Aktivan</>
+                   )}
                 </td>
                 <td className="p-4 text-right">
                   <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -297,10 +317,18 @@ export default function UserManagementPage() {
                       <ShieldCheck size={18} />
                     </button>
                     <button 
-                      onClick={() => handleDeleteUser(item.id)}
-                      className="p-2 text-slate-400 hover:text-red-500"
+                      onClick={() => handleDeleteUser(item.id, true)}
+                      className="p-2 text-slate-400 hover:text-amber-500"
+                      title="Deaktiviraj korisnika"
                     >
                       <XCircle size={18} />
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteUser(item.id, false)}
+                      className="p-2 text-slate-400 hover:text-red-500"
+                      title="Trajno ukloni iz škole"
+                    >
+                      <Trash2 size={18} />
                     </button>
                   </div>
                 </td>
@@ -378,6 +406,27 @@ export default function UserManagementPage() {
                   />
                 </div>
               )}
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Adresa</label>
+                  <input 
+                    type="text" 
+                    value={address}
+                    onChange={e => setAddress(e.target.value)}
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-3 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">OIB</label>
+                  <input 
+                    type="text" 
+                    value={oib}
+                    onChange={e => setOib(e.target.value)}
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-3 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
+                  />
+                </div>
+              </div>
 
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Uloge u školi (odaberi više)</label>

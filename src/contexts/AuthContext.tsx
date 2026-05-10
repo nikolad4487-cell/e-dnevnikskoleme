@@ -143,38 +143,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const currentUserId = session?.user?.id;
       console.log(`[AUTH] Auth Event: ${event} | UID: ${currentUserId || 'GUEST'}`);
       
-      // Handle potential refresh token errors that trigger SIGNED_OUT
-      if (event === 'INITIAL_SESSION' && !session) {
-        // This can happen if getSession fails silently or has a token error
-        const hasSessionInStorage = !!Object.keys(localStorage).find(key => key.includes('sb-') && key.includes('-auth-token'));
-        if (hasSessionInStorage) {
-          console.warn('[AUTH] INITIAL_SESSION with no session but storage exists. Possible token corruption.');
-        }
-      }
-
-      if (isForceLoggedOut && currentUserId && event === 'SIGNED_IN') {
-        console.log('[AUTH] Blocking sign-in due to forceLoggedOut.');
-        await supabase.auth.signOut();
-        return;
-      }
-
+      // Removed forceLoggedOut check to prevent loops
       setSession(session);
       setSupabaseUser(session?.user ?? null);
       
       if (currentUserId) {
-        if (lastLoadedUserId === currentUserId) return;
+        console.log(`[AUTH] AUTH LOAD START for ${currentUserId}`);
+        if (lastLoadedUserId === currentUserId) {
+          if (user) {
+            console.log(`[AUTH] User already loaded, skipping reload.`);
+            setLoading(false);
+            return;
+          }
+        }
         
         lastLoadedUserId = currentUserId;
         setLoading(true);
         try {
           await loadUserData(currentUserId);
+          console.log(`[AUTH] AUTH LOAD END success`);
+        } catch (err) {
+          console.error(`[AUTH] AUTH LOAD END error`);
         } finally {
           if (mounted) setLoading(false);
         }
       } else {
-        if (lastLoadedUserId) {
-          console.log('[AUTH] Session lost or signed out.');
-        }
         lastLoadedUserId = null;
         setUser(null);
         setUserSchoolRoles([]);

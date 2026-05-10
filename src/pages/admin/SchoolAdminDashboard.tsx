@@ -78,8 +78,8 @@ export default function SchoolAdminDashboard() {
   const adminModules = [
     { id: 'razredi', name: 'Razredni odjeli', icon: GraduationCap, color: 'bg-blue-500', link: '/admin/razredi' },
     { id: 'korisnici', name: 'Korisnici / Nastavnici', icon: Users, color: 'bg-indigo-500', link: '/admin/korisnici' },
-    { id: 'učenici', name: 'Učenici', icon: UserPlus, color: 'bg-emerald-500', link: '/admin/korisnici' },
-    { id: 'predmeti', name: 'Predmeti', icon: BookOpen, color: 'bg-amber-500', link: '/admin/predmeti' },
+    { id: 'predmeti', name: 'Globalni predmeti', icon: BookOpen, color: 'bg-amber-500', link: '/admin/predmeti' },
+    { id: 'student-predmeti', name: 'Predmeti učenika', icon: FileText, color: 'bg-cyan-500', link: '/admin/student-predmeti' },
     { id: 'raspored', name: 'Raspored sati', icon: Calendar, color: 'bg-purple-500', link: '/admin/raspored' },
     { id: 'izvještaji', name: 'Izvještaji i statistika', icon: BarChart3, color: 'bg-rose-500', link: '/admin/izvjestaji' },
     { id: 'postavke', name: 'Postavke škole', icon: Settings, color: 'bg-slate-700', link: '/admin/postavke' },

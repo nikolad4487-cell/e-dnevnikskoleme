@@ -19,6 +19,8 @@ const DashboardRedirect = () => {
   const { user, userSchoolRoles, isStaff, isStudent, isParent, isMainAdmin, loading, error, signOut } = useAuth();
   const { selectedSchoolId, selectedClassId, selectedChildId } = useSelection();
 
+  const [timeoutExpired, setTimeoutExpired] = React.useState(false);
+
   useEffect(() => {
     console.log('[DASHBOARD] State check:', {
       user: user?.email,
@@ -28,28 +30,45 @@ const DashboardRedirect = () => {
       selection: { selectedSchoolId, selectedClassId, selectedChildId }
     });
 
-    // Safety timeout to prevent infinite spinner if loading state gets out of sync
+    // Safety timeout to prevent infinite spinner
     let safetyTimeout: any;
     if (loading) {
       safetyTimeout = setTimeout(() => {
-        console.warn('[DASHBOARD] Loading took too long. Debug info:', {
-          userEmail: user?.email,
-          hasRoles: userSchoolRoles.length > 0,
-          error: !!error,
-          lastError: error
-        });
-      }, 35000);
+        console.error('[DASHBOARD] CRITICAL: Loading timeout (20s) expired.');
+        setTimeoutExpired(true);
+      }, 20000);
+    } else {
+      setTimeoutExpired(false);
     }
     return () => clearTimeout(safetyTimeout);
   }, [user, userSchoolRoles, loading, error, selectedSchoolId, selectedClassId, selectedChildId]);
 
-  if (loading) {
+  if (loading && !timeoutExpired) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 font-sans">
         <div className="flex flex-col items-center">
           <div className="w-10 h-10 border-4 border-[#005c8d] border-t-transparent rounded-full animate-spin mb-6"></div>
           <h2 className="text-sm font-bold text-slate-800 uppercase tracking-widest leading-none">Učitavanje podataka...</h2>
           <p className="text-[10px] text-slate-400 mt-4 uppercase font-bold tracking-tighter leading-none">Provjera ovlaštenja sustava e-Dnevnik</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (timeoutExpired) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-slate-50 font-sans">
+        <div className="bg-white p-12 border border-gray-300 max-w-md shadow-sm">
+          <h1 className="text-xl font-black text-slate-900 mb-2 tracking-tighter uppercase leading-none">Učitavanje nije uspjelo</h1>
+          <p className="text-[12px] text-slate-600 mb-8 leading-relaxed font-bold bg-amber-50 p-4 border border-amber-100">
+            Sustav se ne uspijeva povezati u zadanom vremenu. Pogledajte konzolu za više detalja.
+          </p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="w-full bg-[#005c8d] text-white py-3 border border-[#004a71] font-black uppercase tracking-widest text-[10px]"
+          >
+            Pokušaj ponovno (Refresh)
+          </button>
         </div>
       </div>
     );
@@ -154,8 +173,8 @@ const DashboardRedirect = () => {
   }
 
   // Check priority-based redirects
-  console.log("SESSION USER:", user.email);
-  console.log("ROLES LOADED:", roleNames);
+  console.log("[DASHBOARD] Logic Check - User:", user.email, "Path:", window.location.pathname);
+  console.log("[DASHBOARD] Roles:", roleNames);
 
   // According to User Requirements:
   // After login:
@@ -165,27 +184,35 @@ const DashboardRedirect = () => {
 
   // 1. Parent flow (if not staff, they MUST select child first)
   if (isParent && !isStaff && !selectedChildId) {
+    console.log("[DASHBOARD] Redirecting to /select-child");
     return <Navigate to="/select-child" replace />;
   }
 
   // 2. Selection flow: School -> Class
   if (!selectedSchoolId) {
     // Main admin goes to management if no school selected
-    if (isMainAdmin) return <Navigate to="/admin/schools" replace />;
+    if (isMainAdmin) {
+      console.log("[DASHBOARD] Redirecting to /admin/schools (Main Admin)");
+      return <Navigate to="/admin/schools" replace />;
+    }
+    console.log("[DASHBOARD] Redirecting to /select-school");
     return <Navigate to="/select-school" replace />;
   }
 
   if (!selectedClassId) {
     // PH7: After school selection, show classes.
+    console.log("[DASHBOARD] Redirecting to /select-class");
     return <Navigate to="/select-class" replace />;
   }
 
   // 3. Final dashboard redirects
   if (isStaff) {
+    console.log("[DASHBOARD] Redirecting to staff dashboard /class/", selectedClassId);
     return <Navigate to={`/class/${selectedClassId}`} replace />;
   }
 
   if (isStudent || isParent) {
+    console.log("[DASHBOARD] Redirecting to student dashboard /student/ocjene");
     return <Navigate to="/student/ocjene" replace />;
   }
 
@@ -237,13 +264,17 @@ const UserManagementPage = lazy(() => import('./pages/admin/UserManagementPage')
 const SubjectManagementPage = lazy(() => import('./pages/admin/SubjectManagementPage'));
 const ClassSubjectsPage = lazy(() => import('./pages/admin/ClassSubjectsPage'));
 const ClassStudentsPage = lazy(() => import('./pages/admin/ClassStudentsPage'));
+const StudentSubjectEnrollmentPage = lazy(() => import('./pages/admin/StudentSubjectEnrollmentPage'));
+const ScheduleManagementPage = lazy(() => import('./pages/admin/ScheduleManagementPage'));
 
 const ClassDashboardPage = lazy(() => import('./pages/teacher/ClassDashboardPage'));
 
 const APP_VERSION = '1.0.5';
 
 export default function App() {
-  console.log('[APP] Render');
+  const location = (window as any).location?.pathname || 'unknown';
+  console.log(`[APP] Render | Path: ${location}`);
+  
   if (typeof window !== 'undefined') {
     (window as any).__renderCount = ((window as any).__renderCount || 0) + 1;
     if ((window as any).__renderCount > 100) {
@@ -252,21 +283,7 @@ export default function App() {
   }
 
   useEffect(() => {
-    const lastVersion = localStorage.getItem('app_version');
-    const renderCount = (window as any).__renderCount || 0;
-    
-    // Only attempt version-based reload if we haven't rendered excessively
-    if (renderCount < 10) {
-      if (lastVersion && lastVersion !== APP_VERSION) {
-        console.log('[APP] Version mismatch, resetting...');
-        localStorage.clear();
-        sessionStorage.clear();
-        localStorage.setItem('app_version', APP_VERSION);
-        window.location.reload();
-      } else if (!lastVersion) {
-        localStorage.setItem('app_version', APP_VERSION);
-      }
-    }
+    console.log('[APP] Mounted');
   }, []);
 
   return (
@@ -274,7 +291,8 @@ export default function App() {
       <SelectionProvider>
         <BrowserRouter>
           <Toaster position="top-right" />
-          <InactivityTracker />
+          {/* InactivityTracker disabled temporarily to prevent loops */}
+          {/* <InactivityTracker /> */}
           <Suspense fallback={<div className="flex items-center justify-center min-h-screen font-sans">Učitavanje...</div>}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
@@ -318,6 +336,8 @@ export default function App() {
                       <Route path="razredi" element={<ClassManagementPage />} />
                       <Route path="razred-predmeti" element={<ClassSubjectsPage />} />
                       <Route path="razred-ucenici" element={<ClassStudentsPage />} />
+                      <Route path="student-predmeti" element={<StudentSubjectEnrollmentPage />} />
+                      <Route path="raspored" element={<ScheduleManagementPage />} />
                       <Route path="korisnici" element={<UserManagementPage />} />
                       <Route path="predmeti" element={<SubjectManagementPage />} />
                       <Route path="*" element={<Navigate to="/admin/schools" replace />} />
@@ -378,20 +398,32 @@ export default function App() {
 function SelectionGuard({ children, role }: { children: React.ReactNode, role: 'STAFF' | 'STUDENT' }) {
   const { selectedSchoolId, selectedClassId, selectedChildId } = useSelection();
   const { isMainAdmin, isParent } = useAuth();
+  const location = window.location.pathname;
   
+  console.log(`[GUARD] Guarding ${location} | Role: ${role}`);
+
   // Admins can bypass selection guards for browsing
-  if (isMainAdmin) return <>{children}</>;
+  if (isMainAdmin) {
+    console.log('[GUARD] Admin bypass');
+    return <>{children}</>;
+  }
 
   if (isParent && !selectedChildId) {
+    console.log('[GUARD] Parent missing child selection');
     return <Navigate to="/select-child" replace />;
   }
   
   if (role === 'STAFF' && !selectedSchoolId) {
+    console.log('[GUARD] Staff missing school selection');
     return <Navigate to="/select-school" replace />;
   }
   
   if (role === 'STUDENT' && !selectedClassId) {
-    if (!selectedSchoolId) return <Navigate to="/select-school" replace />;
+    if (!selectedSchoolId) {
+      console.log('[GUARD] Student missing school selection');
+      return <Navigate to="/select-school" replace />;
+    }
+    console.log('[GUARD] Student missing class selection');
     return <Navigate to="/select-class" replace />;
   }
   

@@ -37,6 +37,7 @@ export type User = {
   pob?: string;
   mobile?: string;
   programId?: string;
+  status?: 'ACTIVE' | 'INACTIVE';
 };
 
 export type UserSchoolRole = {
@@ -59,6 +60,8 @@ export type Class = {
   deputyTeacherId?: string;
   homeroom?: User;
   deputy?: User;
+  programId?: string;
+  variant?: ClassVariant;
 };
 
 export type Subject = {
