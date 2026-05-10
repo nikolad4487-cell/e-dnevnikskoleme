@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: none;
+  --shadow-lg: none;
+  --shadow-xl: none;
+}
+
+@layer base {
+  body {
+    @apply text-gray-800 bg-[#f0f2f5] text-[13px] leading-normal;
+  }
+  
+  table {
+    @apply w-full border-collapse;
+  }
+  
+  th {
+    @apply bg-[#f8f9fa] border border-gray-300 px-3 py-2 text-left font-bold text-gray-600;
+  }
+  
+  td {
+    @apply border border-gray-300 px-3 py-2;
+  }
+
+  input, select, textarea {
+    @apply border border-gray-300 rounded-none px-2 py-1 focus:border-[#005c8d] focus:outline-none bg-white;
+  }
+
+  button {
+    @apply cursor-pointer;
+  }
+}
+
+.ed-card {
+  @apply bg-white border border-gray-300 shadow-sm mb-4;
+}
+
+.ed-header {
+  @apply bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-gray-700 flex justify-between items-center;
+}
+
+.ed-content {
+  @apply p-4;
+}
+
+.ed-table-dense td, .ed-table-dense th {
+  @apply py-1 px-2 text-[12px];
+}

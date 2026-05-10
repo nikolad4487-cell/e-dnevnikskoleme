@@ -1,0 +1,160 @@
+import React from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Menu, LogOut, User as UserIcon, Bell, Search, Info, Settings } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { useSelection } from '../contexts/SelectionContext';
+import { Role } from '../types';
+import { cn } from '../lib/utils';
+
+interface NavItem {
+  label: string;
+  path: string;
+  icon?: React.ReactNode;
+}
+
+const TEACHER_NAV: NavItem[] = [
+  { label: 'Imenik', path: '/teacher/imenik' },
+  { label: 'Dnevnik rada', path: '/teacher/dnevnik-rada' },
+  { label: 'Zapisnici', path: '/teacher/zapisnici' },
+  { label: 'Izvještaji', path: '/teacher/izvjestaji' },
+  { label: 'Administracija', path: '/teacher/administracija' },
+  { label: 'Pretraživanje', path: '/teacher/pretrazivanje' },
+];
+
+const STUDENT_NAV: NavItem[] = [
+  { label: 'Ocjene', path: '/student/ocjene' },
+  { label: 'Bilješke', path: '/student/biljeske' },
+  { label: 'Ispiti', path: '/student/ispiti' },
+  { label: 'Izostanci', path: '/student/izostanci' },
+  { label: 'Raspored', path: '/student/raspored' },
+  { label: 'Informatika', path: '/student/informatika' },
+];
+
+const ADMIN_NAV: NavItem[] = [
+  { label: 'Škole', path: '/admin/schools' },
+  { label: 'Administracija', path: '/admin/school-dashboard' },
+  { label: 'Razredi', path: '/admin/razredi' },
+  { label: 'Korisnici', path: '/admin/korisnici' },
+  { label: 'Predmeti', path: '/admin/predmeti' },
+];
+
+export function Layout({ children }: { children: React.ReactNode }) {
+  const { user, signOut, userSchoolRoles, isMainAdmin, formattedRoles, isStaff } = useAuth();
+  const { selectedSchoolId, selectedClassId, isArchived, clearSelection } = useSelection();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+
+  const isAdminPath = location.pathname.startsWith('/admin');
+
+  // Current roles in selected school
+  const currentSchoolRoles = userSchoolRoles.filter(r => r.schoolId === selectedSchoolId).map(r => r.role);
+  const isSchoolAdmin = isMainAdmin || currentSchoolRoles.includes(Role.SCHOOL_ADMIN) || currentSchoolRoles.includes(Role.ADMIN);
+  
+  let navItems = isStaff 
+    ? TEACHER_NAV.filter(item => {
+        if (item.path === '/teacher/administracija') return isSchoolAdmin;
+        return true;
+      })
+    : STUDENT_NAV;
+
+  if (isAdminPath) {
+    navItems = ADMIN_NAV;
+  }
+
+  const handleLogout = async () => {
+    await signOut();
+    clearSelection();
+    navigate('/login');
+  };
+
+  const handleSwitch = () => {
+    if (isStaff) {
+      navigate('/select-school');
+    } else {
+      navigate('/select-class');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#f0f2f5] flex flex-col font-sans">
+      {/* Header */}
+      <header className="bg-[#005c8d] text-white z-50 shadow-md">
+        <div className="max-w-[1400px] mx-auto px-4 h-10 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button 
+              className="lg:hidden p-1 hover:bg-[#004a70]"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            >
+              <Menu size={18} />
+            </button>
+            <Link to="/" className="text-base font-bold tracking-tight">e-Dnevnik</Link>
+          </div>
+
+          <div className="hidden lg:flex items-center h-full">
+            {navItems.map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "px-3 h-full flex items-center text-[12px] font-bold uppercase transition-colors",
+                  location.pathname.startsWith(item.path) 
+                    ? "bg-[#004a70]" 
+                    : "hover:bg-[#004a70]"
+                )}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <div className="hidden sm:flex flex-col items-end mr-2">
+              <span className="text-[11px] font-bold leading-tight">{user?.name} {user?.surname}</span>
+              <span className="text-[9px] text-white/70 uppercase">
+                {formattedRoles}
+              </span>
+            </div>
+            <Link
+              to={isStaff ? "/teacher/postavke" : "/student/postavke"}
+              className="p-1.5 hover:bg-[#004a70] transition-colors"
+              title="Postavke"
+            >
+              <Settings size={16} />
+            </Link>
+            <button 
+              onClick={handleLogout}
+              className="p-1.5 hover:bg-[#004a70] transition-colors"
+              title="Odjava"
+            >
+              <LogOut size={16} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col max-w-[1400px] w-full mx-auto p-3 lg:p-4 mb-16 lg:mb-0">
+        <div className="bg-white border border-gray-300 flex-1 flex flex-col min-h-0">
+          {children}
+        </div>
+      </main>
+
+      {/* Mobile Bottom Nav */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#005c8d] text-white flex justify-around items-center h-16 border-t border-[#004a70] z-50">
+        {navItems.slice(0, 5).map((item) => (
+          <Link
+            key={item.path}
+            to={item.path}
+            className={cn(
+              "flex flex-col items-center justify-center flex-1 h-full gap-1",
+              location.pathname.startsWith(item.path) ? "bg-[#004a70]" : ""
+            )}
+          >
+            <span className="text-[10px] font-medium">{item.label}</span>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}

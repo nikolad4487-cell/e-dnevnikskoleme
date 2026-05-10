@@ -1,0 +1,271 @@
+/**
+ * Mapping Layer: DB snake_case -> frontend camelCase
+ */
+
+export function mapObject<T>(obj: any, mapper: (item: any) => T): T {
+  if (!obj) return null as any;
+  return mapper(obj);
+}
+
+export function mapList<T>(list: any[] | null, mapper: (item: any) => T): T[] {
+  if (!list) return [];
+  return list.map(mapper);
+}
+
+export const mappers = {
+  user: (raw: any) => ({
+    id: raw.id,
+    authUserId: raw.auth_user_id,
+    email: raw.email,
+    name: raw.name,
+    surname: raw.surname,
+    address: raw.address,
+    isFirstLogin: raw.is_first_login,
+    requiresAuthenticatorSetup: raw.requires_authenticator_setup,
+    requiresPasswordChange: raw.requires_password_change,
+    passwordType: raw.password_type,
+    oib: raw.oib,
+    dob: raw.dob,
+    pob: raw.pob,
+    mobile: raw.mobile,
+    programId: raw.program_id,
+  }),
+
+  userSchoolRole: (raw: any) => ({
+    id: raw.id,
+    userId: raw.user_id,
+    schoolId: raw.school_id,
+    role: raw.role,
+    status: raw.status,
+  }),
+
+  school: (raw: any) => ({
+    id: raw.id,
+    name: raw.name,
+    type: raw.type,
+    subtype: raw.subtype,
+    address: raw.address,
+    city: raw.city,
+  }),
+
+  class: (raw: any) => ({
+    id: raw.id,
+    schoolId: raw.school_id,
+    schoolYear: raw.school_year,
+    name: raw.name,
+    gradeLevel: raw.grade_level,
+    section: raw.section,
+    status: raw.status,
+    homeroomTeacherId: raw.homeroom_teacher_id,
+    deputyTeacherId: raw.deputy_teacher_id,
+  }),
+
+  subject: (raw: any) => ({
+    id: raw.id,
+    schoolId: raw.school_id,
+    name: raw.name,
+    code: raw.code,
+  }),
+
+  lesson: (raw: any) => ({
+    id: raw.id,
+    classId: raw.class_id,
+    subjectId: raw.subject_id,
+    teacherId: raw.teacher_id,
+    date: raw.date,
+    hour: raw.hour,
+    topic: raw.topic,
+    homework: raw.homework,
+    notes: raw.notes,
+    materials: raw.materials,
+    groupName: raw.group_name,
+    isHeld: raw.is_held,
+    isBlock: raw.is_block,
+    blockCount: raw.block_count,
+    createdByUserId: raw.created_by_user_id,
+    teacherDisplayName: raw.teacher_display_name,
+  }),
+
+  grade: (raw: any) => ({
+    id: raw.id,
+    studentId: raw.student_id,
+    subjectId: raw.subject_id,
+    teacherId: raw.teacher_id,
+    classId: raw.class_id,
+    value: raw.value,
+    note: raw.note,
+    category: raw.category,
+    weight: raw.weight,
+    isImportant: raw.is_important,
+    date: raw.date,
+  }),
+
+  absence: (raw: any) => ({
+    id: raw.id,
+    studentId: raw.student_id,
+    lessonId: raw.lesson_id,
+    classId: raw.class_id,
+    date: raw.date,
+    hour: raw.hour,
+    status: raw.status,
+    note: raw.note,
+    teacherId: raw.teacher_id,
+  }),
+
+  note: (raw: any) => ({
+    id: raw.id,
+    targetType: raw.target_type,
+    targetId: raw.target_id,
+    subjectId: raw.subject_id,
+    authorId: raw.author_id,
+    content: raw.content,
+  }),
+
+  exam: (raw: any) => ({
+    id: raw.id,
+    classId: raw.class_id,
+    subjectId: raw.subject_id,
+    date: raw.date,
+    type: raw.type,
+    description: raw.description,
+    createdBy: raw.created_by,
+  }),
+  
+  classSubjectTeacher: (raw: any) => ({
+    id: raw.id,
+    classId: raw.class_id,
+    subjectId: raw.subject_id,
+    teacherId: raw.teacher_id,
+    schoolId: raw.school_id,
+  }),
+
+  curriculumPlan: (raw: any) => ({
+    id: raw.id,
+    schoolId: raw.school_id,
+    classId: raw.class_id,
+    subjectId: raw.subject_id,
+    weeklyHours: raw.weekly_hours,
+    schoolYear: raw.school_year,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+  }),
+
+  scheduleCell: (raw: any) => ({
+    id: raw.id,
+    classId: raw.class_id,
+    dayOfWeek: raw.day_of_week,
+    shift: raw.shift,
+    periodNumber: raw.period_number,
+  }),
+
+  scheduleCellSubject: (raw: any) => ({
+    id: raw.id,
+    scheduleCellId: raw.schedule_cell_id,
+    subjectId: raw.subject_id,
+    teacherId: raw.teacher_id,
+    classroom: raw.classroom,
+  }),
+
+  week: (raw: any) => ({
+    id: raw.id,
+    classId: raw.class_id,
+    schoolYear: raw.school_year,
+    name: raw.name,
+    startDate: raw.start_date,
+    endDate: raw.end_date,
+    shift: raw.shift,
+    isTeachingWeek: raw.is_teaching_week,
+    onDutyStudentIds: raw.on_duty_student_ids,
+    teachingDays: raw.teaching_days,
+  }),
+
+  studentOverallNotes: (raw: any) => ({
+    id: raw.id,
+    studentId: raw.student_id,
+    classId: raw.class_id,
+    schoolYear: raw.school_year,
+    homeroomNote: raw.homeroom_note,
+    extracurricularActivities: raw.extracurricular_activities,
+    schoolActivities: raw.school_activities,
+    disciplinaryActions: raw.disciplinary_actions,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+  }),
+
+  classOverallNotes: (raw: any) => ({
+    id: raw.id,
+    classId: raw.class_id,
+    schoolYear: raw.school_year,
+    homeroomInfo: raw.homeroom_info,
+    deputyInfo: raw.deputy_info,
+  }),
+
+  studentYearSummary: (raw: any) => ({
+    id: raw.id,
+    studentId: raw.student_id,
+    classId: raw.class_id,
+    schoolYear: raw.school_year,
+    average: raw.average,
+    behavior: raw.behavior,
+    finalResult: raw.final_result,
+    finalizedAt: raw.finalized_at,
+    finalizedBy: raw.finalized_by,
+  }),
+
+  finalGrade: (raw: any) => ({
+    id: raw.id,
+    studentId: raw.student_id,
+    subjectId: raw.subject_id,
+    classId: raw.class_id,
+    schoolId: raw.school_id,
+    teacherId: raw.teacher_id,
+    value: raw.value,
+    period: raw.period,
+    date: raw.date,
+  }),
+
+  specialExam: (raw: any) => ({
+    id: raw.id,
+    studentId: raw.student_id,
+    subjectId: raw.subject_id,
+    classId: raw.class_id,
+    schoolId: raw.school_id,
+    teacherId: raw.teacher_id,
+    type: raw.type,
+    note: raw.note,
+    grade: raw.grade,
+    date: raw.date,
+  }),
+
+  studentNote: (raw: any) => ({
+    id: raw.id,
+    studentId: raw.student_id,
+    subjectId: raw.subject_id,
+    classId: raw.class_id,
+    schoolId: raw.school_id,
+    teacherId: raw.teacher_id,
+    content: raw.content,
+    category: raw.category,
+    date: raw.date,
+  }),
+
+  studentSubjectEnrollment: (raw: any) => ({
+    id: raw.id,
+    studentId: raw.student_id,
+    subjectId: raw.subject_id,
+    classId: raw.class_id,
+    schoolId: raw.school_id,
+    status: raw.status,
+    enrolledAt: raw.enrolled_at,
+    droppedAt: raw.dropped_at,
+  }),
+
+  gradingElement: (raw: any) => ({
+    id: raw.id,
+    classId: raw.class_id,
+    subjectId: raw.subject_id,
+    name: raw.name,
+    displayOrder: raw.display_order,
+    createdAt: raw.created_at,
+  }),
+};

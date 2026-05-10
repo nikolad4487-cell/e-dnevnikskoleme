@@ -1,0 +1,346 @@
+import express from "express";
+import { createServer as createViteServer } from "vite";
+import path from "path";
+import { fileURLToPath } from "url";
+import { createClient } from "@supabase/supabase-js";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || "";
+
+// Supabase Admin Client (Service Role)
+let supabaseAdmin: any;
+if (supabaseUrl && supabaseServiceKey) {
+  supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
+} else {
+  console.warn("[SERVER] Supabase credentials missing. Admin features and seeder will be unavailable.");
+}
+
+async function startServer() {
+  try {
+    const app = express();
+    const PORT = 3000;
+
+    app.use(express.json());
+
+    // Middleware to log requests
+    app.use((req, res, next) => {
+      console.log(`[${req.method}] ${req.url}`);
+      next();
+    });
+
+    // API Routes
+  app.get("/api/health", (req, res) => {
+    res.json({ status: "ok" });
+  });
+
+  // Admin create user endpoint
+  app.post("/api/admin/create-user", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized. Check your environment variables.");
+      const { email, password, name, surname, roles, schoolId, classId } = req.body;
+      
+      // 1. Auth User
+      const { data: existingUserList } = await supabaseAdmin.auth.admin.listUsers();
+      const existingUser = existingUserList?.users?.find((u: any) => u.email === email);
+      
+      let userId;
+      if (existingUser) {
+        userId = existingUser.id;
+        if (password) {
+          await supabaseAdmin.auth.admin.updateUserById(userId, { password });
+        }
+      } else {
+        const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+          user_metadata: { name, surname }
+        });
+        if (authError) throw authError;
+        userId = authUser.user.id;
+      }
+      
+      // 2. Profile
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from('user_profiles')
+        .upsert({
+          auth_user_id: userId,
+          email,
+          name: `${name} ${surname}`,
+          is_first_login: true,
+          requires_password_change: true
+        }, { onConflict: 'auth_user_id' })
+        .select()
+        .single();
+      
+      if (profileError) throw profileError;
+
+      // 3. School Roles
+      if (schoolId && roles && Array.isArray(roles)) {
+        // Clear existing school roles for this user in this school if updating?
+        // For simplicity, just upsert
+        for (const role of roles) {
+          await supabaseAdmin
+            .from('user_school_roles')
+            .upsert({
+              user_id: profile.id,
+              school_id: schoolId,
+              role: role,
+              status: 'ACTIVE'
+            }, { onConflict: 'user_id,school_id,role' });
+        }
+      }
+
+      // 4. Student Enrollment
+      if (roles.includes('STUDENT') && classId) {
+        await supabaseAdmin.from('student_class_enrollments').upsert({
+          student_id: profile.id,
+          class_id: classId,
+          school_year: '2024/2025',
+          status: 'ACTIVE'
+        }, { onConflict: 'student_id,class_id,school_year' });
+      }
+
+      res.json({ userId, profileId: profile.id });
+    } catch (err: any) {
+      console.error("[ADMIN_CREATE] Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin update user endpoint
+  app.post("/api/admin/update-user", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { profileId, authUserId, email, name, surname, roles, schoolId } = req.body;
+
+      // Update Auth Email if changed
+      if (authUserId && email) {
+        await supabaseAdmin.auth.admin.updateUserById(authUserId, { email });
+      }
+
+      // Update Profile
+      const { error: profileError } = await supabaseAdmin
+        .from('user_profiles')
+        .update({
+          email,
+          name: `${name} ${surname}`
+        })
+        .eq('id', profileId);
+      
+      if (profileError) throw profileError;
+
+      // Update Roles (Replace existing for this school)
+      if (schoolId && roles && Array.isArray(roles)) {
+        // Delete old roles for this school
+        await supabaseAdmin
+          .from('user_school_roles')
+          .delete()
+          .eq('user_id', profileId)
+          .eq('school_id', schoolId);
+        
+        // Insert new ones
+        for (const role of roles) {
+          await supabaseAdmin
+            .from('user_school_roles')
+            .insert({
+              user_id: profileId,
+              school_id: schoolId,
+              role: role,
+              status: 'ACTIVE'
+            });
+        }
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[ADMIN_UPDATE] Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin delete user endpoint
+  app.post("/api/admin/delete-user", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { profileId, schoolId } = req.body;
+
+      // Just remove roles for THIS school
+      const { error } = await supabaseAdmin
+        .from('user_school_roles')
+        .delete()
+        .eq('user_id', profileId)
+        .eq('school_id', schoolId);
+      
+      if (error) throw error;
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[ADMIN_DELETE] Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Seeding endpoint (Server-side only)
+  app.post("/api/seed", async (req, res) => {
+    const seedTimeout = setTimeout(() => {
+       console.error("[SEED] TIMEOUT ERROR: Migration taking too long.");
+    }, 25000);
+
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      console.log("[SEED] Starting migration/seed...");
+
+      const demoSchoolId = '00000000-0000-0000-0000-000000000001';
+      
+      // 1. Create School
+      await supabaseAdmin.from('schools').upsert({ id: demoSchoolId, name: 'Demo škola', type: 'SECONDARY' });
+
+      // 2. Create Classes
+      const demoClasses = [
+        { id: 'class-1a', school_id: demoSchoolId, name: '1.A', grade_level: 1, section: 'A', school_year: '2024/2025' },
+        { id: 'class-2b', school_id: demoSchoolId, name: '2.B', grade_level: 2, section: 'B', school_year: '2024/2025' },
+        { id: 'class-3c', school_id: demoSchoolId, name: '3.C', grade_level: 3, section: 'C', school_year: '2024/2025' },
+      ];
+      for (const cls of demoClasses) {
+        await supabaseAdmin.from('classes').upsert(cls);
+      }
+
+      // 3. Create Subjects
+      const demoSubjects = [
+        { id: 'subj-mat', school_id: demoSchoolId, name: 'Matematika', code: 'MAT' },
+        { id: 'subj-hj', school_id: demoSchoolId, name: 'Hrvatski jezik', code: 'HJ' },
+        { id: 'subj-ej', school_id: demoSchoolId, name: 'Engleski jezik', code: 'EJ' },
+      ];
+      for (const subj of demoSubjects) {
+        await supabaseAdmin.from('subjects').upsert(subj);
+      }
+
+      const demoUsers = [
+        { email: 'nikola.duric@eskole.me', password: '123456', name: 'Nikola', surname: 'Đurić', roles: ['MAIN_ADMIN', 'TEACHER'] },
+        { email: 'marija.majdic@eskole.me', password: '123456', name: 'Marija', surname: 'Majdić', roles: ['TEACHER'] },
+        { email: 'ivan.horvat@eskole.me', password: '123456', name: 'Ivan', surname: 'Horvat', roles: ['TEACHER', 'HOMEROOM'], homeroomClassId: 'class-1a' },
+        { email: 'ana.kovac@eskole.me', password: '123456', name: 'Ana', surname: 'Kovač', roles: ['TEACHER', 'DEPUTY'], deputyClassId: 'class-1a' },
+        { email: 'ivica.malcic@eskole.me', password: 'Demo1234', name: 'Ivica', surname: 'Malčić', roles: ['STUDENT'], studentClassId: 'class-1a' },
+        { email: 'matija.malcic@gmail.com', password: 'Demo1234', name: 'Matija', surname: 'Malčić', roles: ['PARENT'] },
+      ];
+
+      // Fetch existing users
+      const { data: userData } = await supabaseAdmin.auth.admin.listUsers();
+      const existingUsers = userData?.users || [];
+
+      const results = [];
+
+      for (const u of demoUsers) {
+        let authUserId;
+        const found = existingUsers.find((au: any) => au.email === u.email);
+
+        if (found) {
+          authUserId = found.id;
+          await supabaseAdmin.auth.admin.updateUserById(authUserId, { password: u.password });
+        } else {
+          const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+            email: u.email,
+            password: u.password,
+            email_confirm: true,
+            user_metadata: { name: u.name, surname: u.surname }
+          });
+          if (createError) {
+             results.push({ email: u.email, status: 'error', error: createError.message });
+             continue;
+          }
+          authUserId = newUser.user.id;
+        }
+
+        // Upsert Profile
+        const { data: profile, error: profileError } = await supabaseAdmin
+          .from('user_profiles')
+          .upsert({
+            auth_user_id: authUserId,
+            email: u.email,
+            name: `${u.name} ${u.surname}`,
+            is_first_login: false,
+            requires_password_change: false
+          }, { onConflict: 'auth_user_id' })
+          .select()
+          .single();
+
+        if (profileError) {
+          results.push({ email: u.email, status: 'profile_error', error: profileError.message });
+          continue;
+        }
+
+        // Upsert Roles
+        for (const roleString of u.roles) {
+          await supabaseAdmin.from('user_school_roles').upsert({
+            user_id: profile.id,
+            school_id: demoSchoolId,
+            role: roleString,
+            status: 'ACTIVE'
+          }, { onConflict: 'user_id,school_id,role' });
+        }
+
+        // Handle specific role relations
+        if (u.homeroomClassId) {
+          await supabaseAdmin.from('classes').update({ homeroom_teacher_id: profile.id }).eq('id', u.homeroomClassId);
+        }
+        if (u.deputyClassId) {
+          await supabaseAdmin.from('classes').update({ deputy_teacher_id: profile.id }).eq('id', u.deputyClassId);
+        }
+        if (u.studentClassId) {
+          await supabaseAdmin.from('student_class_enrollments').upsert({
+            student_id: profile.id,
+            class_id: u.studentClassId,
+            school_year: '2024/2025',
+            status: 'ACTIVE'
+          }, { onConflict: 'student_id,class_id,school_year' });
+        }
+
+        results.push({ email: u.email, status: 'success' });
+      }
+
+      res.json({ message: "Seeding complete", results });
+    } catch (err: any) {
+      console.error("[SEED] Error:", err);
+      res.status(500).json({ error: err.message });
+    } finally {
+      clearTimeout(seedTimeout);
+    }
+  });
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== "production") {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: "spa",
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+  } catch (err) {
+    console.error("CRITICAL: Failed to start server:", err);
+    process.exit(1);
+  }
+}
+
+startServer();
