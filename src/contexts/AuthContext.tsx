@@ -54,125 +54,104 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [userSchoolRoles, setUserSchoolRoles] = useState<UserSchoolRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadingRef = React.useRef<string | null>(null);
+  const userRef = React.useRef<User | null>(null);
+
+  // Sync userRef with user state for use in callbacks
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  // State for tracking if the first auth check has completed
+  const [authInitialized, setAuthInitialized] = useState(false);
+
+  useEffect(() => {
+    console.count('[AUTH] AuthProvider Render');
+    console.log('[AUTH] State:', { loading, authInitialized, hasUser: !!user, error: !!error });
+  });
 
   useEffect(() => {
     console.log('[AUTH] Initializing AuthProvider...');
     
-    /* Temporarily disabled version check to fix infinite loop
-    const storedVersion = localStorage.getItem('app_version');
-    if (storedVersion && storedVersion !== APP_VERSION) {
-      console.log('[AUTH] New version detected, performing full system reset.');
-      
-      const performGlobalSignOut = async () => {
-        try {
-          // Global sign out to clear all sessions
-          await supabase.auth.signOut({ scope: "global" });
-        } catch (e) {
-          console.error('[AUTH] Sign out error:', e);
-        } finally {
-          // Clear ALL storage
-          localStorage.clear();
-          sessionStorage.clear();
-          
-          // Set flag to prevent auto-login on LoginPage
-          localStorage.setItem('forceLoggedOut', 'true');
-          localStorage.setItem('app_version', APP_VERSION);
-          
-          // Hard redirect to login
-          window.location.href = "/login";
-        }
-      };
-      
-      performGlobalSignOut();
-      return;
-    }
-    localStorage.setItem('app_version', APP_VERSION);
-    */
-
     let mounted = true;
-    let lastLoadedUserId: string | null = null;
 
-    // Set loading initially
-    setLoading(true);
-
-    const isForceLoggedOut = localStorage.getItem('forceLoggedOut') === 'true';
-
-    // Initial session check
-    supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
-      if (!mounted) return;
-      
-      if (sessionError) {
-        console.error('[AUTH] getSession error:', sessionError);
-        // If refresh token is invalid, clear it
-        if (sessionError.message.toLowerCase().includes('refresh_token')) {
-          localStorage.clear();
+    const initialize = async () => {
+      try {
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('[AUTH] Initial getSession error:', sessionError);
+          if (mounted) {
+            setLoading(false);
+            setAuthInitialized(true);
+          }
+          return;
         }
-        setLoading(false);
-        return;
-      }
 
-      const userId = session?.user?.id;
-      console.log('[AUTH] Initial getSession:', userId || 'GUEST');
-      
-      if (isForceLoggedOut && userId) {
-        console.log('[AUTH] Blocking initial session auto-login.');
-        setLoading(false);
-        return;
+        if (!session) {
+          console.log('[AUTH] No initial session found.');
+          if (mounted) {
+            setError(null);
+            setLoading(false);
+            setAuthInitialized(true);
+          }
+        } else {
+          console.log('[AUTH] Initial session found for:', session.user.id);
+          setError(null);
+          setSession(session);
+          setSupabaseUser(session.user);
+          loadingRef.current = session.user.id;
+          await loadUserData(session.user.id);
+          if (mounted) {
+            setLoading(false);
+            setAuthInitialized(true);
+          }
+        }
+      } catch (err) {
+        console.error('[AUTH] Critical error during initialization:', err);
+        if (mounted) {
+          setLoading(false);
+          setAuthInitialized(true);
+        }
       }
+    };
 
-      setSession(session);
-      setSupabaseUser(session?.user ?? null);
-      
-      if (userId) {
-        lastLoadedUserId = userId;
-        loadUserData(userId).finally(() => {
-          if (mounted) setLoading(false);
-        });
-      } else {
-        setLoading(false);
-      }
-    }).catch(err => {
-      console.error('[AUTH] Initial session check error:', err);
-      if (mounted) setLoading(false);
-    });
+    initialize();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
       
-      const currentUserId = session?.user?.id;
-      console.log(`[AUTH] Auth Event: ${event} | UID: ${currentUserId || 'GUEST'}`);
+      const userId = session?.user?.id;
+      console.log(`[AUTH] Auth Event: ${event} | UID: ${userId || 'GUEST'}`);
       
-      // Removed forceLoggedOut check to prevent loops
       setSession(session);
       setSupabaseUser(session?.user ?? null);
       
-      if (currentUserId) {
-        console.log(`[AUTH] AUTH LOAD START for ${currentUserId}`);
-        if (lastLoadedUserId === currentUserId) {
-          if (user) {
-            console.log(`[AUTH] User already loaded, skipping reload.`);
-            setLoading(false);
-            return;
-          }
+      if (userId) {
+        setError(null);
+        if (loadingRef.current === userId && userRef.current) {
+          setLoading(false);
+          return;
+        }
+
+        if (loadingRef.current === userId && loading) {
+          return;
         }
         
-        lastLoadedUserId = currentUserId;
+        loadingRef.current = userId;
         setLoading(true);
         try {
-          await loadUserData(currentUserId);
-          console.log(`[AUTH] AUTH LOAD END success`);
-        } catch (err) {
-          console.error(`[AUTH] AUTH LOAD END error`);
+          await loadUserData(userId);
         } finally {
           if (mounted) setLoading(false);
         }
       } else {
-        lastLoadedUserId = null;
+        loadingRef.current = null;
         setUser(null);
         setUserSchoolRoles([]);
-        setLoading(false);
         setError(null);
+        setLoading(false);
       }
     });
 
@@ -186,75 +165,93 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const startTime = Date.now();
     console.log(`[AUTH] loadUserData START for ${authUserId}`);
     
-    // We remove the hard 120s timeout promise here and let Supabase handle its own networking.
-    // If we really want a timeout, we'll keep it but shorter and more discrete.
-    const abortController = new AbortController();
-    const timeoutId = setTimeout(() => abortController.abort(), 60000); // 60s is plenty
-
+    // Add a failsafe timeout specifically for this user data load
+    // If it hangs for 15s, we force fail it
+    const loadFailsafe = setTimeout(() => {
+      console.error(`[AUTH] loadUserData hanging for 15s, forcing error.`);
+      setError('Učitavanje podataka profila traje predugo. Provjerite vezu.');
+      setLoading(false);
+    }, 15000);
+    
     try {
       // 1. Fetch Profile
-      const { data: profileRaw, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('auth_user_id', authUserId)
-        .maybeSingle();
+      const fetchProfile = async () => {
+        console.log(`[AUTH] Fetching profile for ${authUserId}...`);
+        const query = supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('auth_user_id', authUserId)
+          .maybeSingle();
 
-      if (profileError) throw profileError;
+        // Race against a 12s timeout
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('TIMEOUT_PROFILE')), 12000)
+        );
 
-      let finalProfileRaw = profileRaw;
+        return Promise.race([query, timeoutPromise]) as Promise<any>;
+      };
 
-      if (!finalProfileRaw) {
-        console.log('[AUTH] Profile missing, attempting auto-creation...');
-        const { data: { session } } = await supabase.auth.getSession();
-        const email = session?.user?.email;
-        const name = session?.user?.user_metadata?.name;
+      const { data: profileRaw, error: profileError } = await fetchProfile();
 
-        if (email) {
-          const res = await fetch('/api/ensure-profile', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ authUserId, email, name })
-          });
-          
-          if (res.ok) {
-            const data = await res.json();
-            finalProfileRaw = data.profile;
-            console.log('[AUTH] Auto-creation successful:', finalProfileRaw.id);
-          } else {
-            const errData = await res.json();
-            console.error('[AUTH] Auto-creation failed:', errData.error);
-          }
-        }
+      if (profileError) {
+        console.error('[AUTH] Profile fetch error:', profileError);
+        throw profileError;
       }
 
-      if (!finalProfileRaw) {
-        throw new Error('Profil nije pronađen. Kontaktirajte administratora za pomoć.');
+      if (!profileRaw) {
+        console.error('[AUTH] Profile record not found in DB for auth user:', authUserId);
+        throw new Error('Vaš korisnički profil nije pronađen. Kontaktirajte administratora.');
       }
 
-      const profile = mappers.user(finalProfileRaw);
+      const profile = mappers.user(profileRaw);
+      console.log(`[AUTH] Profile loaded: ${profile.email}`);
 
-      // 2. Fetch Roles (now that we have profile.id)
-      const { data: rolesRaw, error: rolesError } = await supabase
-        .from('user_school_roles')
-        .select('id, user_id, school_id, role, status')
-        .eq('user_id', profile.id);
+      // 2. Fetch Roles
+      console.log(`[AUTH] Fetching roles for profile ${profile.id}...`);
+      const fetchRoles = async () => {
+        const query = supabase
+          .from('user_school_roles')
+          .select('*')
+          .eq('user_id', profile.id);
 
-      if (rolesError) throw rolesError;
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('TIMEOUT_ROLES')), 12000)
+        );
+
+        return Promise.race([query, timeoutPromise]) as Promise<any>;
+      };
+
+      const { data: rolesRaw, error: rolesError } = await fetchRoles();
+
+      if (rolesError) {
+        console.error('[AUTH] Roles fetch error:', rolesError);
+        throw rolesError;
+      }
 
       const roles = mapList(rolesRaw || [], mappers.userSchoolRole);
+      console.log(`[AUTH] Roles loaded: ${roles.length}`);
 
-      setUser(profile);
-      setUserSchoolRoles(roles);
-      setError(null);
+      if (loadingRef.current === authUserId) {
+        setUser(profile);
+        setUserSchoolRoles(roles);
+        setError(null);
+      } else {
+        console.warn(`[AUTH] loadUserData finished for ${authUserId} but current user is ${loadingRef.current}. Ignoring result.`);
+      }
+      
       console.log(`[AUTH] loadUserData SUCCESS in ${Date.now() - startTime}ms`);
     } catch (err: any) {
-      const msg = err.name === 'AbortError' ? 'Sinkronizacija traje predugo. Provjerite vezu.' : err.message;
-      console.error(`[AUTH] loadUserData FAILED in ${Date.now() - startTime}ms:`, msg);
-      setError(msg);
-      // We don't necessarily clear user if it was already loaded, but here it's initial load
+      if (err.message === 'TIMEOUT_PROFILE' || err.message === 'TIMEOUT_ROLES') {
+        console.error(`[AUTH] loadUserData DB TIMEOUT for ${authUserId}`);
+        setError('Baza podataka ne odgovara. Molimo provjerite internetsku vezu.');
+      } else {
+        console.error(`[AUTH] loadUserData FAILED for ${authUserId}:`, err.message);
+        setError(err.message);
+      }
       setUser(null);
+      setUserSchoolRoles([]);
     } finally {
-      clearTimeout(timeoutId);
+      clearTimeout(loadFailsafe);
     }
   };
 

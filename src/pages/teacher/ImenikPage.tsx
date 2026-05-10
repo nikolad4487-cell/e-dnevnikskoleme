@@ -213,7 +213,8 @@ export default function ImenikPage() {
   }, [effectiveClassId]);
 
   useEffect(() => {
-    // Real-time listener for enrollments
+    // Real-time listener for enrollments (DISABLED)
+    /*
     const enrollChannel = supabase
       .channel('public:student_subject_enrollments')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'student_subject_enrollments' }, () => {
@@ -222,13 +223,14 @@ export default function ImenikPage() {
         });
       })
       .subscribe();
+    */
 
     supabase.from('student_subject_enrollments').select('*').then(({ data }) => {
       if (data) setEnrollments(mapList(data, mappers.studentSubjectEnrollment));
     });
 
     return () => {
-      supabase.removeChannel(enrollChannel);
+      // supabase.removeChannel(enrollChannel);
     };
   }, []);
 
@@ -291,6 +293,7 @@ export default function ImenikPage() {
       fetchFinals();
       fetchSpecials();
 
+      /* Realtime disabled to prevent loops
       gradeChannel = supabase.channel('grades_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'grades', filter: `student_id=eq.${activeStudent.id}` }, fetchGrades)
         .subscribe();
@@ -298,11 +301,14 @@ export default function ImenikPage() {
       noteChannel = supabase.channel('notes_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'student_notes', filter: `student_id=eq.${activeStudent.id}` }, fetchNotes)
         .subscribe();
+      */
     }
 
     return () => {
+      /*
       if (gradeChannel) supabase.removeChannel(gradeChannel);
       if (noteChannel) supabase.removeChannel(noteChannel);
+      */
     };
   }, [viewMode, activeStudent, activeSubject, effectiveClassId]);
 
@@ -370,12 +376,14 @@ export default function ImenikPage() {
       fetchCN();
       fetchSummary();
 
+      /* Realtime disabled
       snChannel = supabase.channel('sn_changes')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'student_overall_notes', filter: `student_id=eq.${activeStudent.id}` }, fetchSN)
         .subscribe();
+      */
     }
     return () => { 
-      if (snChannel) supabase.removeChannel(snChannel); 
+      // if (snChannel) supabase.removeChannel(snChannel); 
     };
   }, [viewMode, activeStudent, effectiveClassId, isEditingOverallNotes]);
 

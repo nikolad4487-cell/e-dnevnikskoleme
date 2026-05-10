@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { ShieldAlert, Users } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -18,10 +18,10 @@ const ChildSelectionPage = lazy(() => import('./pages/ChildSelectionPage'));
 const DashboardRedirect = () => {
   const { user, userSchoolRoles, isStaff, isStudent, isParent, isMainAdmin, loading, error, signOut } = useAuth();
   const { selectedSchoolId, selectedClassId, selectedChildId } = useSelection();
-
-  const [timeoutExpired, setTimeoutExpired] = React.useState(false);
+  const location = useLocation();
 
   useEffect(() => {
+    console.count('[DASHBOARD] DashboardRedirect Render');
     console.log('[DASHBOARD] State check:', {
       user: user?.email,
       rolesCount: userSchoolRoles.length,
@@ -30,20 +30,11 @@ const DashboardRedirect = () => {
       selection: { selectedSchoolId, selectedClassId, selectedChildId }
     });
 
-    // Safety timeout to prevent infinite spinner
-    let safetyTimeout: any;
-    if (loading) {
-      safetyTimeout = setTimeout(() => {
-        console.error('[DASHBOARD] CRITICAL: Loading timeout (20s) expired.');
-        setTimeoutExpired(true);
-      }, 20000);
-    } else {
-      setTimeoutExpired(false);
-    }
-    return () => clearTimeout(safetyTimeout);
+    // Safety timeout removed in favor of AuthContext handled timeouts
+    return () => {};
   }, [user, userSchoolRoles, loading, error, selectedSchoolId, selectedClassId, selectedChildId]);
 
-  if (loading && !timeoutExpired) {
+  if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 font-sans">
         <div className="flex flex-col items-center">
@@ -55,37 +46,19 @@ const DashboardRedirect = () => {
     );
   }
 
-  if (timeoutExpired) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-slate-50 font-sans">
-        <div className="bg-white p-12 border border-gray-300 max-w-md shadow-sm">
-          <h1 className="text-xl font-black text-slate-900 mb-2 tracking-tighter uppercase leading-none">Učitavanje nije uspjelo</h1>
-          <p className="text-[12px] text-slate-600 mb-8 leading-relaxed font-bold bg-amber-50 p-4 border border-amber-100">
-            Sustav se ne uspijeva povezati u zadanom vremenu. Pogledajte konzolu za više detalja.
-          </p>
-          <button 
-            onClick={() => window.location.reload()}
-            className="w-full bg-[#005c8d] text-white py-3 border border-[#004a71] font-black uppercase tracking-widest text-[10px]"
-          >
-            Pokušaj ponovno (Refresh)
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   if (error) {
-    console.error('[DASHBOARD] Auth Error:', error);
+    console.error('[DASHBOARD] Failed to load dashboard:', { error });
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-slate-50 font-sans">
         <div className="bg-white p-12 border border-gray-300 max-w-md shadow-sm">
           <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
             <ShieldAlert size={24} strokeWidth={3} />
           </div>
-          <h1 className="text-xl font-black text-slate-900 mb-2 tracking-tighter uppercase leading-none">Greška pri učitavanju</h1>
-          <div className="h-px w-8 bg-red-200 mx-auto mb-6"></div>
+          <h1 className="text-xl font-black text-slate-900 mb-2 tracking-tighter uppercase leading-none">
+            Greška pri učitavanju
+          </h1>
           <p className="text-[12px] text-slate-600 mb-8 leading-relaxed font-bold bg-red-50 p-4 border border-red-100">
-            {error}
+            {error || 'Sustav se ne uspijeva povezati. Provjerite internetsku vezu i pokušajte ponovno.'}
           </p>
           <div className="flex flex-col gap-2">
             <button 
@@ -93,72 +66,6 @@ const DashboardRedirect = () => {
               className="w-full bg-[#005c8d] text-white py-3 border border-[#004a71] font-black uppercase tracking-widest text-[10px] hover:bg-[#004a71] transition-all"
             >
               Pokušaj ponovno
-            </button>
-            <button 
-              onClick={() => signOut()} 
-              className="w-full text-slate-400 font-bold uppercase tracking-[0.2em] text-[9px] hover:text-[#005c8d] py-2 transition-colors"
-            >
-              Odjavi se iz sustava
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) {
-    console.log('[DASHBOARD] No user found, redirecting to login.');
-    return <Navigate to="/login" replace />;
-  }
-  
-  const isForceLoggedOut = localStorage.getItem('forceLoggedOut') === 'true';
-  if (isForceLoggedOut) {
-    console.log('[DASHBOARD] forceLoggedOut flag active, redirecting to login.');
-    return <Navigate to="/login" replace />;
-  }
-
-  if (user.requiresAuthenticatorSetup && isStaff) {
-    return <Navigate to="/auth/setup-authenticator" replace />;
-  }
-
-  // Check roles
-  const roleNames = userSchoolRoles.map(r => r.role);
-  const hasAdminRole = roleNames.includes(Role.MAIN_ADMIN) || roleNames.includes(Role.ADMIN) || roleNames.includes(Role.SCHOOL_ADMIN);
-  const hasTeacherRole = roleNames.includes(Role.TEACHER) || roleNames.includes(Role.HOMEROOM) || roleNames.includes(Role.DEPUTY);
-  const hasStudentRole = roleNames.includes(Role.STUDENT);
-  const hasParentRole = roleNames.includes(Role.PARENT);
-
-  console.log('[DASHBOARD] Role Summary:', {
-    hasAdminRole,
-    hasTeacherRole,
-    hasStudentRole,
-    hasParentRole,
-    isMainAdmin,
-    isStaff
-  });
-
-  if (userSchoolRoles.length === 0 && !hasAdminRole && !hasTeacherRole && !hasStudentRole && !isParent) {
-    console.warn('[DASHBOARD] User has NO valid roles assigned.');
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-slate-50 font-sans">
-        <div className="bg-white p-12 border border-gray-300 max-w-md shadow-sm">
-          <div className="w-12 h-12 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Users size={24} strokeWidth={3} />
-          </div>
-          <h1 className="text-xl font-black text-slate-900 mb-2 tracking-tighter uppercase leading-none">Nema uloga</h1>
-          <div className="h-px w-8 bg-amber-200 mx-auto mb-6"></div>
-          <p className="text-[12px] text-slate-600 mb-4 leading-relaxed font-bold">
-            Korisnik nema dodijeljenu ulogu u sustavu e-Dnevnik.
-          </p>
-          <p className="text-[10px] text-slate-400 mb-8 uppercase font-bold leading-tight">
-            Molimo pričekajte da administrator sustava završi s obradom vaših podataka ili se obratite tehničkoj podršci škole.
-          </p>
-          <div className="flex flex-col gap-2">
-            <button 
-              onClick={() => window.location.reload()}
-              className="w-full bg-[#005c8d] text-white py-3 border border-[#004a71] font-black uppercase tracking-widest text-[10px] hover:bg-[#004a71] transition-all"
-            >
-              Osvježi podatke
             </button>
             <button 
               onClick={() => signOut()} 
@@ -172,69 +79,58 @@ const DashboardRedirect = () => {
     );
   }
 
-  // Check priority-based redirects
-  console.log("[DASHBOARD] Logic Check - User:", user.email, "Path:", window.location.pathname);
-  console.log("[DASHBOARD] Roles:", roleNames);
+  if (!user) return <Navigate to="/login" replace />;
 
-  // According to User Requirements:
-  // After login:
-  // Admin / Teacher / Homeroom / Deputy: → /select-school
-  // Student: → /select-school
-  // Parent: → /select-child
+  const roleNames = userSchoolRoles.map(r => r.role);
+  const hasAdminRole = roleNames.includes(Role.MAIN_ADMIN) || roleNames.includes(Role.ADMIN) || roleNames.includes(Role.SCHOOL_ADMIN);
+  const hasTeacherRole = roleNames.includes(Role.TEACHER) || roleNames.includes(Role.HOMEROOM) || roleNames.includes(Role.DEPUTY);
+  const hasStudentRole = roleNames.includes(Role.STUDENT);
+  const hasParentRole = roleNames.includes(Role.PARENT);
 
-  // 1. Parent flow (if not staff, they MUST select child first)
+  if (userSchoolRoles.length === 0 && !hasAdminRole && !hasTeacherRole && !hasStudentRole && !isParent) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-slate-50 font-sans">
+        <div className="bg-white p-12 border border-gray-300 max-w-md shadow-sm">
+          <h1 className="text-xl font-black text-slate-900 mb-4 tracking-tighter uppercase leading-none">Nema uloga</h1>
+          <p className="text-[12px] text-slate-600 mb-8 font-bold">Korisnik nema dodijeljenu ulogu u sustavu.</p>
+          <button onClick={() => signOut()} className="w-full bg-[#005c8d] text-white py-3 font-black uppercase text-[10px]">Odjava</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Final dashboard redirects with route matching check
   if (isParent && !isStaff && !selectedChildId) {
-    console.log("[DASHBOARD] Redirecting to /select-child");
+    if (location.pathname === '/select-child') return null; 
     return <Navigate to="/select-child" replace />;
   }
 
-  // 2. Selection flow: School -> Class
   if (!selectedSchoolId) {
-    // Main admin goes to management if no school selected
     if (isMainAdmin) {
-      console.log("[DASHBOARD] Redirecting to /admin/schools (Main Admin)");
+      if (location.pathname === '/admin/schools') return null;
       return <Navigate to="/admin/schools" replace />;
     }
-    console.log("[DASHBOARD] Redirecting to /select-school");
+    if (location.pathname === '/select-school') return null;
     return <Navigate to="/select-school" replace />;
   }
 
-  if (!selectedClassId) {
-    // PH7: After school selection, show classes.
-    console.log("[DASHBOARD] Redirecting to /select-class");
+  if (!selectedClassId && (isStaff || isStudent)) {
+    if (location.pathname === '/select-class') return null;
     return <Navigate to="/select-class" replace />;
   }
 
-  // 3. Final dashboard redirects
   if (isStaff) {
-    console.log("[DASHBOARD] Redirecting to staff dashboard /class/", selectedClassId);
-    return <Navigate to={`/class/${selectedClassId}`} replace />;
+    const target = `/class/${selectedClassId || 'missing'}`;
+    if (location.pathname.startsWith('/class/')) return null;
+    return <Navigate to={target} replace />;
   }
 
   if (isStudent || isParent) {
-    console.log("[DASHBOARD] Redirecting to student dashboard /student/ocjene");
+    if (location.pathname.startsWith('/student/')) return null;
     return <Navigate to="/student/ocjene" replace />;
   }
 
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-slate-50 font-sans">
-      <div className="bg-white p-12 border border-gray-300 max-w-md shadow-sm">
-        <h1 className="text-xl font-black text-slate-900 mb-4 tracking-tighter uppercase leading-none">Greška pri pristupu</h1>
-        <div className="bg-red-50 border border-red-100 p-4 text-[11px] font-bold text-red-700 uppercase mb-8">
-          Korisnički račun nema definirane rute za dopuštene uloge ({roleNames.join(', ')}).
-        </div>
-        <p className="text-[11px] text-gray-500 font-bold uppercase tracking-tight mb-8">
-          Molimo kontaktirajte tehničku podršku škole radi provjere vaših ovlaštenja.
-        </p>
-        <button 
-          onClick={() => signOut()} 
-          className="w-full bg-[#005c8d] text-white py-3 border border-[#004a71] font-black uppercase tracking-widest text-[10px] hover:bg-[#004a71] transition-all"
-        >
-          Odjava
-        </button>
-      </div>
-    </div>
-  );
+  return <Navigate to="/login" replace />;
 };
 
 // Teacher/Admin Pages

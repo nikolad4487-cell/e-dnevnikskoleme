@@ -341,7 +341,8 @@ export default function AdministrationPage() {
   useEffect(() => {
     if (!isMainAdmin && !isSchoolAdmin) return;
 
-    // Real-time listeners for basic data
+    // Real-time listeners for basic data (DISABLED)
+    /*
     const classesChannel = supabase.channel('classes_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'classes' }, () => {
         supabase.from('classes').select('*').then(({ data }) => {
@@ -349,9 +350,11 @@ export default function AdministrationPage() {
         });
       })
       .subscribe();
+    */
     
     supabase.from('classes').select('*').then(({ data }) => data && setClasses(mapList(data, mappers.class)));
 
+    /*
     const studentsChannel = supabase.channel('students_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'student_class_enrollments' }, () => {
         supabase.from('student_class_enrollments')
@@ -374,6 +377,7 @@ export default function AdministrationPage() {
           });
       })
       .subscribe();
+    */
     
     supabase.from('user_school_roles')
       .select('*, student:user_profiles(*)')
@@ -404,19 +408,23 @@ export default function AdministrationPage() {
         }
       });
 
+    /*
     const subjectsChannel = supabase.channel('subjects_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'subjects' }, () => {
         supabase.from('subjects').select('*').then(({ data }) => data && setAllSubjects(mapList(data, mappers.subject)));
       })
       .subscribe();
+    */
     
     supabase.from('subjects').select('*').then(({ data }) => data && setAllSubjects(mapList(data, mappers.subject)));
 
+    /*
     const rollChannel = supabase.channel('roles_changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_school_roles' }, () => {
         supabase.from('user_school_roles').select('*').then(({ data }) => data && setAllUserSchoolRoles(mapList(data, mappers.userSchoolRole)));
       })
       .subscribe();
+    */
     
     supabase.from('user_school_roles').select('*').then(({ data }) => data && setAllUserSchoolRoles(mapList(data || [], mappers.userSchoolRole)));
 
@@ -438,10 +446,12 @@ export default function AdministrationPage() {
     supabase.from('school_years').select('*').then(({ data }) => data && setSchoolYears(data)); // Add schoolYear mapper if needed
 
     return () => {
+      /*
       supabase.removeChannel(classesChannel);
       supabase.removeChannel(studentsChannel);
       supabase.removeChannel(subjectsChannel);
       supabase.removeChannel(rollChannel);
+      */
     };
   }, [selectedSchoolId, isMainAdmin, isSchoolAdmin]);
 

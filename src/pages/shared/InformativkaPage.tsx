@@ -35,7 +35,8 @@ export default function InformativkaPage() {
 
     fetchGroups();
 
-    // Listen for group changes
+    // Listen for group changes (DISABLED)
+    /*
     const channel = supabase
       .channel('chat_groups_changes')
       .on('postgres_changes', { 
@@ -45,9 +46,10 @@ export default function InformativkaPage() {
         filter: `members=cs.{${user.id}}`
       }, fetchGroups)
       .subscribe();
+    */
 
     return () => {
-      supabase.removeChannel(channel);
+      // supabase.removeChannel(channel);
     };
   }, [user]);
 
@@ -76,7 +78,8 @@ export default function InformativkaPage() {
 
     fetchMessages();
 
-    // Real-time messages
+    // Real-time messages (DISABLED)
+    /*
     const channel = supabase
       .channel(`group_messages_${selectedGroup}`)
       .on('postgres_changes', { 
@@ -95,9 +98,10 @@ export default function InformativkaPage() {
         }, ...prev]);
       })
       .subscribe();
+    */
 
     return () => {
-      supabase.removeChannel(channel);
+      // supabase.removeChannel(channel);
     };
   }, [selectedGroup]);
 
