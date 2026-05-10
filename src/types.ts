@@ -225,7 +225,7 @@ export type StudentSubjectEnrollment = {
   subjectId: string;
   classId: string;
   status: 'ACTIVE' | 'EXEMPT';
-  schoolYear?: string;
+  schoolYear: string;
 };
 
 export type FinalGrade = {

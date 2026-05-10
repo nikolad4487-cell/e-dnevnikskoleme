@@ -104,7 +104,7 @@ export default function StudentSubjectEnrollmentPage() {
           class_id: selectedClassId,
           status: newStatus,
           school_year: '2024/2025' // Should be dynamic
-        }, { onConflict: 'student_id,subject_id,class_id' });
+        }, { onConflict: 'student_id,subject_id,class_id,school_year' });
       
       if (error) throw error;
       
@@ -131,7 +131,7 @@ export default function StudentSubjectEnrollmentPage() {
         school_year: '2024/2025'
       }));
       
-      const { error } = await supabase.from('student_subject_enrollments').upsert(payload, { onConflict: 'student_id,subject_id,class_id' });
+      const { error } = await supabase.from('student_subject_enrollments').upsert(payload, { onConflict: 'student_id,subject_id,class_id,school_year' });
       if (error) throw error;
       
       toast.success('Predmet dodijeljen svima');

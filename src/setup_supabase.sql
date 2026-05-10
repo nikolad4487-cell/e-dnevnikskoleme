@@ -264,10 +264,11 @@ CREATE TABLE public.student_subject_enrollments (
     student_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
     subject_id TEXT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
     class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    school_year TEXT NOT NULL,
     status TEXT DEFAULT 'ACTIVE',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(student_id, subject_id, class_id)
+    UNIQUE(student_id, subject_id, class_id, school_year)
 );
 
 -- 17. Notes & Imenik Specifics

@@ -259,10 +259,10 @@ export const mappers = {
     studentId: raw.student_id,
     subjectId: raw.subject_id,
     classId: raw.class_id,
-    schoolId: raw.school_id,
+    schoolYear: raw.school_year,
     status: raw.status,
-    enrolledAt: raw.enrolled_at,
-    droppedAt: raw.dropped_at,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
   }),
 
   gradingElement: (raw: any) => ({

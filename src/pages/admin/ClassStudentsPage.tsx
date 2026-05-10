@@ -139,7 +139,7 @@ export default function ClassStudentsPage() {
           school_year: currentClass?.schoolYear || '2024/2025',
           status: 'ACTIVE'
         }));
-        await supabase.from('student_subject_enrollments').upsert(enrollments, { onConflict: 'student_id,subject_id,class_id' });
+        await supabase.from('student_subject_enrollments').upsert(enrollments, { onConflict: 'student_id,subject_id,class_id,school_year' });
       }
 
       toast.success('Učenik dodan u razred');
