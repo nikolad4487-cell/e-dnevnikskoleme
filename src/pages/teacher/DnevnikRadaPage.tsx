@@ -355,13 +355,19 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
       if (existingCell) {
         cellId = existingCell.id;
       } else {
+        const payload = {
+          class_id: effectiveClassId,
+          day_of_week: editingCell.dayOfWeek,
+          shift: editingCell.shift,
+          period_number: editingCell.periodNumber
+        };
+        console.log("schedule cell upsert payload", payload);
+        console.log("onConflict", "class_id,day_of_week,shift,period_number");
+
         const { data: newCellData, error: ce } = await supabase
           .from('schedule_cells')
-          .insert({
-            class_id: effectiveClassId,
-            day_of_week: editingCell.dayOfWeek,
-            shift: editingCell.shift,
-            period_number: editingCell.periodNumber
+          .upsert(payload, {
+            onConflict: "class_id,day_of_week,shift,period_number"
           })
           .select()
           .single();

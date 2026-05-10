@@ -124,7 +124,7 @@ export default function ClassSelectionPage() {
       }
 
       const { data: enrollments, error } = await supabase
-        .from('student_subject_enrollments')
+        .from('student_class_enrollments')
         .select(`
           id,
           status,
@@ -150,7 +150,7 @@ export default function ClassSelectionPage() {
       const seenClasses = new Set<string>();
 
       (enrollments || []).forEach((env: any) => {
-        if (!seenClasses.has(env.class_id)) {
+        if (!seenClasses.has(env.class_id) && (!selectedSchoolId || env.classes?.school_id === selectedSchoolId)) {
           seenClasses.add(env.class_id);
           classesData.push({
             id: env.classes.id,

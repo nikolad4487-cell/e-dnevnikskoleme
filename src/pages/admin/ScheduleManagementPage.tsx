@@ -101,14 +101,20 @@ export default function ScheduleManagementPage() {
       let cell = schedule.find(c => c.day_of_week === dayOfWeek && c.period_number === periodNumber);
       
       if (!cell) {
+        const payload = {
+          class_id: selectedClassId,
+          day_of_week: dayOfWeek,
+          shift,
+          period_number: periodNumber
+        };
+        console.log("schedule cell upsert payload", payload);
+        console.log("onConflict", "class_id,day_of_week,shift,period_number");
+
         const { data: newCell, error: cellError } = await supabase
           .from('schedule_cells')
-          .insert([{
-            class_id: selectedClassId,
-            day_of_week: dayOfWeek,
-            shift,
-            period_number: periodNumber
-          }])
+          .upsert(payload, {
+            onConflict: "class_id,day_of_week,shift,period_number"
+          })
           .select()
           .single();
         

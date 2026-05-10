@@ -65,6 +65,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // State for tracking if the first auth check has completed
   const [authInitialized, setAuthInitialized] = useState(false);
 
+  // Hard failsafe for loading
+  useEffect(() => {
+    if (loading) {
+      const timer = setTimeout(() => {
+        console.error('[AUTH] CRITICAL: Loading timeout (60s) triggered. Force-failing loading state.');
+        setLoading(false);
+        setError('Učitavanje traje predugo. Molimo osvježite stranicu.');
+      }, 60000);
+      return () => clearTimeout(timer);
+    }
+  }, [loading]);
+
   useEffect(() => {
     console.count('[AUTH] AuthProvider Render');
     console.log('[AUTH] State:', { loading, authInitialized, hasUser: !!user, error: !!error });
@@ -166,12 +178,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     console.log(`[AUTH] loadUserData START for ${authUserId}`);
     
     // Add a failsafe timeout specifically for this user data load
-    // If it hangs for 15s, we force fail it
+    // If it hangs for 45s, we force fail it
     const loadFailsafe = setTimeout(() => {
-      console.error(`[AUTH] loadUserData hanging for 15s, forcing error.`);
+      console.error(`[AUTH] loadUserData hanging for 45s, forcing error.`);
       setError('Učitavanje podataka profila traje predugo. Provjerite vezu.');
       setLoading(false);
-    }, 15000);
+    }, 45000);
     
     try {
       // 1. Fetch Profile
@@ -183,9 +195,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .eq('auth_user_id', authUserId)
           .maybeSingle();
 
-        // Race against a 12s timeout
+        // Race against a 30s timeout
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('TIMEOUT_PROFILE')), 12000)
+          setTimeout(() => reject(new Error('TIMEOUT_PROFILE')), 30000)
         );
 
         return Promise.race([query, timeoutPromise]) as Promise<any>;
@@ -215,20 +227,58 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .eq('user_id', profile.id);
 
         const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('TIMEOUT_ROLES')), 12000)
+          setTimeout(() => reject(new Error('TIMEOUT_ROLES')), 30000)
         );
 
         return Promise.race([query, timeoutPromise]) as Promise<any>;
       };
 
-      const { data: rolesRaw, error: rolesError } = await fetchRoles();
+      const rolesResult = await fetchRoles();
 
-      if (rolesError) {
-        console.error('[AUTH] Roles fetch error:', rolesError);
-        throw rolesError;
+      if (rolesResult.error) {
+        console.error('[AUTH] Roles fetch error:', rolesResult.error);
+        throw rolesResult.error;
       }
 
-      const roles = mapList(rolesRaw || [], mappers.userSchoolRole);
+      let rolesRaw = rolesResult.data || [];
+
+      // Auto-repair missing student roles from class enrollments
+      try {
+        const { data: enrollments } = await supabase
+          .from('student_class_enrollments')
+          .select('class_id, classes(school_id)')
+          .eq('student_id', profile.id)
+          .eq('status', 'ACTIVE');
+
+        if (enrollments && enrollments.length > 0) {
+          const enrolledSchoolIds = [...new Set(enrollments.map((e: any) => e.classes?.school_id).filter(Boolean))];
+          const existingSchoolIds = rolesRaw.filter(r => r.role === Role.STUDENT).map(r => r.school_id);
+          const missingSchoolIds = enrolledSchoolIds.filter(id => !existingSchoolIds.includes(id));
+
+          if (missingSchoolIds.length > 0) {
+            console.log(`[AUTH] Auto-repair: Adding missing student roles for schools ${missingSchoolIds.join(', ')}`);
+            const newRoles = missingSchoolIds.map(schoolId => ({
+              user_id: profile.id,
+              school_id: schoolId,
+              role: Role.STUDENT,
+              status: 'ACTIVE'
+            }));
+            
+            await supabase.from('user_school_roles').insert(newRoles);
+            
+            // Refetch roles after repair
+            const refetched = await fetchRoles();
+            if (!refetched.error) {
+              rolesRaw = refetched.data || [];
+            }
+          }
+        }
+      } catch (repairErr) {
+        console.error('[AUTH] Auto-repair failed:', repairErr);
+        // Continue with whatever roles we have
+      }
+
+      const roles = mapList(rolesRaw, mappers.userSchoolRole);
       console.log(`[AUTH] Roles loaded: ${roles.length}`);
 
       if (loadingRef.current === authUserId) {

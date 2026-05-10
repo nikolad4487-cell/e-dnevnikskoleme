@@ -43,7 +43,26 @@ export default function SchoolSelectionPage() {
         
         schoolIds = (childRoles || []).map(r => r.school_id);
       } else {
-        schoolIds = userSchoolRoles.map(r => r.school_id);
+        const directSchoolIds = userSchoolRoles.map(r => r.school_id);
+        
+        // Fallback for students: check class enrollments if user doesn't have roles
+        // This handles cases where student has class enrollment but no school role yet
+        let enrollmentSchoolIds: string[] = [];
+        try {
+          const { data: enrollments } = await supabase
+            .from('student_class_enrollments')
+            .select('classes(school_id)')
+            .eq('student_id', user.id)
+            .eq('status', 'ACTIVE');
+          
+          enrollmentSchoolIds = (enrollments || [])
+            .map((e: any) => e.classes?.school_id)
+            .filter(Boolean);
+        } catch (e) {
+          console.error('[SCHOOLS] Error fetching student enrollments:', e);
+        }
+
+        schoolIds = [...new Set([...directSchoolIds, ...enrollmentSchoolIds])];
       }
 
       const { data, error } = await supabase
