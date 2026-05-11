@@ -51,6 +51,7 @@ export type UserSchoolRole = {
 export type Class = {
   id: string;
   schoolId: string;
+  schoolYearId: string;
   schoolYear: string;
   name: string;
   gradeLevel: number;
@@ -173,9 +174,14 @@ export type Grade = {
   subjectId: string;
   teacherId: string;
   classId?: string;
+  schoolId?: string;
   value: number;
   note?: string;
+  element?: string;
   category?: string;
+  gradeType?: string;
+  isFinal?: boolean;
+  period?: string;
   weight: number;
   isImportant: boolean;
   date: string;
@@ -211,10 +217,12 @@ export type StudentYearSummary = {
   id: string;
   studentId: string;
   classId: string;
+  schoolYearId: string;
   schoolYear: string;
   average: number;
   behavior: string;
   finalResult?: number;
+  status: string;
   finalizedAt?: string;
   finalizedBy?: string;
 };
@@ -226,18 +234,6 @@ export type StudentSubjectEnrollment = {
   classId: string;
   status: 'ACTIVE' | 'EXEMPT';
   schoolYear: string;
-};
-
-export type FinalGrade = {
-  id: string;
-  studentId: string;
-  subjectId: string;
-  classId: string;
-  schoolId: string;
-  teacherId: string;
-  value: number | string;
-  period: string;
-  date: string;
 };
 
 export type SpecialExam = {
@@ -290,9 +286,9 @@ export type SchoolYear = {
   id: string;
   schoolId: string;
   name: string;
-  startDate: string;
-  endDate: string;
-  isCurrent: boolean;
+  startsAt: string;
+  endsAt: string;
+  isActive: boolean;
 };
 
 export type Program = {

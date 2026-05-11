@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
-import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, Subject, StudentSubjectEnrollment, SchoolYear, RolloverLog, StudentClassEnrollment, FinalGrade, School, Program, SchoolType, SecondarySubtype, ClassVariant, ContinuationType } from '../../types';
+import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, Subject, StudentSubjectEnrollment, SchoolYear, RolloverLog, StudentClassEnrollment, School, Program, SchoolType, SecondarySubtype, ClassVariant, ContinuationType } from '../../types';
 import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
@@ -58,7 +58,7 @@ export default function AdministrationPage() {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
   // Modals / Tabs
-  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'ROLLOVER' | 'SCHOOLS' | 'PROGRAMS' | 'USERS'>(effectiveClassId ? 'CLASS_DETAIL' : 'MENU');
+  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS'>(effectiveClassId ? 'CLASS_DETAIL' : 'MENU');
   
   useEffect(() => {
     if (effectiveClassId && activeTab === 'MENU') {
@@ -81,6 +81,7 @@ export default function AdministrationPage() {
   const [classEnrollments, setClassEnrollments] = useState<any[]>([]); // Enrollments for the selected class subjects
   const [finalGrades, setFinalGrades] = useState<any[]>([]);
   const [summaries, setSummaries] = useState<any[]>([]);
+  const [overallNotes, setOverallNotes] = useState<any[]>([]);
   const [showEnrollmentModal, setShowEnrollmentModal] = useState<{ isOpen: boolean, subjectId: string | null }>({ isOpen: false, subjectId: null });
   
   const [resetModal, setResetModal] = useState<{
@@ -352,61 +353,8 @@ export default function AdministrationPage() {
       .subscribe();
     */
     
+    // students fetching used to be here, but we will consolidate it into fetchData and its effect
     supabase.from('classes').select('*').then(({ data }) => data && setClasses(mapList(data, mappers.class)));
-
-    /*
-    const studentsChannel = supabase.channel('students_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'student_class_enrollments' }, () => {
-        supabase.from('student_class_enrollments')
-          .select('*, student:user_profiles(*)')
-          .eq('status', 'ACTIVE')
-          .then(({ data }) => {
-            if (data) {
-              const mapped = data.map(row => {
-                const u = mappers.user(row.student);
-                return {
-                  ...u,
-                  name: u.name?.split(' ')[0] || '',
-                  surname: u.name?.split(' ').slice(1).join(' ') || '',
-                  globalRole: Role.STUDENT,
-                  classId: row.class_id
-                };
-              });
-              setStudents(mapped);
-            }
-          });
-      })
-      .subscribe();
-    */
-    
-    supabase.from('user_school_roles')
-      .select('*, student:user_profiles(*)')
-      .eq('role', Role.STUDENT)
-      .then(({ data }) => {
-        if (data) {
-          const mapped = data.map(row => {
-            const u = mappers.user(row.student);
-            return {
-              ...u,
-              name: u.name?.split(' ')[0] || '',
-              surname: u.name?.split(' ').slice(1).join(' ') || '',
-              globalRole: Role.STUDENT
-            };
-          });
-          // Filter by selected school if needed
-          const filtered = selectedSchoolId ? (data || []).filter(r => r.school_id === selectedSchoolId).map(row => {
-            const u = mappers.user(row.student);
-            return {
-              ...u,
-              name: u.name?.split(' ')[0] || '',
-              surname: u.name?.split(' ').slice(1).join(' ') || '',
-              globalRole: Role.STUDENT
-            };
-          }) : mapped;
-          
-          setStudents(filtered as any);
-        }
-      });
 
     /*
     const subjectsChannel = supabase.channel('subjects_changes')
@@ -443,7 +391,7 @@ export default function AdministrationPage() {
     });
     supabase.from('schools').select('*').then(({ data }) => data && setSchools(mapList(data, mappers.school)));
     supabase.from('programs').select('*').then(({ data }) => data && setPrograms(data)); // Add program mapper if needed
-    supabase.from('school_years').select('*').then(({ data }) => data && setSchoolYears(data)); // Add schoolYear mapper if needed
+    supabase.from('school_years').select('*').then(({ data }) => data && setSchoolYears(mapList(data, mappers.schoolYear))); 
 
     return () => {
       /*
@@ -547,21 +495,22 @@ export default function AdministrationPage() {
 
   // Define fetchData for parts that still need manual re-fetching
   const fetchData = async () => {
-    if (!selectedClassId) return;
+    const classToFetch = effectiveClassId || selectedClassId;
+    if (!classToFetch) return;
     try {
       const { data: enrollments, error: err } = await supabase
         .from('student_class_enrollments')
         .select('*, student:user_profiles(*)')
-        .eq('class_id', selectedClassId)
+        .eq('class_id', classToFetch)
         .eq('status', 'ACTIVE');
       
       if (err) throw err;
 
       if (enrollments) {
         const mapped = enrollments.map(row => ({
-          ...row.student,
+          ...mappers.user(row.student), // Use mapper consistently
           name: row.student.name?.split(' ')[0] || '',
-          surname: row.student.name?.split(' ').slice(1).join(' ') || '',
+          surname: row.student.surname || row.student.name?.split(' ').slice(1).join(' ') || '',
           globalRole: Role.STUDENT,
           classId: row.class_id
         }));
@@ -574,12 +523,39 @@ export default function AdministrationPage() {
       const { data: enrollData } = await supabase
         .from('student_subject_enrollments')
         .select('*')
-        .eq('class_id', selectedClassId);
+        .eq('class_id', classToFetch);
       if (enrollData) setClassEnrollments(mapList(enrollData, mappers.studentSubjectEnrollment));
+
+      const { data: summaryData } = await supabase
+        .from('student_year_summaries')
+        .select('*')
+        .eq('class_id', classToFetch);
+      if (summaryData) setSummaries(mapList(summaryData, mappers.studentYearSummary));
+
+      const { data: notesData } = await supabase
+        .from('student_overall_notes')
+        .select('*')
+        .eq('class_id', classToFetch);
+      if (notesData) setOverallNotes(mapList(notesData, mappers.studentOverallNotes));
+
+      const { data: gradesData } = await supabase
+        .from('grades')
+        .select('*')
+        .eq('class_id', classToFetch)
+        .eq('is_final', true);
+      // Removed period check as requested
+      if (gradesData) setFinalGrades(mapList(gradesData, mappers.grade));
+
     } catch (error) {
       console.error(error);
     }
   };
+
+  useEffect(() => {
+    if (selectedClassId) {
+      fetchData();
+    }
+  }, [selectedClassId, activeTab]);
 
   const handleUpdateClass = async () => {
     if (!selectedClassId) return;
@@ -735,28 +711,29 @@ export default function AdministrationPage() {
   };
 
   const handleUpdateBehavior = async (studentId: string, behavior: string) => {
-    if (!selectedClassId) return;
+    if (!selectedClassId || !selectedClassData) return;
     try {
-      const { data: existing } = await supabase
-        .from('student_year_summaries')
-        .select('id')
-        .eq('student_id', studentId)
-        .eq('class_id', selectedClassId)
-        .maybeSingle();
-      
       const payload = {
         student_id: studentId,
         class_id: selectedClassId,
+        school_year_id: selectedClassData.schoolYearId,
+        school_year: selectedClassData.schoolYear,
         behavior,
-        school_year: '2025/2026'
       };
 
-      if (existing) {
-        await supabase.from('student_year_summaries').update(payload).eq('id', existing.id);
-      } else {
-        await supabase.from('student_year_summaries').insert([payload]);
-      }
+      const { error: upsertError } = await supabase.from('student_year_summaries').upsert(payload, {
+        onConflict: 'student_id,class_id,school_year'
+      });
+      
+      if (upsertError) throw upsertError;
+
       toast.success('Vladanje ažurirano');
+      
+      const { data: updatedSummaries } = await supabase
+        .from('student_year_summaries')
+        .select('*')
+        .eq('class_id', selectedClassId);
+      if (updatedSummaries) setSummaries(mapList(updatedSummaries, mappers.studentYearSummary));
     } catch (err) {
       console.error(err);
       toast.error('Greška pri ažuriranju vladanja');
@@ -767,6 +744,7 @@ export default function AdministrationPage() {
     if (!selectedClassId || !selectedClassData) return;
     
     const classStudents = students.filter(s => s.classId === selectedClassId);
+    console.log("FINALIZING FOR CLASS:", selectedClassId, "STUDENT COUNT:", classStudents.length);
     let successCount = 0;
     let skipCount = 0;
     const failures: { student: string, missing: string[] }[] = [];
@@ -779,21 +757,44 @@ export default function AdministrationPage() {
         .select('student_id, subject_id, status')
         .eq('class_id', selectedClassId);
       
+      console.log("ENROLLED SUBJECTS FOUND:", enrollData?.length);
+
       // 2. Fetch all final grades for this class once
       const { data: finalGradesData } = await supabase
-        .from('final_grades')
-        .select('student_id, subject_id, value, period')
+        .from('grades')
+        .select('student_id, subject_id, value, period, is_final')
         .eq('class_id', selectedClassId)
-        .eq('period', '2'); // Assume period '2' is the final one for calculation
+        .eq('is_final', true);
+      
+      console.log("FINAL GRADES FOUND:", finalGradesData?.length);
+
+      // 3. Fetch overall notes for vladanje
+      const { data: overallNotesData } = await supabase
+        .from('student_overall_notes')
+        .select('student_id, disciplinary_actions')
+        .eq('class_id', selectedClassId);
 
       for (const student of classStudents) {
         const studentEnrollments = (enrollData || []).filter(e => e.student_id === student.id && e.status === 'ACTIVE');
         const studentGrades = (finalGradesData || []).filter(g => g.student_id === student.id);
+        const studentNotes = (overallNotesData || []).find(n => n.student_id === student.id);
+        
+        console.log(`POLL FOR STUDENT: ${student.surname} ${student.name} (${student.id})`);
+        console.log(`- Active Subjects: ${studentEnrollments.length}`);
+        console.log(`- Final Grades Found: ${studentGrades.length}`);
+
+        let behavior = 'Uzorno';
+        if (studentNotes?.disciplinary_actions) {
+          const da = studentNotes.disciplinary_actions.toLowerCase();
+          if (da.includes('ukor')) behavior = 'Loše';
+          else if (da.includes('opomena')) behavior = 'Dobro';
+        }
         
         const missingSubjects: string[] = [];
         const gradesValues: number[] = [];
 
         for (const enroll of studentEnrollments) {
+          // Note: we don't check period here, only if there is a grade with is_final=true for this subject
           const fg = studentGrades.find(g => g.subject_id === enroll.subject_id);
           if (!fg || !fg.value) {
             const subject = allSubjects.find(s => s.id === enroll.subject_id);
@@ -804,29 +805,43 @@ export default function AdministrationPage() {
         }
 
         if (missingSubjects.length > 0) {
+          console.log(`- MISSING GRADES FOR: ${missingSubjects.join(', ')}`);
           failures.push({ student: `${student.surname} ${student.name}`, missing: missingSubjects });
           skipCount++;
           continue;
         }
 
         if (gradesValues.length > 0) {
+          const hasFail = gradesValues.some(v => v === 1);
           const avg = gradesValues.reduce((a, b) => a + b, 0) / gradesValues.length;
-          const finalGrade = getFinalAverageGrade(avg);
+          const finalGrade = hasFail ? 1 : getFinalAverageGrade(avg);
           
-          await supabase.from('student_year_summaries').upsert({
+          console.log(`- CALCULATED: Avg=${avg.toFixed(2)}, Final=${finalGrade}, Behavior=${behavior}, HasFail=${hasFail}`);
+
+          const payload = {
             student_id: student.id,
             class_id: selectedClassId,
+            school_year_id: selectedClassData.schoolYearId,
             school_year: selectedClassData.schoolYear,
-            average_grade: avg,
-            final_overall_grade: finalGrade,
+            average: avg,
+            final_result: finalGrade,
+            behavior,
             status: 'FINALIZED',
             finalized_at: new Date().toISOString(),
             finalized_by: user?.id
-          }, {
+          };
+
+          const { error: upsertError } = await supabase.from('student_year_summaries').upsert(payload, {
             onConflict: 'student_id,class_id,school_year'
           });
-          successCount++;
+
+          if (upsertError) {
+            console.error(`- UPSERT ERROR for ${student.id}:`, upsertError);
+          } else {
+            successCount++;
+          }
         } else {
+          console.log("- NO GRADES VALUES FOUND (despite no missing subjects - check exempted list)");
           skipCount++;
         }
       }
@@ -841,7 +856,7 @@ export default function AdministrationPage() {
       
       // Update local state
       const { data: updatedSummaries } = await supabase.from('student_year_summaries').select('*').eq('class_id', selectedClassId);
-      if (updatedSummaries) setSummaries(updatedSummaries);
+      if (updatedSummaries) setSummaries(mapList(updatedSummaries, mappers.studentYearSummary));
 
     } catch (err) {
       console.error(err);
@@ -862,9 +877,11 @@ export default function AdministrationPage() {
       await supabase.from('classes').insert([{
         name: newClassName,
         school_id: selectedSchoolId,
+        school_year_id: newClassSchoolYearId,
         school_year: schoolYear?.name || '',
         grade_level: newClassGrade,
         section: newClassSection,
+        variant: newClassVariant,
         status: 'ACTIVE',
         homeroom_teacher_id: null,
         deputy_teacher_id: null
@@ -1158,6 +1175,17 @@ export default function AdministrationPage() {
       const toYear = schoolYears.find(y => y.id === toYearId);
       if (!toYear) throw new Error('Podaci o školskoj godini nedostaju');
       
+      // Transfer homeroom and deputy if target class exists
+      if (toClassId) {
+        const fromClass = classes.find(c => c.id === fromClassId);
+        if (fromClass) {
+          await supabase.from('classes').update({
+            homeroom_teacher_id: fromClass.homeroomTeacherId,
+            deputy_teacher_id: fromClass.deputyTeacherId
+          }).eq('id', toClassId);
+        }
+      }
+      
       let transferredCount = 0;
       for (const item of rolloverStudents) {
         if (item.status === 'ZAVRSAVA') {
@@ -1209,6 +1237,44 @@ export default function AdministrationPage() {
     }
   };
 
+  const handleFixSchoolYears = async () => {
+    setLoading(true);
+    try {
+      const uniqueYearNames = Array.from(new Set(classes.map(c => c.schoolYear).filter(Boolean)));
+      let created = 0;
+      let linked = 0;
+      
+      for (const name of uniqueYearNames) {
+        let yearId = schoolYears.find(y => y.name === name)?.id;
+        if (!yearId) {
+          const { data } = await supabase.from('school_years').insert([{
+            name,
+            school_id: selectedSchoolId,
+            is_active: false
+          }]).select('id').single();
+          if (data) {
+            yearId = data.id;
+            created++;
+          }
+        }
+        if (yearId) {
+          const orphans = classes.filter(c => c.schoolYear === name && !c.schoolYearId);
+          if (orphans.length > 0) {
+            await supabase.from('classes').update({ school_year_id: yearId }).in('id', orphans.map(o => o.id));
+            linked += orphans.length;
+          }
+        }
+      }
+      toast.success(`Popravljeno: ${created} godina, ${linked} razreda.`);
+      fetchData();
+    } catch (err) {
+      console.error(err);
+      toast.error('Došlo je do greške');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-white font-sans text-[13px]">
       <div className="ed-header !bg-[#005c8d] !text-white h-8 !px-3">
@@ -1235,7 +1301,7 @@ export default function AdministrationPage() {
             { label: 'Satnica i raspored', tab: 'PLANNING', hide: !effectiveClassId },
             { label: 'Opći prosjek', tab: 'OPCI_PROSJEK', hide: !effectiveClassId },
             { label: '--- SUSTAV ---', tab: 'HEADER2', disabled: true },
-            { label: 'Školska godina', tab: 'ROLLOVER' },
+            { label: 'Školske godine', tab: 'SCHOOL_YEARS' },
             { label: 'Škole i Smjerovi', tab: 'SCHOOLS' },
           ].map((opt, i) => {
             if (opt.hide) return null;
@@ -1243,7 +1309,7 @@ export default function AdministrationPage() {
             
             return (
               <button 
-                key={opt.tab}
+                key={`${opt.tab}-${opt.label}`}
                 onClick={() => {
                   if (opt.tab === 'STUDENT_SUBJECTS_ENROLL') {
                     navigate('/admin/student-predmeti');
@@ -1302,7 +1368,7 @@ export default function AdministrationPage() {
                   { label: 'Dodjela nastavnika predmetima', tab: 'STAFF' },
                   { label: 'Nastavni planovi i satnica', tab: 'PLANNING' },
                   { label: 'Raspored sati', tab: 'PLANNING' },
-                  { label: 'Školska godina', tab: 'ROLLOVER' },
+                  { label: 'Školske godine i prijenos', tab: 'SCHOOL_YEARS' },
                   { label: 'Opći prosjek (na kraju godine)', tab: 'OPCI_PROSJEK' },
                   { label: 'Postavke škole', tab: 'SCHOOLS' },
                 ].map((opt) => (
@@ -1418,7 +1484,15 @@ export default function AdministrationPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {classes.map(c => {
+                    {classes.sort((a,b) => {
+                      const yearA = schoolYears.find(y => y.id === a.schoolYearId);
+                      const yearB = schoolYears.find(y => y.id === b.schoolYearId);
+                      if (yearA?.isActive && !yearB?.isActive) return -1;
+                      if (!yearA?.isActive && yearB?.isActive) return 1;
+                      const yearCompare = (yearB?.name || '').localeCompare(yearA?.name || '');
+                      if (yearCompare !== 0) return yearCompare;
+                      return a.name.localeCompare(b.name);
+                    }).map(c => {
                       const school = schools.find(s => s.id === c.schoolId);
                       return (
                         <tr key={c.id} className="group hover:bg-[#eff6ff] transition-colors">
@@ -1432,7 +1506,10 @@ export default function AdministrationPage() {
                           </td>
                           <td className="px-4 py-3 border-r border-gray-200">
                              <div className="font-bold text-gray-600">{school?.name || 'N/A'}</div>
-                             <div className="text-[10px] text-gray-400 font-bold uppercase">{c.school_year}</div>
+                             <div className="flex items-center gap-2">
+                               <div className="text-[10px] text-gray-400 font-bold uppercase">{c.schoolYear}</div>
+                               {!schoolYears.find(y => y.id === c.schoolYearId)?.isActive && <span className="text-[8px] font-black uppercase text-gray-300 border border-gray-200 px-1 rounded shadow-inner">Arhiva</span>}
+                             </div>
                           </td>
                           <td className="px-4 py-3 border-r border-gray-200">
                              <span className={cn("px-2 py-0.5 rounded-full text-[8px] font-black uppercase border", 
@@ -1812,13 +1889,13 @@ export default function AdministrationPage() {
                   <button onClick={() => setActiveTab('CLASS_DETAIL')} className="text-gray-400 hover:text-gray-600 transition-colors"><ChevronLeft size={20}/></button>
                   <h1 className="text-xl font-black text-gray-700 uppercase tracking-tighter">Opći prosjek i vladanje - {selectedClassData?.name}</h1>
                 </div>
-                {(user?.role === Role.ADMIN || selectedClassData?.homeroom_teacher_id === user?.id) && (
+    {(isMainAdmin || isSchoolAdmin || selectedClassData?.homeroom_teacher_id === user?.id) && (
                   <button 
                     onClick={handleFinalizeYearSummaries}
                     disabled={loading}
                     className="bg-[#005c8d] text-white px-4 py-2 text-[10px] font-black uppercase hover:bg-[#004a70] transition-colors shadow-sm disabled:opacity-50"
                   >
-                    Izračunaj i zaključi opći prosjek
+                    Izračunaj i zaključi opći uspjeh i vladanje
                   </button>
                 )}
               </div>
@@ -1836,21 +1913,35 @@ export default function AdministrationPage() {
                       </tr>
                    </thead>
                    <tbody className="divide-y divide-gray-200">
+                      {students.filter(s => s.classId === effectiveClassId).length === 0 && (
+                        <tr>
+                           <td colSpan={6} className="px-4 py-8 text-center text-gray-400 font-bold uppercase text-[10px]">
+                              Nema dodijeljenih učenika ovom razredu.
+                           </td>
+                        </tr>
+                      )}
                       {students.filter(s => s.classId === effectiveClassId).sort((a,b) => a.surname.localeCompare(b.surname)).map((student, idx) => {
-                         const studentClassEnrollmentsRaw = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
-                         const studentClassEnrollments = Array.from(new Map<string, any>(studentClassEnrollmentsRaw.map(e => [e.subjectId, e])).values());
+                         const studentClassEnrollments = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
                          
-                         const studentFinalGradesRaw = finalGrades.filter(fg => fg.studentId === student.id && fg.period === '2' && studentClassEnrollments.some(e => e.subjectId === fg.subjectId));
-                         const studentFinalGrades = Array.from(new Map<string, any>(studentFinalGradesRaw.map(fg => [fg.subjectId, fg])).values());
+                         const studentFinalGrades = finalGrades.filter(fg => fg.studentId === student.id);
                          
-                         const missingGrades = studentClassEnrollments.length > studentFinalGrades.length;
                          const missingSubjects = studentClassEnrollments
                             .filter(e => !studentFinalGrades.some(fg => fg.subjectId === e.subjectId))
                             .map(e => allSubjects.find(s => s.id === e.subjectId)?.name)
                             .filter(Boolean);
 
-                         const summary = summaries.find(s => s.studentId === student.id && s.classId === selectedClassId);
+                         const missingGrades = missingSubjects.length > 0;
+
+                         const summary = summaries.find(s => s.studentId === student.id && (s.classId === selectedClassId || s.classId === effectiveClassId));
                          const isFinalized = !!summary?.finalizedAt;
+
+                         const studentNotes = overallNotes.find(n => n.studentId === student.id);
+                         let autoBehavior = 'Uzorno';
+                         if (studentNotes?.disciplinaryActions) {
+                           const da = studentNotes.disciplinaryActions.toLowerCase();
+                           if (da.includes('ukor')) autoBehavior = 'Loše';
+                           else if (da.includes('opomena')) autoBehavior = 'Dobro';
+                         }
 
                          return (
                            <tr key={student.id} className="hover:bg-gray-50">
@@ -1886,25 +1977,15 @@ export default function AdministrationPage() {
                                  </span>
                               </td>
                               <td className="px-4 py-3 border-r border-gray-200">
-                                 {(user?.role === Role.ADMIN || selectedClassData?.homeroomTeacherId === user?.id) ? (
-                                   <select 
-                                     value={summary?.behavior || 'Uzorno'}
-                                     onChange={(e) => handleUpdateBehavior(student.id, e.target.value)}
-                                     className="w-full border border-gray-300 p-1 text-[10px] font-bold outline-none focus:border-[#005c8d]"
-                                   >
-                                      <option value="Uzorno">Uzorno</option>
-                                      <option value="Dobro">Dobro</option>
-                                      <option value="Loše">Loše</option>
-                                   </select>
-                                 ) : (
-                                   <div className="text-center font-bold text-gray-500 uppercase text-[10px]">{summary?.behavior || 'Uzorno'}</div>
-                                 )}
+                                 {summary?.behavior || autoBehavior}
                               </td>
                               <td className="px-4 py-3 text-center">
                                  {isFinalized ? (
                                     <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-black uppercase tracking-tighter text-[9px] border border-green-200">Zaključeno</span>
+                                 ) : missingGrades ? (
+                                    <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-black uppercase tracking-tighter text-[9px] border border-red-200">Nedostaju ocjene</span>
                                  ) : (
-                                    <span className="px-2 py-0.5 bg-gray-100 text-gray-400 rounded-full font-black uppercase tracking-tighter text-[9px] border border-gray-200">U obradi</span>
+                                    <span className="px-2 py-0.5 bg-blue-100 text-[#005c8d] rounded-full font-black uppercase tracking-tighter text-[9px] border border-blue-200">Spremno</span>
                                  )}
                               </td>
                            </tr>
@@ -2437,10 +2518,18 @@ export default function AdministrationPage() {
             </div>
           )}
 
-          {activeTab === 'ROLLOVER' && (
+          {activeTab === 'SCHOOL_YEARS' && (
             <div className="max-w-6xl space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Školska godina i Rollover</h3>
+                {isMainAdmin && (
+                  <button 
+                    onClick={handleFixSchoolYears}
+                    className="text-[9px] font-black text-red-500 uppercase border border-red-200 px-3 py-1 bg-red-50 hover:bg-red-100"
+                  >
+                    Popravi strukturu (Legacy Sync)
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -2495,6 +2584,7 @@ export default function AdministrationPage() {
                           <th className="px-4 py-2 border-r border-gray-200">Šk. Godina</th>
                           <th className="px-4 py-2 border-r border-gray-200">Trajanje</th>
                           <th className="px-4 py-2 text-center w-24">Status</th>
+                          <th className="px-4 py-2 text-center w-24">Akcije</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -2510,6 +2600,21 @@ export default function AdministrationPage() {
                               ) : (
                                 <span className="px-2 py-0.5 bg-gray-100 text-gray-400 rounded-full font-black uppercase text-[8px] border border-gray-200">Arhiva</span>
                               )}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                               {!y.isActive && (
+                                 <button 
+                                   onClick={async () => {
+                                      if (!confirm(`Postaviti ${y.name} kao aktivnu godinu? Sve ostale bit će arhivirane.`)) return;
+                                      await supabase.from('school_years').update({ is_active: false }).eq('school_id', selectedSchoolId);
+                                      await supabase.from('school_years').update({ is_active: true }).eq('id', y.id);
+                                      fetchData();
+                                   }}
+                                   className="text-[9px] font-black text-[#005c8d] uppercase hover:underline"
+                                 >
+                                   Aktiviraj
+                                 </button>
+                               )}
                             </td>
                           </tr>
                         ))}
@@ -2535,7 +2640,12 @@ export default function AdministrationPage() {
                             className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                           >
                             <option value="">-- Odaberi --</option>
-                            {classes.sort((a,b) => a.name.localeCompare(b.name)).map(c => <option key={c.id} value={c.id}>{c.name} ({c.school_year})</option>)}
+                            {classes.sort((a,b) => {
+                              const yearA = schoolYears.find(y => y.id === a.schoolYearId)?.isActive ? 0 : 1;
+                              const yearB = schoolYears.find(y => y.id === b.schoolYearId)?.isActive ? 0 : 1;
+                              if (yearA !== yearB) return yearA - yearB;
+                              return a.name.localeCompare(b.name);
+                            }).map(c => <option key={c.id} value={c.id}>{c.name} ({c.schoolYear})</option>)}
                           </select>
                         </div>
                         <div className="space-y-1">

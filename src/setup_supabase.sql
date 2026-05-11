@@ -26,7 +26,6 @@ DROP TABLE IF EXISTS public.student_notes CASCADE;
 DROP TABLE IF EXISTS public.student_overall_notes CASCADE;
 DROP TABLE IF EXISTS public.class_overall_notes CASCADE;
 DROP TABLE IF EXISTS public.special_exams CASCADE;
-DROP TABLE IF EXISTS public.final_grades CASCADE;
 DROP TABLE IF EXISTS public.notes CASCADE;
 DROP TABLE IF EXISTS public.grading_elements CASCADE;
 DROP TABLE IF EXISTS public.user_profiles CASCADE;
@@ -74,10 +73,23 @@ CREATE TABLE public.user_school_roles (
     UNIQUE(user_id, school_id, role)
 );
 
--- 4. Classes Table (ID is TEXT)
+-- 4. School Years
+CREATE TABLE public.school_years (
+    id TEXT PRIMARY KEY,
+    school_id TEXT REFERENCES public.schools(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    starts_at DATE,
+    ends_at DATE,
+    is_active BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. Classes Table (ID is TEXT)
 CREATE TABLE public.classes (
     id TEXT PRIMARY KEY,
     school_id TEXT REFERENCES public.schools(id) ON DELETE CASCADE,
+    school_year_id TEXT REFERENCES public.school_years(id) ON DELETE SET NULL,
     school_year TEXT NOT NULL,
     name TEXT NOT NULL,
     grade_level INTEGER NOT NULL,
@@ -86,15 +98,17 @@ CREATE TABLE public.classes (
     homeroom_teacher_id UUID REFERENCES public.user_profiles(id),
     deputy_teacher_id UUID REFERENCES public.user_profiles(id),
     program_id UUID,
+    variant TEXT DEFAULT 'Redovni',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 5. Student Class Enrollments (Membership)
+-- 6. Student Class Enrollments (Membership)
 CREATE TABLE public.student_class_enrollments (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     student_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
     class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    school_year_id TEXT REFERENCES public.school_years(id) ON DELETE SET NULL,
     school_year TEXT NOT NULL,
     status TEXT DEFAULT 'ACTIVE',
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -197,16 +211,26 @@ CREATE TABLE public.grades (
     student_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
     subject_id TEXT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
     teacher_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
-    class_id TEXT REFERENCES public.classes(id),
+    class_id TEXT REFERENCES public.classes(id) ON DELETE CASCADE,
+    school_id TEXT REFERENCES public.schools(id) ON DELETE CASCADE,
     value INTEGER NOT NULL,
     note TEXT,
-    category TEXT,
+    element TEXT,
+    category TEXT, -- keep for backward compatibility if needed, but 'element' is preferred now
+    grade_type TEXT DEFAULT 'REGULAR',
+    is_final BOOLEAN DEFAULT FALSE,
+    period TEXT, -- For final grades ('1', 'FINAL', etc.)
     weight INTEGER DEFAULT 1,
     is_important BOOLEAN DEFAULT FALSE,
     date DATE DEFAULT CURRENT_DATE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Partial unique index to ensure only one final grade per student/subject/class
+CREATE UNIQUE INDEX IF NOT EXISTS grades_one_final_per_subject 
+ON public.grades(student_id, class_id, subject_id) 
+WHERE is_final = true;
 
 -- 13. Exams
 CREATE TABLE public.exams (
@@ -248,14 +272,17 @@ CREATE TABLE public.student_year_summaries (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     student_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
     class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    school_year_id TEXT REFERENCES public.school_years(id) ON DELETE SET NULL,
     school_year TEXT NOT NULL,
     average NUMERIC(3,2),
     behavior TEXT DEFAULT 'Uzorno',
     final_result INTEGER,
+    status TEXT DEFAULT 'PENDING',
     finalized_at TIMESTAMPTZ,
     finalized_by UUID REFERENCES public.user_profiles(id),
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(student_id, class_id, school_year)
 );
 
 -- 16. Student Subject Enrollments
@@ -264,6 +291,7 @@ CREATE TABLE public.student_subject_enrollments (
     student_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
     subject_id TEXT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
     class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    school_year_id TEXT REFERENCES public.school_years(id) ON DELETE SET NULL,
     school_year TEXT NOT NULL,
     status TEXT DEFAULT 'ACTIVE',
     created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -308,21 +336,7 @@ CREATE TABLE public.class_overall_notes (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 18. Final Grades
-CREATE TABLE public.final_grades (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    student_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
-    subject_id TEXT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
-    teacher_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
-    class_id TEXT REFERENCES public.classes(id),
-    school_id TEXT REFERENCES public.schools(id),
-    value TEXT NOT NULL,
-    period TEXT NOT NULL,
-    date DATE DEFAULT CURRENT_DATE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
+-- 18. Grading Elements
 CREATE TABLE public.grading_elements (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
@@ -336,6 +350,7 @@ CREATE TABLE public.grading_elements (
 
 -- Enable RLS on all tables
 ALTER TABLE public.schools ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.school_years ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_school_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.classes ENABLE ROW LEVEL SECURITY;
@@ -355,11 +370,11 @@ ALTER TABLE public.student_subject_enrollments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.student_notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.student_overall_notes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.class_overall_notes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.final_grades ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.grading_elements ENABLE ROW LEVEL SECURITY;
 
 -- Policies
 CREATE POLICY "Authenticated read" ON public.schools FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated read" ON public.school_years FOR ALL TO authenticated USING (true);
 CREATE POLICY "Authenticated read" ON public.user_profiles FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated read" ON public.user_school_roles FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated read" ON public.classes FOR SELECT TO authenticated USING (true);
@@ -375,7 +390,6 @@ CREATE POLICY "Authenticated manage" ON public.student_subject_enrollments FOR A
 CREATE POLICY "Authenticated manage" ON public.student_notes FOR ALL TO authenticated USING (true);
 CREATE POLICY "Authenticated manage" ON public.student_overall_notes FOR ALL TO authenticated USING (true);
 CREATE POLICY "Authenticated manage" ON public.class_overall_notes FOR ALL TO authenticated USING (true);
-CREATE POLICY "Authenticated manage" ON public.final_grades FOR ALL TO authenticated USING (true);
 CREATE POLICY "Authenticated manage" ON public.grading_elements FOR ALL TO authenticated USING (true);
 CREATE POLICY "Authenticated manage" ON public.work_weeks FOR ALL TO authenticated USING (true);
 CREATE POLICY "Authenticated manage" ON public.schedule_cells FOR ALL TO authenticated USING (true);

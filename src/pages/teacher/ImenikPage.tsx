@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
-import { Class, User, Role, Grade, Subject, StudentNote, FinalGrade, SpecialExam, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary } from '../../types';
+import { Class, User, Role, Grade, Subject, StudentNote, SpecialExam, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary } from '../../types';
 import { cn } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2 } from 'lucide-react';
@@ -54,7 +54,7 @@ export default function ImenikPage() {
   
   const [currentGrades, setCurrentGrades] = useState<Grade[]>([]);
   const [currentNotes, setCurrentNotes] = useState<StudentNote[]>([]);
-  const [finalGrades, setFinalGrades] = useState<FinalGrade[]>([]);
+  const [finalGrades, setFinalGrades] = useState<Grade[]>([]);
   const [specialExams, setSpecialExams] = useState<SpecialExam[]>([]);
   const [studentOverallNotes, setStudentOverallNotes] = useState<StudentNotes | null>(null);
   const [classOverallNotes, setClassOverallNotes] = useState<ClassNotes | null>(null);
@@ -254,7 +254,8 @@ export default function ImenikPage() {
           .from('grades')
           .select('*')
           .eq('student_id', activeStudent.id)
-          .eq('subject_id', activeSubject.id);
+          .eq('subject_id', activeSubject.id)
+          .eq('is_final', false);
         if (data) setCurrentGrades(mapList(data, mappers.grade));
       };
       
@@ -269,12 +270,13 @@ export default function ImenikPage() {
 
       const fetchFinals = async () => {
         const { data } = await supabase
-          .from('final_grades')
+          .from('grades')
           .select('*')
           .eq('student_id', activeStudent.id)
           .eq('subject_id', activeSubject.id)
-          .eq('class_id', effectiveClassId);
-        if (data) setFinalGrades(data);
+          .eq('class_id', effectiveClassId)
+          .eq('is_final', true);
+        if (data) setFinalGrades(mapList(data, mappers.grade));
       };
 
       const fetchSpecials = async () => {
@@ -396,6 +398,7 @@ export default function ImenikPage() {
         .select('*')
         .eq('student_id', activeStudent.id)
         .eq('subject_id', activeSubject.id)
+        .eq('is_final', false)
         .order('created_at', { ascending: false });
       setCurrentGrades(mapList(grades, mappers.grade));
 
@@ -408,12 +411,13 @@ export default function ImenikPage() {
       setCurrentNotes(mapList(notes, mappers.studentNote) as any);
 
       const { data: finals } = await supabase
-        .from('final_grades')
+        .from('grades')
         .select('*')
         .eq('student_id', activeStudent.id)
         .eq('subject_id', activeSubject.id)
-        .eq('class_id', effectiveClassId);
-      setFinalGrades(mapList(finals || [], mappers.finalGrade));
+        .eq('class_id', effectiveClassId)
+        .eq('is_final', true);
+      setFinalGrades(mapList(finals || [], mappers.grade));
 
       const { data: specials } = await supabase
         .from('special_exams')
@@ -667,18 +671,23 @@ export default function ImenikPage() {
         school_id: selectedSchoolId,
         teacher_id: user.id,
         value: newGrade.value,
+        element: newGrade.category || gradingElementNames[0],
         category: newGrade.category || gradingElementNames[0],
         note: newGrade.note,
         is_important: newGrade.isImportant,
+        grade_type: 'REGULAR',
+        is_final: false,
         weight: 1,
         date: newGrade.customDate
       }]);
-      if (error) throw error;
+      if (error) {
+        toast.error(`Greška: ${error.message}`);
+        throw error;
+      }
       setShowGradeModal(false);
       fetchGradesAndNotes();
     } catch (err) {
       console.error(err);
-      toast.error('Greška pri dodavanju ocjene');
     }
   };
 
@@ -769,37 +778,44 @@ export default function ImenikPage() {
       setLoading(true);
       
       const { data: existing, error: fe } = await supabase
-        .from('final_grades')
+        .from('grades')
         .select('id')
         .eq('student_id', activeStudent.id)
         .eq('subject_id', activeSubject.id)
         .eq('class_id', effectiveClassId)
-        .eq('period', selectedFinalPeriod)
+        .eq('is_final', true)
         .maybeSingle();
 
       if (fe) throw fe;
       
+      const numericGrade = typeof val === 'number' ? val : 0;
       const payload = {
         student_id: activeStudent.id,
         subject_id: activeSubject.id,
         class_id: effectiveClassId,
         school_id: selectedSchoolId,
         teacher_id: user.id,
-        value: val,
-        period: selectedFinalPeriod,
-        timestamp: new Date().toISOString()
+        value: numericGrade,
+        note: typeof val === 'string' ? val : '',
+        period: 'FINAL', // Always save as FINAL as requested
+        grade_type: 'FINAL',
+        is_final: true,
+        date: new Date().toISOString().split('T')[0]
       };
 
       if (existing) {
-        await supabase.from('final_grades').update(payload).eq('id', existing.id);
+        const { error } = await supabase.from('grades').update(payload).eq('id', existing.id);
+        if (error) throw error;
       } else {
-        await supabase.from('final_grades').insert([payload]);
+        const { error } = await supabase.from('grades').insert([payload]);
+        if (error) throw error;
       }
+      toast.success('Zaključna ocjena spremljena.');
       setShowFinalGradeModal(false);
       fetchGradesAndNotes();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Greška pri spremanju zaključne ocjene');
+      toast.error(`Greška: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -825,7 +841,7 @@ export default function ImenikPage() {
       case 'GRADE': tableName = 'grades'; break;
       case 'NOTE': tableName = 'student_notes'; break;
       case 'SPECIAL_EXAM': tableName = 'special_exams'; break;
-      case 'FINAL_GRADE': tableName = 'final_grades'; break;
+      case 'FINAL_GRADE': tableName = 'grades'; break;
     }
 
     try {
@@ -872,9 +888,12 @@ export default function ImenikPage() {
             school_id: selectedSchoolId,
             teacher_id: user.id,
             value: studentData.value,
+            element: groupGradeForm.category || gradingElementNames[0],
             category: groupGradeForm.category || gradingElementNames[0],
             note: studentData.note || groupGradeForm.note,
             is_important: groupGradeForm.isImportant,
+            grade_type: 'REGULAR',
+            is_final: false,
             weight: 1,
             date: groupGradeForm.customDate
           });
@@ -1134,7 +1153,7 @@ export default function ImenikPage() {
                           {fg ? (
                             <div className="flex items-center gap-2 group">
                               <span className="text-[8px] font-bold text-gray-400 uppercase">1. pol:</span>
-                              <span className="font-bold text-[#005c8d] text-base">{fg.value}</span>
+                              <span className="font-bold text-[#005c8d] text-base">{fg.value === 0 ? fg.note : fg.value}</span>
                               {canEditGrades(activeSubject?.id || '') && (
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); handleDeleteFinalGrade(fg.id); }}
@@ -1163,14 +1182,14 @@ export default function ImenikPage() {
                  </td>
                  <td className="border border-gray-300 text-center" colSpan={6}>
                     {(() => {
-                      const fg = finalGrades.find(f => f.period === '2');
+                      const fg = finalGrades.find(f => f.period === 'FINAL');
                       const suggested = getSuggestedGrade(Number(avg));
                       return (
                         <div className="w-full h-full p-2 flex flex-col items-center justify-center min-h-[40px]">
                           {fg ? (
                             <div className="flex items-center gap-2 group">
                               <span className="text-[8px] font-bold text-gray-400 uppercase">Zaključna:</span>
-                              <span className="font-bold text-[#005c8d] text-base">{fg.value}</span>
+                              <span className="font-bold text-[#005c8d] text-base">{fg.value === 0 ? fg.note : fg.value}</span>
                               {canEditGrades(activeSubject?.id || '') && (
                                 <button 
                                   onClick={(e) => { e.stopPropagation(); handleDeleteFinalGrade(fg.id); }}
@@ -1185,7 +1204,7 @@ export default function ImenikPage() {
                               <span className="text-[8px] font-bold text-gray-300 uppercase">Zaključna ocjena nije unesena</span>
                               {canEditGrades(activeSubject?.id || '') && (
                                 <button 
-                                  onClick={() => { setSelectedFinalPeriod('2'); setShowFinalGradeModal(true); }}
+                                  onClick={() => { setSelectedFinalPeriod('FINAL'); setShowFinalGradeModal(true); }}
                                   className="text-[8px] font-bold text-[#005c8d] uppercase hover:underline"
                                 >
                                   Unesi ocjenu

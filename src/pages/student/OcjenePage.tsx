@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
-import { Grade, Subject, FinalGrade, User, ClassSubjectTeacher } from '../../types';
+import { Grade, Subject, User, ClassSubjectTeacher } from '../../types';
 import { cn } from '../../lib/utils';
 import { BookOpen, GraduationCap, ChevronRight, ArrowLeft } from 'lucide-react';
 import { mappers, mapList } from '../../lib/mappers';
@@ -12,7 +12,6 @@ export default function OcjenePage() {
   const { selectedClassId, selectedChildId } = useSelection();
   const [grades, setGrades] = useState<Grade[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [finalGrades, setFinalGrades] = useState<FinalGrade[]>([]);
   const [subjectTeachers, setSubjectTeachers] = useState<ClassSubjectTeacher[]>([]);
   const [teachers, setTeachers] = useState<Record<string, User>>({});
   const [loading, setLoading] = useState(true);
@@ -95,7 +94,7 @@ export default function OcjenePage() {
           setTeachers(teacherMap);
         }
 
-        // 5. Get student's grades for THIS class
+        // 5. Get student's grades for THIS class (including final)
         const { data: gradesData } = await supabase
           .from('grades')
           .select('*')
@@ -103,15 +102,6 @@ export default function OcjenePage() {
           .eq('class_id', selectedClassId);
         
         setGrades(mapList(gradesData, mappers.grade));
-
-        // 6. Get final grades for THIS class
-        const { data: finalData } = await supabase
-          .from('final_grades')
-          .select('*')
-          .eq('student_id', targetStudentId)
-          .eq('class_id', selectedClassId);
-        
-        setFinalGrades(mapList(finalData, mappers.finalGrade));
 
       } catch (error) {
         console.error(error);
@@ -154,7 +144,7 @@ export default function OcjenePage() {
 
           <div className="grid grid-cols-1 gap-3">
             {subjects.sort((a, b) => a.name.localeCompare(b.name)).map(subject => {
-              const subjectGrades = grades.filter(g => g.subjectId === subject.id);
+              const subjectGrades = grades.filter(g => g.subjectId === subject.id && !g.isFinal);
               const subjectAvg = subjectGrades.length > 0 
                 ? (subjectGrades.reduce((acc, curr) => acc + curr.value, 0) / subjectGrades.length).toFixed(2)
                 : '-';
@@ -210,7 +200,8 @@ export default function OcjenePage() {
 
   // --- SUBJECT DETAIL VIEW ---
   const activeSubject = subjects.find(s => s.id === selectedSubject)!;
-  const activeGrades = grades.filter(g => g.subjectId === activeSubject.id);
+  const activeGrades = grades.filter(g => g.subjectId === activeSubject.id && !g.isFinal);
+  const activeFinalGrades = grades.filter(g => g.subjectId === activeSubject.id && g.isFinal);
   const average = activeGrades.length > 0 
     ? (activeGrades.reduce((acc, curr) => acc + curr.value, 0) / activeGrades.length).toFixed(2)
     : '0.00';
@@ -285,7 +276,8 @@ export default function OcjenePage() {
                   {MONTHS_ORDER.map(m => {
                     const isSemester1 = ['XII'].includes(m);
                     const isSemester2 = ['VI'].includes(m);
-                    const val = finalGrades.find(f => f.subjectId === activeSubject.id && f.period === (m === 'XII' ? '1' : '2'))?.value;
+                    const fg = activeFinalGrades.find(f => f.period === (m === 'XII' ? '1' : 'FINAL'));
+                    const val = fg ? (fg.value === 0 ? fg.note : fg.value) : '';
                     return (
                       <td key={m} className="p-2 border-r border-slate-300 text-center text-red-600 text-lg">
                         {(isSemester1 || isSemester2) ? val : ''}
