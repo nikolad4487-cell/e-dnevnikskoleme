@@ -61,6 +61,9 @@ export const mappers = {
     homeroomTeacherId: raw.homeroom_teacher_id,
     deputyTeacherId: raw.deputy_teacher_id,
     programId: raw.program_id,
+    programType: raw.program_type,
+    continuationType: raw.continuation_type,
+    classVariant: raw.class_variant,
     variant: raw.variant,
     homeroom: raw.homeroom ? mappers.user(raw.homeroom) : undefined,
     deputy: raw.deputy ? mappers.user(raw.deputy) : undefined,
@@ -277,5 +280,14 @@ export const mappers = {
     name: raw.name,
     displayOrder: raw.display_order,
     createdAt: raw.created_at,
+  }),
+
+  program: (raw: any) => ({
+    id: raw.id,
+    schoolId: raw.school_id,
+    name: raw.name,
+    durationYears: raw.duration_years,
+    type: raw.type,
+    continuationType: raw.continuation_type,
   }),
 };

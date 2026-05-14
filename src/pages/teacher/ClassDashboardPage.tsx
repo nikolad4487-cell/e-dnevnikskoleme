@@ -19,7 +19,7 @@ const ImenikPage = lazy(() => import('./ImenikPage'));
 export default function ClassDashboardPage() {
   const { classId } = useParams<{ classId: string }>();
   const { user, isMainAdmin, userSchoolRoles } = useAuth();
-  const { setSelectedClassId, setSelectedSchoolId } = useSelection();
+  const { setSelectedClassId, setSelectedSchoolId, isArchived, setIsArchived } = useSelection();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -54,6 +54,16 @@ export default function ClassDashboardPage() {
 
       const mappedClass = mappers.class(rawClass);
       setCurrentClass(mappedClass);
+
+      // 1b. Check if archived (class status or school year is_active)
+      const { data: yearData } = await supabase
+        .from('school_years')
+        .select('is_active')
+        .eq('id', mappedClass.schoolYearId)
+        .maybeSingle();
+      
+      const archived = mappedClass.status === 'ARCHIVED' || (yearData && !yearData.is_active);
+      setIsArchived(!!archived);
 
       // 2. Check access
       const isSchoolAdmin = userSchoolRoles.some(r => 
@@ -111,7 +121,7 @@ export default function ClassDashboardPage() {
     { id: 'raspored', label: 'Raspored sati', path: 'raspored' },
     { id: 'zapisnici', label: 'Zapisnici', path: 'zapisnici' },
     { id: 'izvjestaji', label: 'Izvještaji', path: 'izvjestaji' },
-    { id: 'administracija', label: 'Administracija', path: 'administracija' },
+    { id: 'administracija', label: 'Administracija', path: 'admin' },
   ];
 
   const currentTab = location.pathname.split('/').pop() || 'imenik';
@@ -171,6 +181,18 @@ export default function ClassDashboardPage() {
         </div>
       </div>
 
+      {isArchived && (
+        <div className="bg-amber-100 border-b border-amber-200 px-6 py-2 flex items-center gap-3 shrink-0">
+          <div className="w-5 h-5 bg-amber-500 text-white rounded-full flex items-center justify-center shrink-0">
+            <ShieldAlert size={12} />
+          </div>
+          <div className="flex flex-col">
+            <span className="text-[10px] font-black uppercase text-amber-800 leading-none">Arhivirani podaci</span>
+            <span className="text-[9px] font-bold text-amber-700">Ovaj razredni odjel je dio arhivirane školske godine. Izmjene su onemogućene.</span>
+          </div>
+        </div>
+      )}
+
       {/* Tabs Navigation */}
       <div className="bg-[#f8f9fa] border-b border-[#dee2e6] px-6 flex items-center overflow-x-auto no-scrollbar shrink-0">
          {tabs.map(tab => (
@@ -206,7 +228,7 @@ export default function ClassDashboardPage() {
             <Route path="raspored" element={<DnevnikRadaPage initialView="SCHEDULE" />} />
             <Route path="zapisnici" element={<ZapisniciPage />} />
             <Route path="izvjestaji" element={<IzvjestajiPage />} />
-            <Route path="administracija" element={<AdministrationPage />} />
+            <Route path="admin" element={<AdministrationPage />} />
           </Routes>
         </Suspense>
       </div>

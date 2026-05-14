@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, Subject, User, Role } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 import { 
   ChevronLeft, 
   Plus, 
@@ -28,6 +29,7 @@ const PERIODS = [1, 2, 3, 4, 5, 6, 7];
 
 export default function ScheduleManagementPage() {
   const { selectedSchoolId } = useSelection();
+  const { isMainAdmin, userSchoolRoles } = useAuth();
   const navigate = useNavigate();
   const [classes, setClasses] = useState<Class[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -35,6 +37,8 @@ export default function ScheduleManagementPage() {
   const [schedule, setSchedule] = useState<any[]>([]); // Schedule entries
   const [loading, setLoading] = useState(false);
   const [shift, setShift] = useState<'MORNING' | 'AFTERNOON'>('MORNING');
+
+  const isAnyAdmin = isMainAdmin || userSchoolRoles.some(r => r.schoolId === selectedSchoolId && (r.role === Role.SCHOOL_ADMIN || r.role === Role.ADMIN));
 
   useEffect(() => {
     if (!selectedSchoolId) {
@@ -94,6 +98,10 @@ export default function ScheduleManagementPage() {
   };
 
   const handleSetSubject = async (dayOfWeek: string, periodNumber: number, subjectAssignmentId: string) => {
+    if (!isAnyAdmin) {
+      toast.error('Nemate dozvolu za mijenjanje rasporeda.');
+      return;
+    }
     if (!subjectAssignmentId) return;
     
     try {
@@ -144,6 +152,10 @@ export default function ScheduleManagementPage() {
   };
 
   const clearCell = async (cellId: string) => {
+    if (!isAnyAdmin) {
+      toast.error('Nemate dozvolu za mijenjanje rasporeda.');
+      return;
+    }
     try {
       const { error } = await supabase.from('schedule_cell_subjects').delete().eq('schedule_cell_id', cellId);
       if (error) throw error;
@@ -240,21 +252,25 @@ export default function ScheduleManagementPage() {
                                   <div className="text-[9px] font-bold text-blue-400 uppercase leading-none truncate">{assignedSubject.teacher?.name}</div>
                                   <button 
                                     onClick={() => clearCell(cell.id)}
-                                    className="absolute top-1 right-1 text-blue-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                                    className={`absolute top-1 right-1 text-blue-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 ${!isAnyAdmin && 'hidden'}`}
                                   >
                                     <Trash2 size={12} />
                                   </button>
                                </div>
                              ) : (
-                               <select 
-                                 onChange={(e) => handleSetSubject(day.id, num, e.target.value)}
-                                 className="w-full bg-slate-50 border border-transparent hover:border-slate-200 rounded-xl p-2 text-[10px] font-bold text-slate-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all outline-none"
-                               >
-                                 <option value="">+</option>
-                                 {subjects.map(s => (
-                                   <option key={s.id} value={s.id}>{s.subject?.name}</option>
-                                 ))}
-                               </select>
+                               isAnyAdmin ? (
+                                 <select 
+                                   onChange={(e) => handleSetSubject(day.id, num, e.target.value)}
+                                   className="w-full bg-slate-50 border border-transparent hover:border-slate-200 rounded-xl p-2 text-[10px] font-bold text-slate-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all outline-none"
+                                 >
+                                   <option value="">+</option>
+                                   {subjects.map(s => (
+                                     <option key={s.id} value={s.id}>{s.subject?.name}</option>
+                                   ))}
+                                 </select>
+                               ) : (
+                                 <div className="text-[9px] text-slate-200 uppercase font-black tracking-widest text-center py-2">—</div>
+                               )
                              )}
                           </td>
                         );

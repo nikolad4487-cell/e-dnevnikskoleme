@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { User, Role } from '../../types';
 import { 
   UserPlus, 
@@ -21,12 +22,15 @@ import { useNavigate } from 'react-router-dom';
 
 export default function UserManagementPage() {
   const { selectedSchoolId } = useSelection();
+  const { isMainAdmin, userSchoolRoles } = useAuth();
   const navigate = useNavigate();
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
+
+  const isAnyAdmin = isMainAdmin || userSchoolRoles.some(r => r.schoolId === selectedSchoolId && (r.role === Role.SCHOOL_ADMIN || r.role === Role.ADMIN));
 
   // Form State
   const [editingUser, setEditingUser] = useState<any | null>(null);
@@ -48,12 +52,14 @@ export default function UserManagementPage() {
   };
 
   const handleOpenEdit = (user: any) => {
+    if (!isAnyAdmin) {
+      toast.error('Ova akcija je dopuštena samo administratorima.');
+      return;
+    }
     setEditingUser(user);
     setEmail(user.email);
-    // Extract name/surname if possible
-    const parts = user.name?.split(' ') || [];
-    setName(parts[0] || '');
-    setSurname(parts.slice(1).join(' ') || '');
+    setName(user.name || '');
+    setSurname(user.surname || '');
     setAddress(user.address || '');
     setOib(user.oib || '');
     setSelectedRoles(user.roles);
@@ -61,6 +67,10 @@ export default function UserManagementPage() {
   };
 
   const handleOpenCreate = () => {
+    if (!isAnyAdmin) {
+      toast.error('Ova akcija je dopuštena samo administratorima.');
+      return;
+    }
     setEditingUser(null);
     setEmail('');
     setName('');
@@ -82,7 +92,6 @@ export default function UserManagementPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      // Fetch user_school_roles joined with user_profiles
       const { data, error } = await supabase
         .from('user_school_roles')
         .select(`
@@ -95,7 +104,6 @@ export default function UserManagementPage() {
       
       if (error) throw error;
       
-      // Group by user
       const usersMap = new Map();
       data?.forEach(row => {
         const profile = row.user as any;
@@ -119,6 +127,10 @@ export default function UserManagementPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAnyAdmin) {
+      console.warn("Attempted user create/update without admin permissions");
+      return;
+    }
     if (selectedRoles.length === 0) {
       toast.error('Odaberite barem jednu ulogu');
       return;
@@ -126,9 +138,9 @@ export default function UserManagementPage() {
     setSubmitting(true);
     try {
       const endpoint = editingUser ? '/api/admin/update-user' : '/api/admin/create-user';
-      const payload = editingUser ? {
-        profileId: editingUser.id,
-        authUserId: editingUser.auth_user_id,
+      const payload = {
+        profileId: editingUser?.id,
+        authUserId: editingUser?.auth_user_id,
         email,
         name,
         surname,
@@ -136,17 +148,11 @@ export default function UserManagementPage() {
         oib,
         roles: selectedRoles,
         schoolId: selectedSchoolId,
-        status: editingUser?.status || 'ACTIVE'
-      } : {
-        email,
-        password,
-        name,
-        surname,
-        address,
-        oib,
-        roles: selectedRoles,
-        schoolId: selectedSchoolId
+        status: editingUser?.status || 'ACTIVE',
+        password: editingUser ? undefined : password
       };
+
+      console.log(`${editingUser ? 'UPDATE' : 'CREATE'} USER CLICKED`, payload);
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -155,42 +161,80 @@ export default function UserManagementPage() {
       });
 
       const data = await response.json();
+      console.log("USER ACTION RESULT:", { status: response.status, data });
+      
       if (!response.ok) throw new Error(data.error || 'Neuspjela obrada zahtjeva');
 
       toast.success(editingUser ? 'Korisnik ažuriran' : 'Korisnik uspješno kreiran');
       setIsModalOpen(false);
       fetchUsers();
     } catch (err: any) {
-      toast.error(err.message);
+      console.error("USER ACTION FAILED:", err);
+      toast.error('Greška pri spremanju korisnika: ' + (err.message || 'Nepoznata greška'));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDeleteUser = async (profileId: string, soft: boolean = true) => {
+  const handleDeleteUser = async (profileId: string, profile: any, soft: boolean = true) => {
+    if (!isAnyAdmin) {
+      toast.error('Nemate dozvolu za brisanje korisnika.');
+      return;
+    }
+
+    console.log("DELETE USER CLICKED", { profileId, soft });
+
     const msg = soft 
       ? 'Jeste li sigurni da želite DEAKTIVIRATI ovog korisnika u ovoj školi? Povijesni podaci će ostati sačuvani.'
-      : 'Jeste li sigurni da želite trajno ukloniti uloge ovog korisnika u ovoj školi?';
+      : isMainAdmin 
+        ? 'Jeste li sigurni da želite TRAJNO obrisati ovog korisnika i sve njegove podatke u cijelom sustavu?'
+        : 'Jeste li sigurni da želite ukloniti uloge ovog korisnika u ovoj školi?';
       
     if (!confirm(msg)) return;
+    
     try {
-      const response = await fetch('/api/admin/delete-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId, schoolId: selectedSchoolId, softDelete: soft })
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Neuspjelo brisanje');
-      toast.success(soft ? 'Korisnik deaktiviran' : 'Korisnik uklonjen iz škole');
+      setLoading(true);
+      if (!soft && isMainAdmin) {
+        console.log("PERFORMING PERMANENT DELETE AS MAIN ADMIN for user profile:", profileId);
+        // Cascade delete helpers
+        const results = await Promise.all([
+          supabase.from('grades').delete().eq('student_id', profileId),
+          supabase.from('absences').delete().eq('student_id', profileId),
+          supabase.from('student_class_enrollments').delete().eq('student_id', profileId),
+          supabase.from('student_subject_enrollments').delete().eq('student_id', profileId),
+          supabase.from('student_year_summaries').delete().eq('student_id', profileId),
+          supabase.from('user_school_roles').delete().eq('user_id', profileId),
+        ]);
+        console.log("CASCADE DELETE RESULTS:", results);
+        
+        const { data, error } = await supabase.from('user_profiles').delete().eq('id', profileId).select();
+        console.log("FINAL USER PROFILE DELETE RESULT:", { data, error });
+        if (error) throw error;
+        toast.success('Korisnik je trajno obrisan iz sustava.');
+      } else {
+        const response = await fetch('/api/admin/delete-user', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profileId, schoolId: selectedSchoolId, softDelete: soft })
+        });
+        const data = await response.json();
+        console.log("DELETE USER RESULT:", { status: response.status, data });
+        if (!response.ok) throw new Error(data.error || 'Neuspjelo brisanje');
+        toast.success(soft ? 'Korisnik deaktiviran' : 'Korisnik uklonjen iz škole');
+      }
       fetchUsers();
     } catch (err: any) {
-      toast.error(err.message);
+      console.error("DELETE USER FAILED:", err);
+      toast.error('Brisanje nije uspjelo: ' + (err.message || 'Nepoznata greška'));
+    } finally {
+      setLoading(false);
     }
   };
 
   const filteredUsers = users.filter(profile => {
     const matchesSearch = 
       profile?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      profile?.surname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       profile?.email?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesRole = roleFilter === 'ALL' || profile.roles.includes(roleFilter);
@@ -224,13 +268,15 @@ export default function UserManagementPage() {
           <p className="text-slate-500 font-medium text-sm">Upravljanje pristupnim podacima i ulogama u školi</p>
         </div>
         
-        <button 
-          onClick={handleOpenCreate}
-          className="bg-[#005c8d] text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 hover:bg-[#004a71] transition-all shadow-lg active:scale-95"
-        >
-          <UserPlus size={18} strokeWidth={3} />
-          Novi korisnik
-        </button>
+        {isAnyAdmin && (
+          <button 
+            onClick={handleOpenCreate}
+            className="bg-[#005c8d] text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 hover:bg-[#004a71] transition-all shadow-lg active:scale-95"
+          >
+            <UserPlus size={18} strokeWidth={3} />
+            Novi korisnik
+          </button>
+        )}
       </div>
 
       {/* Filters */}
@@ -282,7 +328,7 @@ export default function UserManagementPage() {
                       <UserIcon size={20} />
                     </div>
                     <div className="font-black text-slate-900 uppercase text-xs tracking-tight">
-                      {item.name || 'Nepoznat korisnik'}
+                      {item.name} {item.surname}
                     </div>
                   </div>
                 </td>
@@ -310,26 +356,30 @@ export default function UserManagementPage() {
                 </td>
                 <td className="p-4 text-right">
                   <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={() => handleOpenEdit(item)}
-                      className="p-2 text-slate-400 hover:text-blue-500"
-                    >
-                      <ShieldCheck size={18} />
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteUser(item.id, true)}
-                      className="p-2 text-slate-400 hover:text-amber-500"
-                      title="Deaktiviraj korisnika"
-                    >
-                      <XCircle size={18} />
-                    </button>
-                    <button 
-                      onClick={() => handleDeleteUser(item.id, false)}
-                      className="p-2 text-slate-400 hover:text-red-500"
-                      title="Trajno ukloni iz škole"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    {isAnyAdmin && (
+                      <>
+                        <button 
+                          onClick={() => handleOpenEdit(item)}
+                          className="p-2 text-slate-400 hover:text-blue-500"
+                        >
+                          <ShieldCheck size={18} />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteUser(item.id, item, true)}
+                          className="p-2 text-slate-400 hover:text-amber-500"
+                          title="Deaktiviraj korisnika"
+                        >
+                          <XCircle size={18} />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteUser(item.id, item, false)}
+                          className="p-2 text-slate-400 hover:text-red-500"
+                          title="Trajno ukloni iz škole"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </td>
               </tr>

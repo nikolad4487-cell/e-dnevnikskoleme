@@ -1,18 +1,22 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Subject } from '../../types';
+import { Subject, Role } from '../../types';
 import { useSelection } from '../../contexts/SelectionContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { Plus, Edit2, Trash2, BookOpen, ChevronLeft, Search } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 
 export default function SubjectManagementPage() {
   const { selectedSchoolId } = useSelection();
+  const { isMainAdmin, userSchoolRoles } = useAuth();
   const navigate = useNavigate();
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const isAnyAdmin = isMainAdmin || userSchoolRoles.some(r => r.schoolId === selectedSchoolId && (r.role === Role.SCHOOL_ADMIN || r.role === Role.ADMIN));
 
   // Form State
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null);
@@ -38,33 +42,86 @@ export default function SubjectManagementPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAnyAdmin) {
+      console.warn("Attempted subject create/update without admin permissions");
+      return;
+    }
+    
+    const payload = { name, code: code || null };
+    console.log(`${editingSubject ? 'UPDATE' : 'CREATE'} SUBJECT CLICKED`, payload);
+
     try {
-      const payload = { name, code: code || null };
       if (editingSubject) {
-        const { error } = await supabase.from('subjects').update(payload).eq('id', editingSubject.id);
+        const { data, error } = await supabase.from('subjects').update(payload).eq('id', editingSubject.id).select();
+        console.log("UPDATE SUBJECT RESULT:", { data, error });
         if (error) throw error;
         toast.success('Predmet ažuriran');
       } else {
-        const { error } = await supabase.from('subjects').insert([payload]);
+        const { data, error } = await supabase.from('subjects').insert([payload]).select();
+        console.log("CREATE SUBJECT RESULT:", { data, error });
         if (error) throw error;
         toast.success('Predmet dodan');
       }
       setIsModalOpen(false);
       fetchSubjects();
     } catch (err: any) {
-      toast.error('Greška: ' + err.message);
+      console.error("SUBJECT ACTION FAILED:", err);
+      toast.error('Greška pri spremanju predmeta: ' + (err.message || 'Nepoznata greška'));
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Brisanjem predmeta on će biti uklonjen iz svih razreda. Nastaviti?')) return;
+    if (!isAnyAdmin) {
+      toast.error('Nemate dozvolu za brisanje predmeta.');
+      return;
+    }
+
+    console.log("DELETE SUBJECT CLICKED", { id });
+
+    const confirmMsg = isMainAdmin 
+      ? 'Brisanjem predmeta uklonit ćete ga iz svih razreda, te obrisati sve ocjene i upise za ovaj predmet u CIJELOM SUSTAVU. Nastaviti?'
+      : 'Brisanjem predmeta on će biti uklonjen iz svih razreda u ovoj školi. Nastaviti?';
+
+    if (!window.confirm(confirmMsg)) return;
+
     try {
-      const { error } = await supabase.from('subjects').delete().eq('id', id);
-      if (error) throw error;
-      toast.success('Predmet obrisan');
+      setLoading(true);
+      if (isMainAdmin) {
+        console.log("PERFORMING GLOBAL CASCADE DELETE for subject:", id);
+        // Global cascade
+        const results = await Promise.all([
+          supabase.from('class_subject_teachers').delete().eq('subject_id', id),
+          supabase.from('curriculum_plans').delete().eq('subject_id', id),
+          supabase.from('student_subject_enrollments').delete().eq('subject_id', id),
+          supabase.from('grading_elements').delete().eq('subject_id', id),
+          supabase.from('grades').delete().eq('subject_id', id),
+          supabase.from('exams').delete().eq('subject_id', id),
+        ]);
+        console.log("CASCADE DELETE RESULTS:", results);
+
+        const { data, error } = await supabase.from('subjects').delete().eq('id', id).select();
+        console.log("FINAL SUBJECT DELETE RESULT:", { data, error });
+        if (error) throw error;
+        toast.success('Predmet trajno obrisan.');
+      } else {
+        const { data, error } = await supabase.from('subjects').delete().eq('id', id).select();
+        console.log("REGULAR SUBJECT DELETE RESULT:", { data, error });
+        if (error) {
+           if (error.message.includes('foreign key constraint')) {
+             toast.error('Predmet sadrži podatke. Samo glavni administrator ga može obrisati.');
+           } else {
+             throw error;
+           }
+        } else {
+          toast.success('Predmet obrisan.');
+        }
+      }
       fetchSubjects();
     } catch (err: any) {
-      toast.error('Greška: ' + err.message);
+      console.error("DELETE SUBJECT FAILED:", err);
+      toast.error('Greška pri brisanju predmeta: ' + (err.message || 'Nepoznata greška'));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -88,18 +145,20 @@ export default function SubjectManagementPage() {
           <p className="text-slate-500 font-medium text-sm">Popis svih nastavnih predmeta dostupnih u sustavu</p>
         </div>
         
-        <button 
-          onClick={() => {
-            setEditingSubject(null);
-            setName('');
-            setCode('');
-            setIsModalOpen(true);
-          }}
-          className="bg-[#005c8d] text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 hover:bg-[#004a71] transition-all shadow-lg"
-        >
-          <Plus size={18} strokeWidth={3} />
-          Novi predmet
-        </button>
+        {isAnyAdmin && (
+          <button 
+            onClick={() => {
+              setEditingSubject(null);
+              setName('');
+              setCode('');
+              setIsModalOpen(true);
+            }}
+            className="bg-[#005c8d] text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 hover:bg-[#004a71] transition-all shadow-lg"
+          >
+            <Plus size={18} strokeWidth={3} />
+            Novi predmet
+          </button>
+        )}
       </div>
 
       <div className="bg-white p-4 rounded-2xl border border-slate-200 mb-6 flex items-center gap-4">
@@ -127,23 +186,27 @@ export default function SubjectManagementPage() {
             </div>
             
             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button 
-                onClick={() => {
-                  setEditingSubject(subject);
-                  setName(subject.name);
-                  setCode(subject.code || '');
-                  setIsModalOpen(true);
-                }}
-                className="p-2 text-slate-400 hover:text-blue-500"
-              >
-                <Edit2 size={16} />
-              </button>
-              <button 
-                onClick={() => handleDelete(subject.id)}
-                className="p-2 text-slate-400 hover:text-red-500"
-              >
-                <Trash2 size={16} />
-              </button>
+              {isAnyAdmin && (
+                <>
+                  <button 
+                    onClick={() => {
+                      setEditingSubject(subject);
+                      setName(subject.name);
+                      setCode(subject.code || '');
+                      setIsModalOpen(true);
+                    }}
+                    className="p-2 text-slate-400 hover:text-blue-500"
+                  >
+                    <Edit2 size={16} />
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(subject.id)}
+                    className="p-2 text-slate-400 hover:text-red-500"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </>
+              )}
             </div>
           </div>
         ))}

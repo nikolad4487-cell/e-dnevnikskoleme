@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, Subject, User, Role } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 import { 
   Plus, 
   Trash2, 
@@ -16,6 +17,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 export default function ClassSubjectsPage() {
   const { selectedSchoolId } = useSelection();
+  const { isMainAdmin, userSchoolRoles } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const classId = searchParams.get('classId');
@@ -25,6 +27,8 @@ export default function ClassSubjectsPage() {
   const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
   const [teachers, setTeachers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const isAnyAdmin = isMainAdmin || userSchoolRoles.some(r => r.schoolId === selectedSchoolId && (r.role === Role.SCHOOL_ADMIN || r.role === Role.ADMIN));
   
   // Assign State
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
@@ -91,18 +95,26 @@ export default function ClassSubjectsPage() {
 
   const handleAssignSubject = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAnyAdmin) {
+      console.warn("Attempted subject assign without admin permissions");
+      return;
+    }
     if (!selectedSubjectId || !selectedTeacherId) {
       toast.error('Odaberite predmet i nastavnika');
       return;
     }
 
+    console.log("ASSIGN SUBJECT TO CLASS CLICKED", { classId, selectedSubjectId, selectedTeacherId });
+
     try {
-      const { error } = await supabase.from('class_subject_teachers').insert([{
+      const { data, error } = await supabase.from('class_subject_teachers').insert([{
         class_id: classId,
         subject_id: selectedSubjectId,
         teacher_id: selectedTeacherId,
         school_id: selectedSchoolId
-      }]);
+      }]).select();
+
+      console.log("ASSIGN SUBJECT RESULT:", { data, error });
 
       if (error) {
         if (error.code === '23505') throw new Error('Ovaj predmet je već dodijeljen ovom razredu.');
@@ -114,19 +126,30 @@ export default function ClassSubjectsPage() {
       setSelectedTeacherId('');
       fetchData();
     } catch (err: any) {
-      toast.error(err.message);
+      console.error("ASSIGN SUBJECT FAILED:", err);
+      toast.error(err.message || 'Greška pri dodjeli predmeta');
     }
   };
 
   const handleRemoveAssignment = async (id: string) => {
+    if (!isAnyAdmin) {
+      toast.error('Nemate dozvolu za uklanjanje predmeta.');
+      return;
+    }
+
+    console.log("REMOVE ASSIGNMENT CLICKED", { id });
+
     if (!window.confirm('Želite li ukloniti ovaj predmet iz razreda?')) return;
     try {
-      const { error } = await supabase.from('class_subject_teachers').delete().eq('id', id);
+      const { data, error } = await supabase.from('class_subject_teachers').delete().eq('id', id).select();
+      console.log("REMOVE ASSIGNMENT RESULT:", { data, error });
+      
       if (error) throw error;
       toast.success('Predmet uklonjen');
       fetchData();
     } catch (err: any) {
-      toast.error(err.message);
+      console.error("REMOVE ASSIGNMENT FAILED:", err);
+      toast.error('Greška pri uklanjanju: ' + (err.message || 'Nepoznata greška'));
     }
   };
 
@@ -155,55 +178,58 @@ export default function ClassSubjectsPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Assignment Form */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="bg-slate-50 p-6 border-b border-slate-100">
-              <h2 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Dodijeli novi predmet</h2>
+        {isAnyAdmin && (
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="bg-slate-50 p-6 border-b border-slate-100">
+                <h2 className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Dodijeli novi predmet</h2>
+              </div>
+              <form onSubmit={handleAssignSubject} className="p-6 space-y-6">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Predmet</label>
+                  <select 
+                    value={selectedSubjectId}
+                    onChange={e => setSelectedSubjectId(e.target.value)}
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
+                    required
+                  >
+                    <option value="">Odaberi predmet...</option>
+                    {allSubjects.map(s => (
+                      <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nastavnik izvođač</label>
+                  <select 
+                    value={selectedTeacherId}
+                    onChange={e => setSelectedTeacherId(e.target.value)}
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
+                    required
+                  >
+                    <option value="">Odaberi nastavnika...</option>
+                    {teachers.map(t => (
+                      <option key={t.id} value={t.id}>{(t as any).name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <button 
+                  type="submit"
+                  className="w-full bg-[#005c8d] text-white py-4 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:bg-[#004a71] transition-all flex items-center justify-center gap-2"
+                >
+                  <Plus size={16} strokeWidth={3} />
+                  Dodijeli predmet
+                </button>
+              </form>
             </div>
-            <form onSubmit={handleAssignSubject} className="p-6 space-y-6">
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Predmet</label>
-                <select 
-                  value={selectedSubjectId}
-                  onChange={e => setSelectedSubjectId(e.target.value)}
-                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
-                  required
-                >
-                  <option value="">Odaberi predmet...</option>
-                  {allSubjects.map(s => (
-                    <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Nastavnik izvođač</label>
-                <select 
-                  value={selectedTeacherId}
-                  onChange={e => setSelectedTeacherId(e.target.value)}
-                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
-                  required
-                >
-                  <option value="">Odaberi nastavnika...</option>
-                  {teachers.map(t => (
-                    <option key={t.id} value={t.id}>{(t as any).name}</option>
-                  ))}
-                </select>
-              </div>
-
-              <button 
-                type="submit"
-                className="w-full bg-[#005c8d] text-white py-4 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:bg-[#004a71] transition-all flex items-center justify-center gap-2"
-              >
-                <Plus size={16} strokeWidth={3} />
-                Dodijeli predmet
-              </button>
-            </form>
           </div>
-        </div>
+        )}
 
         {/* List of Subjects */}
-        <div className="lg:col-span-2">
+        <div className={isAnyAdmin ? "lg:col-span-2" : "lg:col-span-3"}>
+
           <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -236,12 +262,14 @@ export default function ClassSubjectsPage() {
                       </div>
                     </td>
                     <td className="p-4 text-right">
-                      <button 
-                        onClick={() => handleRemoveAssignment(item.id)}
-                        className="p-2 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      {isAnyAdmin && (
+                        <button 
+                          onClick={() => handleRemoveAssignment(item.id)}
+                          className="p-2 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

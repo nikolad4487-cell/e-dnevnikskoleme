@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
-import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, Subject, StudentSubjectEnrollment, SchoolYear, RolloverLog, StudentClassEnrollment, School, Program, SchoolType, SecondarySubtype, ClassVariant, ContinuationType } from '../../types';
-import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert } from 'lucide-react';
+import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, Subject, StudentSubjectEnrollment, SchoolYear, RolloverLog, StudentClassEnrollment, School, Program, SchoolType, SecondarySubtype, ClassVariant, ContinuationType, PROGRAM_TYPES, CONTINUATION_TYPES, CLASS_VARIANTS, ProgramType } from '../../types';
+import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2 } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
 import { cn } from '../../lib/utils';
@@ -15,7 +15,26 @@ export default function AdministrationPage() {
   const navigate = useNavigate();
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { user, isMainAdmin, signOut, userSchoolRoles } = useAuth();
-  const { selectedSchoolId } = useSelection();
+  const { selectedSchoolId, isArchived } = useSelection();
+
+  const isAnyAdmin = React.useMemo(() => {
+    // Current user's roles for the selected school
+    const rolesForSchool = userSchoolRoles
+      .filter(r => !selectedSchoolId || r.schoolId === selectedSchoolId)
+      .map(r => r.role);
+    
+    // Check if user has ANY admin role (global or school-specific)
+    const canDelete = isMainAdmin || 
+                      rolesForSchool.includes(Role.MAIN_ADMIN) || 
+                      rolesForSchool.includes(Role.SCHOOL_ADMIN) || 
+                      rolesForSchool.includes(Role.ADMIN);
+    
+    console.log("CURRENT USER ROLES (School):", rolesForSchool);
+    console.log("IS GLOBAL MAIN ADMIN:", isMainAdmin);
+    console.log("CAN DELETE:", canDelete);
+    
+    return canDelete;
+  }, [userSchoolRoles, isMainAdmin, selectedSchoolId]);
   
   const effectiveClassId = routeClassId;
 
@@ -44,9 +63,10 @@ export default function AdministrationPage() {
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
     id: string;
-    type: 'CLASS' | 'SUBJECT' | 'STUDENT' | 'GRADING_ELEMENT' | null;
+    type: 'CLASS' | 'SUBJECT' | 'STUDENT' | 'GRADING_ELEMENT' | 'STAFF' | 'PLANNING' | 'PROGRAM' | 'SCHOOL_YEAR' | null;
     loading: boolean;
     extraData?: any;
+    message?: string;
   }>({
     isOpen: false,
     id: '',
@@ -56,9 +76,31 @@ export default function AdministrationPage() {
   
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [selectedYearId, setSelectedYearId] = useState<string>('');
+  const [showModal, setShowModal] = useState<string | null>(null);
+  const [editingClass, setEditingClass] = useState<Class | null>(null);
+
+  const isSchoolAdminMode = location.pathname.startsWith('/admin/');
+  const isClassAdminMode = !!effectiveClassId;
 
   // Modals / Tabs
-  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS'>(effectiveClassId ? 'CLASS_DETAIL' : 'MENU');
+  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN'>(
+    isClassAdminMode ? 'CLASS_DETAIL' : (isSchoolAdminMode ? 'SCHOOL_YEARS' : 'MENU')
+  );
+
+  const [graduatesAdmin, setGraduatesAdmin] = useState<{
+    sourceYearId: string;
+    sourceClassId: string;
+    targetClassId: string;
+    selectedStudentIds: string[];
+    isTransferring: boolean;
+  }>({
+    sourceYearId: '',
+    sourceClassId: '',
+    targetClassId: '',
+    selectedStudentIds: [],
+    isTransferring: false
+  });
   
   useEffect(() => {
     if (effectiveClassId && activeTab === 'MENU') {
@@ -75,7 +117,27 @@ export default function AdministrationPage() {
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [rolloverLogs, setRolloverLogs] = useState<RolloverLog[]>([]);
   const [newYearForm, setNewYearForm] = useState({ name: '', startsAt: '', endsAt: '' });
-  const [rolloverForm, setRolloverForm] = useState({ fromYearId: '', fromClassId: '', toYearId: '', toClassId: '' });
+  
+  // NEW ROLLOVER WIZARD STATE
+  const [rolloverWizard, setRolloverWizard] = useState<{
+    step: 1 | 2 | 3;
+    sourceYearId: string;
+    targetYearId: string;
+    createEmptyFirstGrades: boolean;
+    mappings: {
+      fromClassId: string;
+      toClassName: string;
+      toClassId?: string;
+      type: 'TRANSFER' | 'GRADUATE' | 'MANUAL';
+      isNew?: boolean;
+    }[];
+  }>({
+    step: 1,
+    sourceYearId: '',
+    targetYearId: '',
+    createEmptyFirstGrades: true,
+    mappings: []
+  });
   const [subjectAssignments, setSubjectAssignments] = useState<SubjectTeachingAssignment[]>([]);
   const [curriculumPlans, setCurriculumPlans] = useState<CurriculumPlan[]>([]);
   const [classEnrollments, setClassEnrollments] = useState<any[]>([]); // Enrollments for the selected class subjects
@@ -84,6 +146,8 @@ export default function AdministrationPage() {
   const [overallNotes, setOverallNotes] = useState<any[]>([]);
   const [showEnrollmentModal, setShowEnrollmentModal] = useState<{ isOpen: boolean, subjectId: string | null }>({ isOpen: false, subjectId: null });
   
+  const selectedClassData = classes.find(c => c.id === selectedClassId);
+
   const [resetModal, setResetModal] = useState<{
     isOpen: boolean;
     user: User | null;
@@ -105,9 +169,11 @@ export default function AdministrationPage() {
   const [editingCurriculumId, setEditingCurriculumId] = useState<string | null>(null);
   const [newClassGrade, setNewClassGrade] = useState(1);
   const [newClassSection, setNewClassSection] = useState('A');
-  const [newClassVariant, setNewClassVariant] = useState<ClassVariant>('REGULAR');
-  const [newClassSchoolYearId, setNewClassSchoolYearId] = useState('');
-  const [newClassSchoolId, setNewClassSchoolId] = useState('');
+  const [newClassVariant, setNewClassVariant] = useState<ClassVariant>(CLASS_VARIANTS.REGULAR);
+  const [newProgramType, setNewProgramType] = useState<ProgramType>(PROGRAM_TYPES.VOCATIONAL_3Y);
+  const [newContinuationType, setNewContinuationType] = useState<ContinuationType>(CONTINUATION_TYPES.NONE);
+  const [classCreationYearId, setClassCreationYearId] = useState<string | null>(null);
+  const [activeYearId, setActiveYearId] = useState<string | null>(null);
   const [studentForm, setStudentForm] = useState({ 
     name: '', 
     surname: '', 
@@ -130,7 +196,6 @@ export default function AdministrationPage() {
     weeklyHours: 1
   });
 
-  const [rolloverStudents, setRolloverStudents] = useState<any[]>([]);
   const [selectedUserForRole, setSelectedUserForRole] = useState<string | null>(null);
   const [roleForm, setRoleForm] = useState({
     userId: '',
@@ -149,7 +214,19 @@ export default function AdministrationPage() {
     address: '',
     programId: '',
     classId: '',
-    mobile: ''
+    mobile: '',
+    parentEmail: '',
+    password: '',
+    isContinuation: false,
+    continuationType: null as ContinuationType | null
+  });
+
+  const [programForm, setProgramForm] = useState({
+    name: '',
+    durationYears: 4,
+    schoolId: '',
+    type: PROGRAM_TYPES.VOCATIONAL_3Y,
+    continuationType: CONTINUATION_TYPES.NONE
   });
 
   const isSchoolAdmin = allUserSchoolRolesState.some(r => r.role === Role.SCHOOL_ADMIN && r.schoolId === selectedSchoolId);
@@ -175,6 +252,8 @@ export default function AdministrationPage() {
       return;
     }
 
+    console.log("CREATE UNIFIED USER CLICKED", newUserForm);
+
     setLoading(true);
     try {
       const response = await fetch('/api/admin/create-user', {
@@ -196,16 +275,21 @@ export default function AdministrationPage() {
       });
 
       const result = await response.json();
+      console.log("CREATE UNIFIED USER RESULT:", { status: response.status, result });
+      
       if (!response.ok) throw new Error(result.error || 'Neuspješno kreiranje korisnika');
 
       toast.success(`Korisnik kreiran. Privremena lozinka: ${result.tempPassword || 'Provjerite email'}`);
       
       setNewUserForm({
         name: '', surname: '', email: '', username: '', globalRole: Role.TEACHER,
-        oib: '', dob: '', address: '', programId: '', classId: '', mobile: ''
+        oib: '', dob: '', address: '', programId: '', classId: '', mobile: '',
+        parentEmail: '', password: '', isContinuation: false, continuationType: null
       });
+      if (typeof fetchData === 'function') fetchData();
     } catch (err: any) {
-      toast.error(err.message);
+      console.error("CREATE UNIFIED USER ERROR:", err);
+      toast.error(err.message || 'Greška pri kreiranju korisnika');
     } finally {
       setLoading(false);
     }
@@ -279,103 +363,347 @@ export default function AdministrationPage() {
     }
   };
 
-  const generateRolloverPreview = () => {
-    const { fromClassId, toYearId, toClassId } = rolloverForm;
-    if (!fromClassId || !toYearId) {
-      toast.error('Odaberite izvorni razred i ciljnu školsku godinu');
-      return;
-    }
+  const parseClassName = (name: string) => {
+    const match = name.match(/^(\d+)\.(.+)$/);
+    if (!match) return { grade: 0, section: name.toUpperCase() };
+    return { grade: parseInt(match[1]), section: match[2].toUpperCase() };
+  };
 
-    const fromClass = classes.find(c => c.id === fromClassId);
-    const nextYear = schoolYears.find(y => y.id === toYearId);
-    if (!fromClass || !nextYear) return;
+  const calculateRolloverMappings = async (targetIdOverride?: string) => {
+    const targetYearId = targetIdOverride || rolloverWizard.targetYearId;
+    if (!rolloverWizard.sourceYearId || !targetYearId) return;
+    
+    setLoading(true);
+    try {
+      const sourceClasses = classes.filter(c => c.schoolYearId === rolloverWizard.sourceYearId && c.status === 'ACTIVE');
+      const targetClasses = classes.filter(c => c.schoolYearId === targetYearId);
+      
+      const newMappings = sourceClasses.map(fromClass => {
+        const { grade, section } = parseClassName(fromClass.name);
+        
+        // --- ROLLOVER RULES ---
 
-    // Get current school info
-    const currentSchool = schools.find(s => s.id === fromClass.schoolId);
-    const classStudents = students.filter(s => s.classId === fromClassId);
+        // 1. ZAVRŠAVA (GRADUATE)
+        // Vocational terminal: 3.A, 3.B, 3.C
+        const is3yTerminal = grade === 3 && ['A', 'B', 'C'].includes(section);
+        // Regular/Special terminal: 4.D, 4.I, 4.A, 4.B, 4.C
+        const is4yTerminal = grade === 4 && ['D', 'I', 'A', 'B', 'C'].includes(section);
 
-    const preview = classStudents.map(student => {
-      let status: 'NAPREDUJE' | 'ZAVRSAVA' | 'NASTAVLJA' = 'NAPREDUJE';
-      let nextGrade = fromClass.gradeLevel + 1;
-      let targetClassId = toClassId; // Default suggestion
-      let isContinuation = false;
-
-      const program = programs.find(p => p.id === student.programId);
-
-      if (currentSchool?.type === 'PRIMARY') {
-        if (fromClass.gradeLevel === 8) {
-          status = 'ZAVRSAVA';
-          targetClassId = '';
+        if (is3yTerminal || is4yTerminal) {
+          return {
+            fromClassId: fromClass.id,
+            toClassName: 'ZAVRŠAVA',
+            type: 'GRADUATE' as const
+          };
         }
-      } else {
-        // SECONDARY
-        if (currentSchool?.subtype === 'GENERAL') {
-          if (fromClass.gradeLevel === 4) {
-            status = 'ZAVRSAVA';
-            targetClassId = '';
-          }
-        } else {
-          // VOCATIONAL
-          const duration = program?.durationYears || 4;
-          if (fromClass.gradeLevel >= duration) {
-            status = 'ZAVRSAVA';
-            targetClassId = '';
+
+        // 2. POSEBNI PRIJENOSI
+        // 4.K -> 4.I
+        if (grade === 4 && section === 'K') {
+          const target = targetClasses.find(c => c.name.toUpperCase() === '4.I');
+          return {
+            fromClassId: fromClass.id,
+            toClassName: '4.I',
+            toClassId: target?.id,
+            type: 'TRANSFER' as const,
+            isNew: !target
+          };
+        }
+
+        // 3. REDOVNI PRIJENOSI
+        // 1.A -> 2.A -> 3.A
+        // 1.B -> 2.B -> 3.B
+        // 1.C -> 2.C -> 3.C
+        // 1.D -> 2.D -> 3.D -> 4.D
+        const isRegularProgress = (grade < 3 && ['A', 'B', 'C'].includes(section)) || 
+                                  (grade < 4 && section === 'D');
+
+        if (isRegularProgress) {
+          const nextGrade = grade + 1;
+          const nextName = `${nextGrade}.${section}`;
+          const target = targetClasses.find(c => c.name.toUpperCase() === nextName);
+          return {
+            fromClassId: fromClass.id,
+            toClassName: nextName,
+            toClassId: target?.id,
+            type: 'TRANSFER' as const,
+            isNew: !target
+          };
+        }
+
+        // 4. RUČNA DODJELA (If not caught by rules)
+        return {
+          fromClassId: fromClass.id,
+          toClassName: 'POTREBAN RUČNI ODABIR',
+          type: 'MANUAL' as const
+        };
+      });
+
+      setRolloverWizard(prev => ({ 
+        ...prev, 
+        step: 3, 
+        mappings: newMappings 
+      }));
+    } catch (err: any) {
+      toast.error('Greška: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRunRollover = async () => {
+    if (rolloverWizard.mappings.length === 0) return;
+    
+    setLoading(true);
+    const toastId = toast.loading('Pokretanje školskog rollovera...');
+    
+    try {
+      const targetYear = schoolYears.find(y => y.id === rolloverWizard.targetYearId);
+      if (!targetYear) throw new Error('Ciljna godina nije pronađena');
+
+      let totalStudentsTransferred = 0;
+
+      for (const mapping of rolloverWizard.mappings) {
+        const fromClass = classes.find(c => c.id === mapping.fromClassId);
+        if (!fromClass) continue;
+
+        // --- 1. ALWAYS Archive the 'from' class ---
+        await supabase.from('classes').update({ status: 'ARCHIVED' }).eq('id', mapping.fromClassId);
+
+        // --- 2. Handle Graduates ---
+        if (mapping.type === 'GRADUATE') {
+          // Mark students as GRADUATED
+          await supabase.from('student_class_enrollments')
+            .update({ status: 'GRADUATED' })
+            .eq('class_id', mapping.fromClassId)
+            .eq('status', 'ACTIVE');
+          continue;
+        }
+
+        // --- 3. Skip Manual ---
+        if (mapping.type === 'MANUAL') continue;
+
+        // --- 4. Process Transfer ---
+        // Ensure target class exists
+        let targetClassId = mapping.toClassId;
+        
+        if (mapping.isNew || !targetClassId) {
+          const { grade, section } = parseClassName(mapping.toClassName);
+          const { data: newClass, error: classError } = await supabase.from('classes').insert([{
+            name: mapping.toClassName,
+            school_id: selectedSchoolId,
+            school_year_id: rolloverWizard.targetYearId,
+            school_year: targetYear.name,
+            grade_level: grade || 1, 
+            section: section || '',
+            status: 'ACTIVE'
+          }]).select().single();
+          
+          if (classError) throw classError;
+          targetClassId = newClass.id;
+        }
+
+        // Transfer students
+        const { data: enrolls } = await supabase
+          .from('student_class_enrollments')
+          .select('student_id')
+          .eq('class_id', mapping.fromClassId)
+          .eq('status', 'ACTIVE');
+        
+        if (enrolls && enrolls.length > 0) {
+          const newEnrollments = enrolls.map(e => ({
+            student_id: e.student_id,
+            class_id: targetClassId,
+            school_year: targetYear.name,
+            school_year_id: rolloverWizard.targetYearId,
+            status: 'ACTIVE'
+          }));
+          
+          const { error: insError } = await supabase.from('student_class_enrollments').insert(newEnrollments);
+          if (insError) throw insError;
+          
+          // Mark old as TRANSFERRED
+          await supabase.from('student_class_enrollments')
+            .update({ status: 'TRANSFERRED' })
+            .eq('class_id', mapping.fromClassId)
+            .eq('status', 'ACTIVE');
+          
+          totalStudentsTransferred += enrolls.length;
+        }
+      }
+
+      // Archive source year
+      await supabase.from('school_years')
+        .update({ is_active: false, status: 'ARCHIVED' })
+        .eq('id', rolloverWizard.sourceYearId);
+        
+      // Activate target year
+      await supabase.from('school_years')
+        .update({ is_active: true, status: 'ACTIVE' })
+        .eq('id', rolloverWizard.targetYearId);
+
+      // 4. Create empty 1st grades if requested
+      if (rolloverWizard.createEmptyFirstGrades) {
+        const sourceYearClasses = classes.filter(c => c.schoolYearId === rolloverWizard.sourceYearId);
+        const sectionsInSource = Array.from(new Set(sourceYearClasses.map(c => c.section)));
+        const targetClassesAfterInsert = (await supabase.from('classes').select('name').eq('school_year_id', rolloverWizard.targetYearId)).data || [];
+        
+        for (const section of sectionsInSource) {
+          const name = `1.${section}`;
+          const exists = targetClassesAfterInsert.some(c => c.name.toUpperCase() === name.toUpperCase());
+          if (!exists) {
+            const { grade: g, section: s } = parseClassName(name);
+            await supabase.from('classes').insert([{
+              name,
+              school_id: selectedSchoolId,
+              school_year_id: rolloverWizard.targetYearId,
+              school_year: targetYear.name,
+              grade_level: g,
+              section: s,
+              status: 'ACTIVE'
+            }]);
           }
         }
       }
 
-      return {
-        studentId: student.id,
-        name: `${student.surname} ${student.name}`,
-        status,
-        nextClassId: targetClassId,
-        isContinuation,
-        programName: program?.name || '—'
-      };
-    });
-
-    setRolloverStudents(preview);
+      toast.success(`Rollover uspješan! Preneseno ${totalStudentsTransferred} učenika.`, { id: toastId });
+      setRolloverWizard({ step: 1, sourceYearId: '', targetYearId: '', createEmptyFirstGrades: true, mappings: [] });
+      fetchData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Greška pri rolloveru: ' + err.message, { id: toastId });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const selectedClassData = classes.find(c => c.id === selectedClassId);
+
+  const [graduatesAdminStudents, setGraduatesAdminStudents] = useState<any[]>([]);
+
+  const fetchGraduatesStudents = async (classId: string) => {
+    if (!classId) {
+      setGraduatesAdminStudents([]);
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('student_class_enrollments')
+        .select('*, student:user_profiles(*)')
+        .eq('class_id', classId);
+      
+      if (error) throw error;
+      if (data) {
+        setGraduatesAdminStudents(data.map(d => ({
+          ...mappers.user(d.student),
+          enrollmentId: d.id,
+          status: d.status
+        })));
+      }
+    } catch (err: any) {
+      toast.error('Greška pri dohvaćanju učenika: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEnrollGraduates = async () => {
+    if (!graduatesAdmin.targetClassId || graduatesAdmin.selectedStudentIds.length === 0) {
+      toast.error('Odaberite ciljni razred i barem jednog učenika');
+      return;
+    }
+
+    const targetClass = classes.find(c => c.id === graduatesAdmin.targetClassId);
+    if (!targetClass) return;
+
+    setLoading(true);
+    const toastId = toast.loading('Upisivanje učenika...');
+    try {
+      const enrollments = graduatesAdmin.selectedStudentIds.map(studentId => ({
+        student_id: studentId,
+        class_id: graduatesAdmin.targetClassId,
+        school_year: targetClass.schoolYear,
+        school_year_id: targetClass.schoolYearId,
+        status: 'ACTIVE'
+      }));
+
+      const { error } = await supabase.from('student_class_enrollments').insert(enrollments);
+      if (error) throw error;
+
+      toast.success(`Uspješno upisano ${enrollments.length} u razred ${targetClass.name}`, { id: toastId });
+      setGraduatesAdmin(prev => ({ ...prev, selectedStudentIds: [] }));
+      fetchData();
+    } catch (err: any) {
+      toast.error('Greška pri upisu: ' + err.message, { id: toastId });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchSchoolYears = async () => {
+    if (!selectedSchoolId) return;
+    const { data, error } = await supabase
+      .from('school_years')
+      .select('*')
+      .eq('school_id', selectedSchoolId)
+      .order('starts_at', { ascending: false });
+    
+    if (error) {
+      console.error("Error fetching school years:", error);
+      return;
+    }
+    
+    if (data) {
+      setSchoolYears(mapList(data, mappers.schoolYear));
+    }
+  };
 
   useEffect(() => {
-    if (!isMainAdmin && !isSchoolAdmin) return;
-
-    // Real-time listeners for basic data (DISABLED)
-    /*
-    const classesChannel = supabase.channel('classes_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'classes' }, () => {
-        supabase.from('classes').select('*').then(({ data }) => {
-          if (data) setClasses(mapList(data, mappers.class));
-        });
-      })
-      .subscribe();
-    */
+    if (!selectedSchoolId || (!isMainAdmin && !isSchoolAdmin)) return;
     
-    // students fetching used to be here, but we will consolidate it into fetchData and its effect
-    supabase.from('classes').select('*').then(({ data }) => data && setClasses(mapList(data, mappers.class)));
+    const checkAndCreateSchoolYear = async () => {
+      const { data, error } = await supabase
+        .from('school_years')
+        .select('*')
+        .eq('school_id', selectedSchoolId)
+        .order('starts_at', { ascending: false });
+      
+      if (error) return;
+      
+      if (data && data.length === 0) {
+        const currentYear = new Date().getFullYear();
+        const nextYear = currentYear + 1;
+        const name = `${currentYear}./${nextYear}.`;
+        
+        const { data: newYear, error: createError } = await supabase
+          .from('school_years')
+          .insert([{
+            id: `sy-${selectedSchoolId}-${currentYear}`,
+            school_id: selectedSchoolId,
+            name,
+            starts_at: `${currentYear}-09-01`,
+            ends_at: `${nextYear}-06-30`,
+            is_active: true
+          }])
+          .select()
+          .single();
+          
+        if (createError) console.error("School year creation error:", createError);
+          
+        if (!createError && newYear) {
+          fetchSchoolYears();
+        }
+      } else {
+        setSchoolYears(mapList(data, mappers.schoolYear));
+      }
+    };
 
-    /*
-    const subjectsChannel = supabase.channel('subjects_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'subjects' }, () => {
-        supabase.from('subjects').select('*').then(({ data }) => data && setAllSubjects(mapList(data, mappers.subject)));
-      })
-      .subscribe();
-    */
+    checkAndCreateSchoolYear();
     
-    supabase.from('subjects').select('*').then(({ data }) => data && setAllSubjects(mapList(data, mappers.subject)));
-
-    /*
-    const rollChannel = supabase.channel('roles_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_school_roles' }, () => {
-        supabase.from('user_school_roles').select('*').then(({ data }) => data && setAllUserSchoolRoles(mapList(data, mappers.userSchoolRole)));
-      })
-      .subscribe();
-    */
-    
+    supabase.from('classes').select('*').eq('school_id', selectedSchoolId).then(({ data }) => data && setClasses(mapList(data, mappers.class)));
+    supabase.from('subjects').select('*').eq('school_id', selectedSchoolId).then(({ data }) => data && setAllSubjects(mapList(data, mappers.subject)));
     supabase.from('user_school_roles').select('*').then(({ data }) => data && setAllUserSchoolRoles(mapList(data || [], mappers.userSchoolRole)));
-
+    
     supabase.from('user_profiles').select('*').then(({ data }) => {
       if (data) {
         const mapped = data.map(p => {
@@ -389,18 +717,11 @@ export default function AdministrationPage() {
         setAllUsers(mapped);
       }
     });
-    supabase.from('schools').select('*').then(({ data }) => data && setSchools(mapList(data, mappers.school)));
-    supabase.from('programs').select('*').then(({ data }) => data && setPrograms(data)); // Add program mapper if needed
-    supabase.from('school_years').select('*').then(({ data }) => data && setSchoolYears(mapList(data, mappers.schoolYear))); 
 
-    return () => {
-      /*
-      supabase.removeChannel(classesChannel);
-      supabase.removeChannel(studentsChannel);
-      supabase.removeChannel(subjectsChannel);
-      supabase.removeChannel(rollChannel);
-      */
-    };
+    supabase.from('schools').select('*').then(({ data }) => data && setSchools(mapList(data, mappers.school)));
+    supabase.from('programs').select('*').then(({ data }) => data && setPrograms(mapList(data, mappers.program)));
+    supabase.from('class_subject_teachers').select('*').eq('school_id', selectedSchoolId).then(({ data }) => data && setSubjectAssignments(mapList(data, mappers.classSubjectTeacher)));
+    supabase.from('curriculum_plans').select('*').eq('school_id', selectedSchoolId).then(({ data }) => data && setCurriculumPlans(mapList(data, mappers.curriculumPlan)));
   }, [selectedSchoolId, isMainAdmin, isSchoolAdmin]);
 
   useEffect(() => {
@@ -496,8 +817,39 @@ export default function AdministrationPage() {
   // Define fetchData for parts that still need manual re-fetching
   const fetchData = async () => {
     const classToFetch = effectiveClassId || selectedClassId;
-    if (!classToFetch) return;
+    
     try {
+      // Global fetches
+      const { data: schoolsData } = await supabase.from('schools').select('*');
+      if (schoolsData) setSchools(mapList(schoolsData, mappers.school));
+
+      const { data: progsData } = await supabase.from('programs').select('*');
+      if (progsData) setPrograms(mapList(progsData, mappers.program));
+
+      const { data: yearRoles } = await supabase.from('user_school_roles').select('*');
+      if (yearRoles) setAllUserSchoolRoles(mapList(yearRoles, mappers.userSchoolRole));
+
+      const { data: teachersData } = await supabase.from('user_profiles').select('*');
+      if (teachersData) {
+        const mapped = teachersData.map(p => {
+          const u = mappers.user(p);
+          return {
+            ...u,
+            name: u.name?.split(' ')[0] || '',
+            surname: u.name?.split(' ').slice(1).join(' ') || '',
+          };
+        });
+        setAllUsers(mapped);
+      }
+
+      const { data: clsData } = await supabase.from('classes').select('*').eq('school_id', selectedSchoolId);
+      if (clsData) setClasses(mapList(clsData, mappers.class));
+
+      const { data: subAll } = await supabase.from('subjects').select('*').eq('school_id', selectedSchoolId);
+      if (subAll) setAllSubjects(mapList(subAll, mappers.subject));
+
+      if (!classToFetch) return;
+
       const { data: enrollments, error: err } = await supabase
         .from('student_class_enrollments')
         .select('*, student:user_profiles(*)')
@@ -516,9 +868,6 @@ export default function AdministrationPage() {
         }));
         setStudents(mapped as any);
       }
-
-      const { data: subData } = await supabase.from('subjects').select('*');
-      if (subData) setAllSubjects(subData);
 
       const { data: enrollData } = await supabase
         .from('student_subject_enrollments')
@@ -558,6 +907,10 @@ export default function AdministrationPage() {
   }, [selectedClassId, activeTab]);
 
   const handleUpdateClass = async () => {
+    if (isArchived) {
+      toast.error('Nije moguće uređivati arhivirane razrede.');
+      return;
+    }
     if (!selectedClassId) return;
     setLoading(true);
     try {
@@ -740,49 +1093,42 @@ export default function AdministrationPage() {
     }
   };
 
-  const handleFinalizeYearSummaries = async () => {
-    if (!selectedClassId || !selectedClassData) return;
-    
-    const classStudents = students.filter(s => s.classId === selectedClassId);
-    console.log("FINALIZING FOR CLASS:", selectedClassId, "STUDENT COUNT:", classStudents.length);
+  const handleFinalizeYearSummaries = async (classId: string) => {
+    if (!classId || !selectedClassData) return;
+    if (!confirm('Želite li izračunati i zaključiti opći uspjeh za sve učenike u ovom razredu? Ovo će prepisati postojeće nezaključene podatke.')) return;
+
+    const classStudents = students.filter(s => s.classId === classId);
+    console.log("FINALIZING FOR CLASS:", classId, "STUDENT COUNT:", classStudents.length);
     let successCount = 0;
     let skipCount = 0;
     const failures: { student: string, missing: string[] }[] = [];
 
     setLoading(true);
     try {
-      // 1. Fetch all enrollments for this class once to avoid repeated queries
+      // 1. Fetch all enrollments for this class once
       const { data: enrollData } = await supabase
         .from('student_subject_enrollments')
         .select('student_id, subject_id, status')
-        .eq('class_id', selectedClassId);
+        .eq('class_id', classId);
       
-      console.log("ENROLLED SUBJECTS FOUND:", enrollData?.length);
-
       // 2. Fetch all final grades for this class once
       const { data: finalGradesData } = await supabase
         .from('grades')
         .select('student_id, subject_id, value, period, is_final')
-        .eq('class_id', selectedClassId)
+        .eq('class_id', classId)
         .eq('is_final', true);
       
-      console.log("FINAL GRADES FOUND:", finalGradesData?.length);
-
       // 3. Fetch overall notes for vladanje
       const { data: overallNotesData } = await supabase
         .from('student_overall_notes')
         .select('student_id, disciplinary_actions')
-        .eq('class_id', selectedClassId);
+        .eq('class_id', classId);
 
       for (const student of classStudents) {
         const studentEnrollments = (enrollData || []).filter(e => e.student_id === student.id && e.status === 'ACTIVE');
         const studentGrades = (finalGradesData || []).filter(g => g.student_id === student.id);
         const studentNotes = (overallNotesData || []).find(n => n.student_id === student.id);
         
-        console.log(`POLL FOR STUDENT: ${student.surname} ${student.name} (${student.id})`);
-        console.log(`- Active Subjects: ${studentEnrollments.length}`);
-        console.log(`- Final Grades Found: ${studentGrades.length}`);
-
         let behavior = 'Uzorno';
         if (studentNotes?.disciplinary_actions) {
           const da = studentNotes.disciplinary_actions.toLowerCase();
@@ -794,7 +1140,6 @@ export default function AdministrationPage() {
         const gradesValues: number[] = [];
 
         for (const enroll of studentEnrollments) {
-          // Note: we don't check period here, only if there is a grade with is_final=true for this subject
           const fg = studentGrades.find(g => g.subject_id === enroll.subject_id);
           if (!fg || !fg.value) {
             const subject = allSubjects.find(s => s.id === enroll.subject_id);
@@ -805,7 +1150,6 @@ export default function AdministrationPage() {
         }
 
         if (missingSubjects.length > 0) {
-          console.log(`- MISSING GRADES FOR: ${missingSubjects.join(', ')}`);
           failures.push({ student: `${student.surname} ${student.name}`, missing: missingSubjects });
           skipCount++;
           continue;
@@ -814,17 +1158,15 @@ export default function AdministrationPage() {
         if (gradesValues.length > 0) {
           const hasFail = gradesValues.some(v => v === 1);
           const avg = gradesValues.reduce((a, b) => a + b, 0) / gradesValues.length;
-          const finalGrade = hasFail ? 1 : getFinalAverageGrade(avg);
+          const finalResultGrade = hasFail ? 1 : getFinalAverageGrade(avg);
           
-          console.log(`- CALCULATED: Avg=${avg.toFixed(2)}, Final=${finalGrade}, Behavior=${behavior}, HasFail=${hasFail}`);
-
           const payload = {
             student_id: student.id,
-            class_id: selectedClassId,
+            class_id: classId,
             school_year_id: selectedClassData.schoolYearId,
             school_year: selectedClassData.schoolYear,
-            average: avg,
-            final_result: finalGrade,
+            average: Number(avg.toFixed(2)),
+            final_result: finalResultGrade,
             behavior,
             status: 'FINALIZED',
             finalized_at: new Date().toISOString(),
@@ -835,61 +1177,68 @@ export default function AdministrationPage() {
             onConflict: 'student_id,class_id,school_year'
           });
 
-          if (upsertError) {
-            console.error(`- UPSERT ERROR for ${student.id}:`, upsertError);
-          } else {
-            successCount++;
-          }
+          if (upsertError) console.error(`Upsert error for ${student.id}:`, upsertError);
+          else successCount++;
         } else {
-          console.log("- NO GRADES VALUES FOUND (despite no missing subjects - check exempted list)");
           skipCount++;
         }
       }
 
       if (failures.length > 0) {
-        const failureMsg = failures.map(f => `${f.student}: Nedostaju ocjene iz: ${f.missing.join(', ')}`).join('\n');
-        console.error("Preskočeni učenici:\n", failureMsg);
-        toast.error(`Zaključivanje djelomično uspjelo. ${skipCount} učenika preskočeno zbog nedostajućih ocjena.`);
+        toast(`${successCount} uspješnih, ${skipCount} preskočenih. provjerite ocjene.`, { icon: '⚠️' });
       } else {
         toast.success(`Uspješno zaključeno za svih ${successCount} učenika.`);
       }
       
-      // Update local state
-      const { data: updatedSummaries } = await supabase.from('student_year_summaries').select('*').eq('class_id', selectedClassId);
-      if (updatedSummaries) setSummaries(mapList(updatedSummaries, mappers.studentYearSummary));
-
+      fetchData();
     } catch (err) {
       console.error(err);
-      toast.error('Došlo je do greške pri zaključivanju.');
+      toast.error('Greska pri zaključivanju.');
     } finally {
       setLoading(false);
     }
   };
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newClassName || !selectedSchoolId || !newClassSchoolYearId) {
-      toast.error('Odaberite godinu i naziv razreda');
+    const yearId = classCreationYearId;
+    if (!newClassName || !selectedSchoolId || !yearId) {
+      toast.error('Greška: Nedostaju podaci za kreiranje razreda');
       return;
     }
+    
+    console.log("CREATE CLASS CLICKED", { name: newClassName, yearId, selectedSchoolId });
+    
     setLoading(true);
     try {
-      const schoolYear = schoolYears.find(y => y.id === newClassSchoolYearId);
-      await supabase.from('classes').insert([{
+      const schoolYear = schoolYears.find(y => y.id === yearId);
+      const { data, error } = await supabase.from('classes').insert([{
         name: newClassName,
         school_id: selectedSchoolId,
-        school_year_id: newClassSchoolYearId,
+        school_year_id: yearId,
         school_year: schoolYear?.name || '',
         grade_level: newClassGrade,
         section: newClassSection,
         variant: newClassVariant,
+        program_id: newUserForm.programId || null,
         status: 'ACTIVE',
         homeroom_teacher_id: null,
         deputy_teacher_id: null
-      }]);
-      setNewClassName('');
-      toast.success('Razred kreiran');
-    } catch (err) {
-      console.error(err);
+      }]).select();
+
+      console.log("CREATE CLASS RESULT:", { data, error });
+
+      if (error) {
+        throw error;
+      } else {
+        setClassCreationYearId(null);
+        toast.success('Razredni odjel uspješno kreiran');
+        // Fetch all classes again
+        const { data: updatedClasses } = await supabase.from('classes').select('*').eq('school_id', selectedSchoolId);
+        if (updatedClasses) setClasses(mapList(updatedClasses, mappers.class));
+      }
+    } catch (err: any) {
+      console.error("CREATE CLASS ERROR:", err);
+      toast.error(`Greška pri kreiranju razreda: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -945,9 +1294,12 @@ export default function AdministrationPage() {
   const handleCreateSubject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newSubjectName || !selectedSchoolId) return;
+    
+    console.log("CREATE SUBJECT CLICKED", { name: newSubjectName, schoolId: selectedSchoolId });
+    
     setLoading(true);
     try {
-      await supabase.from('subjects').insert([{
+      const { data, error } = await supabase.from('subjects').insert([{
         name: newSubjectName,
         school_id: selectedSchoolId,
         grading_elements: [
@@ -955,11 +1307,21 @@ export default function AdministrationPage() {
           'Primjena nastavnih sadržaja',
           'Samostalan rad i aktivnost'
         ]
-      }]);
+      }]).select();
+      
+      console.log("CREATE SUBJECT RESULT:", { data, error });
+      
+      if (error) throw error;
+      
+      toast.success('Predmet uspješno kreiran');
       setNewSubjectName('');
-      // No manual fetchData needed because of realtime
-    } catch (err) {
-      console.error(err);
+      
+      // Update local subjects list
+      const { data: updatedSubjects } = await supabase.from('subjects').select('*').eq('school_id', selectedSchoolId);
+      if (updatedSubjects) setAllSubjects(mapList(updatedSubjects, mappers.subject));
+    } catch (err: any) {
+      console.error("CREATE SUBJECT ERROR:", err);
+      toast.error('Problem kod kreiranja predmeta: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -1012,18 +1374,28 @@ export default function AdministrationPage() {
 
   const handleCreateAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isArchived) {
+      toast.error('Nije moguće uređivati arhivirane razrede.');
+      return;
+    }
     if (!assignmentForm.subjectId || !assignmentForm.classId || !assignmentForm.teacherId) {
       toast.error('Molimo popunite sva polja');
       return;
     }
+    
+    console.log("CREATE ASSIGNMENT CLICKED", assignmentForm);
+    
     setLoading(true);
     try {
       if (editingAssignmentId) {
-        await supabase.from('class_subject_teachers').update({
+        const { data, error } = await supabase.from('class_subject_teachers').update({
           subject_id: assignmentForm.subjectId,
           class_id: assignmentForm.classId,
           teacher_id: assignmentForm.teacherId
-        }).eq('id', editingAssignmentId);
+        }).eq('id', editingAssignmentId).select();
+        
+        console.log("UPDATE ASSIGNMENT RESULT:", { data, error });
+        if (error) throw error;
         toast.success('Zaduženje ažurirano');
       } else {
         const exists = subjectAssignments.find(a => a.subject_id === assignmentForm.subjectId && a.class_id === assignmentForm.classId);
@@ -1032,18 +1404,26 @@ export default function AdministrationPage() {
           setLoading(false);
           return;
         }
-        await supabase.from('class_subject_teachers').insert([{
+        const { data, error } = await supabase.from('class_subject_teachers').insert([{
           subject_id: assignmentForm.subjectId,
           class_id: assignmentForm.classId,
           teacher_id: assignmentForm.teacherId,
           school_id: selectedSchoolId
-        }]);
+        }]).select();
+        
+        console.log("CREATE ASSIGNMENT RESULT:", { data, error });
+        if (error) throw error;
         toast.success('Zaduženje kreirano');
       }
       setAssignmentForm({ subjectId: '', classId: '', teacherId: '' });
       setEditingAssignmentId(null);
-    } catch (err) {
-      console.error(err);
+      
+      // Refresh assignments
+      const { data: updatedAssignments } = await supabase.from('class_subject_teachers').select('*').eq('school_id', selectedSchoolId);
+      if (updatedAssignments) setSubjectAssignments(mapList(updatedAssignments, mappers.classSubjectTeacher));
+    } catch (err: any) {
+      console.error("ASSIGNMENT ERROR:", err);
+      toast.error('Greška pri spremanju zaduženja: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -1091,7 +1471,10 @@ export default function AdministrationPage() {
   const confirmDelete = async () => {
     if (!deleteDialog.id || !deleteDialog.type) return;
 
-    if (user?.role !== Role.ADMIN && user?.globalRole !== Role.MAIN_ADMIN) {
+    console.log("DELETE ACTION TRIGGERED", { type: deleteDialog.type, id: deleteDialog.id });
+
+    // Permissions check
+    if (!isAnyAdmin) {
       toast.error('Samo administrator može brisati ove zapise.');
       setDeleteDialog({ ...deleteDialog, isOpen: false });
       return;
@@ -1101,15 +1484,105 @@ export default function AdministrationPage() {
 
     try {
       if (deleteDialog.type === 'CLASS') {
-        await supabase.from('classes').delete().eq('id', deleteDialog.id);
-        toast.success('Razred je uspješno obrisan.');
+        const classId = deleteDialog.id;
+        console.log("DELETE CLASS CONFIRMED", classId);
+        
+        // MAIN_ADMIN can force delete with cascade
+        if (isAnyAdmin) {
+          console.log("EXECUTING CASCADE DELETE FOR CLASS:", classId);
+          // Manual cascade for safety
+          const cleanupResults = await Promise.all([
+            supabase.from('grades').delete().eq('class_id', classId),
+            supabase.from('absences').delete().eq('class_id', classId),
+            supabase.from('lessons').delete().eq('class_id', classId),
+            supabase.from('schedule_cells').delete().eq('class_id', classId),
+            supabase.from('student_class_enrollments').delete().eq('class_id', classId),
+            supabase.from('student_subject_enrollments').delete().eq('class_id', classId),
+            supabase.from('curriculum_plans').delete().eq('class_id', classId),
+            supabase.from('class_subject_teachers').delete().eq('class_id', classId),
+            supabase.from('student_year_summaries').delete().eq('class_id', classId),
+            supabase.from('student_overall_notes').delete().eq('class_id', classId),
+            supabase.from('class_overall_notes').delete().eq('class_id', classId),
+          ]);
+
+          console.log("CASCADE CLEANUP RESULTS:", cleanupResults);
+
+          const { error: deleteError } = await supabase.from('classes').delete().eq('id', classId);
+          if (deleteError) {
+            console.error("SUPABASE DELETE ERROR:", deleteError);
+            throw deleteError;
+          }
+          
+          toast.success('Razred i svi povezani podaci su obrisani.');
+        } else {
+          const { error: deleteError } = await supabase.from('classes').delete().eq('id', classId);
+          if (deleteError) throw deleteError;
+          toast.success('Razred je obrisan.');
+        }
+      } else if ((deleteDialog.type as string) === 'SCHOOL_YEAR') {
+        const yearId = deleteDialog.id;
+        // Delete all classes in year first
+        const { data: yearClasses } = await supabase.from('classes').select('id').eq('school_year_id', yearId);
+        if (yearClasses && yearClasses.length > 0) {
+          for (const c of yearClasses) {
+            await Promise.all([
+              supabase.from('grades').delete().eq('class_id', c.id),
+              supabase.from('absences').delete().eq('class_id', c.id),
+              supabase.from('student_class_enrollments').delete().eq('class_id', c.id),
+              supabase.from('class_subject_teachers').delete().eq('class_id', c.id),
+              supabase.from('classes').delete().eq('id', c.id)
+            ]);
+          }
+        }
+        const { error } = await supabase.from('school_years').delete().eq('id', yearId);
+        if (error) throw error;
+        toast.success('Školska godina je obrisana.');
       } else if (deleteDialog.type === 'SUBJECT') {
-        await supabase.from('subjects').delete().eq('id', deleteDialog.id);
-        toast.success('Predmet je uspješno obrisan.');
+        const subjectId = deleteDialog.id;
+        if (isMainAdmin) {
+          if (confirm('Obavijest: Brisanje predmeta uklonit će sva zaduženja, planove i upise povezane s ovim predmetom. Nastaviti?')) {
+             await Promise.all([
+               supabase.from('class_subject_teachers').delete().eq('subject_id', subjectId),
+               supabase.from('curriculum_plans').delete().eq('subject_id', subjectId),
+               supabase.from('student_subject_enrollments').delete().eq('subject_id', subjectId),
+               supabase.from('grading_elements').delete().eq('subject_id', subjectId),
+               supabase.from('grades').delete().eq('subject_id', subjectId),
+               supabase.from('exams').delete().eq('subject_id', subjectId),
+             ]);
+             const { error } = await supabase.from('subjects').delete().eq('id', subjectId);
+             if (error) throw error;
+             toast.success('Predmet je obrisan.');
+          }
+        } else {
+          const { error } = await supabase.from('subjects').delete().eq('id', subjectId);
+          if (error) throw error;
+          toast.success('Predmet je obrisan.');
+        }
       } else if (deleteDialog.type === 'STUDENT') {
-        // In Supabase, we might want to delete the auth user too, but typically we just deactivate or delete profile
-        await supabase.from('user_profiles').delete().eq('auth_user_id', deleteDialog.id);
-        toast.success('Učenik je uspješno obrisan.');
+        const authUserId = deleteDialog.id;
+        const { data: profile } = await supabase.from('user_profiles').select('id').eq('auth_user_id', authUserId).single();
+        
+        if (isMainAdmin && profile) {
+          if (confirm('Jeste li sigurni da želite obrisati ovog učenika i SVE njegove podatke?')) {
+            await Promise.all([
+              supabase.from('grades').delete().eq('student_id', profile.id),
+              supabase.from('absences').delete().eq('student_id', profile.id),
+              supabase.from('student_class_enrollments').delete().eq('student_id', profile.id),
+              supabase.from('student_subject_enrollments').delete().eq('student_id', profile.id),
+              supabase.from('student_year_summaries').delete().eq('student_id', profile.id),
+              supabase.from('student_overall_notes').delete().eq('student_id', profile.id),
+              supabase.from('user_school_roles').delete().eq('user_id', profile.id),
+            ]);
+            
+            // Delete profile
+            await supabase.from('user_profiles').delete().eq('id', profile.id);
+            // Delete auth user if possible (requires admin API, but profile delete might be enough for UI)
+            toast.success('Učenik je obrisan.');
+          }
+        } else {
+          await supabase.from('user_profiles').delete().eq('auth_user_id', authUserId);
+          toast.success('Učenik je obrisan.');
+        }
       } else if (deleteDialog.type === 'GRADING_ELEMENT') {
         const subjectId = deleteDialog.id;
         const element = deleteDialog.extraData.element;
@@ -1125,113 +1598,169 @@ export default function AdministrationPage() {
       } else if (deleteDialog.type === 'PLANNING') {
         await supabase.from('curriculum_plans').delete().eq('id', deleteDialog.id);
         toast.success('Plan je obrisan.');
+      } else if (deleteDialog.type === 'PROGRAM') {
+        const { error } = await supabase.from('programs').delete().eq('id', deleteDialog.id);
+        if (error) throw error;
+        toast.success('Program je obrisan.');
       }
-    } catch (err) {
-      toast.error('Brisanje nije uspjelo.');
+    } catch (err: any) {
+      console.error("Delete error:", err);
+      toast.error('Brisanje nije uspjelo: ' + (err.message || 'Nepoznata greška'));
     } finally {
       setDeleteDialog({ isOpen: false, id: '', type: null, loading: false });
+      if (typeof fetchData === 'function') fetchData();
+      // Ensure classes list is refreshed specifically after delete
+      if (selectedSchoolId) {
+        supabase.from('classes')
+          .select('*')
+          .eq('school_id', selectedSchoolId)
+          .then(({ data }) => data && setClasses(mapList(data, mappers.class)));
+      }
     }
   };
 
   const handleCreateSchoolYear = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newYearForm.name) return;
+    if (!newYearForm.name || !selectedSchoolId) {
+      toast.error('Naziv školske godine je obavezan');
+      return;
+    }
+    
+    console.log("CREATE SCHOOL YEAR CLICKED", { name: newYearForm.name, schoolId: selectedSchoolId });
+    
     setLoading(true);
     try {
       if (schoolYears.some(y => y.name === newYearForm.name)) {
         toast.error('Ova školska godina već postoji');
+        setLoading(false);
         return;
       }
-      await supabase.from('school_years').insert([{
+      const { data, error } = await supabase.from('school_years').insert([{
         name: newYearForm.name,
-        starts_at: newYearForm.startsAt,
-        ends_at: newYearForm.endsAt,
+        starts_at: newYearForm.startsAt || null,
+        ends_at: newYearForm.endsAt || null,
         school_id: selectedSchoolId,
         is_active: schoolYears.length === 0 
-      }]);
-      setNewYearForm({ name: '', startsAt: '', endsAt: '' });
-      toast.success('Nova školska godina je otvorena');
-    } catch (err) {
-      console.error(err);
+      }]).select().single();
+
+      console.log("CREATE SCHOOL YEAR RESULT:", { data, error });
+
+      if (error) {
+        throw error;
+      } else {
+        setNewYearForm({ name: '', startsAt: '', endsAt: '' });
+        toast.success(`Nova školska godina ${newYearForm.name} je otvorena`);
+        await fetchSchoolYears();
+      }
+    } catch (err: any) {
+      console.error("CREATE SCHOOL YEAR ERROR:", err);
+      toast.error('Greška pri otvaranju školske godine: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRunRollover = async () => {
-    if (rolloverStudents.length === 0) {
-      toast.error('Prvo generirajte prijedlog prijenosa');
+  const handleActivateSchoolYear = async (yearId: string) => {
+    console.log('--- handleActivateSchoolYear CLICKED ---', { yearId, selectedSchoolId });
+    if (!selectedSchoolId) {
+      toast.error('Greska: Interni ID škole nije postavljen. Osvježite stranicu.');
       return;
     }
-    const { fromClassId, toYearId, toClassId } = rolloverForm;
-    if (!fromClassId || !toYearId) {
-      toast.error('Molimo odaberite sve potrebne podatke');
+    const year = schoolYears.find(y => y.id === yearId);
+    if (!year) {
+      toast.error('Greska: Školska godina nije pronađena.');
       return;
     }
-    if (!confirm(`Jeste li sigurni da želite izvršiti prijenos za ${rolloverStudents.length} učenika?`)) return;
     
+    // TEMPORARILY BYPASSING CONFIRMATION AS REQUESTED FOR TESTING
+    console.log("BYPASSING CONFIRMATION FOR TESTING");
+    const confirmed = true;
+    
+    /*
+    const confirmed = window.confirm(`Postaviti ${year.name} kao aktivnu godinu? Sve ostale bit će arhivirane.`);
+    console.log("CONFIRM RESULT:", confirmed);
+    */
+    
+    if (!confirmed) {
+      console.log('Activation cancelled by user.');
+      return;
+    }
+
+    console.log("ACTIVATION EXECUTION START");
+    const toastId = toast.loading(`Aktivacija školske godine ${year.name}...`);
     setLoading(true);
     try {
-      const toYear = schoolYears.find(y => y.id === toYearId);
-      if (!toYear) throw new Error('Podaci o školskoj godini nedostaju');
+      console.log('--- AKTIVACIJA ŠKOLSKE GODINE START ---');
+      console.log('Ciljna godina:', { id: yearId, name: year.name });
+
+      // 1. Set all school years for selected school: is_active = false (and status = 'ARCHIVED' for others)
+      const { error: deactivateError } = await supabase
+        .from("school_years")
+        .update({ is_active: false, status: 'ARCHIVED' })
+        .eq("school_id", selectedSchoolId);
       
-      // Transfer homeroom and deputy if target class exists
-      if (toClassId) {
-        const fromClass = classes.find(c => c.id === fromClassId);
-        if (fromClass) {
-          await supabase.from('classes').update({
-            homeroom_teacher_id: fromClass.homeroomTeacherId,
-            deputy_teacher_id: fromClass.deputyTeacherId
-          }).eq('id', toClassId);
-        }
+      if (deactivateError) {
+        console.error('Greška pri deaktivaciji ostalih godina:', deactivateError);
+        throw deactivateError;
       }
-      
-      let transferredCount = 0;
-      for (const item of rolloverStudents) {
-        if (item.status === 'ZAVRSAVA') {
-          // Update current enrollment
-          await supabase.from('student_class_enrollments')
-            .update({ status: 'COMPLETED' })
-            .eq('student_id', item.studentId)
-            .eq('class_id', fromClassId);
-          
-          transferredCount++;
-          continue;
-        }
+      console.log('Sve ostale godine deaktivirane/arhivirane.');
 
-        if (!item.nextClassId) continue;
+      // 2. Set selected school year: is_active = true, status = 'ACTIVE'
+      const { error: activateError } = await supabase
+        .from("school_years")
+        .update({ is_active: true, status: "ACTIVE" })
+        .eq("id", yearId);
 
-        // Mark previous enrollment as TRANSFERRED
-        await supabase.from('student_class_enrollments')
-          .update({ status: 'TRANSFERRED' })
-          .eq('student_id', item.studentId)
-          .eq('class_id', fromClassId);
-
-        // Create new enrollment
-        await supabase.from('student_class_enrollments').insert([{
-          student_id: item.studentId,
-          class_id: item.nextClassId,
-          school_year_id: toYearId,
-          status: 'ACTIVE',
-          is_continuation: item.status === 'NASTAVLJA'
-        }]);
-
-        transferredCount++;
+      if (activateError) {
+        console.error('Greška pri aktivaciji godine:', activateError);
+        throw activateError;
       }
+      console.log('Ciljna godina aktivirana.');
 
-      await supabase.from('rollover_logs').insert([{
-        from_school_year_id: rolloverForm.fromYearId || null,
-        to_school_year_id: toYearId,
-        from_class_id: fromClassId,
-        to_class_id: toClassId || null,
-        created_by: user?.id,
-        students_transferred: transferredCount
-      }]);
+      toast.success(`Školska godina ${year.name} je sada aktivna.`, { id: toastId });
       
-      setRolloverStudents([]);
-      toast.success(`Rollover uspješan: ${transferredCount} akcija izvršeno.`);
-    } catch (err) {
+      // Update local state immediately for better UX
+      setSchoolYears(prev => prev.map(y => ({
+        ...y,
+        isActive: y.id === yearId,
+        status: y.id === yearId ? 'ACTIVE' : 'ARCHIVED'
+      })));
+
+      await fetchSchoolYears();
+      if (typeof fetchData === 'function') await fetchData();
+      console.log('--- AKTIVACIJA ŠKOLSKE GODINE USPJEŠNA ---');
+    } catch (err: any) {
+      console.error('KRITIČNA GREŠKA PRI AKTIVACIJI:', err);
+      toast.error('Aktivacija nije uspjela: ' + (err.message || 'Nepoznata Supabase greška'), { id: toastId });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleArchiveSchoolYear = async (yearId: string) => {
+    console.log('--- handleArchiveSchoolYear CLICKED ---', { yearId });
+    const year = schoolYears.find(y => y.id === yearId);
+    if (!year) return;
+    
+    const confirmed = window.confirm(`Arhivirati školsku godinu ${year.name}?`);
+    console.log("ARCHIVE CONFIRM RESULT:", confirmed);
+    if (!confirmed) return;
+
+    console.log("ARCHIVE EXECUTION START");
+    const toastId = toast.loading(`Arhiviranje školske godine ${year.name}...`);
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('school_years')
+        .update({ is_active: false, status: 'ARCHIVED' })
+        .eq('id', yearId);
+
+      if (error) throw error;
+      toast.success('Školska godina arhivirana', { id: toastId });
+      await fetchSchoolYears();
+    } catch (err: any) {
       console.error(err);
+      toast.error('Arhiviranje nije uspjelo: ' + err.message, { id: toastId });
     } finally {
       setLoading(false);
     }
@@ -1239,19 +1768,71 @@ export default function AdministrationPage() {
 
   const handleFixSchoolYears = async () => {
     setLoading(true);
+    console.log("selectedSchoolId", selectedSchoolId);
     try {
-      const uniqueYearNames = Array.from(new Set(classes.map(c => c.schoolYear).filter(Boolean)));
+      // 1. Ensure we have school years loaded
+      const { data: yearsData, error: yearsError } = await supabase
+        .from('school_years')
+        .select('*')
+        .eq('school_id', selectedSchoolId)
+        .order('starts_at', { ascending: false });
+
+      console.log("schoolYears found", yearsData);
+      if (yearsError) console.error("schoolYears error", yearsError);
+
+      const currentYears = yearsData ? mapList(yearsData, mappers.schoolYear) : [];
+      let activeYear = currentYears.find(y => y.isActive);
+
+      if (!activeYear && currentYears.length > 0) {
+        activeYear = currentYears[0];
+      }
+
+      // If NO year exists at all, create one
+      if (!activeYear) {
+         const currentYear = new Date().getFullYear();
+         const nextYear = currentYear + 1;
+         const { data: newYear, error: createError } = await supabase.from('school_years').insert([{
+           id: `sy-${selectedSchoolId}-${currentYear}`,
+           name: `${currentYear}./${nextYear}.`,
+           school_id: selectedSchoolId,
+           is_active: true,
+           starts_at: `${currentYear}-09-01`,
+           ends_at: `${nextYear}-06-30`
+         }]).select().single();
+         
+         if (createError) throw createError;
+         if (newYear) {
+           activeYear = mappers.schoolYear(newYear);
+           currentYears.push(activeYear);
+         }
+      }
+
+      if (!activeYear) throw new Error("Nije moguće pronaći ili kreirati školsku godinu.");
+      console.log("activeSchoolYear found", activeYear);
+
       let created = 0;
       let linked = 0;
-      
+
+      // Part A: Link by name
+      const uniqueYearNames = Array.from(new Set(classes.map(c => c.schoolYear).filter(Boolean))) as string[];
       for (const name of uniqueYearNames) {
-        let yearId = schoolYears.find(y => y.name === name)?.id;
+        let yearId = currentYears.find(y => y.name === name)?.id;
         if (!yearId) {
-          const { data } = await supabase.from('school_years').insert([{
+          const yearMatch = name.match(/(\d{4})/);
+          const startYear = yearMatch ? yearMatch[1] : new Date().getFullYear().toString();
+          const { data, error: insertError } = await supabase.from('school_years').insert([{
+            id: `sy-${selectedSchoolId}-${startYear}-${Math.random().toString(36).substr(2, 4)}`,
             name,
             school_id: selectedSchoolId,
-            is_active: false
+            is_active: false,
+            starts_at: `${startYear}-09-01`,
+            ends_at: `${parseInt(startYear) + 1}-06-30`
           }]).select('id').single();
+          
+          if (insertError) {
+             console.error("Error creating year during sync:", insertError);
+             continue;
+          }
           if (data) {
             yearId = data.id;
             created++;
@@ -1260,16 +1841,63 @@ export default function AdministrationPage() {
         if (yearId) {
           const orphans = classes.filter(c => c.schoolYear === name && !c.schoolYearId);
           if (orphans.length > 0) {
-            await supabase.from('classes').update({ school_year_id: yearId }).in('id', orphans.map(o => o.id));
-            linked += orphans.length;
+            const { error: updateError } = await supabase.from('classes').update({ 
+               school_year_id: yearId 
+            }).in('id', orphans.map(o => o.id));
+            
+            if (updateError) console.error("Error linking classes by name:", updateError);
+            else linked += orphans.length;
           }
         }
       }
-      toast.success(`Popravljeno: ${created} godina, ${linked} razreda.`);
+
+      // Part B: Link total orphans (no name, no id) or name-mismatch orphans to ACTIVE year
+      const totalOrphans = classes.filter(c => !c.schoolYearId);
+      if (totalOrphans.length > 0) {
+        const { error: updateOrphansError } = await supabase.from('classes').update({ 
+          school_year_id: activeYear.id,
+          school_year: activeYear.name 
+        }).in('id', totalOrphans.map(o => o.id));
+        
+        if (updateOrphansError) console.error("Error linking remaining orphans:", updateOrphansError);
+        else linked += totalOrphans.length;
+      }
+
+      toast.success(`Popravljeno: ${created} godina, ${linked} razrednih poveznica.`);
       fetchData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Došlo je do greške');
+      toast.error('Greska: ' + (err.message || 'Nepoznata greška'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createInitialClassesForYear = async () => {
+    if (!selectedSchoolId || !selectedYearId) return;
+    const year = schoolYears.find(y => y.id === selectedYearId);
+    if (!year) return;
+
+    setLoading(true);
+    try {
+      const classNames = ['1.A', '1.B', '1.C', '1.D'];
+      const payloads = classNames.map(name => ({
+        name,
+        school_id: selectedSchoolId,
+        school_year_id: selectedYearId,
+        school_year: year.name,
+        grade_level: 1,
+        section: name.split('.')[1],
+        status: 'ACTIVE'
+      }));
+
+      const { error } = await supabase.from('classes').insert(payloads);
+      if (error) throw error;
+      
+      toast.success('Inicijalni razredi kreirani');
+      fetchData();
+    } catch (err: any) {
+      toast.error('Greška: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -1288,22 +1916,29 @@ export default function AdministrationPage() {
         {/* Sidebar - Simple list */}
         <div className="w-56 bg-[#f8f9fa] border-r border-gray-300 flex flex-col font-medium overflow-y-auto">
           {[
-            { label: 'Administracija škole', tab: 'MENU' },
-            { label: 'Razredi i Odjeli', tab: 'CLASSES' },
-            { label: 'Korisnici i Uloge', tab: 'USERS' },
-            { label: 'Učenici u školi', tab: 'STUDENTS' },
-            { label: 'Predmeti (Globalno)', tab: 'SUBJECTS' },
-            { label: '--- RAZRED ---', tab: 'HEADER', disabled: true },
-            { label: 'Postavke razreda', tab: 'CLASS_DETAIL', hide: !effectiveClassId },
-            { label: 'Predmeti u razredu', tab: 'STAFF', hide: !effectiveClassId },
-            { label: 'Učenici u razredu', tab: 'STUDENTS', filterToClass: true, hide: !effectiveClassId },
-            { label: 'Predmeti učenika', tab: 'STUDENT_SUBJECTS_ENROLL', hide: !effectiveClassId },
-            { label: 'Satnica i raspored', tab: 'PLANNING', hide: !effectiveClassId },
-            { label: 'Opći prosjek', tab: 'OPCI_PROSJEK', hide: !effectiveClassId },
-            { label: '--- SUSTAV ---', tab: 'HEADER2', disabled: true },
-            { label: 'Školske godine', tab: 'SCHOOL_YEARS' },
-            { label: 'Škole i Smjerovi', tab: 'SCHOOLS' },
-          ].map((opt, i) => {
+            // SCHOOL MODULES
+            { label: 'Administracija škole', tab: 'MENU', mode: 'SCHOOL', hide: false, disabled: false },
+            { label: 'Školske godine', tab: 'SCHOOL_YEARS', mode: 'SCHOOL', hide: false, disabled: false },
+            { label: 'Razredni odjeli', tab: 'CLASSES', mode: 'SCHOOL', hide: false, disabled: false },
+            { label: 'Korisnici / Nastavnici', tab: 'USERS', mode: 'SCHOOL', hide: false, disabled: false },
+            { label: 'Učenici u školi', tab: 'STUDENTS', mode: 'SCHOOL', hide: false, disabled: false },
+            { label: 'Globalni predmeti', tab: 'SUBJECTS', mode: 'SCHOOL', hide: false, disabled: false },
+            { label: 'Smjerovi / programi', tab: 'PROGRAMS', mode: 'SCHOOL', hide: false, disabled: false },
+            { label: 'Prijenos (Rollover)', tab: 'ROLLOVER', mode: 'SCHOOL', hide: false, disabled: false },
+            { label: 'Postavke škole', tab: 'SCHOOLS', mode: 'SCHOOL', hide: false, disabled: false },
+            
+            // CLASS MODULES
+            { label: 'Postavke razreda', tab: 'CLASS_DETAIL', mode: 'CLASS', hide: false, disabled: false },
+            { label: 'Predmeti u razredu', tab: 'STAFF', mode: 'CLASS', hide: false, disabled: false },
+            { label: 'Učenici u razredu', tab: 'STUDENTS', filterToClass: true, mode: 'CLASS', hide: false, disabled: false },
+            { label: 'Predmeti učenika', tab: 'STUDENT_SUBJECTS_ENROLL', mode: 'CLASS', hide: false, disabled: false },
+            { label: 'Satnica i raspored', tab: 'PLANNING', mode: 'CLASS', hide: false, disabled: false },
+            { label: 'Opći prosjek', tab: 'OPCI_PROSJEK', mode: 'CLASS', hide: false, disabled: false },
+          ].map((opt: any, i) => {
+            // Filter by mode
+            if (isClassAdminMode && opt.mode !== 'CLASS') return null;
+            if (isSchoolAdminMode && opt.mode !== 'SCHOOL') return null;
+
             if (opt.hide) return null;
             if (opt.disabled) return <div key={i} className="px-4 py-2 text-[8px] font-black text-gray-400 uppercase tracking-widest bg-gray-50">{opt.label}</div>;
             
@@ -1330,6 +1965,16 @@ export default function AdministrationPage() {
 
         {/* Content */}
         <div className="flex-1 p-8 overflow-auto bg-white">
+          {isArchived && selectedClassId && (
+            <div className="mb-6 bg-amber-50 border border-amber-200 p-4 flex items-center gap-4">
+              <ShieldAlert className="text-amber-500" size={24} />
+              <div>
+                <div className="text-[11px] font-black uppercase text-amber-800">Arhivirani razredni odjel</div>
+                <div className="text-[10px] font-bold text-amber-700">Ovaj razredni odjel je dio arhivirane školske godine. Promjene su onemogućene.</div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'MENU' && (
             <div className="max-w-4xl space-y-6">
               <h1 className="text-xl font-bold text-gray-800 pb-2 border-b-2 border-gray-100">Administracija</h1>
@@ -1369,6 +2014,7 @@ export default function AdministrationPage() {
                   { label: 'Nastavni planovi i satnica', tab: 'PLANNING' },
                   { label: 'Raspored sati', tab: 'PLANNING' },
                   { label: 'Školske godine i prijenos', tab: 'SCHOOL_YEARS' },
+                  { label: 'Upis završenih učenika', tab: 'GRADUATES_ADMIN' },
                   { label: 'Opći prosjek (na kraju godine)', tab: 'OPCI_PROSJEK' },
                   { label: 'Postavke škole', tab: 'SCHOOLS' },
                 ].map((opt) => (
@@ -1390,160 +2036,114 @@ export default function AdministrationPage() {
           )}
 
           {activeTab === 'CLASSES' && (
-            <div className="max-w-4xl space-y-6">
-              <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
-                <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Upravljanje razrednim odjelima</h3>
-              </div>
-              
-              <div className="bg-white border border-gray-300 p-4">
-                <div className="text-[10px] font-black text-gray-400 uppercase mb-4 border-b pb-1">Dodavanje novog razrednog odjela</div>
-                <form onSubmit={handleCreateClass} className="space-y-4">
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className={cn("space-y-1", selectedSchoolId && "opacity-50 pointer-events-none")}>
-                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Škola</label>
-                      <select 
-                        value={selectedSchoolId || newClassSchoolId}
-                        onChange={e => setNewClassSchoolId(e.target.value)}
-                        disabled={!!selectedSchoolId}
-                        className="w-full border border-gray-300 p-2 text-xs font-black focus:border-[#005c8d] outline-none"
-                      >
-                        <option value="">-- Odaberi --</option>
-                        {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Školska godina</label>
-                      <select 
-                        value={newClassSchoolYearId}
-                        onChange={e => setNewClassSchoolYearId(e.target.value)}
-                        className="w-full border border-gray-300 p-2 text-xs font-black focus:border-[#005c8d] outline-none"
-                      >
-                        <option value="">-- Odaberi --</option>
-                        {schoolYears.map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
-                      </select>
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Razina (1-8)</label>
-                      <input 
-                        type="number" min="1" max="8"
-                        value={newClassGrade}
-                        onChange={e => setNewClassGrade(parseInt(e.target.value) || 1)}
-                        className="w-full border border-gray-300 p-2 text-xs font-black focus:border-[#005c8d] outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Oznaka (A, B...)</label>
-                      <input 
-                        type="text" maxLength={1}
-                        value={newClassSection}
-                        onChange={e => setNewClassSection(e.target.value.toUpperCase())}
-                        className="w-full border border-gray-300 p-2 text-xs font-black focus:border-[#005c8d] outline-none text-center"
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-                    <div className="space-y-1">
-                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Tip razreda</label>
-                      <select 
-                        value={newClassVariant}
-                        onChange={e => setNewClassVariant(e.target.value as ClassVariant)}
-                        className="w-full border border-gray-300 p-2 text-xs font-black focus:border-[#005c8d] outline-none"
-                      >
-                        <option value="REGULAR">Redovni (Standard)</option>
-                        <option value="CONTINUATION">Nastavljački (Razlika)</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1 lg:col-span-2">
-                       <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Naziv odjela (npr. 4.A)</label>
-                       <input 
-                        type="text" 
-                        value={newClassName}
-                        onChange={e => setNewClassName(e.target.value)}
-                        placeholder="npr. 4.A" 
-                        className="w-full border border-gray-300 p-2 text-xs font-black focus:border-[#005c8d] outline-none" 
-                      />
-                    </div>
+            <div className="space-y-6">
+              <div className="bg-white border border-gray-300 shadow-sm p-4 sticky top-0 z-20 flex flex-wrap items-center gap-4">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Odabir školske godine</label>
+                  <select 
+                    value={selectedYearId}
+                    onChange={e => setSelectedYearId(e.target.value)}
+                    className="w-full border-2 border-gray-100 p-2 text-sm font-black text-gray-700 outline-none focus:border-[#005c8d]"
+                  >
+                    <option value="">-- SVE GODINE --</option>
+                    {schoolYears.map(y => (
+                      <option key={y.id} value={y.id}>{y.name} {y.isActive ? '(AKTIVNA)' : ''}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="flex gap-2">
+                  {selectedYearId && classes.filter(c => c.schoolYearId === selectedYearId).length === 0 && (
                     <button 
-                      disabled={loading}
-                      className="bg-[#005c8d] text-white py-2 border border-[#004a70] font-black text-[10px] uppercase hover:bg-[#004a70] shadow-sm transform transition-all active:scale-95"
+                      onClick={createInitialClassesForYear}
+                      className="bg-amber-600 text-white px-4 py-2 font-black text-[10px] uppercase hover:bg-amber-700 flex items-center gap-2"
                     >
-                      Kreiraj odjel
+                      <Plus size={16} /> Kreiraj inicijalne razrede za ovu godinu
                     </button>
-                  </div>
-                </form>
+                  )}
+                  <button 
+                    onClick={() => {
+                      setNewClassGrade(1);
+                      setNewClassSection('');
+                      setEditingClass(null);
+                      setShowModal('NEW_CLASS');
+                    }}
+                    className="bg-[#005c8d] text-white px-4 py-2 font-black text-[10px] uppercase hover:bg-[#004a72] flex items-center gap-2"
+                  >
+                    <Plus size={16} /> Novi razred
+                  </button>
+                </div>
               </div>
 
-              <div className="bg-white border border-gray-300">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="bg-gray-100 border-b border-gray-300">
-                      <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Razredni odjel</th>
-                      <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Škola / Godina</th>
-                      <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Tip</th>
-                      <th className="px-4 py-2 font-black uppercase text-gray-500 text-center w-48">Akcije</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {classes.sort((a,b) => {
-                      const yearA = schoolYears.find(y => y.id === a.schoolYearId);
-                      const yearB = schoolYears.find(y => y.id === b.schoolYearId);
-                      if (yearA?.isActive && !yearB?.isActive) return -1;
-                      if (!yearA?.isActive && yearB?.isActive) return 1;
-                      const yearCompare = (yearB?.name || '').localeCompare(yearA?.name || '');
-                      if (yearCompare !== 0) return yearCompare;
-                      return a.name.localeCompare(b.name);
-                    }).map(c => {
-                      const school = schools.find(s => s.id === c.schoolId);
-                      return (
-                        <tr key={c.id} className="group hover:bg-[#eff6ff] transition-colors">
-                          <td className="px-4 py-3 border-r border-gray-200">
-                             <div 
-                               onClick={() => openClassDetail(c.id)}
-                               className="text-lg font-black text-[#005c8d] group-hover:underline cursor-pointer"
-                             >
-                               {c.name}
-                             </div>
-                          </td>
-                          <td className="px-4 py-3 border-r border-gray-200">
-                             <div className="font-bold text-gray-600">{school?.name || 'N/A'}</div>
-                             <div className="flex items-center gap-2">
-                               <div className="text-[10px] text-gray-400 font-bold uppercase">{c.schoolYear}</div>
-                               {!schoolYears.find(y => y.id === c.schoolYearId)?.isActive && <span className="text-[8px] font-black uppercase text-gray-300 border border-gray-200 px-1 rounded shadow-inner">Arhiva</span>}
-                             </div>
-                          </td>
-                          <td className="px-4 py-3 border-r border-gray-200">
-                             <span className={cn("px-2 py-0.5 rounded-full text-[8px] font-black uppercase border", 
-                               c.variant === 'CONTINUATION' ? "bg-orange-100 text-orange-700 border-orange-200" : "bg-blue-100 text-blue-700 border-blue-200"
-                             )}>
-                               {c.variant === 'CONTINUATION' ? 'Razlika' : 'Redovni'}
-                             </span>
-                          </td>
-                          <td className="px-4 py-3 flex items-center justify-center gap-4">
-                            <button 
-                              onClick={() => navigate(`/class/${c.id}/administracija`)}
-                              className="text-[10px] font-black text-[#005c8d] uppercase hover:underline"
-                            >
-                              Administracija
-                            </button>
-                            <button 
-                              onClick={() => navigate(`/class/${c.id}/imenik`)}
-                              className="text-[10px] font-black text-gray-500 uppercase hover:underline"
-                            >
-                               Dnevnik
-                            </button>
-                            <button 
-                              onClick={() => setDeleteDialog({ isOpen: true, id: c.id, type: 'CLASS', loading: false })}
-                              className="p-1 text-gray-300 hover:text-red-500 transition-colors"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              {classes.filter(c => !selectedYearId || c.schoolYearId === selectedYearId).length === 0 ? (
+                <div className="h-48 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400">
+                  <BookOpen size={40} className="mb-2 opacity-20" />
+                  <div className="text-xs font-black uppercase">Nema pronađenih razreda za odabrane kriterije</div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {classes
+                    .filter(c => !selectedYearId || c.schoolYearId === selectedYearId)
+                    .sort((a,b) => a.name.localeCompare(b.name))
+                    .map(cls => {
+                    const year = schoolYears.find(y => y.id === cls.schoolYearId);
+                    return (
+                      <div key={cls.id} className="bg-white border-2 border-gray-100 p-4 hover:border-[#005c8d] transition-all group relative">
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="text-3xl font-black text-gray-800 tracking-tighter">{cls.name}</div>
+                          <div className={cn(
+                            "text-[8px] font-black px-1.5 py-0.5 rounded leading-none uppercase",
+                            cls.status === 'ACTIVE' ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                          )}>
+                            {cls.status === 'ACTIVE' ? 'Aktivan' : 'Arhiv'}
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <div className="text-[9px] font-black text-gray-400 uppercase">Šk. godina: <span className="text-gray-600">{year?.name || cls.schoolYear}</span></div>
+                          <div className="text-[9px] font-black text-gray-400 uppercase">Razrednik: <span className="text-gray-600 truncate block">
+                            {allUsers.find(u => u.id === cls.homeroomTeacherId)?.name || 'Nije dodijeljen'} {allUsers.find(u => u.id === cls.homeroomTeacherId)?.surname || ''}
+                          </span></div>
+                        </div>
+
+                        <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
+                          <div className="flex gap-2">
+                             {isAnyAdmin && (
+                               <>
+                                 <button 
+                                   onClick={() => {
+                                     setEditingClass(cls);
+                                     setNewClassGrade(cls.gradeLevel);
+                                     setNewClassSection(cls.section || '');
+                                     setShowModal('NEW_CLASS');
+                                   }}
+                                   className="p-1.5 text-gray-400 hover:text-[#005c8d] hover:bg-blue-50 rounded"
+                                   title="Uredi"
+                                 >
+                                   <Settings2 size={16} />
+                                 </button>
+                                 <button 
+                                   onClick={() => setDeleteDialog({ isOpen: true, id: cls.id, type: 'CLASS', loading: false, message: `Jeste li sigurni da želite obrisati razred ${cls.name}?` })}
+                                   className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
+                                   title="Obriši"
+                                 >
+                                   <Trash2 size={16} />
+                                 </button>
+                               </>
+                             )}
+                          </div>
+                          <button 
+                            onClick={() => setSelectedClassId(cls.id)}
+                            className="text-[9px] font-black text-[#005c8d] uppercase border-b-2 border-transparent hover:border-[#005c8d]"
+                          >
+                            Upravljaj razredom
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -1618,10 +2218,13 @@ export default function AdministrationPage() {
                          </div>
                          <button 
                            onClick={handleUpdateClass}
-                           disabled={loading}
-                           className="w-full bg-[#005c8d] text-white py-2 border border-[#004a70] font-black text-[10px] uppercase tracking-widest mt-2"
+                           disabled={loading || isArchived}
+                           className={cn(
+                             "w-full text-white py-2 border font-black text-[10px] uppercase tracking-widest mt-2",
+                             isArchived ? "bg-gray-400 border-gray-500 cursor-not-allowed" : "bg-[#005c8d] border-[#004a70]"
+                           )}
                          >
-                           Spremi postavke
+                           {isArchived ? 'Arhivirano' : 'Spremi postavke'}
                          </button>
                       </div>
                    </div>
@@ -1644,7 +2247,7 @@ export default function AdministrationPage() {
                       <div className="p-4 border-b border-gray-300 flex items-center justify-between">
                          <div className="flex items-center gap-4">
                            <div className="text-[10px] font-black text-gray-400 uppercase">Predmeti u razrednom odjelu</div>
-                           {user?.role === Role.ADMIN && (
+                           {isAnyAdmin && (
                              <button 
                                onClick={handleFixEnrollmentDuplicates}
                                className="text-red-500 font-bold uppercase text-[8px] border border-red-200 bg-red-50 px-2 py-0.5 rounded hover:bg-red-100"
@@ -1653,7 +2256,7 @@ export default function AdministrationPage() {
                              </button>
                            )}
                          </div>
-                         {(user?.role === Role.ADMIN || selectedClassData?.homeroom_teacher_id === user?.id) && !editingAssignmentId && (
+                         {(isAnyAdmin || selectedClassData?.homeroom_teacher_id === user?.id) && !editingAssignmentId && (
                            <button 
                              onClick={() => {
                                setEditingAssignmentId(null);
@@ -1667,7 +2270,7 @@ export default function AdministrationPage() {
                       </div>
 
                       {/* ADD / EDIT SUBJECT FORM */}
-                      {(user?.role === Role.ADMIN || selectedClassData?.homeroom_teacher_id === user?.id) && (assignmentForm.classId === selectedClassId || editingAssignmentId) && (
+                      {(isAnyAdmin || selectedClassData?.homeroom_teacher_id === user?.id) && (assignmentForm.classId === selectedClassId || editingAssignmentId) && (
                         <div className="p-4 bg-gray-50 border-b border-gray-300">
                           <div className="text-[10px] font-black text-gray-500 uppercase mb-3">
                             {editingAssignmentId ? 'Uređivanje postojećeg predmeta' : 'Dodjela novog predmeta razredu'}
@@ -1735,7 +2338,7 @@ export default function AdministrationPage() {
                                const subject = allSubjects.find(s => s.id === a.subjectId);
                                const teacher = teachers.find(t => t.id === a.teacherId);
                                const activeEnrollCount = classEnrollments.filter(e => e.subjectId === a.subjectId && e.status === 'ACTIVE').length;
-                               const isManager = user?.role === Role.ADMIN || selectedClassData?.homeroom_teacher_id === user?.id;
+                               const isManager = isAnyAdmin || selectedClassData?.homeroom_teacher_id === user?.id;
 
                                return (
                                  <tr key={a.id} className="hover:bg-blue-50/30">
@@ -1900,8 +2503,33 @@ export default function AdministrationPage() {
                 )}
               </div>
 
-              <div className="bg-white border border-gray-300">
-                <table className="w-full text-left border-collapse text-[11px]">
+                <div className="flex justify-between items-center bg-blue-50/50 p-3 border border-blue-100 mb-4">
+                  <div className="flex gap-4 items-center">
+                    <div className="flex flex-col">
+                      <span className="text-[10px] font-black text-blue-800 uppercase tracking-tighter">Zaključivanje godine</span>
+                      <span className="text-[9px] text-blue-600 font-medium italic">Izračun prosjeka i automatsko određivanje vladanja</span>
+                    </div>
+                    <button 
+                      onClick={() => handleFinalizeYearSummaries(effectiveClassId)}
+                      disabled={loading}
+                      className="bg-[#005c8d] text-white px-6 py-2 border border-[#004a70] font-black text-[10px] uppercase hover:bg-[#004a70] shadow-sm disabled:opacity-50 flex items-center gap-2"
+                    >
+                      <CheckCircle size={14} /> Izračunaj i zaključi opći uspjeh i vladanje
+                    </button>
+                  </div>
+                  <div className="flex gap-2">
+                     <span className="text-[9px] font-black text-gray-400 uppercase">Status razreda:</span>
+                     {students.filter(s => s.classId === effectiveClassId).length === 
+                      summaries.filter(s => (s.classId === selectedClassId || s.classId === effectiveClassId) && s.finalizedAt).length ? (
+                        <span className="text-[9px] font-black text-green-600 uppercase">Svi zaključeni</span>
+                      ) : (
+                        <span className="text-[9px] font-black text-yellow-600 uppercase">U tijeku</span>
+                      )}
+                  </div>
+                </div>
+
+                <div className="bg-white border border-gray-300">
+                  <table className="w-full text-left border-collapse text-[11px]">
                    <thead>
                       <tr className="bg-gray-50 border-b border-gray-300 font-black text-gray-500 uppercase text-[9px]">
                          <th className="px-4 py-3 border-r border-gray-200">Učenik</th>
@@ -2229,7 +2857,7 @@ export default function AdministrationPage() {
             <div className="max-w-5xl space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Predmetna nastava (Zaduženja)</h3>
-                {user?.role === Role.ADMIN && (
+                {isAnyAdmin && (
                    <button 
                      onClick={() => {
                         setEditingAssignmentId(null);
@@ -2518,261 +3146,551 @@ export default function AdministrationPage() {
             </div>
           )}
 
-          {activeTab === 'SCHOOL_YEARS' && (
-            <div className="max-w-6xl space-y-6">
-              <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
-                <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Školska godina i Rollover</h3>
-                {isMainAdmin && (
+          {activeTab === 'GRADUATES_ADMIN' && (
+             <div className="space-y-6">
+                <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Upis završenih učenika</h3>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase">Ručni upis učenika iz arhiviranih godina (npr. iz 3.A u 4.A)</p>
+                  </div>
                   <button 
-                    onClick={handleFixSchoolYears}
-                    className="text-[9px] font-black text-red-500 uppercase border border-red-200 px-3 py-1 bg-red-50 hover:bg-red-100"
+                    onClick={() => setActiveTab('MENU')} 
+                    className="text-[10px] font-black text-gray-400 uppercase hover:text-[#005c8d] flex items-center gap-1"
                   >
-                    Popravi strukturu (Legacy Sync)
+                    <ChevronLeft size={14} /> Povratak na menu
                   </button>
-                )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {/* SOURCE */}
+                  <div className="space-y-4 bg-gray-50 p-6 border border-gray-200">
+                    <h4 className="text-xs font-black text-gray-500 uppercase tracking-widest border-b border-gray-200 pb-2">1. Odabir izvornog razreda (Arhiva)</h4>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Školska godina</label>
+                        <select 
+                          className="w-full border-2 border-gray-200 p-3 text-sm font-black text-gray-700 outline-none focus:border-[#005c8d]"
+                          value={graduatesAdmin.sourceYearId}
+                          onChange={e => {
+                            setGraduatesAdmin(prev => ({ ...prev, sourceYearId: e.target.value, sourceClassId: '', selectedStudentIds: [] }));
+                            setGraduatesAdminStudents([]);
+                          }}
+                        >
+                          <option value="">-- Odaberite godinu --</option>
+                          {schoolYears.map(y => (
+                            <option key={y.id} value={y.id}>{y.name} {y.isActive ? '(AKTIVNA)' : '(ARHIVA)'}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase block mb-1">Izvorni razredni odjel</label>
+                        <select 
+                          className="w-full border-2 border-gray-200 p-3 text-sm font-black text-gray-700 outline-none focus:border-[#005c8d]"
+                          value={graduatesAdmin.sourceClassId}
+                          onChange={e => {
+                            setGraduatesAdmin(prev => ({ ...prev, sourceClassId: e.target.value, selectedStudentIds: [] }));
+                            fetchGraduatesStudents(e.target.value);
+                          }}
+                        >
+                          <option value="">-- Odaberite razred --</option>
+                          {classes.filter(c => c.schoolYearId === graduatesAdmin.sourceYearId).map(c => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {graduatesAdmin.sourceClassId && (
+                        <div className="mt-4">
+                           <label className="text-[10px] font-black text-gray-400 uppercase block mb-2">Učenici ({graduatesAdminStudents.length})</label>
+                           <div className="max-h-64 overflow-y-auto border border-gray-200 bg-white divide-y divide-gray-100">
+                             {graduatesAdminStudents.map(s => (
+                               <label key={s.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer transition-colors group">
+                                 <input 
+                                   type="checkbox"
+                                   checked={graduatesAdmin.selectedStudentIds.includes(s.id)}
+                                   onChange={e => {
+                                      const ids = e.target.checked 
+                                        ? [...graduatesAdmin.selectedStudentIds, s.id]
+                                        : graduatesAdmin.selectedStudentIds.filter(id => id !== s.id);
+                                      setGraduatesAdmin(prev => ({ ...prev, selectedStudentIds: ids }));
+                                   }}
+                                   className="w-4 h-4 rounded border-gray-300 text-[#005c8d] focus:ring-[#005c8d]"
+                                 />
+                                 <div className="flex-1">
+                                   <div className="text-xs font-black text-gray-700 group-hover:text-[#005c8d]">{s.name} {s.surname}</div>
+                                   <div className="text-[9px] text-gray-400 font-bold uppercase">{s.email}</div>
+                                 </div>
+                               </label>
+                             ))}
+                             {graduatesAdminStudents.length === 0 && (
+                               <div className="p-8 text-center text-gray-400 italic text-[10px] uppercase">Nema učenika u ovom razredu</div>
+                             )}
+                           </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* TARGET */}
+                  <div className="space-y-4 bg-blue-50 p-6 border border-blue-100">
+                    <h4 className="text-xs font-black text-blue-600 uppercase tracking-widest border-b border-blue-100 pb-2">2. Odabir ciljnog razreda</h4>
+                    
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-[10px] font-black text-blue-400 uppercase block mb-1">Ciljni razredni odjel (Nova godina)</label>
+                        <select 
+                          className="w-full border-2 border-blue-200 p-3 text-sm font-black text-gray-700 outline-none focus:border-[#005c8d] bg-white"
+                          value={graduatesAdmin.targetClassId}
+                          onChange={e => setGraduatesAdmin(prev => ({ ...prev, targetClassId: e.target.value }))}
+                        >
+                          <option value="">-- Odaberite cilj --</option>
+                          {classes.filter(c => schoolYears.find(y => y.id === c.schoolYearId)?.isActive).map(c => (
+                            <option key={c.id} value={c.id}>{c.name} ({c.schoolYear})</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="pt-8">
+                         <button 
+                           onClick={handleEnrollGraduates}
+                           disabled={loading || !graduatesAdmin.targetClassId || graduatesAdmin.selectedStudentIds.length === 0}
+                           className="w-full bg-[#005c8d] text-white py-4 font-black text-xs uppercase hover:bg-[#004a72] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg transition-all flex items-center justify-center gap-3"
+                         >
+                           {loading ? <Clock className="animate-spin" size={18} /> : <GraduationCap size={18} />}
+                           Upiši odabrane učenike ({graduatesAdmin.selectedStudentIds.length})
+                         </button>
+                         <p className="mt-4 text-[9px] text-blue-400 font-bold uppercase text-center leading-relaxed">
+                           Ova akcija će kreirati upisnice za odabrane učenike u novom razredu. 
+                           Učenici će zadržati povijest iz prethodnih godina.
+                         </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+             </div>
+          )}
+
+          {activeTab === 'SCHOOL_YEARS' && (
+            <React.Fragment>
+              <div className="max-w-6xl space-y-6">
+              <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
+                <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Upravljanje školskim godinama</h3>
+                <div className="flex gap-2">
+                  {isMainAdmin && (
+                    <button 
+                      onClick={handleFixSchoolYears}
+                      className="text-[9px] font-black text-red-500 uppercase border border-red-200 px-3 py-1 bg-red-50 hover:bg-red-100"
+                    >
+                      Popravi strukturu
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => setNewYearForm({ name: '', startsAt: '', endsAt: '' })} // In a real app maybe toggle visibility
+                    className="bg-[#005c8d] text-white px-4 py-1.5 font-black text-[10px] uppercase hover:bg-[#004a70] flex items-center gap-2"
+                  >
+                    <Plus size={14}/> Otvori novu školsku godinu
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Left: Open New Year */}
-                <div className="space-y-6">
-                  <div className="bg-white border border-gray-300 p-4">
-                    <div className="text-[10px] font-black text-gray-400 uppercase mb-4 border-b pb-1">Otvori novu školsku godinu</div>
-                    <form onSubmit={handleCreateSchoolYear} className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Naziv školske godine</label>
-                          <input 
-                            type="text" required placeholder="npr. 2026./2027."
-                            value={newYearForm.name}
-                            onChange={e => setNewYearForm({...newYearForm, name: e.target.value})}
-                            className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Početak</label>
-                          <input 
-                            type="date"
-                            value={newYearForm.startsAt}
-                            onChange={e => setNewYearForm({...newYearForm, startsAt: e.target.value})}
-                            className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none"
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Završetak</label>
-                          <input 
-                            type="date"
-                            value={newYearForm.endsAt}
-                            onChange={e => setNewYearForm({...newYearForm, endsAt: e.target.value})}
-                            className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none"
-                          />
-                        </div>
-                      </div>
-                      <button 
-                        disabled={loading}
-                        className="w-full bg-[#005c8d] text-white py-2 border border-[#004a70] font-black text-[10px] uppercase hover:bg-[#004a70]"
-                      >
-                        Otvori novu školsku godinu
-                      </button>
-                    </form>
+              {/* NEW YEAR FORM (Collapsed by default in thought, but let's show it if name is being typed or just always available at top) */}
+              <div className="bg-white border border-gray-300 p-4 shadow-sm">
+                <div className="text-[10px] font-black text-gray-400 uppercase mb-4 border-b pb-1">Dodavanje nove školske godine</div>
+                <form onSubmit={handleCreateSchoolYear} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Naziv (npr. 2025./2026.)</label>
+                    <input 
+                      type="text" required placeholder="2025./2026."
+                      value={newYearForm.name}
+                      onChange={e => setNewYearForm({...newYearForm, name: e.target.value})}
+                      className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none font-bold"
+                    />
                   </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Početak</label>
+                    <input 
+                      type="date"
+                      value={newYearForm.startsAt}
+                      onChange={e => setNewYearForm({...newYearForm, startsAt: e.target.value})}
+                      className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Kraj</label>
+                    <input 
+                      type="date"
+                      value={newYearForm.endsAt}
+                      onChange={e => setNewYearForm({...newYearForm, endsAt: e.target.value})}
+                      className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none"
+                    />
+                  </div>
+                  <button 
+                    disabled={loading}
+                    className="bg-[#005c8d] text-white py-2 border border-[#004a70] font-black text-[10px] uppercase hover:bg-[#004a70]"
+                  >
+                    Kreiraj godinu
+                  </button>
+                </form>
+              </div>
 
-                  <div className="bg-white border border-gray-300">
-                    <div className="p-4 border-b border-gray-300 text-[10px] font-black text-gray-400 uppercase">Povijest školskih godina</div>
-                    <table className="w-full text-left border-collapse text-[11px]">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-300 font-black text-gray-500 uppercase text-[9px]">
-                          <th className="px-4 py-2 border-r border-gray-200">Šk. Godina</th>
-                          <th className="px-4 py-2 border-r border-gray-200">Trajanje</th>
-                          <th className="px-4 py-2 text-center w-24">Status</th>
-                          <th className="px-4 py-2 text-center w-24">Akcije</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {schoolYears.sort((a,b) => b.name.localeCompare(a.name)).map(y => (
-                          <tr key={y.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 border-r border-gray-200 font-black text-[#005c8d]">{y.name}</td>
-                            <td className="px-4 py-3 border-r border-gray-200 text-gray-500">
-                              {y.startsAt || '—'} do {y.endsAt || '—'}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              {y.isActive ? (
-                                <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-black uppercase text-[8px] border border-green-200">Aktivna</span>
-                              ) : (
-                                <span className="px-2 py-0.5 bg-gray-100 text-gray-400 rounded-full font-black uppercase text-[8px] border border-gray-200">Arhiva</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                               {!y.isActive && (
-                                 <button 
-                                   onClick={async () => {
-                                      if (!confirm(`Postaviti ${y.name} kao aktivnu godinu? Sve ostale bit će arhivirane.`)) return;
-                                      await supabase.from('school_years').update({ is_active: false }).eq('school_id', selectedSchoolId);
-                                      await supabase.from('school_years').update({ is_active: true }).eq('id', y.id);
-                                      fetchData();
-                                   }}
-                                   className="text-[9px] font-black text-[#005c8d] uppercase hover:underline"
-                                 >
-                                   Aktiviraj
-                                 </button>
-                               )}
-                            </td>
-                          </tr>
-                        ))}
-                        {schoolYears.length === 0 && (
-                          <tr><td colSpan={3} className="p-8 text-center text-gray-400 italic">Nema definiranih školskih godina</td></tr>
+              {/* Hierarchy Display */}
+              <div className="space-y-4">
+                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b pb-1 mb-2">Popis školskih godina i razreda</div>
+                {schoolYears.sort((a,b) => b.name.localeCompare(a.name)).map(y => (
+                  <div key={y.id} className={cn("border bg-white shadow-sm overflow-hidden", y.isActive ? "border-[#005c8d]" : "border-gray-200")}>
+                    <div className={cn("p-4 flex items-center justify-between", y.isActive ? "bg-blue-50/50" : "bg-gray-50/50")}>
+                      <div className="flex items-center gap-3">
+                        <div className="text-xl font-black text-[#005c8d] tracking-tighter">{y.name}</div>
+                        {y.isActive && (
+                          <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-black uppercase text-[8px] border border-green-200">ACTIVE</span>
                         )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Right: Rollover Students */}
-                <div className="space-y-6 lg:col-span-1">
-                  <div className="bg-white border border-gray-300 p-4">
-                    <div className="text-[10px] font-black text-gray-400 uppercase mb-4 border-b pb-1">Prijenos učenika (Rollover)</div>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-black text-gray-400 uppercase">Trenutni razred</label>
-                          <select 
-                            value={rolloverForm.fromClassId}
-                            onChange={e => setRolloverForm({...rolloverForm, fromClassId: e.target.value})}
-                            className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
-                          >
-                            <option value="">-- Odaberi --</option>
-                            {classes.sort((a,b) => {
-                              const yearA = schoolYears.find(y => y.id === a.schoolYearId)?.isActive ? 0 : 1;
-                              const yearB = schoolYears.find(y => y.id === b.schoolYearId)?.isActive ? 0 : 1;
-                              if (yearA !== yearB) return yearA - yearB;
-                              return a.name.localeCompare(b.name);
-                            }).map(c => <option key={c.id} value={c.id}>{c.name} ({c.schoolYear})</option>)}
-                          </select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-black text-gray-400 uppercase">Ciljna šk. godina</label>
-                          <select 
-                            value={rolloverForm.toYearId}
-                            onChange={e => setRolloverForm({...rolloverForm, toYearId: e.target.value})}
-                            className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
-                          >
-                            <option value="">-- Odaberi --</option>
-                            {schoolYears.filter(y => !y.isActive).map(y => <option key={y.id} value={y.id}>{y.name}</option>)}
-                          </select>
-                        </div>
+                        {!y.isActive && (
+                           <span className="px-2 py-0.5 bg-gray-100 text-gray-400 rounded-full font-black uppercase text-[8px] border border-gray-200 text-gray-400">ARCHIVE</span>
+                        )}
+                        <span className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">{y.startsAt || '—'} - {y.endsAt || '—'}</span>
                       </div>
-
-                      {/* Rollover confirmation button area */}
-                      <button 
-                        onClick={generateRolloverPreview}
-                        disabled={loading}
-                        className="w-full bg-[#005c8d] text-white py-2 border border-[#004a70] font-black text-[10px] uppercase hover:bg-[#004a70] shadow-md mt-4"
-                      >
-                        Generiraj prijedlog prijenosa
-                      </button>
+                        <div className="flex gap-2">
+                          <button 
+                             onClick={() => {
+                               setClassCreationYearId(y.id);
+                               setNewClassGrade(1);
+                               setNewClassSection('A');
+                             }}
+                             className="text-[9px] font-black text-green-600 uppercase border border-green-100 px-3 py-1 bg-green-50 hover:bg-green-100 flex items-center gap-1"
+                           >
+                             <Plus size={10}/> Dodaj razred
+                           </button>
+                            {!y.isActive && (
+                              <button 
+                                onClick={() => handleActivateSchoolYear(y.id)}
+                                className="text-[9px] font-black text-[#005c8d] uppercase border border-blue-100 px-3 py-1 bg-blue-50 hover:bg-blue-100"
+                              >
+                                Aktiviraj školsku godinu
+                              </button>
+                            )}
+                            {y.isActive && (
+                              <button 
+                                onClick={() => handleArchiveSchoolYear(y.id)}
+                                className="text-[9px] font-black text-gray-500 uppercase border border-gray-100 px-3 py-1 bg-gray-50 hover:bg-gray-100"
+                              >
+                                Arhiviraj
+                              </button>
+                            )}
+                            {isAnyAdmin && (
+                              <button 
+                                onClick={() => setDeleteDialog({ isOpen: true, id: y.id, type: 'SCHOOL_YEAR' as any, loading: false, message: `Jeste li sigurni da želite obrisati školsku godinu ${y.name}? Ovo će obrisati i sve razrede u njoj.` })}
+                                className="text-[9px] font-black text-red-500 uppercase border border-red-100 px-3 py-1 bg-red-50 hover:bg-red-100"
+                              >
+                                Obriši
+                              </button>
+                            )}
+                        </div>
+                  </div>
+                  
+                  {/* Classes List inside Year */}
+                  <div className="p-4 border-t border-gray-100 bg-gray-50/30">
+                    <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Razredni odjeli ({classes.filter(c => c.schoolYearId === y.id).length})</div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                       {classes.filter(c => c.schoolYearId === y.id).sort((a,b) => a.name.localeCompare(b.name)).map(c => (
+                         <div key={c.id} className="group relative">
+                            <button 
+                              onClick={() => openClassDetail(c.id)}
+                              className="w-full p-2 bg-white border border-gray-200 text-[#005c8d] font-black text-[11px] uppercase text-center hover:border-[#005c8d] transition-all hover:shadow-sm"
+                            >
+                              {c.name}
+                            </button>
+                            <button 
+                              onClick={() => setDeleteDialog({ isOpen: true, id: c.id, type: 'CLASS', loading: false })}
+                              className="absolute -top-1 -right-1 bg-white text-gray-300 hover:text-red-500 rounded-full border border-gray-100 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X size={8}/>
+                            </button>
+                         </div>
+                       ))}
+                       {classes.filter(c => c.schoolYearId === y.id).length === 0 && (
+                         <div className="col-span-full text-[10px] text-gray-300 italic py-2">Nema definiranih razreda za ovu godinu.</div>
+                       )}
                     </div>
                   </div>
 
-                  {rolloverStudents.length > 0 && (
-                    <div className="bg-white border border-gray-300 shadow-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500">
-                       <div className="p-3 bg-gray-50 border-b border-gray-300 flex items-center justify-between">
-                         <div className="text-[10px] font-black text-gray-500 uppercase">Prijedlog prijenosa: {rolloverStudents.length} učenika</div>
-                         <button onClick={handleRunRollover} className="px-4 py-1 bg-green-600 text-white font-black text-[10px] uppercase hover:bg-green-700 shadow-sm">Izvrši prijenos</button>
-                       </div>
-                       <div className="max-h-[500px] overflow-auto">
-                         <table className="w-full text-left border-collapse text-[11px]">
-                           <thead className="sticky top-0 bg-white shadow-sm z-10">
-                              <tr className="bg-gray-100 border-b border-gray-300 text-[9px] font-black text-gray-400 uppercase">
-                                <th className="px-3 py-2">Učenik / Program</th>
-                                <th className="px-3 py-2">Status</th>
-                                <th className="px-3 py-2">Ciljni razred</th>
-                              </tr>
-                           </thead>
-                           <tbody className="divide-y divide-gray-200">
-                             {rolloverStudents.map((item, idx) => (
-                               <tr key={item.studentId} className="hover:bg-blue-50/30">
-                                 <td className="px-3 py-2">
-                                   <div className="font-black text-[#005c8d] uppercase tracking-tighter">{item.name}</div>
-                                   <div className="text-[9px] text-gray-400 font-bold uppercase">{item.programName}</div>
-                                 </td>
-                                 <td className="px-3 py-2">
-                                   <select 
-                                     value={item.status}
-                                     onChange={e => {
-                                       const newPreview = [...rolloverStudents];
-                                       newPreview[idx].status = e.target.value;
-                                       if (e.target.value === 'ZAVRSAVA') newPreview[idx].nextClassId = '';
-                                       setRolloverStudents(newPreview);
-                                     }}
-                                     className={cn("w-full border p-1 font-bold text-[9px] uppercase outline-none", 
-                                       item.status === 'NAPREDUJE' ? "border-green-200 text-green-700" : 
-                                       item.status === 'ZAVRSAVA' ? "border-red-200 text-red-700" : "border-blue-200 text-blue-700"
-                                     )}
-                                   >
-                                     <option value="NAPREDUJE">Napreduje</option>
-                                     <option value="ZAVRSAVA">Završava</option>
-                                     <option value="NASTAVLJA">Nastavlja obrazovanje (Razlika)</option>
-                                   </select>
-                                 </td>
-                                 <td className="px-3 py-2">
-                                   {item.status !== 'ZAVRSAVA' ? (
-                                      <select 
-                                        value={item.nextClassId}
-                                        onChange={e => {
-                                          const newPreview = [...rolloverStudents];
-                                          newPreview[idx].nextClassId = e.target.value;
-                                          setRolloverStudents(newPreview);
-                                        }}
-                                        className="w-full border border-gray-300 p-1 text-[9px] font-bold outline-none"
-                                      >
-                                        <option value="">-- Odaberi --</option>
-                                        {classes.filter(c => c.schoolYearId === rolloverForm.toYearId).map(c => (
-                                          <option key={c.id} value={c.id}>{c.name} {c.variant === 'CONTINUATION' ? '(R)' : ''}</option>
-                                        ))}
-                                      </select>
-                                   ) : (
-                                     <span className="text-gray-300 font-black text-[9px] uppercase">Ishod: Dovršeno</span>
-                                   )}
-                                 </td>
-                               </tr>
-                             ))}
-                           </tbody>
-                         </table>
-                       </div>
+                  {/* Inline Class Creation Form */}
+                  {classCreationYearId === y.id && (
+                    <div className="p-4 border-t border-green-100 bg-green-50/20 animate-in slide-in-from-top-1 duration-200">
+                      <div className="flex items-center justify-between mb-3">
+                         <div className="text-[10px] font-black text-green-700 uppercase tracking-tight flex items-center gap-2">
+                           <Plus size={12}/> Novi razredni odjel u {y.name}
+                         </div>
+                         <button onClick={() => setClassCreationYearId(null)} className="text-gray-400 hover:text-gray-600"><X size={14}/></button>
+                      </div>
+                      <form onSubmit={handleCreateClass} className="grid grid-cols-4 lg:grid-cols-6 gap-3 items-end">
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black text-gray-400 uppercase">Razred (1-8)</label>
+                          <input 
+                            type="number" min="1" max="8"
+                            value={newClassGrade}
+                            onChange={e => setNewClassGrade(parseInt(e.target.value) || 1)}
+                            className="w-full border border-gray-200 p-1.5 text-xs font-bold outline-none focus:border-[#005c8d]"
+                          />
+                        </div>
+                        <div className="space-y-1 text-center">
+                          <label className="text-[8px] font-black text-gray-400 uppercase">Oznaka (A, B...)</label>
+                          <input 
+                            type="text" maxLength={1}
+                            value={newClassSection}
+                            onChange={e => setNewClassSection(e.target.value.toUpperCase())}
+                            className="w-full border border-gray-200 p-1.5 text-xs font-bold outline-none focus:border-[#005c8d] text-center"
+                          />
+                        </div>
+                        <div className="space-y-1 lg:col-span-1">
+                          <label className="text-[8px] font-black text-gray-400 uppercase">Naziv (automatski)</label>
+                          <div className="w-full border border-gray-100 bg-gray-50/50 p-1.5 text-xs font-black text-gray-400 select-none">
+                            {newClassGrade}.{newClassSection}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black text-gray-400 uppercase">Varijanta</label>
+                          <select 
+                            value={newClassVariant}
+                            onChange={e => setNewClassVariant(e.target.value as ClassVariant)}
+                            className="w-full border border-gray-200 p-1.5 text-xs font-bold outline-none focus:border-[#005c8d]"
+                          >
+                            <option value="REGULAR">Redovni program</option>
+                            <option value="CONTINUATION">Nastavak / Razlika</option>
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black text-gray-400 uppercase">Program</label>
+                          <select 
+                            value={newUserForm.programId}
+                            onChange={e => setNewUserForm({...newUserForm, programId: e.target.value})}
+                            className="w-full border border-gray-200 p-1.5 text-xs font-bold outline-none focus:border-[#005c8d]"
+                          >
+                            <option value="">-- Odaberi --</option>
+                            {programs.filter(p => p.schoolId === selectedSchoolId).map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex gap-2 lg:col-span-1">
+                          <button 
+                            type="submit"
+                            disabled={loading}
+                            onClick={() => {
+                              // Ensure year ID is set before submit
+                              // We use the local classCreationYearId
+                            }}
+                            className="flex-1 bg-green-600 text-white font-black text-[9px] uppercase py-2 hover:bg-green-700 shadow-sm"
+                          >
+                             Spremi
+                          </button>
+                        </div>
+                      </form>
                     </div>
                   )}
-
-                  <div className="bg-white border border-gray-300">
-                    <div className="p-4 border-b border-gray-300 text-[10px] font-black text-gray-400 uppercase">Logovi prijenosa</div>
-                    <table className="w-full text-left border-collapse text-[11px]">
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-300 font-black text-gray-500 uppercase text-[9px]">
-                          <th className="px-4 py-2 border-r border-gray-200">Razred (Iz - U)</th>
-                          <th className="px-4 py-2 border-r border-gray-200 text-center">Broj</th>
-                          <th className="px-4 py-2 text-center w-32">Vrijeme</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {rolloverLogs.sort((a,b) => b.createdAt.localeCompare(a.createdAt)).map(l => (
-                          <tr key={l.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 border-r border-gray-200">
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-gray-500">{classes.find(c => c.id === l.fromClassId)?.name || 'N/A'}</span>
-                                <ChevronDown size={14} className="-rotate-90 text-gray-300" />
-                                <span className="font-black text-[#005c8d]">{classes.find(c => c.id === l.toClassId)?.name || 'N/A'}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3 border-r border-gray-200 text-center font-black">
-                              {l.studentsTransferred}
-                            </td>
-                            <td className="px-3 py-3 text-center text-gray-400 text-[9px] font-bold">
-                              {new Date(l.createdAt).toLocaleString()}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
                 </div>
+              ))}
+              {schoolYears.length === 0 && (
+                <div className="p-12 text-center border-2 border-dashed border-gray-100">
+                  <SchoolIcon size={48} className="mx-auto text-gray-200 mb-4" />
+                  <div className="text-gray-400 font-bold uppercase text-xs tracking-widest">Nema definiranih školskih godina</div>
+                  <div className="text-gray-300 text-[10px] mt-1">Otvorite novu školsku godinu koristeći gumb iznad</div>
+                </div>
+              )}
+              </div>
+            </div>
+          </React.Fragment>
+        )}
+
+          {activeTab === 'ROLLOVER' && (
+            <div className="max-w-5xl space-y-8 animate-in fade-in duration-500">
+              <div className="border-b-2 border-[#005c8d] pb-3 flex items-center justify-between bg-white sticky top-0 z-20">
+                <div className="flex flex-col">
+                  <h3 className="text-xl font-black text-[#005c8d] uppercase tracking-tighter">Školski Rollover (Prijenos godine)</h3>
+                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">Automatski prijenos cijele školske godine po ThinkWave modelu</p>
+                </div>
+                <div className="flex gap-2">
+                  {rolloverWizard.step > 1 && (
+                    <button 
+                      onClick={() => setRolloverWizard(prev => ({ ...prev, step: prev.step - 1 as any }))}
+                      className="px-4 py-2 border border-gray-300 text-gray-500 font-black text-[10px] uppercase hover:bg-gray-50 flex items-center gap-2"
+                    >
+                      <ChevronLeft size={16} /> Natrag
+                    </button>
+                  )}
+                  {rolloverWizard.step === 3 && (
+                    <button 
+                      onClick={handleRunRollover}
+                      disabled={loading}
+                      className="px-6 py-2 bg-green-600 text-white font-black text-[10px] uppercase hover:bg-green-700 shadow-md flex items-center gap-2"
+                    >
+                      {loading ? 'U tijeku...' : 'Pokreni prijenos'}
+                      {!loading && <ArrowRight size={16} />}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white border-2 border-gray-100 p-8">
+                {rolloverWizard.step === 1 && (
+                  <div className="space-y-8 max-w-2xl mx-auto py-10">
+                    <div className="text-center space-y-2">
+                       <GraduationCap size={40} className="mx-auto text-gray-300" />
+                       <h4 className="text-lg font-black text-gray-800 uppercase">1. Odabir izvorišne godine</h4>
+                       <p className="text-xs text-gray-500 font-medium">Odaberite školsku godinu iz koje želite prenijeti učenike i razrede.</p>
+                    </div>
+                    <div className="grid grid-cols-1 gap-3">
+                      {schoolYears.map(y => (
+                        <button 
+                          key={y.id}
+                          onClick={() => setRolloverWizard({ ...rolloverWizard, sourceYearId: y.id, step: 2 })}
+                          className={cn(
+                            "group p-6 border-2 text-left transition-all flex items-center justify-between",
+                            rolloverWizard.sourceYearId === y.id ? "border-[#005c8d] bg-blue-50" : "border-gray-100 hover:border-gray-300 hover:bg-gray-50"
+                          )}
+                        >
+                          <div>
+                            <div className="text-lg font-black text-gray-800 tracking-tighter">{y.name}</div>
+                            <div className="text-[10px] font-black uppercase text-gray-400">
+                              {y.isActive ? 'Aktivna godina' : 'Arhivirana'}
+                            </div>
+                          </div>
+                          <ChevronDown className="-rotate-90 group-hover:translate-x-1 transition-transform text-gray-300" />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {rolloverWizard.step === 2 && (
+                  <div className="space-y-8 max-w-2xl mx-auto py-10">
+                    <div className="text-center space-y-2">
+                       <ArrowRight size={40} className="mx-auto text-gray-300" />
+                       <h4 className="text-lg font-black text-gray-800 uppercase">2. Odabir ciljne godine</h4>
+                       <p className="text-xs text-gray-500 font-medium">Odaberite godinu u koju će učenici biti premješteni (obično sljedeća godina).</p>
+                    </div>
+                    <div className="space-y-4">
+                      <div className="bg-gray-50 border border-gray-200 p-4 rounded-sm">
+                        <label className="flex items-center gap-3 cursor-pointer">
+                          <input 
+                            type="checkbox"
+                            checked={rolloverWizard.createEmptyFirstGrades}
+                            onChange={e => setRolloverWizard(prev => ({ ...prev, createEmptyFirstGrades: e.target.checked }))}
+                            className="w-4 h-4 text-[#005c8d]"
+                          />
+                          <div>
+                            <div className="text-[11px] font-bold text-gray-700 uppercase">Kreiraj prazne odjele 1. razreda</div>
+                            <div className="text-[10px] text-gray-500">Automatski kreira prazne strukture za novu generaciju učenika (npr. 1.A, 1.B).</div>
+                          </div>
+                        </label>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3">
+                        {schoolYears
+                          .filter(y => y.id !== rolloverWizard.sourceYearId)
+                          .map(y => (
+                          <button 
+                            key={y.id}
+                            onClick={() => {
+                              setRolloverWizard(prev => ({ ...prev, targetYearId: y.id }));
+                              calculateRolloverMappings(y.id);
+                            }}
+                            className={cn(
+                              "group p-6 border-2 text-left transition-all flex items-center justify-between",
+                              rolloverWizard.targetYearId === y.id ? "border-[#005c8d] bg-blue-50" : "border-gray-100 hover:border-gray-300 hover:bg-gray-50"
+                            )}
+                          >
+                            <div>
+                              <div className="text-lg font-black text-gray-800 tracking-tighter">{y.name}</div>
+                              <div className="text-[10px] font-black uppercase text-gray-400">Prijemište za novu generaciju</div>
+                            </div>
+                            {loading ? <div className="w-4 h-4 border-2 border-[#005c8d] border-t-transparent rounded-full animate-spin" /> : <ChevronDown className="-rotate-90 group-hover:translate-x-1 transition-transform text-gray-300" />}
+                          </button>
+                        ))}
+                        <button 
+                          onClick={() => setActiveTab('SCHOOL_YEAR_DETAIL' as any)} // Or SCHOOL_YEARS
+                          onClickCapture={() => setActiveTab('SCHOOL_YEARS')}
+                          className="p-6 border-2 border-dashed border-gray-200 text-gray-400 font-black text-[10px] uppercase hover:bg-gray-50 flex items-center justify-center gap-2"
+                        >
+                          <Plus size={16} /> Kreiraj novu školsku godinu u postavkama
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {rolloverWizard.step === 3 && (
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between bg-blue-50 p-4 border border-blue-100">
+                      <div>
+                        <div className="text-[11px] font-black text-[#005c8d] uppercase">Izvor: {schoolYears.find(y => y.id === rolloverWizard.sourceYearId)?.name}</div>
+                        <div className="text-xl font-black text-gray-800 tracking-tighter flex items-center gap-3">
+                           Prijenos u: {schoolYears.find(y => y.id === rolloverWizard.targetYearId)?.name}
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-xs font-black text-gray-400 uppercase">Ukupno razreda</div>
+                        <div className="text-2xl font-black text-gray-800">{rolloverWizard.mappings.length}</div>
+                      </div>
+                    </div>
+
+                    <div className="border border-gray-200 overflow-hidden">
+                       <table className="w-full text-left border-collapse">
+                         <thead className="bg-gray-100 border-b border-gray-200 text-[10px] font-black text-gray-500 uppercase">
+                            <tr>
+                              <th className="px-6 py-4">TRENUTNI RAZRED</th>
+                              <th className="px-6 py-4">CILJ</th>
+                              <th className="px-6 py-4 text-center">TIP</th>
+                            </tr>
+                         </thead>
+                         <tbody className="divide-y divide-gray-100">
+                            {rolloverWizard.mappings.map(m => (
+                              <tr key={m.fromClassId} className="hover:bg-gray-50 transition-colors">
+                                <td className="px-6 py-4 font-black text-gray-800 text-sm">
+                                  {classes.find(c => c.id === m.fromClassId)?.name}
+                                </td>
+                                <td className="px-6 py-4">
+                                  <div className="flex items-center gap-3">
+                                    <ArrowRight size={14} className="text-gray-300" />
+                                    <span className={cn(
+                                      "font-black text-sm uppercase tracking-tighter",
+                                      m.type === 'GRADUATE' ? 'text-blue-600' : 
+                                      m.type === 'MANUAL' ? 'text-amber-500' : 'text-[#005c8d]'
+                                    )}>
+                                      {m.toClassName}
+                                    </span>
+                                    {m.isNew && <span className="bg-blue-100 text-[#005c8d] px-1.5 py-0.5 rounded text-[8px] font-black uppercase">Novi razred</span>}
+                                  </div>
+                                </td>
+                                <td className="px-6 py-4 text-center">
+                                  <span className={cn(
+                                    "px-2 py-1 rounded text-[8px] font-black uppercase tracking-widest leading-none block w-fit mx-auto border",
+                                    m.type === 'GRADUATE' ? 'bg-blue-50 text-blue-700 border-blue-100' : 
+                                    m.type === 'MANUAL' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-green-50 text-green-600 border-green-100'
+                                  )}>
+                                    {m.type === 'GRADUATE' ? 'Završava' : m.type === 'MANUAL' ? 'Ručno' : 'Prijenos'}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                         </tbody>
+                       </table>
+                    </div>
+
+                    <div className="bg-amber-50 border border-amber-200 p-4 flex gap-4">
+                       <ShieldAlert className="text-amber-600 shrink-0" size={24} />
+                       <div className="space-y-1">
+                          <div className="text-[11px] font-black text-amber-800 uppercase">Važna napomena prije prijenosa</div>
+                          <p className="text-[10px] text-amber-700 font-medium leading-relaxed">
+                            Pokretanjem prijenosa, svi učenici iz izvornih razreda bit će prebačeni u nove razrede u ciljnoj godini. 
+                            Izvorna školska godina bit će <span className="font-bold">ARHIVIRANA</span> i zaključana za uređivanje. 
+                            Zaduženja nastavnika i planovi se ne prenose automatski - njih je potrebno definirati nakon rollovera.
+                          </p>
+                       </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -2792,9 +3710,41 @@ export default function AdministrationPage() {
                     const type = form.schoolType.value;
                     const subtype = form.schoolSubtype.value;
                     if (!name) return;
-                    await supabase.from('schools').insert([{ name, type, subtype }]);
-                    form.reset();
-                    toast.success('Škola dodana');
+                    
+                    setLoading(true);
+                    try {
+                      // 1. Create School
+                      const schoolId = `sch-${name.toLowerCase().replace(/\s+/g, '-')}-${Math.random().toString(36).substr(2, 4)}`;
+                      const { error: schError } = await supabase.from('schools').insert([{ 
+                        id: schoolId,
+                        name, 
+                        type, 
+                        subtype 
+                      }]);
+                      
+                      if (schError) throw schError;
+
+                      // 2. Create Default School Year
+                      const currentYear = new Date().getFullYear();
+                      const nextYear = currentYear + 1;
+                      const yearId = `sy-${schoolId}-${currentYear}`;
+                      await supabase.from('school_years').insert([{
+                        id: yearId,
+                        name: `${currentYear}./${nextYear}.`,
+                        school_id: schoolId,
+                        is_active: true,
+                        starts_at: `${currentYear}-09-01`,
+                        ends_at: `${nextYear}-06-30`
+                      }]);
+
+                      form.reset();
+                      toast.success('Škola i zadana školska godina kreirani');
+                      fetchData();
+                    } catch (err: any) {
+                      toast.error('Greska pri kreiranju škole: ' + err.message);
+                    } finally {
+                      setLoading(false);
+                    }
                   }} className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <input name="schoolName" placeholder="Naziv škole" className="md:col-span-1 border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none" required />
                     <select name="schoolType" className="border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none">
@@ -2842,22 +3792,86 @@ export default function AdministrationPage() {
                   <div className="text-[10px] font-black text-gray-400 uppercase mb-3">Dodaj novi obrazovni program</div>
                   <form onSubmit={async (e) => {
                     e.preventDefault();
-                    const form = e.target as any;
-                    const name = form.progName.value;
-                    const duration = parseInt(form.progDuration.value);
-                    const schoolId = form.progSchool.value;
-                    if (!name || !schoolId) return;
-                    await supabase.from('programs').insert([{ name, duration_years: duration, school_id: schoolId }]);
-                    form.reset();
-                    toast.success('Program dodan');
-                  }} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <input name="progName" placeholder="Naziv programa" className="md:col-span-1 border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none" required />
-                    <input name="progDuration" type="number" min="1" max="5" defaultValue={4} className="border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none" required />
-                    <select name="progSchool" className="border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none" required>
-                      <option value="">-- Odaberi školu --</option>
-                      {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                    <button className="bg-[#005c8d] text-white font-black text-[10px] uppercase py-2">Dodaj</button>
+                    if (!programForm.name || !programForm.schoolId) return;
+                    setLoading(true);
+                    try {
+                      const { error } = await supabase.from('programs').insert([{ 
+                        name: programForm.name, 
+                        duration_years: programForm.durationYears, 
+                        school_id: programForm.schoolId,
+                        type: programForm.type,
+                        continuation_type: programForm.continuationType
+                      }]);
+                      if (error) throw error;
+                      setProgramForm({
+                        name: '',
+                        durationYears: 4,
+                        schoolId: programForm.schoolId,
+                        type: PROGRAM_TYPES.VOCATIONAL_3Y,
+                        continuationType: CONTINUATION_TYPES.NONE
+                      });
+                      toast.success('Program dodan');
+                      fetchData();
+                    } catch (err: any) {
+                      toast.error('Greska: ' + err.message);
+                    } finally {
+                      setLoading(false);
+                    }
+                  }} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase">Naziv programa</label>
+                        <input 
+                          value={programForm.name}
+                          onChange={e => setProgramForm({...programForm, name: e.target.value})}
+                          placeholder="npr. Tehničar za računalstvo" 
+                          className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none" required 
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase">Škola</label>
+                        <select 
+                          value={programForm.schoolId}
+                          onChange={e => setProgramForm({...programForm, schoolId: e.target.value})}
+                          className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none" required
+                        >
+                          <option value="">-- Odaberi školu --</option>
+                          {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase">Trajanje (godina)</label>
+                        <input 
+                          type="number" min="1" max="5" 
+                          value={programForm.durationYears}
+                          onChange={e => setProgramForm({...programForm, durationYears: parseInt(e.target.value)})}
+                          className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none" required 
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase">Tip programa</label>
+                        <select 
+                          value={programForm.type}
+                          onChange={e => setProgramForm({...programForm, type: e.target.value as any})}
+                          className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none"
+                        >
+                          {Object.entries(PROGRAM_TYPES).map(([k, v]) => <option key={k} value={v}>{k}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase">Tip nastavka</label>
+                        <select 
+                          value={programForm.continuationType}
+                          onChange={e => setProgramForm({...programForm, continuationType: e.target.value as any})}
+                          className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none"
+                        >
+                          {Object.entries(CONTINUATION_TYPES).map(([k, v]) => <option key={k} value={v}>{k}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <button className="w-full bg-[#005c8d] text-white font-black text-[10px] uppercase py-3 border border-[#004a70] hover:bg-[#004a70]">Dodaj Program</button>
                   </form>
                 </div>
               )}
@@ -2866,8 +3880,11 @@ export default function AdministrationPage() {
                   <thead className="bg-gray-50 font-black text-gray-400 uppercase text-[9px] border-b">
                     <tr>
                       <th className="px-4 py-2">Naziv programa</th>
-                      <th className="px-4 py-2">Trajanje (God)</th>
+                      <th className="px-4 py-2">Trajanje</th>
+                      <th className="px-4 py-2">Tip</th>
+                      <th className="px-4 py-2">Nastavak</th>
                       <th className="px-4 py-2">Škola</th>
+                      <th className="px-4 py-2 text-right">Akcije</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -2875,7 +3892,25 @@ export default function AdministrationPage() {
                       <tr key={p.id} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-bold">{p.name}</td>
                         <td className="px-4 py-3 text-gray-500 font-bold">{p.durationYears} god.</td>
+                        <td className="px-4 py-3 text-[9px] font-black text-blue-400 uppercase tracking-tighter">{p.type}</td>
+                        <td className="px-4 py-3 text-[9px] font-black text-gray-400 uppercase tracking-tighter">{p.continuationType}</td>
                         <td className="px-4 py-3 text-gray-400 text-[10px] font-bold uppercase">{schools.find(s => s.id === p.schoolId)?.name || 'N/A'}</td>
+                        <td className="px-4 py-3 text-right">
+                          {isMainAdmin && (
+                            <button 
+                              onClick={() => setDeleteDialog({
+                                isOpen: true,
+                                type: 'PROGRAM',
+                                id: p.id,
+                                loading: false,
+                                message: `Jeste li sigurni da želite obrisati program "${p.name}"?`
+                              })}
+                              className="text-gray-300 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -3239,8 +4274,6 @@ export default function AdministrationPage() {
               </div>
             </div>
           )}
-        </div>
-      </div>
       <DeleteConfirmDialog 
         isOpen={deleteDialog.isOpen}
         onClose={() => setDeleteDialog({ ...deleteDialog, isOpen: false })}
@@ -3353,6 +4386,8 @@ export default function AdministrationPage() {
           </div>
         </div>
       )}
+        </div>
+      </div>
     </div>
   );
 }

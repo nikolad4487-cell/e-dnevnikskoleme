@@ -3,18 +3,22 @@ import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
+import { useAuth } from '../../contexts/AuthContext';
 import { Plus, Edit2, Trash2, GraduationCap, ChevronLeft, Search, BookOpen, Users, LayoutGrid } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 
 export default function ClassManagementPage() {
   const { selectedSchoolId } = useSelection();
+  const { isMainAdmin, userSchoolRoles } = useAuth();
   const navigate = useNavigate();
   const [classes, setClasses] = useState<Class[]>([]);
   const [teachers, setTeachers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const isAnyAdmin = isMainAdmin || userSchoolRoles.some(r => r.schoolId === selectedSchoolId && (r.role === Role.SCHOOL_ADMIN || r.role === Role.ADMIN));
 
   // Form State
   const [editingClass, setEditingClass] = useState<Class | null>(null);
@@ -25,7 +29,7 @@ export default function ClassManagementPage() {
   const [homeroomTeacherId, setHomeroomTeacherId] = useState('');
   const [deputyHomeroomTeacherId, setDeputyHomeroomTeacherId] = useState('');
   const [programId, setProgramId] = useState('');
-  const [variant, setVariant] = useState<string>('Redovni');
+  const [variant, setVariant] = useState<string>('REGULAR');
   const [programs, setPrograms] = useState<any[]>([]);
 
   useEffect(() => {
@@ -81,6 +85,10 @@ export default function ClassManagementPage() {
   };
 
   const handleOpenModal = (cls?: Class) => {
+    if (!isAnyAdmin) {
+      toast.error('Ova akcija je dopuštena samo administratorima.');
+      return;
+    }
     if (cls) {
       setEditingClass(cls);
       setName(cls.name);
@@ -90,7 +98,7 @@ export default function ClassManagementPage() {
       setHomeroomTeacherId(cls.homeroomTeacherId || '');
       setDeputyHomeroomTeacherId(cls.deputyTeacherId || '');
       setProgramId(cls.programId || '');
-      setVariant(cls.variant || 'Redovni');
+      setVariant(cls.classVariant || 'REGULAR');
     } else {
       setEditingClass(null);
       setName('');
@@ -100,33 +108,42 @@ export default function ClassManagementPage() {
       setHomeroomTeacherId('');
       setDeputyHomeroomTeacherId('');
       setProgramId('');
-      setVariant('Redovni');
+      setVariant('REGULAR');
     }
     setIsModalOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      const payload = {
-        name: name || `${gradeLevel}.${section}`,
-        grade_level: gradeLevel,
-        section,
-        school_year: schoolYear,
-        school_id: selectedSchoolId,
-        status: 'ACTIVE',
-        homeroom_teacher_id: homeroomTeacherId || null,
-        deputy_teacher_id: deputyHomeroomTeacherId || null,
-        program_id: programId || null,
-        variant: variant
-      };
+    if (!isAnyAdmin) {
+      console.warn("Attempted class create/update without admin permissions");
+      return;
+    }
+    
+    const payload = {
+      name: name || `${gradeLevel}.${section}`,
+      grade_level: gradeLevel,
+      section,
+      school_year: schoolYear,
+      school_id: selectedSchoolId,
+      status: 'ACTIVE',
+      homeroom_teacher_id: homeroomTeacherId || null,
+      deputy_teacher_id: deputyHomeroomTeacherId || null,
+      program_id: programId || null,
+      variant: variant
+    };
 
+    console.log(`${editingClass ? 'UPDATE' : 'CREATE'} CLASS CLICKED`, payload);
+
+    try {
       if (editingClass) {
-        const { error } = await supabase.from('classes').update(payload).eq('id', editingClass.id);
+        const { data, error } = await supabase.from('classes').update(payload).eq('id', editingClass.id).select();
+        console.log("UPDATE CLASS RESULT:", { data, error });
         if (error) throw error;
         toast.success('Razredni odjel ažuriran');
       } else {
-        const { error } = await supabase.from('classes').insert([payload]);
+        const { data, error } = await supabase.from('classes').insert([payload]).select();
+        console.log("CREATE CLASS RESULT:", { data, error });
         if (error) throw error;
         toast.success('Razredni odjel dodan');
       }
@@ -134,7 +151,65 @@ export default function ClassManagementPage() {
       setIsModalOpen(false);
       fetchData();
     } catch (err: any) {
-      toast.error('Greška: ' + err.message);
+      console.error("CLASS ACTION FAILED:", err);
+      toast.error('Greška pri spremanju razreda: ' + (err.message || 'Nepoznata greška'));
+    }
+  };
+
+  const handleDeleteClass = async (classId: string) => {
+    if (!isAnyAdmin) {
+      toast.error('Nemate dozvolu za brisanje razreda.');
+      return;
+    }
+
+    console.log("DELETE CLASS CLICKED", { classId });
+
+    const confirmMsg = isMainAdmin 
+      ? 'Jeste li sigurni da želite obrisati ovaj razredi i SVE povezane podatke? Ova radnja je trajna.'
+      : 'Jeste li sigurni da želite obrisati ovaj razred?';
+
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      setLoading(true);
+      if (isMainAdmin) {
+        console.log("PERFORMING CASCADE DELETE AS MAIN ADMIN for class:", classId);
+        // Cascade delete helpers
+        const results = await Promise.all([
+          supabase.from('grades').delete().eq('class_id', classId),
+          supabase.from('absences').delete().eq('class_id', classId),
+          supabase.from('lessons').delete().eq('class_id', classId),
+          supabase.from('schedule_cells').delete().eq('class_id', classId),
+          supabase.from('student_class_enrollments').delete().eq('class_id', classId),
+          supabase.from('student_subject_enrollments').delete().eq('class_id', classId),
+          supabase.from('curriculum_plans').delete().eq('class_id', classId),
+          supabase.from('class_subject_teachers').delete().eq('class_id', classId),
+        ]);
+        console.log("CASCADE DELETE RESULTS:", results);
+        
+        const { data, error } = await supabase.from('classes').delete().eq('id', classId).select();
+        console.log("FINAL CLASS DELETE RESULT:", { data, error });
+        if (error) throw error;
+        toast.success('Razred i povezani podaci obrisani.');
+      } else {
+        const { data, error } = await supabase.from('classes').delete().eq('id', classId).select();
+        console.log("REGULAR CLASS DELETE RESULT:", { data, error });
+        if (error) {
+           if (error.message.includes('foreign key constraint')) {
+             toast.error('Razred sadrži podatke. Samo glavni administrator ga može obrisati.');
+           } else {
+             throw error;
+           }
+        } else {
+          toast.success('Razred obrisan.');
+        }
+      }
+      fetchData();
+    } catch (err: any) {
+      console.error("DELETE CLASS FAILED:", err);
+      toast.error('Brisanje nije uspjelo: ' + (err.message || 'Nepoznata greška'));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -157,13 +232,15 @@ export default function ClassManagementPage() {
           <p className="text-slate-500 font-medium text-sm">Upravljanje razredima u ovoj školskoj godini</p>
         </div>
         
-        <button 
-          onClick={() => handleOpenModal()}
-          className="bg-[#005c8d] text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 hover:bg-[#004a71] transition-all shadow-lg"
-        >
-          <Plus size={18} strokeWidth={3} />
-          Novi razred
-        </button>
+        {isAnyAdmin && (
+          <button 
+            onClick={() => handleOpenModal()}
+            className="bg-[#005c8d] text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 hover:bg-[#004a71] transition-all shadow-lg"
+          >
+            <Plus size={18} strokeWidth={3} />
+            Novi razred
+          </button>
+        )}
       </div>
 
       {/* Search */}
@@ -231,15 +308,22 @@ export default function ClassManagementPage() {
                     >
                       <BookOpen size={18} />
                     </button>
-                    <button 
-                      onClick={() => handleOpenModal(cls)}
-                      className="p-2 text-slate-400 hover:text-blue-500 transition-colors"
-                    >
-                      <Edit2 size={18} />
-                    </button>
-                    <button className="p-2 text-slate-400 hover:text-red-500 transition-colors">
-                      <Trash2 size={18} />
-                    </button>
+                    {isAnyAdmin && (
+                      <button 
+                        onClick={() => handleOpenModal(cls)}
+                        className="p-2 text-slate-400 hover:text-blue-500 transition-colors"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                    )}
+                    {isAnyAdmin && (
+                      <button 
+                        onClick={() => handleDeleteClass(cls.id)}
+                        className="p-2 text-slate-400 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -333,9 +417,8 @@ export default function ClassManagementPage() {
                   onChange={e => setVariant(e.target.value)}
                   className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
                 >
-                  <option value="Redovni">Redovni</option>
-                  <option value="Pošteni">Pošteni</option>
-                  <option value="Posebni">Posebni</option>
+                  <option value="REGULAR">Redovni program</option>
+                  <option value="CONTINUATION">Nastavak / Razlika</option>
                 </select>
               </div>
 

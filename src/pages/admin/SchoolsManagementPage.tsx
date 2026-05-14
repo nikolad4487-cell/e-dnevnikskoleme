@@ -8,7 +8,7 @@ import { Plus, List, Edit2, Trash2, ExternalLink, School as SchoolIcon } from 'l
 import { toast } from 'react-hot-toast';
 
 export default function SchoolsManagementPage() {
-  const { user } = useAuth();
+  const { user, isMainAdmin } = useAuth();
   const { setSelectedSchoolId } = useSelection();
   const navigate = useNavigate();
   const [schools, setSchools] = useState<School[]>([]);
@@ -39,6 +39,10 @@ export default function SchoolsManagementPage() {
   };
 
   const handleOpenModal = (school?: School) => {
+    if (!isMainAdmin) {
+      toast.error('Samo glavni administrator može uređivati škole.');
+      return;
+    }
     if (school) {
       setEditingSchool(school);
       setName(school.name);
@@ -55,6 +59,13 @@ export default function SchoolsManagementPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isMainAdmin) {
+      console.warn("Attempted school create/update without MAIN_ADMIN role");
+      return;
+    }
+    
+    console.log(`${editingSchool ? 'UPDATE' : 'CREATE'} SCHOOL CLICKED`, { name, type, subtype });
+    
     try {
       const payload = {
         name,
@@ -63,11 +74,15 @@ export default function SchoolsManagementPage() {
       };
 
       if (editingSchool) {
-        const { error } = await supabase.from('schools').update(payload).eq('id', editingSchool.id);
+        const { data, error } = await supabase.from('schools').update(payload).eq('id', editingSchool.id).select();
+        console.log("UPDATE SCHOOL RESULT:", { data, error });
         if (error) throw error;
         toast.success('Škola uspješno ažurirana');
       } else {
-        const { error } = await supabase.from('schools').insert([payload]);
+        // ID must be string for schools
+        const id = name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+        const { data, error } = await supabase.from('schools').insert([{ ...payload, id }]).select();
+        console.log("CREATE SCHOOL RESULT:", { data, error });
         if (error) throw error;
         toast.success('Škola uspješno dodana');
       }
@@ -75,19 +90,34 @@ export default function SchoolsManagementPage() {
       setIsModalOpen(false);
       fetchSchools();
     } catch (err: any) {
-      toast.error('Greška: ' + err.message);
+      console.error("SCHOOL ACTION FAILED:", err);
+      toast.error('Greška pri spremanju škole: ' + (err.message || 'Nepoznata greška'));
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Jeste li sigurni da želite obrisati ovu školu?')) return;
+    if (!isMainAdmin) {
+      toast.error('Samo glavni administrator može brisati škole.');
+      return;
+    }
+    
+    console.log("DELETE SCHOOL CLICKED", { id });
+    
+    if (!window.confirm('Jeste li sigurni da želite obrisati ovu školu i SVE njezine podatke (korisnike, razrede, ocjene)? Ova radnja je nepovratna.')) return;
+    
+    setLoading(true);
     try {
-      const { error } = await supabase.from('schools').delete().eq('id', id);
+      const { data, error } = await supabase.from('schools').delete().eq('id', id).select();
+      console.log("DELETE SCHOOL RESULT:", { data, error });
+      
       if (error) throw error;
-      toast.success('Škola obrisana');
+      toast.success('Škola i svi njezini podaci su obrisani.');
       fetchSchools();
     } catch (err: any) {
-      toast.error('Greška: ' + err.message);
+      console.error("DELETE SCHOOL FAILED:", err);
+      toast.error('Greška pri brisanju škole: ' + (err.message || 'Nepoznata greška'));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -104,7 +134,7 @@ export default function SchoolsManagementPage() {
           <p className="text-slate-500 font-medium text-sm">Pregled i administracija svih obrazovnih ustanova u sustavu</p>
         </div>
         
-        {user?.globalRole === Role.MAIN_ADMIN && (
+        {isMainAdmin && (
           <button 
             id="add-school-btn"
             onClick={() => handleOpenModal()}
@@ -149,22 +179,24 @@ export default function SchoolsManagementPage() {
                     <ExternalLink size={14} />
                     Otvori
                   </button>
-                  <div className="flex gap-2">
-                    <button 
-                      onClick={() => handleOpenModal(school)}
-                      className="flex-1 flex items-center justify-center bg-slate-50 text-slate-600 py-3 rounded-xl hover:bg-slate-100 transition-colors"
-                      title="Uredi"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button 
-                      onClick={() => handleDelete(school.id)}
-                      className="flex-1 flex items-center justify-center bg-red-50 text-red-500 py-3 rounded-xl hover:bg-red-100 transition-colors"
-                      title="Obriši"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+                  {isMainAdmin && (
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => handleOpenModal(school)}
+                        className="flex-1 flex items-center justify-center bg-slate-50 text-slate-600 py-3 rounded-xl hover:bg-slate-100 transition-colors"
+                        title="Uredi"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(school.id)}
+                        className="flex-1 flex items-center justify-center bg-red-50 text-red-500 py-3 rounded-xl hover:bg-red-100 transition-colors"
+                        title="Obriši"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

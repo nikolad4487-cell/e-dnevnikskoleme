@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
-import { Class, User, Subject } from '../../types';
+import { Class, User, Subject, Role } from '../../types';
+import { useAuth } from '../../contexts/AuthContext';
 import { 
   ChevronLeft, 
   Search, 
@@ -18,6 +19,7 @@ import { useNavigate } from 'react-router-dom';
 
 export default function StudentSubjectEnrollmentPage() {
   const { selectedSchoolId } = useSelection();
+  const { isMainAdmin, userSchoolRoles } = useAuth();
   const navigate = useNavigate();
   const [classes, setClasses] = useState<Class[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
@@ -26,6 +28,8 @@ export default function StudentSubjectEnrollmentPage() {
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const isAnyAdmin = isMainAdmin || userSchoolRoles.some(r => r.schoolId === selectedSchoolId && (r.role === Role.SCHOOL_ADMIN || r.role === Role.ADMIN));
 
   useEffect(() => {
     if (!selectedSchoolId) {
@@ -93,10 +97,16 @@ export default function StudentSubjectEnrollmentPage() {
   };
 
   const toggleEnrollment = async (studentId: string, subjectId: string, currentStatus?: string) => {
+    if (!isAnyAdmin) {
+      toast.error('Nemate dozvolu za mijenjanje upisa.');
+      return;
+    }
+    
+    const newStatus = (currentStatus === 'ACTIVE') ? 'EXEMPT' : 'ACTIVE';
+    console.log("TOGGLE STUDENT SUBJECT ENROLLMENT CLICKED", { studentId, subjectId, newStatus });
+
     try {
-      const newStatus = (currentStatus === 'ACTIVE') ? 'EXEMPT' : 'ACTIVE';
-      
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('student_subject_enrollments')
         .upsert({
           student_id: studentId,
@@ -104,8 +114,11 @@ export default function StudentSubjectEnrollmentPage() {
           class_id: selectedClassId,
           status: newStatus,
           school_year: '2024/2025' // Should be dynamic
-        }, { onConflict: 'student_id,subject_id,class_id,school_year' });
+        }, { onConflict: 'student_id,subject_id,class_id,school_year' })
+        .select();
       
+      console.log("TOGGLE ENROLLMENT RESULT:", { data, error });
+
       if (error) throw error;
       
       toast.success(newStatus === 'ACTIVE' ? 'Sluša predmet' : 'Oslobođen predmeta');
@@ -116,11 +129,19 @@ export default function StudentSubjectEnrollmentPage() {
         return [...other, { student_id: studentId, subject_id: subjectId, status: newStatus }];
       });
     } catch (err: any) {
-      toast.error('Greška: ' + err.message);
+      console.error("TOGGLE ENROLLMENT FAILED:", err);
+      toast.error('Greška pri izmjeni upisa: ' + (err.message || 'Nepoznata greška'));
     }
   };
 
   const assignAllToSubject = async (subjectId: string) => {
+    if (!isAnyAdmin) {
+      toast.error('Nemate dozvolu za masovni upis.');
+      return;
+    }
+    
+    console.log("ASSIGN ALL TO SUBJECT CLICKED", { subjectId, selectedClassId });
+
     if (!window.confirm('Dodijeli ovaj predmet svim učenicima u razredu?')) return;
     try {
       const payload = students.map(s => ({
@@ -131,13 +152,16 @@ export default function StudentSubjectEnrollmentPage() {
         school_year: '2024/2025'
       }));
       
-      const { error } = await supabase.from('student_subject_enrollments').upsert(payload, { onConflict: 'student_id,subject_id,class_id,school_year' });
+      const { data, error } = await supabase.from('student_subject_enrollments').upsert(payload, { onConflict: 'student_id,subject_id,class_id,school_year' }).select();
+      console.log("ASSIGN ALL RESULT:", { data, error });
+      
       if (error) throw error;
       
       toast.success('Predmet dodijeljen svima');
       fetchClassData();
     } catch (err: any) {
-      toast.error(err.message);
+      console.error("ASSIGN ALL FAILED:", err);
+      toast.error('Masovni upis nije uspio: ' + (err.message || 'Nepoznata greška'));
     }
   };
 
@@ -215,8 +239,8 @@ export default function StudentSubjectEnrollmentPage() {
                       <span className="text-[8px] font-bold text-slate-400 uppercase">{s.code}</span>
                     </div>
                     <button 
-                      onClick={() => assignAllToSubject(s.id)}
-                      className="absolute top-2 right-2 bg-slate-100 text-slate-400 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[#005c8d] hover:text-white transition-all transform hover:scale-110"
+                      onClick={() => isAnyAdmin && assignAllToSubject(s.id)}
+                      className={`absolute top-2 right-2 bg-slate-100 text-slate-400 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-[#005c8d] hover:text-white transition-all transform hover:scale-110 ${!isAnyAdmin && 'hidden'}`}
                       title="Dodijeli svima"
                     >
                       <Check size={10} strokeWidth={4} />

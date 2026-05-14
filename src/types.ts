@@ -48,6 +48,28 @@ export type UserSchoolRole = {
   status: string;
 };
 
+export const PROGRAM_TYPES = {
+  VOCATIONAL_3Y: 'VOCATIONAL_3Y',
+  COMMERCIALIST_4Y: 'COMMERCIALIST_4Y',
+  CONTINUATION_FREE: 'CONTINUATION_FREE',
+  CONTINUATION_PAID: 'CONTINUATION_PAID'
+} as const;
+export type ProgramType = typeof PROGRAM_TYPES[keyof typeof PROGRAM_TYPES];
+
+export const CONTINUATION_TYPES = {
+  NONE: 'NONE',
+  FREE: 'FREE',
+  PAID: 'PAID'
+} as const;
+export type ContinuationType = typeof CONTINUATION_TYPES[keyof typeof CONTINUATION_TYPES];
+
+export const CLASS_VARIANTS = {
+  REGULAR: 'REGULAR',
+  DIFFERENTIAL: 'DIFFERENTIAL',
+  CONTINUATION: 'CONTINUATION'
+} as const;
+export type ClassVariant = typeof CLASS_VARIANTS[keyof typeof CLASS_VARIANTS];
+
 export type Class = {
   id: string;
   schoolId: string;
@@ -62,7 +84,10 @@ export type Class = {
   homeroom?: User;
   deputy?: User;
   programId?: string;
-  variant?: ClassVariant;
+  programType?: ProgramType;
+  continuationType?: ContinuationType;
+  classVariant?: ClassVariant;
+  isContinuationProgram?: boolean;
 };
 
 export type Subject = {
@@ -296,6 +321,8 @@ export type Program = {
   schoolId: string;
   name: string;
   durationYears: number;
+  type: ProgramType;
+  continuationType: ContinuationType;
 };
 
 export type RolloverLog = {
@@ -309,8 +336,7 @@ export type RolloverLog = {
 };
 
 
-export type ClassVariant = 'Redovni' | 'Pošteni' | 'Posebni';
-export type ContinuationType = 'REDOVNI' | 'PONAVLJA' | 'ZAVRŠAVA';
+// Removed duplicate and conflicting type definitions
 
 export type ChatGroup = {
   id: string;

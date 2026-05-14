@@ -115,8 +115,13 @@ async function startServer() {
   app.post("/api/admin/create-user", async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized. Check your environment variables.");
-      const { email, password, name, surname, address, oib, roles, schoolId, classId } = req.body;
+      const { email, password, name, surname, address, oib, roles, schoolId, classId, studentData } = req.body;
       
+      const programId = studentData?.programId || req.body.programId;
+      const dob = studentData?.dob || req.body.dob;
+      const pob = studentData?.pob || req.body.pob;
+      const mobile = studentData?.mobile || req.body.mobile;
+
       // 1. Auth User
       const { data: existingUserList } = await supabaseAdmin.auth.admin.listUsers();
       const existingUser = existingUserList?.users?.find((u: any) => u.email === email);
@@ -147,6 +152,10 @@ async function startServer() {
           name: `${name} ${surname}`,
           address,
           oib,
+          dob,
+          pob,
+          mobile,
+          program_id: programId,
           is_first_login: true,
           requires_password_change: true
         }, { onConflict: 'auth_user_id' })

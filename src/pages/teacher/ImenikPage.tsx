@@ -717,6 +717,10 @@ export default function ImenikPage() {
 
   const handleAddNote = async () => {
     if (!activeStudent || !activeSubject || !user || !effectiveClassId || !selectedSchoolId) return;
+    if (isArchived) {
+      toast.error('Nije moguće uređivati arhivirane podatke.');
+      return;
+    }
     try {
       const { error } = await supabase.from('student_notes').insert([{
         student_id: activeStudent.id,
@@ -739,6 +743,10 @@ export default function ImenikPage() {
 
   const handleAddSpecialExam = async () => {
     if (!activeStudent || !activeSubject || !user || !effectiveClassId || !selectedSchoolId) return;
+    if (isArchived) {
+      toast.error('Nije moguće uređivati arhivirane podatke.');
+      return;
+    }
     try {
       const { error } = await supabase.from('special_exams').insert([{
         student_id: activeStudent.id,

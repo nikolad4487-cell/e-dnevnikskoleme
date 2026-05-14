@@ -65,17 +65,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // State for tracking if the first auth check has completed
   const [authInitialized, setAuthInitialized] = useState(false);
 
+  const isFetchingUserDataRef = React.useRef(false);
+
   // Hard failsafe for loading
   useEffect(() => {
     if (loading) {
       const timer = setTimeout(() => {
-        console.error('[AUTH] CRITICAL: Loading timeout (60s) triggered. Force-failing loading state.');
+        console.error('[AUTH] CRITICAL: Loading timeout (10s) triggered. Force-failing loading state.');
         setLoading(false);
-        setError('Učitavanje traje predugo. Molimo osvježite stranicu.');
-      }, 60000);
+        if (!user && !error) {
+          setError('Učitavanje podataka nije uspjelo u razumnom vremenu. Provjerite internetsku vezu.');
+        }
+      }, 10000);
       return () => clearTimeout(timer);
     }
-  }, [loading]);
+  }, [loading, user, error]);
 
   useEffect(() => {
     console.count('[AUTH] AuthProvider Render');
@@ -112,10 +116,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setError(null);
           setSession(session);
           setSupabaseUser(session.user);
-          loadingRef.current = session.user.id;
           await loadUserData(session.user.id);
           if (mounted) {
-            setLoading(false);
             setAuthInitialized(true);
           }
         }
@@ -142,22 +144,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (userId) {
         setError(null);
-        if (loadingRef.current === userId && userRef.current) {
-          setLoading(false);
-          return;
-        }
-
-        if (loadingRef.current === userId && loading) {
+        
+        // Use the same guard as in initialize
+        if (loadingRef.current === userId && (user || isFetchingUserDataRef.current)) {
+          console.log(`[AUTH] User ${userId} already loaded or loading, skipping duplicate call.`);
           return;
         }
         
-        loadingRef.current = userId;
-        setLoading(true);
-        try {
-          await loadUserData(userId);
-        } finally {
-          if (mounted) setLoading(false);
+        // Prevent infinite loops if multiple events fire
+        if (loadingRef.current === userId && event !== 'SIGNED_IN') {
+          return;
         }
+
+        loadingRef.current = userId;
+        loadUserData(userId);
       } else {
         loadingRef.current = null;
         setUser(null);
@@ -174,75 +174,64 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadUserData = async (authUserId: string) => {
+    if (isFetchingUserDataRef.current) {
+      console.log(`[AUTH] loadUserData already in progress for ${authUserId}, skipping.`);
+      return;
+    }
+
     const startTime = Date.now();
     console.log(`[AUTH] loadUserData START for ${authUserId}`);
+    isFetchingUserDataRef.current = true;
+    setLoading(true);
     
-    // Add a failsafe timeout specifically for this user data load
-    // If it hangs for 45s, we force fail it
+    // Total timeout for the entire sequence
+    const controller = new AbortController();
     const loadFailsafe = setTimeout(() => {
-      console.error(`[AUTH] loadUserData hanging for 45s, forcing error.`);
-      setError('Učitavanje podataka profila traje predugo. Provjerite vezu.');
-      setLoading(false);
-    }, 45000);
+      console.error(`[AUTH] loadUserData TIMEOUT after 8s for ${authUserId}`);
+      controller.abort();
+    }, 8000);
     
     try {
       // 1. Fetch Profile
-      const fetchProfile = async () => {
-        console.log(`[AUTH] Fetching profile for ${authUserId}...`);
-        const query = supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('auth_user_id', authUserId)
-          .maybeSingle();
+      console.log(`[AUTH] Fetching profile for ${authUserId}...`);
+      const { data: profileRaw, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('id, auth_user_id, email, name, address')
+        .eq('auth_user_id', authUserId)
+        .maybeSingle();
 
-        // Race against a 30s timeout
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('TIMEOUT_PROFILE')), 30000)
-        );
-
-        return Promise.race([query, timeoutPromise]) as Promise<any>;
-      };
-
-      const { data: profileRaw, error: profileError } = await fetchProfile();
+      console.log(`[AUTH] Profile Result for ${authUserId}:`, { hasData: !!profileRaw, error: profileError });
 
       if (profileError) {
         console.error('[AUTH] Profile fetch error:', profileError);
-        throw profileError;
+        throw new Error(`Greška pri dohvaćanju profila: ${profileError.message}`);
       }
 
       if (!profileRaw) {
         console.error('[AUTH] Profile record not found in DB for auth user:', authUserId);
-        throw new Error('Vaš korisnički profil nije pronađen. Kontaktirajte administratora.');
+        throw new Error('Profil korisnika nije pronađen. Molimo kontaktirajte administratora.');
       }
 
       const profile = mappers.user(profileRaw);
-      console.log(`[AUTH] Profile loaded: ${profile.email}`);
+      console.log(`[AUTH] Profile loaded: ${profile.email} (${profile.id})`);
 
       // 2. Fetch Roles
       console.log(`[AUTH] Fetching roles for profile ${profile.id}...`);
-      const fetchRoles = async () => {
-        const query = supabase
-          .from('user_school_roles')
-          .select('*')
-          .eq('user_id', profile.id);
+      const { data: rolesRawResult, error: rolesError } = await supabase
+        .from('user_school_roles')
+        .select('*')
+        .eq('user_id', profile.id);
 
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error('TIMEOUT_ROLES')), 30000)
-        );
+      console.log(`[AUTH] Roles Result for ${profile.id}:`, { count: rolesRawResult?.length, error: rolesError });
 
-        return Promise.race([query, timeoutPromise]) as Promise<any>;
-      };
-
-      const rolesResult = await fetchRoles();
-
-      if (rolesResult.error) {
-        console.error('[AUTH] Roles fetch error:', rolesResult.error);
-        throw rolesResult.error;
+      if (rolesError) {
+        console.error('[AUTH] Roles fetch error:', rolesError);
+        throw new Error(`Greška pri dohvaćanju uloga: ${rolesError.message}`);
       }
 
-      let rolesRaw = rolesResult.data || [];
+      let rolesData = rolesRawResult || [];
 
-      // Auto-repair missing student roles from class enrollments
+      // Optional: Auto-repair enrollments if needed, but keep it tight
       try {
         const { data: enrollments } = await supabase
           .from('student_class_enrollments')
@@ -252,11 +241,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (enrollments && enrollments.length > 0) {
           const enrolledSchoolIds = [...new Set(enrollments.map((e: any) => e.classes?.school_id).filter(Boolean))];
-          const existingSchoolIds = rolesRaw.filter(r => r.role === Role.STUDENT).map(r => r.school_id);
+          const existingSchoolIds = rolesData.filter(r => r.role === Role.STUDENT).map(r => r.school_id);
           const missingSchoolIds = enrolledSchoolIds.filter(id => !existingSchoolIds.includes(id));
 
           if (missingSchoolIds.length > 0) {
-            console.log(`[AUTH] Auto-repair: Adding missing student roles for schools ${missingSchoolIds.join(', ')}`);
+            console.log(`[AUTH] Auto-repair: Adding ${missingSchoolIds.length} student roles`);
             const newRoles = missingSchoolIds.map(schoolId => ({
               user_id: profile.id,
               school_id: schoolId,
@@ -265,43 +254,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }));
             
             await supabase.from('user_school_roles').insert(newRoles);
-            
-            // Refetch roles after repair
-            const refetched = await fetchRoles();
-            if (!refetched.error) {
-              rolesRaw = refetched.data || [];
-            }
+            const { data: refetchedRoles } = await supabase.from('user_school_roles').select('*').eq('user_id', profile.id);
+            if (refetchedRoles) rolesData = refetchedRoles;
           }
         }
-      } catch (repairErr) {
-        console.error('[AUTH] Auto-repair failed:', repairErr);
-        // Continue with whatever roles we have
+      } catch (e) {
+        console.warn('[AUTH] Enrollment repair failed, non-critical:', e);
       }
 
-      const roles = mapList(rolesRaw, mappers.userSchoolRole);
-      console.log(`[AUTH] Roles loaded: ${roles.length}`);
-
-      if (loadingRef.current === authUserId) {
-        setUser(profile);
-        setUserSchoolRoles(roles);
-        setError(null);
-      } else {
-        console.warn(`[AUTH] loadUserData finished for ${authUserId} but current user is ${loadingRef.current}. Ignoring result.`);
-      }
+      const roles = mapList(rolesData, mappers.userSchoolRole);
+      
+      setUser(profile);
+      setUserSchoolRoles(roles);
+      setError(null);
       
       console.log(`[AUTH] loadUserData SUCCESS in ${Date.now() - startTime}ms`);
     } catch (err: any) {
-      if (err.message === 'TIMEOUT_PROFILE' || err.message === 'TIMEOUT_ROLES') {
-        console.error(`[AUTH] loadUserData DB TIMEOUT for ${authUserId}`);
-        setError('Baza podataka ne odgovara. Molimo provjerite internetsku vezu.');
-      } else {
-        console.error(`[AUTH] loadUserData FAILED for ${authUserId}:`, err.message);
-        setError(err.message);
-      }
+      console.error(`[AUTH] loadUserData FAILED after ${Date.now() - startTime}ms:`, err.message);
+      setError(err.message || 'Neuspjelo učitavanje podataka.');
       setUser(null);
       setUserSchoolRoles([]);
     } finally {
       clearTimeout(loadFailsafe);
+      isFetchingUserDataRef.current = false;
+      setLoading(false);
     }
   };
 

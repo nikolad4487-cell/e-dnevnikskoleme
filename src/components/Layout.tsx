@@ -17,7 +17,7 @@ const TEACHER_NAV: NavItem[] = [
   { label: 'Dnevnik rada', path: '/teacher/dnevnik-rada' },
   { label: 'Zapisnici', path: '/teacher/zapisnici' },
   { label: 'Izvještaji', path: '/teacher/izvjestaji' },
-  { label: 'Administracija', path: '/teacher/administracija' },
+  { label: 'Administracija', path: '/admin/school-dashboard' },
   { label: 'Pretraživanje', path: '/teacher/pretrazivanje' },
 ];
 
@@ -53,7 +53,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   
   let navItems = isStaff 
     ? TEACHER_NAV.filter(item => {
-        if (item.path === '/teacher/administracija') return isSchoolAdmin;
+        if (item.path === '/admin/school-dashboard') return isSchoolAdmin;
         return true;
       })
     : STUDENT_NAV;

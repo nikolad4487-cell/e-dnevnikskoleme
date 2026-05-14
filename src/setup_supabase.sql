@@ -53,6 +53,7 @@ CREATE TABLE public.user_profiles (
     dob DATE,
     pob TEXT,
     mobile TEXT,
+    program_id UUID,
     is_first_login BOOLEAN DEFAULT TRUE,
     requires_password_change BOOLEAN DEFAULT TRUE,
     requires_authenticator_setup BOOLEAN DEFAULT FALSE,
@@ -81,13 +82,26 @@ CREATE TABLE public.school_years (
     starts_at DATE,
     ends_at DATE,
     is_active BOOLEAN DEFAULT FALSE,
+    status TEXT DEFAULT 'ACTIVE',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4.1 Programs Table
+CREATE TABLE public.programs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    school_id TEXT NOT NULL REFERENCES public.schools(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    duration_years INTEGER NOT NULL DEFAULT 4,
+    type TEXT NOT NULL DEFAULT 'VOCATIONAL_3Y',
+    continuation_type TEXT NOT NULL DEFAULT 'NONE',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 5. Classes Table (ID is TEXT)
 CREATE TABLE public.classes (
-    id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
     school_id TEXT REFERENCES public.schools(id) ON DELETE CASCADE,
     school_year_id TEXT REFERENCES public.school_years(id) ON DELETE SET NULL,
     school_year TEXT NOT NULL,
@@ -98,7 +112,7 @@ CREATE TABLE public.classes (
     homeroom_teacher_id UUID REFERENCES public.user_profiles(id),
     deputy_teacher_id UUID REFERENCES public.user_profiles(id),
     program_id UUID,
-    variant TEXT DEFAULT 'Redovni',
+    variant TEXT DEFAULT 'REGULAR',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -264,7 +278,8 @@ CREATE TABLE public.schedule_cell_subjects (
     teacher_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
     classroom TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(schedule_cell_id, subject_id)
 );
 
 -- 15. Year Summaries
@@ -351,6 +366,7 @@ CREATE TABLE public.grading_elements (
 -- Enable RLS on all tables
 ALTER TABLE public.schools ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.school_years ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.programs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_school_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.classes ENABLE ROW LEVEL SECURITY;
@@ -375,6 +391,7 @@ ALTER TABLE public.grading_elements ENABLE ROW LEVEL SECURITY;
 -- Policies
 CREATE POLICY "Authenticated read" ON public.schools FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated read" ON public.school_years FOR ALL TO authenticated USING (true);
+CREATE POLICY "Authenticated read" ON public.programs FOR ALL TO authenticated USING (true);
 CREATE POLICY "Authenticated read" ON public.user_profiles FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated read" ON public.user_school_roles FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated read" ON public.classes FOR SELECT TO authenticated USING (true);
@@ -395,6 +412,20 @@ CREATE POLICY "Authenticated manage" ON public.work_weeks FOR ALL TO authenticat
 CREATE POLICY "Authenticated manage" ON public.schedule_cells FOR ALL TO authenticated USING (true);
 CREATE POLICY "Authenticated manage" ON public.schedule_cell_subjects FOR ALL TO authenticated USING (true);
 CREATE POLICY "Authenticated manage" ON public.student_year_summaries FOR ALL TO authenticated USING (true);
+CREATE POLICY "Authenticated manage" ON public.rollover_logs FOR ALL TO authenticated USING (true);
+
+-- 22. Rollover Logs
+CREATE TABLE public.rollover_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    school_id TEXT REFERENCES public.schools(id),
+    from_school_year_id TEXT,
+    to_school_year_id TEXT,
+    from_class_id TEXT,
+    to_class_id TEXT,
+    created_by UUID REFERENCES public.user_profiles(id),
+    students_transferred INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- RELOAD SCHEMA
 NOTIFY pgrst, 'reload schema';

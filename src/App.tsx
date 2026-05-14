@@ -228,7 +228,7 @@ export default function App() {
                   <Layout>
                     <Routes>
                       <Route path="schools" element={<SchoolsManagementPage />} />
-                      <Route path="school-dashboard" element={<SchoolAdminDashboard />} />
+                      <Route path="school-dashboard" element={<AdministrationPage />} />
                       <Route path="razredi" element={<ClassManagementPage />} />
                       <Route path="razred-predmeti" element={<ClassSubjectsPage />} />
                       <Route path="razred-ucenici" element={<ClassStudentsPage />} />

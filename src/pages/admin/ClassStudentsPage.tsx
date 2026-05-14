@@ -16,6 +16,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export default function ClassStudentsPage() {
   const { selectedSchoolId } = useSelection();
+  const { isMainAdmin, userSchoolRoles } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const classId = searchParams.get('classId');
@@ -25,6 +26,8 @@ export default function ClassStudentsPage() {
   const [availableStudents, setAvailableStudents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+
+  const isAnyAdmin = isMainAdmin || userSchoolRoles.some(r => r.schoolId === selectedSchoolId && (r.role === Role.SCHOOL_ADMIN || r.role === Role.ADMIN));
 
   useEffect(() => {
     if (!selectedSchoolId || !classId) {
@@ -113,17 +116,28 @@ export default function ClassStudentsPage() {
   };
 
   const handleAssignStudent = async (studentId: string) => {
+    if (!isAnyAdmin) {
+      toast.error('Nemate dozvolu za dodavanje učenika.');
+      return;
+    }
+
+    console.log("ASSIGN STUDENT TO CLASS CLICKED", { classId, studentId });
+
     try {
-      const { error } = await supabase
+      const schoolYear = currentClass?.schoolYear || '2025./2026.';
+      const { data: enrollResult, error: enrollError } = await supabase
         .from('student_class_enrollments')
         .upsert([{ 
           student_id: studentId,
           class_id: classId,
-          school_year: currentClass?.schoolYear || '2024/2025',
+          school_year: schoolYear,
           status: 'ACTIVE'
-        }], { onConflict: 'student_id,class_id' });
+        }], { onConflict: 'student_id,class_id,school_year' })
+        .select();
       
-      if (error) throw error;
+      console.log("STUDENT ENROLL RESULT:", { data: enrollResult, error: enrollError });
+
+      if (enrollError) throw enrollError;
 
       // Also automatically enroll student in all subjects of this class
       const { data: assignments } = await supabase
@@ -131,46 +145,68 @@ export default function ClassStudentsPage() {
         .select('subject_id')
         .eq('class_id', classId);
       
+      console.log("FETCHED CLASS SUBJECTS FOR AUTO-ENROLLMENT:", assignments);
+
       if (assignments && assignments.length > 0) {
         const enrollments = assignments.map(a => ({
           student_id: studentId,
           subject_id: a.subject_id,
           class_id: classId,
-          school_year: currentClass?.schoolYear || '2024/2025',
+          school_year: schoolYear,
           status: 'ACTIVE'
         }));
-        await supabase.from('student_subject_enrollments').upsert(enrollments, { onConflict: 'student_id,subject_id,class_id,school_year' });
+        const { data: subEnrollResult, error: subEnrollError } = await supabase
+          .from('student_subject_enrollments')
+          .upsert(enrollments, { onConflict: 'student_id,subject_id,class_id,school_year' })
+          .select();
+        
+        console.log("STUDENT SUBJECT ENROLL RESULT:", { data: subEnrollResult, error: subEnrollError });
       }
 
       toast.success('Učenik dodan u razred');
       fetchData();
     } catch (err: any) {
-      toast.error('Greška: ' + err.message);
+      console.error("ASSIGN STUDENT FAILED:", err);
+      toast.error('Greška pri dodavanju učenika: ' + (err.message || 'Nepoznata greška'));
     }
   };
 
   const handleRemoveStudent = async (studentId: string) => {
+    if (!isAnyAdmin) {
+      toast.error('Nemate dozvolu za uklanjanje učenika.');
+      return;
+    }
+
+    console.log("REMOVE STUDENT FROM CLASS CLICKED", { classId, studentId });
+
     if (!window.confirm('Želite li ukloniti učenika iz razreda?')) return;
     try {
-      const { error } = await supabase
+      const { data: remEnrollResult, error: remEnrollError } = await supabase
         .from('student_class_enrollments')
         .update({ status: 'DROPPED' })
         .eq('student_id', studentId)
-        .eq('class_id', classId);
+        .eq('class_id', classId)
+        .select();
       
-      if (error) throw error;
+      console.log("REMOVE CLASS ENROLL RESULT:", { data: remEnrollResult, error: remEnrollError });
+      
+      if (remEnrollError) throw remEnrollError;
 
       // Note: we might want to keep the grades but deactivate enrollment
-      await supabase
+      const { data: remSubResult, error: remSubError } = await supabase
         .from('student_subject_enrollments')
         .update({ status: 'DROPPED' })
         .eq('student_id', studentId)
-        .eq('class_id', classId);
+        .eq('class_id', classId)
+        .select();
+        
+      console.log("REMOVE SUBJECT ENROLL RESULT:", { data: remSubResult, error: remSubError });
 
       toast.success('Učenik uklonjen iz razreda');
       fetchData();
     } catch (err: any) {
-      toast.error('Greška: ' + err.message);
+      console.error("REMOVE STUDENT FAILED:", err);
+      toast.error('Greška pri uklanjanju učenika: ' + (err.message || 'Nepoznata greška'));
     }
   };
 
@@ -236,12 +272,14 @@ export default function ClassStudentsPage() {
                       </div>
                     </td>
                     <td className="p-4 text-right">
-                      <button 
-                        onClick={() => handleAssignStudent(s.id)}
-                        className="bg-blue-50 text-[#005c8d] p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-[#005c8d] hover:text-white"
-                      >
-                        <UserPlus size={18} />
-                      </button>
+                      {isAnyAdmin && (
+                        <button 
+                          onClick={() => handleAssignStudent(s.id)}
+                          className="bg-blue-50 text-[#005c8d] p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-all hover:bg-[#005c8d] hover:text-white"
+                        >
+                          <UserPlus size={18} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -276,12 +314,14 @@ export default function ClassStudentsPage() {
                       </div>
                     </td>
                     <td className="p-4 text-right">
-                      <button 
-                        onClick={() => handleRemoveStudent(s.id)}
-                        className="p-2 text-slate-200 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
-                      >
-                        <Trash2 size={18} />
-                      </button>
+                      {isAnyAdmin && (
+                        <button 
+                          onClick={() => handleRemoveStudent(s.id)}
+                          className="p-2 text-slate-200 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
