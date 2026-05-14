@@ -13,6 +13,17 @@ export default function ClassManagementPage() {
   const { isMainAdmin, userSchoolRoles } = useAuth();
   const navigate = useNavigate();
   const [classes, setClasses] = useState<Class[]>([]);
+  const setClassesUnified = (newClasses: Class[]) => {
+    setClasses(prev => {
+      const combined = [...newClasses];
+      const seen = new Set();
+      return combined.filter(c => {
+        if (seen.has(c.id)) return false;
+        seen.add(c.id);
+        return true;
+      });
+    });
+  };
   const [teachers, setTeachers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -57,7 +68,7 @@ export default function ClassManagementPage() {
         .order('section');
       
       if (classError) throw classError;
-      setClasses(mapList(classData || [], mappers.class));
+      setClassesUnified(mapList(classData || [], mappers.class));
 
       // Fetch potential homeroom teachers
       const { data: teacherData, error: teacherError } = await supabase

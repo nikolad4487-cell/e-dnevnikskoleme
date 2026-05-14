@@ -39,6 +39,17 @@ export default function AdministrationPage() {
   const effectiveClassId = routeClassId;
 
   const [classes, setClasses] = useState<Class[]>([]);
+  const setClassesUnified = (newClasses: Class[]) => {
+    setClasses(prev => {
+      const combined = [...newClasses];
+      const seen = new Set();
+      return combined.filter(c => {
+        if (seen.has(c.id)) return false;
+        seen.add(c.id);
+        return true;
+      });
+    });
+  };
   const [students, setStudents] = useState<User[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [allUserSchoolRolesState, setAllUserSchoolRoles] = useState<any[]>([]);
@@ -700,7 +711,7 @@ export default function AdministrationPage() {
 
     checkAndCreateSchoolYear();
     
-    supabase.from('classes').select('*').eq('school_id', selectedSchoolId).then(({ data }) => data && setClasses(mapList(data, mappers.class)));
+    supabase.from('classes').select('*').eq('school_id', selectedSchoolId).then(({ data }) => data && setClassesUnified(mapList(data, mappers.class)));
     supabase.from('subjects').select('*').eq('school_id', selectedSchoolId).then(({ data }) => data && setAllSubjects(mapList(data, mappers.subject)));
     supabase.from('user_school_roles').select('*').then(({ data }) => data && setAllUserSchoolRoles(mapList(data || [], mappers.userSchoolRole)));
     
@@ -843,7 +854,7 @@ export default function AdministrationPage() {
       }
 
       const { data: clsData } = await supabase.from('classes').select('*').eq('school_id', selectedSchoolId);
-      if (clsData) setClasses(mapList(clsData, mappers.class));
+      if (clsData) setClassesUnified(mapList(clsData, mappers.class));
 
       const { data: subAll } = await supabase.from('subjects').select('*').eq('school_id', selectedSchoolId);
       if (subAll) setAllSubjects(mapList(subAll, mappers.subject));
@@ -1234,7 +1245,7 @@ export default function AdministrationPage() {
         toast.success('Razredni odjel uspješno kreiran');
         // Fetch all classes again
         const { data: updatedClasses } = await supabase.from('classes').select('*').eq('school_id', selectedSchoolId);
-        if (updatedClasses) setClasses(mapList(updatedClasses, mappers.class));
+        if (updatedClasses) setClassesUnified(mapList(updatedClasses, mappers.class));
       }
     } catch (err: any) {
       console.error("CREATE CLASS ERROR:", err);
@@ -1614,7 +1625,7 @@ export default function AdministrationPage() {
         supabase.from('classes')
           .select('*')
           .eq('school_id', selectedSchoolId)
-          .then(({ data }) => data && setClasses(mapList(data, mappers.class)));
+          .then(({ data }) => data && setClassesUnified(mapList(data, mappers.class)));
       }
     }
   };
@@ -2885,7 +2896,7 @@ export default function AdministrationPage() {
                         required
                       >
                         <option value="">-- Odaberi --</option>
-                        {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {classes.filter(c => !selectedYearId || c.schoolYearId === selectedYearId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -3023,7 +3034,7 @@ export default function AdministrationPage() {
                         required
                       >
                         <option value="">-- Odaberi --</option>
-                        {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {classes.filter(c => !selectedYearId || c.schoolYearId === selectedYearId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -4063,7 +4074,7 @@ export default function AdministrationPage() {
                               className="w-full border border-gray-300 p-2 text-[10px] font-bold"
                            >
                               <option value="">Odaberi razred...</option>
-                              {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                              {classes.filter(c => !selectedYearId || c.schoolYearId === selectedYearId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                            </select>
                         </div>
                       )}
