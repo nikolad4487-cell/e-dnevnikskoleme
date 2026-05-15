@@ -206,7 +206,7 @@ export default function ClassManagementPage() {
         const { data, error } = await supabase.from('classes').delete().eq('id', classId).select();
         console.log("REGULAR CLASS DELETE RESULT:", { data, error });
         if (error) {
-           if (error.message.includes('foreign key constraint')) {
+           if (error.message?.includes('foreign key constraint')) {
              toast.error('Razred sadrži podatke. Samo glavni administrator ga može obrisati.');
            } else {
              throw error;

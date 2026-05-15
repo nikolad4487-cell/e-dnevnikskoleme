@@ -107,7 +107,7 @@ export default function SubjectManagementPage() {
         const { data, error } = await supabase.from('subjects').delete().eq('id', id).select();
         console.log("REGULAR SUBJECT DELETE RESULT:", { data, error });
         if (error) {
-           if (error.message.includes('foreign key constraint')) {
+           if (error.message?.includes('foreign key constraint')) {
              toast.error('Predmet sadrži podatke. Samo glavni administrator ga može obrisati.');
            } else {
              throw error;

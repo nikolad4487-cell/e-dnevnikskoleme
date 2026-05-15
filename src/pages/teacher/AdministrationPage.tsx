@@ -290,7 +290,12 @@ export default function AdministrationPage() {
       
       if (!response.ok) throw new Error(result.error || 'Neuspješno kreiranje korisnika');
 
-      toast.success(`Korisnik kreiran. Privremena lozinka: ${result.tempPassword || 'Provjerite email'}`);
+      const generatedPassword = result.password || result.user?.password || result.tempPassword || "Nije vraćena";
+      
+      toast.success(
+        `Korisnik uspješno kreiran!\nEmail: ${newUserForm.email.toLowerCase()}\nLozinka: ${generatedPassword}\n\nKorisnik mora promijeniti lozinku pri prvoj prijavi.`,
+        { duration: 10000 }
+      );
       
       setNewUserForm({
         name: '', surname: '', email: '', username: '', globalRole: Role.TEACHER,
@@ -1284,7 +1289,12 @@ export default function AdministrationPage() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Neuspješno kreiranje učenika');
 
-      toast.success(`Učenik registriran. Lozinka: ${result.tempPassword || 'Provjerite email'}`);
+      const generatedPassword = result.password || result.user?.password || result.tempPassword || "Nije vraćena";
+
+      toast.success(
+        `Učenik registriran!\nEmail: ${studentForm.email.toLowerCase()}\nLozinka: ${generatedPassword}\n\nKorisnik mora promijeniti lozinku pri prvoj prijavi.`,
+        { duration: 10000 }
+      );
       setStudentForm({ 
         name: '', 
         surname: '', 
@@ -3220,11 +3230,11 @@ export default function AdministrationPage() {
                                <label key={s.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 cursor-pointer transition-colors group">
                                  <input 
                                    type="checkbox"
-                                   checked={graduatesAdmin.selectedStudentIds.includes(s.id)}
+                                   checked={graduatesAdmin.selectedStudentIds?.includes(s.id)}
                                    onChange={e => {
                                       const ids = e.target.checked 
-                                        ? [...graduatesAdmin.selectedStudentIds, s.id]
-                                        : graduatesAdmin.selectedStudentIds.filter(id => id !== s.id);
+                                        ? [...(graduatesAdmin.selectedStudentIds || []), s.id]
+                                        : (graduatesAdmin.selectedStudentIds || []).filter(id => id !== s.id);
                                       setGraduatesAdmin(prev => ({ ...prev, selectedStudentIds: ids }));
                                    }}
                                    className="w-4 h-4 rounded border-gray-300 text-[#005c8d] focus:ring-[#005c8d]"

@@ -62,7 +62,7 @@ export default function UserManagementPage() {
     setSurname(user.surname || '');
     setAddress(user.address || '');
     setOib(user.oib || '');
-    setSelectedRoles(user.roles);
+    setSelectedRoles(user.roles || []);
     setIsModalOpen(true);
   };
 
@@ -237,7 +237,7 @@ export default function UserManagementPage() {
       profile?.surname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       profile?.email?.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesRole = roleFilter === 'ALL' || profile.roles.includes(roleFilter);
+    const matchesRole = roleFilter === 'ALL' || (profile.roles && profile.roles.includes(roleFilter));
     
     return matchesSearch && matchesRole;
   });

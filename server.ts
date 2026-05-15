@@ -115,7 +115,19 @@ async function startServer() {
   app.post("/api/admin/create-user", async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized. Check your environment variables.");
-      const { email, password, name, surname, address, oib, roles, schoolId, classId, studentData } = req.body;
+
+      // Defensive defaults for roles and programs (preventing .includes() crash)
+      const roles = Array.isArray(req.body.roles) ? req.body.roles : (Array.isArray(req.body.selectedRoles) ? req.body.selectedRoles : []);
+      const programs = Array.isArray(req.body.programs) ? req.body.programs : (Array.isArray(req.body.selectedPrograms) ? req.body.selectedPrograms : []);
+
+      const { email, password, name, surname, address, oib, schoolId, classId, studentData } = req.body;
+
+      console.log("CREATE USER DEBUG", { 
+        email, 
+        roles, 
+        programs, 
+        hasClassId: !!classId 
+      });
       
       const programId = studentData?.programId || req.body.programId;
       const dob = studentData?.dob || req.body.dob;
@@ -155,7 +167,7 @@ async function startServer() {
           dob,
           pob,
           mobile,
-          program_id: programId,
+          // program_id: programId, // Temporarily bypassed because "programs" table does not exist
           is_first_login: true,
           requires_password_change: true
         }, { onConflict: 'auth_user_id' })
@@ -298,6 +310,7 @@ async function startServer() {
       // 1. Create School
       await supabaseAdmin.from('schools').upsert({ id: demoSchoolId, name: 'Demo škola', type: 'SECONDARY' });
 
+      /*
       // 1.1 Create Programs
       const demoPrograms = [
         { id: 'prog-gym', school_id: demoSchoolId, name: 'Opća gimnazija', duration_years: 4 },
@@ -306,12 +319,13 @@ async function startServer() {
       for (const prog of demoPrograms) {
         await supabaseAdmin.from('programs').upsert(prog);
       }
+      */
 
       // 2. Create Classes
       const demoClasses = [
-        { id: 'class-1a', school_id: demoSchoolId, name: '1.A', grade_level: 1, section: 'A', school_year: '2024/2025', program_id: 'prog-gym' },
-        { id: 'class-2b', school_id: demoSchoolId, name: '2.B', grade_level: 2, section: 'B', school_year: '2024/2025', program_id: 'prog-gym' },
-        { id: 'class-3c', school_id: demoSchoolId, name: '3.C', grade_level: 3, section: 'C', school_year: '2024/2025', program_id: 'prog-web' },
+        { id: 'class-1a', school_id: demoSchoolId, name: '1.A', grade_level: 1, section: 'A', school_year: '2024/2025' },
+        { id: 'class-2b', school_id: demoSchoolId, name: '2.B', grade_level: 2, section: 'B', school_year: '2024/2025' },
+        { id: 'class-3c', school_id: demoSchoolId, name: '3.C', grade_level: 3, section: 'C', school_year: '2024/2025' },
       ];
       for (const cls of demoClasses) {
         await supabaseAdmin.from('classes').upsert(cls);
