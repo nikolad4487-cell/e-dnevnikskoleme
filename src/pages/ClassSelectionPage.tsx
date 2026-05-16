@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, ArrowRight, Calendar, ChevronLeft, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn } from '../lib/utils';
+import { Header } from '../components/Header';
 
 interface ClassWithDetails {
   id: string;
@@ -306,8 +307,9 @@ export default function ClassSelectionPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] font-sans">
-      <div className="max-w-5xl mx-auto py-12 px-6">
+    <div className="min-h-screen bg-[#f8f9fa] font-sans flex flex-col">
+      <Header showNav={false} />
+      <div className="flex-1 max-w-5xl mx-auto py-12 px-6 w-full">
         <div className="flex justify-between items-center mb-8">
           <button 
             onClick={() => navigate('/select-school')}

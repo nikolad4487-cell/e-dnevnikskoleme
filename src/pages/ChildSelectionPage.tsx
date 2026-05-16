@@ -6,6 +6,7 @@ import { User, Role } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, ArrowRight, User as UserIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Header } from '../components/Header';
 
 export default function ChildSelectionPage() {
   const { user } = useAuth();
@@ -96,8 +97,9 @@ export default function ChildSelectionPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] font-sans">
-      <div className="max-w-4xl mx-auto py-12 px-6">
+    <div className="min-h-screen bg-[#f8f9fa] font-sans flex flex-col">
+      <Header showNav={false} />
+      <div className="flex-1 max-w-4xl mx-auto py-12 px-6 w-full">
         <div className="mb-10 text-center">
           <h1 className="text-2xl font-black text-[#005c8d] uppercase tracking-tight mb-2">Odabir djeteta</h1>
           <div className="w-12 h-1 bg-[#005c8d] mx-auto opacity-20"></div>

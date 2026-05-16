@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { Role } from '../types';
 import { cn } from '../lib/utils';
+import { Header } from './Header';
 
 interface NavItem {
   label: string;
@@ -79,89 +80,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-[#f0f2f5] flex flex-col font-sans">
       {/* Header */}
-      <header className="bg-[#005c8d] text-white z-50 shadow-md">
-        <div className="max-w-[1400px] mx-auto px-4 h-10 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button 
-              className="lg:hidden p-1 hover:bg-[#004a70]"
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-            >
-              <Menu size={18} />
-            </button>
-            <Link to="/" className="text-base font-bold tracking-tight">e-Dnevnik</Link>
-            
-            <div className="hidden lg:flex items-center gap-1 ml-6">
-               {selectedSchoolId && (
-                 <button 
-                   onClick={() => navigate('/select-school')}
-                   className="px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-[9px] font-black uppercase tracking-widest border border-white/20 transition-all active:scale-95"
-                   title="Promijeni školu"
-                 >
-                   Škola
-                 </button>
-               )}
-               {selectedClassId && (
-                 <button 
-                   onClick={() => navigate('/select-class')}
-                   className="px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-[9px] font-black uppercase tracking-widest border border-white/20 transition-all active:scale-95"
-                   title="Promijeni razred"
-                 >
-                   Razred
-                 </button>
-               )}
-               {userSchoolRoles.some(r => r.role === Role.PARENT) && (
-                 <button 
-                   onClick={() => navigate('/select-child')}
-                   className="px-2 py-1 bg-white/10 hover:bg-white/20 rounded text-[9px] font-black uppercase tracking-widest border border-white/20 transition-all active:scale-95"
-                   title="Promijeni učenika"
-                 >
-                   Učenik
-                 </button>
-               )}
-            </div>
-          </div>
-
-          <div className="hidden lg:flex items-center h-full">
-            {navItems.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  "px-3 h-full flex items-center text-[12px] font-bold uppercase transition-colors",
-                  location.pathname.startsWith(item.path) 
-                    ? "bg-[#004a70]" 
-                    : "hover:bg-[#004a70]"
-                )}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <div className="hidden sm:flex flex-col items-end mr-2">
-              <span className="text-[11px] font-bold leading-tight">{user?.name} {user?.surname}</span>
-              <span className="text-[9px] text-white/70 uppercase">
-                {formattedRoles}
-              </span>
-            </div>
-            <Link
-              to={isStaff ? "/teacher/postavke" : "/student/postavke"}
-              className="p-1.5 hover:bg-[#004a70] transition-colors"
-              title="Postavke"
-            >
-              <Settings size={16} />
-            </Link>
-            <button 
-              onClick={handleLogout}
-              className="p-1.5 hover:bg-[#004a70] transition-colors"
-              title="Odjava"
-            >
-              <LogOut size={16} />
-            </button>
-          </div>
-        </div>
-      </header>
+      <Header 
+        navItems={navItems} 
+        onMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
+      />
 
       {/* Mobile Sidebar Overlay */}
       {isMobileMenuOpen && (
