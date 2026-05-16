@@ -85,7 +85,6 @@ export type Class = {
   deputy?: User;
   programId?: string;
   programType?: ProgramType;
-  continuationType?: ContinuationType;
   classVariant?: ClassVariant;
   isContinuationProgram?: boolean;
 };
@@ -322,7 +321,6 @@ export type Program = {
   name: string;
   durationYears: number;
   type: ProgramType;
-  continuationType: ContinuationType;
 };
 
 export type RolloverLog = {

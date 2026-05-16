@@ -124,6 +124,7 @@ CREATE TABLE public.student_class_enrollments (
     class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
     school_year_id TEXT REFERENCES public.school_years(id) ON DELETE SET NULL,
     school_year TEXT NOT NULL,
+    program_id TEXT REFERENCES public.programs(id) ON DELETE SET NULL,
     status TEXT DEFAULT 'ACTIVE',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
@@ -426,6 +427,24 @@ CREATE TABLE public.rollover_logs (
     students_transferred INTEGER DEFAULT 0,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 23. View for Active Classes (Used for Student Registration)
+CREATE OR REPLACE VIEW public.active_classes_for_students AS
+SELECT
+  c.id,
+  c.name,
+  c.grade_level,
+  c.section,
+  c.school_year_id,
+  c.school_id,
+  c.status,
+  sy.is_active as school_year_active
+FROM public.classes c
+JOIN public.school_years sy
+  ON sy.id = c.school_year_id
+WHERE
+  lower(c.status) IN ('active', 'aktivan')
+  AND sy.is_active = true;
 
 -- RELOAD SCHEMA
 NOTIFY pgrst, 'reload schema';

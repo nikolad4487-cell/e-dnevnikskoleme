@@ -62,7 +62,6 @@ export const mappers = {
     deputyTeacherId: raw.deputy_teacher_id,
     programId: raw.program_id,
     programType: raw.program_type,
-    continuationType: raw.continuation_type,
     classVariant: raw.class_variant,
     variant: raw.variant,
     homeroom: raw.homeroom ? mappers.user(raw.homeroom) : undefined,
@@ -288,6 +287,5 @@ export const mappers = {
     name: raw.name,
     durationYears: raw.duration_years,
     type: raw.type,
-    continuationType: raw.continuation_type,
   }),
 };

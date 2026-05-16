@@ -17,7 +17,10 @@ interface ClassWithDetails {
   yearId: string;
   yearName: string;
   status: 'ACTIVE' | 'ARCHIVED' | 'COMPLETED';
+  homeroomTeacherId?: string;
+  deputyTeacherId?: string;
   homeroomTeacherName?: string;
+  deputyTeacherName?: string;
   userRoleInClass?: 'HOMEROOM' | 'DEPUTY' | 'TEACHER' | 'ADMIN' | 'STUDENT';
   programName?: string;
 }
@@ -150,7 +153,9 @@ export default function ClassSelectionPage() {
             yearName: cls.school_year,
             status: cls.status,
             homeroomTeacherId: cls.homeroom_teacher_id,
-            homeroomTeacherName: (cls.homeroom as any)?.name || 'Nije dodijeljen',
+            deputyTeacherId: cls.deputy_teacher_id,
+            homeroomTeacherName: (cls.homeroom as any)?.name,
+            deputyTeacherName: (cls.deputy as any)?.name,
             userRoleInClass: role as any,
             programName: cls.program_type || `${cls.grade_level}. razred`
           } as any;
@@ -216,7 +221,9 @@ export default function ClassSelectionPage() {
             yearName: env.classes.school_year,
             status: env.status,
             homeroomTeacherId: env.classes.homeroom_teacher_id,
-            homeroomTeacherName: env.classes.homeroom?.name || 'Nije dodijeljen',
+            deputyTeacherId: env.classes.deputy_teacher_id,
+            homeroomTeacherName: env.classes.homeroom?.name,
+            deputyTeacherName: env.classes.deputy?.name,
             userRoleInClass: 'STUDENT',
             programName: env.classes.program_type || `${env.classes.grade_level}. razred`
           } as any);
@@ -418,10 +425,17 @@ export default function ClassSelectionPage() {
                         </div>
                       </div>
 
-                      {/* Homeroom Teacher */}
-                      <div className="flex items-center gap-2 text-slate-600 font-bold uppercase text-[11px] tracking-tight border-l-0 md:border-l border-slate-200 md:pl-6 h-full">
-                        <span className="text-slate-300 font-black block md:hidden">RAZREDNIK:</span>
-                        {cls.homeroomTeacherName}
+                      {/* Homeroom / Deputy Teacher */}
+                      <div className="flex flex-col gap-0.5 text-slate-600 font-bold uppercase text-[11px] tracking-tight border-l-0 md:border-l border-slate-200 md:pl-6 h-full justify-center">
+                        <span className="text-slate-300 font-black block md:hidden">NASTAVNICI:</span>
+                        <div className="truncate">
+                          {(() => {
+                            const teachers = [];
+                            if (cls.homeroomTeacherName) teachers.push(cls.homeroomTeacherName);
+                            if (cls.deputyTeacherName) teachers.push(cls.deputyTeacherName);
+                            return teachers.length > 0 ? teachers.join(', ') : 'NIJE DODIJELJEN';
+                          })()}
+                        </div>
                       </div>
 
                       {/* Description / Program */}

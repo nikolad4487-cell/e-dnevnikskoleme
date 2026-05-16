@@ -118,15 +118,31 @@ async function startServer() {
 
       // Defensive defaults for roles and programs (preventing .includes() crash)
       const roles = Array.isArray(req.body.roles) ? req.body.roles : (Array.isArray(req.body.selectedRoles) ? req.body.selectedRoles : []);
+      const globalRole = req.body.globalRole;
+      if (globalRole && !roles.includes(globalRole)) roles.push(globalRole);
+
       const programs = Array.isArray(req.body.programs) ? req.body.programs : (Array.isArray(req.body.selectedPrograms) ? req.body.selectedPrograms : []);
 
-      const { email, password, name, surname, address, oib, schoolId, classId, studentData } = req.body;
+      const { email, name, surname, address, oib, schoolId, classId, studentData } = req.body;
+      
+      // Determination of password and role requirements
+      let finalPassword = req.body.password;
+      let requiresPasswordChange = true;
+
+      if (roles.includes('STUDENT')) {
+        finalPassword = 'yupu8Ev4';
+        requiresPasswordChange = false;
+      } else if (roles.includes('TEACHER') || roles.includes('ADMIN') || roles.includes('MAIN_ADMIN') || roles.includes('SCHOOL_ADMIN')) {
+        finalPassword = '1234';
+        requiresPasswordChange = true;
+      }
 
       console.log("CREATE USER DEBUG", { 
         email, 
         roles, 
         programs, 
-        hasClassId: !!classId 
+        hasClassId: !!classId,
+        finalPassword
       });
       
       const programId = studentData?.programId || req.body.programId;
@@ -141,13 +157,11 @@ async function startServer() {
       let userId;
       if (existingUser) {
         userId = existingUser.id;
-        if (password) {
-          await supabaseAdmin.auth.admin.updateUserById(userId, { password });
-        }
+        await supabaseAdmin.auth.admin.updateUserById(userId, { password: finalPassword });
       } else {
         const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email,
-          password,
+          password: finalPassword,
           email_confirm: true,
           user_metadata: { name, surname }
         });
@@ -161,15 +175,14 @@ async function startServer() {
         .upsert({
           auth_user_id: userId,
           email,
-          name: `${name} ${surname}`,
-          address,
-          oib,
+          name: name || (surname ? `${name} ${surname}` : name),
+          address: address || studentData?.address,
+          oib: oib || studentData?.oib,
           dob,
           pob,
           mobile,
-          // program_id: programId, // Temporarily bypassed because "programs" table does not exist
           is_first_login: true,
-          requires_password_change: true
+          requires_password_change: requiresPasswordChange
         }, { onConflict: 'auth_user_id' })
         .select()
         .single();
@@ -178,8 +191,6 @@ async function startServer() {
 
       // 3. School Roles
       if (schoolId && roles && Array.isArray(roles)) {
-        // Clear existing school roles for this user in this school if updating?
-        // For simplicity, just upsert
         for (const role of roles) {
           await supabaseAdmin
             .from('user_school_roles')
@@ -198,11 +209,12 @@ async function startServer() {
           student_id: profile.id,
           class_id: classId,
           school_year: '2024/2025',
+          program_id: programId,
           status: 'ACTIVE'
         }, { onConflict: 'student_id,class_id,school_year' });
       }
 
-      res.json({ userId, profileId: profile.id });
+      res.json({ success: true, userId, profileId: profile.id, password: finalPassword, email: email, message: "Korisnik uspješno kreiran" });
     } catch (err: any) {
       console.error("[ADMIN_CREATE] Error:", err);
       res.status(500).json({ error: err.message });
@@ -310,16 +322,17 @@ async function startServer() {
       // 1. Create School
       await supabaseAdmin.from('schools').upsert({ id: demoSchoolId, name: 'Demo škola', type: 'SECONDARY' });
 
-      /*
       // 1.1 Create Programs
       const demoPrograms = [
-        { id: 'prog-gym', school_id: demoSchoolId, name: 'Opća gimnazija', duration_years: 4 },
-        { id: 'prog-web', school_id: demoSchoolId, name: 'Web dizajner', duration_years: 4 },
+        { id: 'prog-kuhar', school_id: demoSchoolId, name: 'Kuhar/Kuharica', duration_years: 3, type: 'VOCATIONAL_3Y', status: 'ACTIVE' },
+        { id: 'prog-konobar', school_id: demoSchoolId, name: 'Konobar/Konobarica', duration_years: 3, type: 'VOCATIONAL_3Y', status: 'ACTIVE' },
+        { id: 'prog-slasticar', school_id: demoSchoolId, name: 'Slastičar/Slastičarka', duration_years: 3, type: 'VOCATIONAL_3Y', status: 'ACTIVE' },
+        { id: 'prog-teh-ugost', school_id: demoSchoolId, name: 'Tehničar za ugostiteljstvo', duration_years: 4, type: 'COMMERCIALIST_4Y', status: 'ACTIVE' },
+        { id: 'prog-turist-kom', school_id: demoSchoolId, name: 'Turističko-hotelijerski komercijalist', duration_years: 4, type: 'COMMERCIALIST_4Y', status: 'ACTIVE' },
       ];
       for (const prog of demoPrograms) {
         await supabaseAdmin.from('programs').upsert(prog);
       }
-      */
 
       // 2. Create Classes
       const demoClasses = [

@@ -45,6 +45,12 @@ export default function LoginPage() {
     // Clear force logout flag to allow this manual sign-in attempt
     localStorage.removeItem('forceLoggedOut');
     
+    // Virtual MFA simulation for staff
+    if (loginType === 'STAFF' && (!otp || otp.length !== 6)) {
+      setError('Molimo unesite ispravan 6-znamenkasti OTP kod iz autentifikatora.');
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -112,24 +118,16 @@ export default function LoginPage() {
           <div className="bg-yellow-50 border-b border-gray-300 p-4">
             <div className="flex items-center gap-2 mb-3">
               <Info size={14} className="text-yellow-600" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-yellow-700">Demo prijava</span>
+              <span className="text-[10px] font-bold uppercase tracking-widest text-yellow-700">Podaci za prijavu</span>
             </div>
             <div className="grid grid-cols-2 gap-x-6 gap-y-2">
               <div>
-                <p className="text-[9px] font-bold text-gray-400 uppercase leading-none mb-1">Administrator (STAFF)</p>
-                <code className="text-[11px] block text-gray-800">nikola.duric@eskole.me / 123456</code>
+                <p className="text-[9px] font-bold text-gray-400 uppercase leading-none mb-1">Zaposlenici (STAFF)</p>
+                <code className="text-[10px] block text-gray-800">Lozinka: 1234 + OTP (6 znamenki)</code>
               </div>
               <div>
-                <p className="text-[9px] font-bold text-gray-400 uppercase leading-none mb-1">Nastavnik (STAFF)</p>
-                <code className="text-[11px] block text-gray-800">marija.majdic@eskole.me / 123456</code>
-              </div>
-              <div>
-                <p className="text-[9px] font-bold text-gray-400 uppercase leading-none mb-1">Učenik (USER)</p>
-                <code className="text-[11px] block text-gray-800">ivica.malcic@eskole.me / Demo1234</code>
-              </div>
-              <div>
-                <p className="text-[9px] font-bold text-gray-400 uppercase leading-none mb-1">Roditelj (USER)</p>
-                <code className="text-[11px] block text-gray-800">matija.malcic@gmail.com / Demo1234</code>
+                <p className="text-[9px] font-bold text-gray-400 uppercase leading-none mb-1">Učenici (USER)</p>
+                <code className="text-[10px] block text-gray-800">Lozinka: yupu8Ev4</code>
               </div>
             </div>
           </div>
@@ -168,26 +166,8 @@ export default function LoginPage() {
                   <Shield size={16} className="text-red-500" />
                   <p className="text-[11px] font-bold uppercase tracking-tight">Greška pri prijavi</p>
                 </div>
-                <div className="bg-white p-2 border border-red-100 text-[11px] font-bold">
+                <div className="bg-white p-2 border border-red-100 text-[11px] font-bold overflow-hidden text-ellipsis">
                   {displayError}
-                </div>
-                <div className="flex gap-2">
-                   <button 
-                     type="button"
-                     onClick={() => { setError(''); window.location.reload(); }}
-                     className="text-[10px] bg-red-600 text-white px-3 py-1 font-bold uppercase border border-red-800"
-                   >
-                     Osvježi
-                   </button>
-                   {authContextError && (
-                     <button 
-                       type="button"
-                       onClick={async () => { await signOut(); window.location.reload(); }}
-                       className="text-[10px] bg-white text-red-600 border border-red-200 px-3 py-1 font-bold uppercase"
-                     >
-                       Odjava
-                     </button>
-                   )}
                 </div>
               </div>
             )}
@@ -228,14 +208,18 @@ export default function LoginPage() {
               </div>
             </div>
 
-            {loginType === 'STAFF' && showOtp && (
-              <div className="space-y-1">
-                <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest">OTP Sigurnosni kod</label>
+            {loginType === 'STAFF' && (
+              <div className="space-y-1 transition-all animate-in fade-in slide-in-from-top-2">
+                <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest flex justify-between">
+                  <span>Autentifikator Kod</span>
+                  <span className="text-[7px] text-[#005c8d] font-black italic">Obavezno za zaposlenike</span>
+                </label>
                 <input
                   type="text"
+                  required
                   maxLength={6}
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
                   className="block w-full px-3 py-3 border border-gray-300 text-sm outline-none focus:border-[#005c8d] focus:bg-blue-50/20 shadow-inner text-center font-black tracking-[0.5em]"
                   placeholder="000000"
                 />
