@@ -55,8 +55,17 @@ export default function ScheduleManagementPage() {
   }, [selectedClassId, shift]);
 
   const fetchClasses = async () => {
-    const { data } = await supabase.from('classes').select('*').eq('school_id', selectedSchoolId).order('name');
-    setClasses(data || []);
+    const { data } = await supabase
+      .from('active_classes_current_year')
+      .select('*')
+      .eq('school_id', selectedSchoolId)
+      .order('name');
+    
+    // Deduplicate by ID
+    const uniqueClasses = Array.from(
+      new Map((data || []).map(c => [c.id, c])).values()
+    );
+    setClasses(uniqueClasses);
   };
 
   const fetchClassData = async () => {

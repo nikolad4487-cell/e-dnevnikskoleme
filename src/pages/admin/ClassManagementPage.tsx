@@ -14,15 +14,11 @@ export default function ClassManagementPage() {
   const navigate = useNavigate();
   const [classes, setClasses] = useState<Class[]>([]);
   const setClassesUnified = (newClasses: Class[]) => {
-    setClasses(prev => {
-      const combined = [...newClasses];
-      const seen = new Set();
-      return combined.filter(c => {
-        if (seen.has(c.id)) return false;
-        seen.add(c.id);
-        return true;
-      });
-    });
+    // Deduplicate by ID and replace
+    const uniqueClasses = Array.from(
+      new Map(newClasses.map(c => [c.id, c])).values()
+    );
+    setClasses(uniqueClasses);
   };
   const [teachers, setTeachers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,9 +51,9 @@ export default function ClassManagementPage() {
     try {
       setLoading(true);
       
-      // Fetch Classes
+      // Fetch Classes from view to avoid current-year duplicates
       const { data: classData, error: classError } = await supabase
-        .from('classes')
+        .from('active_classes_current_year')
         .select(`
           *,
           homeroom:user_profiles!classes_homeroom_teacher_id_fkey(*),

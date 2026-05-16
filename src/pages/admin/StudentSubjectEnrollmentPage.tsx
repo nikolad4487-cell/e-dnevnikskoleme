@@ -50,11 +50,20 @@ export default function StudentSubjectEnrollmentPage() {
   }, [selectedClassId]);
 
   const fetchClasses = async () => {
-    const { data } = await supabase.from('classes').select('*').eq('school_id', selectedSchoolId).order('name');
-    setClasses(data || []);
-    if (data && data.length > 0) {
-      // Don't auto-select to avoid heavy fetch
-    }
+    // We use the view for current year classes to avoid legacy duplicates
+    setClasses([]); // Clear before fetch
+    const { data } = await supabase
+      .from('active_classes_current_year')
+      .select('*')
+      .eq('school_id', selectedSchoolId)
+      .order('name');
+      
+    // Deduplicate by ID just in case
+    const uniqueClasses = Array.from(
+      new Map((data || []).map(c => [c.id, c])).values()
+    );
+      
+    setClasses(uniqueClasses);
   };
 
   const fetchClassData = async () => {
@@ -195,7 +204,7 @@ export default function StudentSubjectEnrollmentPage() {
           >
             <option value="">Odaberi razred...</option>
             {classes.map(c => (
-              <option key={c.id} value={c.id}>{c.name} ({c.schoolYear})</option>
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
         </div>

@@ -41,15 +41,11 @@ export default function AdministrationPage() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [activeStudentClasses, setActiveStudentClasses] = useState<any[]>([]);
   const setClassesUnified = (newClasses: Class[]) => {
-    setClasses(prev => {
-      const combined = [...newClasses];
-      const seen = new Set();
-      return combined.filter(c => {
-        if (seen.has(c.id)) return false;
-        seen.add(c.id);
-        return true;
-      });
-    });
+    // Deduplicate by ID and replace existing state
+    const uniqueClasses = Array.from(
+      new Map(newClasses.map(c => [c.id, c])).values()
+    );
+    setClasses(uniqueClasses);
   };
   const [students, setStudents] = useState<User[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -758,16 +754,25 @@ export default function AdministrationPage() {
 
     checkAndCreateSchoolYear();
     
-    supabase.from('classes').select('*').eq('school_id', selectedSchoolId).then(({ data }) => data && setClassesUnified(mapList(data, mappers.class)));
+    supabase
+      .from('active_classes_current_year')
+      .select('*')
+      .eq('school_id', selectedSchoolId)
+      .then(({ data }) => data && setClassesUnified(mapList(data, mappers.class)));
     
     // Fetch active classes for students using the view
     supabase
-      .from('active_classes_for_students')
+      .from('active_classes_current_year')
       .select('id, name, grade_level, section, school_id')
       .eq('school_id', selectedSchoolId)
       .order('grade_level')
       .order('section')
-      .then(({ data }) => data && setActiveStudentClasses(data));
+      .then(({ data }) => {
+        if (data) {
+          const unique = Array.from(new Map(data.map(c => [c.id, c])).values());
+          setActiveStudentClasses(unique);
+        }
+      });
 
     supabase.from('subjects').select('*').eq('school_id', selectedSchoolId).then(({ data }) => data && setAllSubjects(mapList(data, mappers.subject)));
     supabase.from('user_school_roles').select('*').then(({ data }) => data && setAllUserSchoolRoles(mapList(data || [], mappers.userSchoolRole)));
@@ -921,17 +926,17 @@ export default function AdministrationPage() {
         setAllUsers(mapped);
       }
 
-      const { data: clsData } = await supabase.from('classes').select('*').eq('school_id', selectedSchoolId);
+      const { data: clsData } = await supabase.from('active_classes_current_year').select('*').eq('school_id', selectedSchoolId);
       if (clsData) setClassesUnified(mapList(clsData, mappers.class));
 
-      // Re-fetch active student classes
       const { data: activeClsData } = await supabase
-        .from('active_classes_for_students')
+        .from('active_classes_current_year')
         .select('id, name, grade_level, section, school_id')
-        .eq('school_id', selectedSchoolId)
-        .order('grade_level')
-        .order('section');
-      if (activeClsData) setActiveStudentClasses(activeClsData);
+        .eq('school_id', selectedSchoolId);
+      if (activeClsData) {
+        const unique = Array.from(new Map(activeClsData.map(c => [c.id, c])).values());
+        setActiveStudentClasses(unique);
+      }
 
       const { data: subAll } = await supabase.from('subjects').select('*').eq('school_id', selectedSchoolId);
       if (subAll) setAllSubjects(mapList(subAll, mappers.subject));
@@ -1356,7 +1361,10 @@ export default function AdministrationPage() {
         setClassCreationYearId(null);
         toast.success('Razredni odjel uspješno kreiran');
         // Fetch all classes again
-        const { data: updatedClasses } = await supabase.from('classes').select('*').eq('school_id', selectedSchoolId);
+        const { data: updatedClasses } = await supabase
+          .from('active_classes_current_year')
+          .select('*')
+          .eq('school_id', selectedSchoolId);
         if (updatedClasses) setClassesUnified(mapList(updatedClasses, mappers.class));
       }
     } catch (err: any) {
