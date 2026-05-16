@@ -6,12 +6,13 @@ import { mappers, mapList } from '../../lib/mappers';
 import { useAuth } from '../../contexts/AuthContext';
 import { Plus, Edit2, Trash2, GraduationCap, ChevronLeft, Search, BookOpen, Users, LayoutGrid } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 
 export default function ClassManagementPage() {
   const { selectedSchoolId } = useSelection();
   const { isMainAdmin, userSchoolRoles } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [classes, setClasses] = useState<Class[]>([]);
   const setClassesUnified = (newClasses: Class[]) => {
     // Deduplicate by ID and replace
@@ -46,6 +47,12 @@ export default function ClassManagementPage() {
     }
     fetchData();
   }, [selectedSchoolId]);
+
+  useEffect(() => {
+    if (searchParams.get('openModal') === 'true' && isAnyAdmin) {
+      setIsModalOpen(true);
+    }
+  }, [searchParams, isAnyAdmin]);
 
   const fetchData = async () => {
     try {
@@ -127,10 +134,28 @@ export default function ClassManagementPage() {
       return;
     }
     
+    let finalGradeLevel = Number(gradeLevel);
+    let finalSection = section.toUpperCase();
+    let finalName = name || `${finalGradeLevel}.${finalSection}`;
+
+    if (variant === 'REGULAR') {
+      finalGradeLevel = Number(gradeLevel);
+      finalSection = section.toUpperCase();
+      finalName = name || `${finalGradeLevel}.${finalSection}`;
+    } else if (variant === 'CONTINUATION_FREE') {
+      finalGradeLevel = 4;
+      finalSection = 'K';
+      finalName = '4.K';
+    } else if (variant === 'CONTINUATION_PAID') {
+      finalGradeLevel = 4;
+      finalSection = section.toUpperCase();
+      finalName = `4.${finalSection}`;
+    }
+
     const payload = {
-      name: name || `${gradeLevel}.${section}`,
-      grade_level: gradeLevel,
-      section,
+      name: finalName,
+      grade_level: finalGradeLevel,
+      section: finalSection,
       school_year: schoolYear,
       school_id: selectedSchoolId,
       status: 'ACTIVE',
@@ -139,6 +164,11 @@ export default function ClassManagementPage() {
       program_id: programId || null,
       variant: variant
     };
+
+    if (!homeroomTeacherId) {
+      toast.error('Odaberite razrednika.');
+      return;
+    }
 
     console.log(`${editingClass ? 'UPDATE' : 'CREATE'} CLASS CLICKED`, payload);
 
@@ -222,6 +252,23 @@ export default function ClassManagementPage() {
 
   const filteredClasses = classes.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const getAllowedProgramTypes = (variantVal: string) => {
+    if (variantVal === 'REGULAR') {
+      return ['VOCATIONAL_3Y', 'COMMERCIALIST_4Y'];
+    }
+    if (variantVal === 'CONTINUATION_FREE') {
+      return ['CONTINUATION_FREE'];
+    }
+    if (variantVal === 'CONTINUATION_PAID') {
+      return ['CONTINUATION_PAID'];
+    }
+    return [];
+  };
+
+  const filteredPrograms = programs.filter(program =>
+    getAllowedProgramTypes(variant).includes(program.type)
   );
 
   return (
@@ -363,9 +410,10 @@ export default function ClassManagementPage() {
                   <input 
                     type="number" 
                     min="1" max="8"
-                    value={gradeLevel}
+                    value={variant.startsWith('CONTINUATION') ? 4 : gradeLevel}
                     onChange={e => setGradeLevel(parseInt(e.target.value))}
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
+                    disabled={variant.startsWith('CONTINUATION')}
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                     required
                   />
                 </div>
@@ -373,9 +421,10 @@ export default function ClassManagementPage() {
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Odjel (npr. A)</label>
                   <input 
                     type="text" 
-                    value={section}
+                    value={variant === 'CONTINUATION_FREE' ? 'K' : section}
                     onChange={e => setSection(e.target.value)}
-                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
+                    disabled={variant === 'CONTINUATION_FREE'}
+                    className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                     required
                   />
                 </div>
@@ -385,10 +434,14 @@ export default function ClassManagementPage() {
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Naziv (opcionalno)</label>
                 <input 
                   type="text" 
-                  value={name}
+                  value={
+                    variant === 'CONTINUATION_FREE' ? '4.K' : 
+                    (variant === 'CONTINUATION_PAID' ? `4.${section.toUpperCase()}` : name)
+                  }
                   placeholder={`${gradeLevel}.${section}`}
                   onChange={e => setName(e.target.value)}
-                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
+                  disabled={variant.startsWith('CONTINUATION')}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none disabled:opacity-50 disabled:cursor-not-allowed"
                 />
               </div>
 
@@ -411,7 +464,7 @@ export default function ClassManagementPage() {
                   className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
                 >
                   <option value="">Nema programa...</option>
-                  {programs.map(p => (
+                  {filteredPrograms.map(p => (
                     <option key={p.id} value={p.id}>{p.name}</option>
                   ))}
                 </select>
@@ -421,20 +474,34 @@ export default function ClassManagementPage() {
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Varijanta nastave</label>
                 <select 
                   value={variant}
-                  onChange={e => setVariant(e.target.value)}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setVariant(val);
+                    setProgramId('');
+                    if (val === 'CONTINUATION_FREE') {
+                      setGradeLevel(4);
+                      setSection('K');
+                      setName('4.K');
+                    } else if (val === 'CONTINUATION_PAID') {
+                      setGradeLevel(4);
+                      setName(`4.${section.toUpperCase()}`);
+                    }
+                  }}
                   className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
                 >
                   <option value="REGULAR">Redovni program</option>
-                  <option value="CONTINUATION">Nastavak / Razlika</option>
+                  <option value="CONTINUATION_FREE">Nastavak / Razlika - besplatni</option>
+                  <option value="CONTINUATION_PAID">Nastavak / Razlika - plaćeni</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Razrednik</label>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Razrednik <span className="text-red-500">*</span></label>
                 <select 
                   value={homeroomTeacherId}
                   onChange={e => setHomeroomTeacherId(e.target.value)}
                   className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
+                  required
                 >
                   <option value="">Odaberi nastavnika...</option>
                   {teachers.map(t => (
@@ -450,8 +517,8 @@ export default function ClassManagementPage() {
                   onChange={e => setDeputyHomeroomTeacherId(e.target.value)}
                   className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
                 >
-                  <option value="">Odaberi nastavnika...</option>
-                  {teachers.map(t => (
+                  <option value="">Odaberi nastavnika (opcionalno)...</option>
+                  {teachers.filter(t => t.id !== homeroomTeacherId).map(t => (
                     <option key={t.id} value={t.id}>{(t as any).name}</option>
                   ))}
                 </select>

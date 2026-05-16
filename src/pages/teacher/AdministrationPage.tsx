@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -8,12 +8,12 @@ import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, T
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
 import { cn } from '../../lib/utils';
-import { useParams } from 'react-router-dom';
 import { mappers, mapList } from '../../lib/mappers';
 
 export default function AdministrationPage() {
   const navigate = useNavigate();
   const { classId: routeClassId } = useParams<{ classId: string }>();
+  const [searchParams] = useSearchParams();
   const { user, isMainAdmin, signOut, userSchoolRoles } = useAuth();
   const { selectedSchoolId, isArchived } = useSelection();
 
@@ -68,6 +68,7 @@ export default function AdministrationPage() {
     return result.sort((a,b) => (a.surname || '').localeCompare(b.surname || ''));
   }, [allUsers, allUserSchoolRolesState, selectedSchoolId]);
 
+
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
     id: string;
@@ -87,6 +88,30 @@ export default function AdministrationPage() {
   const [selectedYearId, setSelectedYearId] = useState<string>('');
   const [showModal, setShowModal] = useState<string | null>(null);
   const [editingClass, setEditingClass] = useState<Class | null>(null);
+
+  const selectedClassData = classes.find(c => c.id === selectedClassId);
+
+  const filteredPrograms = React.useMemo(() => {
+    if (!selectedClassData || !programs) return [];
+    console.log('CURRENT CLASS USED FOR STUDENTS:', selectedClassData);
+    console.log('ALL LOADED PROGRAMS:', programs);
+    
+    const filtered = programs.filter(program => {
+        if (selectedClassData.variant === 'REGULAR') {
+            return ['VOCATIONAL_3Y', 'COMMERCIALIST_4Y'].includes(program.type);
+        }
+        if (selectedClassData.variant === 'CONTINUATION_FREE') {
+            return program.type === 'CONTINUATION_FREE';
+        }
+        if (selectedClassData.variant === 'CONTINUATION_PAID') {
+            return program.type === 'CONTINUATION_PAID';
+        }
+        return true;
+     }).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+     
+     console.log('FILTERED PROGRAMS:', filtered);
+     return filtered;
+  }, [selectedClassData, programs]);
 
   const isSchoolAdminMode = location.pathname.startsWith('/admin/');
   const isClassAdminMode = !!effectiveClassId;
@@ -122,6 +147,17 @@ export default function AdministrationPage() {
     }
   }, [effectiveClassId]);
 
+  useEffect(() => {
+    const shouldOpenAddClass = searchParams.get('openAddClass') === 'true';
+    const yearId = searchParams.get('schoolYearId');
+    if (shouldOpenAddClass && yearId && isAnyAdmin) {
+      setActiveTab('SCHOOL_YEARS');
+      setClassCreationYearId(yearId);
+      setNewClassGrade(1);
+      setNewClassSection('A');
+    }
+  }, [searchParams, isAnyAdmin]);
+
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [rolloverLogs, setRolloverLogs] = useState<RolloverLog[]>([]);
   const [newYearForm, setNewYearForm] = useState({ name: '', startsAt: '', endsAt: '' });
@@ -154,8 +190,6 @@ export default function AdministrationPage() {
   const [overallNotes, setOverallNotes] = useState<any[]>([]);
   const [showEnrollmentModal, setShowEnrollmentModal] = useState<{ isOpen: boolean, subjectId: string | null }>({ isOpen: false, subjectId: null });
   
-  const selectedClassData = classes.find(c => c.id === selectedClassId);
-
   const [resetModal, setResetModal] = useState<{
     isOpen: boolean;
     user: User | null;
@@ -182,6 +216,8 @@ export default function AdministrationPage() {
   const [newProgramType, setNewProgramType] = useState<ProgramType>(PROGRAM_TYPES.VOCATIONAL_3Y);
   const [newContinuationType, setNewContinuationType] = useState<ContinuationType>(CONTINUATION_TYPES.NONE);
   const [classCreationYearId, setClassCreationYearId] = useState<string | null>(null);
+  const [newClassHomeroomTeacherId, setNewClassHomeroomTeacherId] = useState<string>('');
+  const [newClassDeputyTeacherId, setNewClassDeputyTeacherId] = useState<string>('');
   const [activeYearId, setActiveYearId] = useState<string | null>(null);
   const [studentForm, setStudentForm] = useState({ 
     name: '',
@@ -298,8 +334,8 @@ export default function AdministrationPage() {
 
   const handleCreateUnifiedUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newUserForm.name || !newUserForm.surname || !newUserForm.email) {
-      toast.error('Popunite osnovna polja (Ime, Prezime, E-mail)');
+    if (!newUserForm.name || !newUserForm.surname) {
+      toast.error('Popunite osnovna polja (Ime, Prezime)');
       return;
     }
 
@@ -311,7 +347,7 @@ export default function AdministrationPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: newUserForm.email.toLowerCase(),
+          email: newUserForm.email?.toLowerCase() || '',
           name: `${newUserForm.name} ${newUserForm.surname}`,
           globalRole: newUserForm.globalRole,
           schoolId: selectedSchoolId || (newUserForm.classId ? classes.find(c => c.id === newUserForm.classId)?.school_id : null),
@@ -336,7 +372,7 @@ export default function AdministrationPage() {
 
       if (isStaff && result.authenticatorSecret) {
         setCreatedStaffTotp({
-          email: newUserForm.email.toLowerCase(),
+          email: result.email || '',
           name: `${newUserForm.name} ${newUserForm.surname}`,
           secret: result.authenticatorSecret,
           qrCode: result.qrCode,
@@ -345,7 +381,7 @@ export default function AdministrationPage() {
         toast.success(`Korisnik ${newUserForm.name} kreiran. Postavite autentifikator.`);
       } else {
         toast.success(
-          `Korisnik uspješno kreiran!\nEmail: ${newUserForm.email.toLowerCase()}\nLozinka: ${generatedPassword}${isStudent ? '' : '\n\nKorisnik mora promijeniti lozinku pri prvoj prijavi.'}`,
+          `Korisnik uspješno kreiran!\nEmail: ${result.email || ''}\nLozinka: ${generatedPassword}${isStudent ? '' : '\n\nKorisnik mora promijeniti lozinku pri prvoj prijavi.'}`,
           { duration: 10000 }
         );
       }
@@ -848,8 +884,14 @@ export default function AdministrationPage() {
   }, [selectedSchoolId, isMainAdmin, isSchoolAdmin]);
 
   useEffect(() => {
-    setNewClassName(`${newClassGrade}.${newClassSection}`);
-  }, [newClassGrade, newClassSection]);
+    if (newClassVariant === 'CONTINUATION_FREE') {
+      setNewClassName(`4.K`);
+    } else if (newClassVariant === 'CONTINUATION_PAID') {
+      setNewClassName(`4.${newClassSection}`);
+    } else {
+      setNewClassName(`${newClassGrade}.${newClassSection}`);
+    }
+  }, [newClassGrade, newClassSection, newClassVariant]);
 
   const [allSubjects, setAllSubjects] = useState<any[]>([]);
   const [enrollments, setEnrollments] = useState<any[]>([]);
@@ -1383,24 +1425,46 @@ export default function AdministrationPage() {
       toast.error('Greška: Nedostaju podaci za kreiranje razreda');
       return;
     }
+    if (!newClassHomeroomTeacherId) {
+      toast.error('Odaberite razrednika.');
+      return;
+    }
     
-    console.log("CREATE CLASS CLICKED", { name: newClassName, yearId, selectedSchoolId });
+    let finalGradeLevel = newClassGrade;
+    let finalSection = newClassSection;
+    let finalName = newClassName;
+
+    if (newClassVariant === 'REGULAR') {
+      finalGradeLevel = Number(newClassGrade);
+      finalSection = newClassSection.toUpperCase();
+      finalName = `${finalGradeLevel}.${finalSection}`;
+    } else if (newClassVariant === 'CONTINUATION_FREE') {
+      finalGradeLevel = 4;
+      finalSection = 'K';
+      finalName = '4.K';
+    } else if (newClassVariant === 'CONTINUATION_PAID') {
+      finalGradeLevel = 4;
+      finalSection = newClassSection.toUpperCase();
+      finalName = `4.${finalSection}`;
+    }
+
+    console.log("CREATE CLASS CLICKED", { name: finalName, variant: newClassVariant, yearId, selectedSchoolId });
     
     setLoading(true);
     try {
       const schoolYear = schoolYears.find(y => y.id === yearId);
       const { data, error } = await supabase.from('classes').insert([{
-        name: newClassName,
+        name: finalName,
         school_id: selectedSchoolId,
         school_year_id: yearId,
         school_year: schoolYear?.name || '',
-        grade_level: newClassGrade,
-        section: newClassSection,
+        grade_level: finalGradeLevel,
+        section: finalSection,
         variant: newClassVariant,
         program_id: newUserForm.programId || null,
         status: 'ACTIVE',
-        homeroom_teacher_id: null,
-        deputy_teacher_id: null
+        homeroom_teacher_id: newClassHomeroomTeacherId,
+        deputy_teacher_id: newClassDeputyTeacherId || null
       }]).select();
 
       console.log("CREATE CLASS RESULT:", { data, error });
@@ -1444,10 +1508,15 @@ export default function AdministrationPage() {
     });
   };
 
+  const [isBulkAddingStudents, setIsBulkAddingStudents] = useState<boolean>(false);
+  const [bulkStudentText, setBulkStudentText] = useState<string>('');
+  const [bulkStudentClassId, setBulkStudentClassId] = useState<string>('');
+  const [bulkStudentProgramId, setBulkStudentProgramId] = useState<string>('');
+
   const handleCreateStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!studentForm.name || !selectedSchoolId || !studentForm.email) {
-      toast.error('Ime i prezime i email su obavezni');
+    if (!studentForm.name || !selectedSchoolId) {
+      toast.error('Ime i prezime i škola su obavezni');
       return;
     }
     setLoading(true);
@@ -1457,11 +1526,8 @@ export default function AdministrationPage() {
         // 1. Update user profile - ONLY profile fields
         const currentYear = schoolYears.find(y => y.id === activeYearId) || schoolYears.find(y => y.isActive);
         
-        const { error: profileError } = await supabase
-          .from('user_profiles')
-          .update({
+        const updatePayload: any = {
             name: studentForm.name,
-            email: studentForm.email.toLowerCase(),
             oib: studentForm.oib,
             dob: studentForm.dob || null,
             pob: studentForm.pob,
@@ -1470,7 +1536,14 @@ export default function AdministrationPage() {
             class_id: studentForm.classId || null,
             school_id: selectedSchoolId,
             school_year_id: currentYear?.id || null
-          })
+        };
+        if (studentForm.email) {
+            updatePayload.email = studentForm.email.toLowerCase();
+        }
+
+        const { error: profileError } = await supabase
+          .from('user_profiles')
+          .update(updatePayload)
           .eq('id', editingStudentId);
         
         if (profileError) throw profileError;
@@ -1494,11 +1567,14 @@ export default function AdministrationPage() {
         setEditingStudentId(null);
       } else {
         // CREATE NEW STUDENT
+        const classIdToUse = isClassAdminMode ? selectedClassId : studentForm.classId;
+        const programIdToUse = isClassAdminMode ? selectedClassData?.programId : studentForm.programId;
+
         const response = await fetch('/api/admin/create-user', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email: studentForm.email.toLowerCase(),
+            email: studentForm.email?.toLowerCase() || '',
             name: studentForm.name,
             globalRole: Role.STUDENT,
             schoolId: selectedSchoolId,
@@ -1508,8 +1584,8 @@ export default function AdministrationPage() {
               pob: studentForm.pob,
               mobile: studentForm.mobile,
               address: studentForm.address || '',
-              classId: studentForm.classId,
-              programId: studentForm.programId
+              classId: classIdToUse,
+              programId: programIdToUse
             }
           })
         });
@@ -1520,7 +1596,7 @@ export default function AdministrationPage() {
         const generatedPassword = result.password || "Nije vraćena";
 
         toast.success(
-          `Učenik registriran!\nEmail: ${studentForm.email.toLowerCase()}\nLozinka: ${generatedPassword}`,
+          `Učenik registriran!\nEmail: ${result.email || ''}\nLozinka: ${generatedPassword}`,
           { duration: 10000 }
         );
       }
@@ -1545,6 +1621,63 @@ export default function AdministrationPage() {
       toast.error(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBulkCreateStudents = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const classIdToUse = isClassAdminMode ? selectedClassId : bulkStudentClassId;
+    const programIdToUse = isClassAdminMode ? selectedClassData?.programId : bulkStudentProgramId;
+    
+    if (!classIdToUse || !programIdToUse || !bulkStudentText.trim()) {
+      toast.error('Razred, program i lista učenika su obavezni.');
+      return;
+    }
+
+    const lines = bulkStudentText.split('\n').filter(l => l.trim().length > 0);
+    const parsedStudents: {name: string, surname: string, email?: string}[] = [];
+
+    for (const line of lines) {
+        const parts = line.split(',');
+        const fullName = parts[0].trim();
+        const email = parts[1]?.trim();
+        
+        const names = fullName.split(' ');
+        const name = names[0];
+        const surname = names.slice(1).join(' ');
+
+        parsedStudents.push({ name, surname, email: email || undefined });
+    }
+
+    setLoading(true);
+    try {
+        const currentYear = schoolYears.find(y => y.id === activeYearId) || schoolYears.find(y => y.isActive);
+        const res = await fetch('/api/admin/bulk-create-users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                students: parsedStudents,
+                classId: classIdToUse,
+                schoolId: selectedSchoolId,
+                programId: programIdToUse,
+                schoolYearId: currentYear?.id
+            })
+        });
+        
+        const data = await res.json();
+        if (!data.success) {
+            throw new Error(data.error || 'Greška pri grupnom dodavanju');
+        }
+
+        toast.success(`Učenici uspješno dodani. Dodano ${parsedStudents.length} učenika.\nLozinka za učenike: yupu8Ev4`, { duration: 8000 });
+        setBulkStudentText('');
+        setIsBulkAddingStudents(false);
+        fetchData();
+    } catch (err: any) {
+        console.error(err);
+        toast.error('Dogodila se greška: ' + err.message);
+    } finally {
+        setLoading(false);
     }
   };
 
@@ -2341,7 +2474,7 @@ export default function AdministrationPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {classes
                     .filter(c => !selectedYearId || c.schoolYearId === selectedYearId)
-                    .sort((a,b) => a.name.localeCompare(b.name))
+                    .sort((a,b) => String(a.name || '').localeCompare(String(b.name || '')))
                     .map(cls => {
                     const year = schoolYears.find(y => y.id === cls.schoolYearId);
                     return (
@@ -2446,7 +2579,7 @@ export default function AdministrationPage() {
                               onChange={e => setClassDetailForm({...classDetailForm, program_id: e.target.value})}
                             >
                               <option value="">-- Odaberi --</option>
-                              {programs.filter(p => !selectedSchoolId || p.school_id === selectedSchoolId).map(p => (
+                              {filteredPrograms.map(p => (
                                 <option key={p.id} value={p.id}>{p.name}</option>
                               ))}
                             </select>
@@ -2469,8 +2602,8 @@ export default function AdministrationPage() {
                               value={classDetailForm.deputy_teacher_id}
                               onChange={e => setClassDetailForm({...classDetailForm, deputy_teacher_id: e.target.value})}
                             >
-                              <option value="">-- Odaberi --</option>
-                              {teachers.map(t => <option key={t.id} value={t.id}>{t.surname} {t.name}</option>)}
+                              <option value="">-- Nema (Opcionalno) --</option>
+                              {teachers.filter(t => t.id !== classDetailForm.homeroom_teacher_id).map(t => <option key={t.id} value={t.id}>{t.surname} {t.name}</option>)}
                             </select>
                          </div>
                          <button 
@@ -2489,7 +2622,7 @@ export default function AdministrationPage() {
                    <div className="bg-white border border-gray-300 p-4">
                       <div className="text-[10px] font-black text-gray-400 uppercase mb-4 border-b pb-1">Učenici ({students.filter(s => s.classId === selectedClassId).length})</div>
                       <div className="space-y-1 max-h-[400px] overflow-auto">
-                        {students.filter(s => s.classId === selectedClassId).sort((a,b) => a.surname.localeCompare(b.surname)).map((s, idx) => (
+                        {students.filter(s => s.classId === selectedClassId).sort((a,b) => (a.surname || '').localeCompare(b.surname || '')).map((s, idx) => (
                            <div key={s.id} className="flex items-center justify-between p-2 border border-gray-100 hover:bg-gray-50">
                               <span className="text-[11px] font-bold text-gray-600">{idx+1}. {s.surname} {s.name}</span>
                               <button onClick={() => { setSelectedStudentId(s.id); setActiveTab('STUDENT_DETAIL'); }} className="text-[#005c8d] hover:underline text-[9px] font-black uppercase">Prikaz</button>
@@ -2543,7 +2676,7 @@ export default function AdministrationPage() {
                                 required
                               >
                                 <option value="">-- Odaberi --</option>
-                                {allSubjects.sort((a,b) => a.name.localeCompare(b.name)).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                                {allSubjects.sort((a,b) => (a.name || '').localeCompare(b.name || '')).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                               </select>
                             </div>
                             <div className="space-y-1">
@@ -2555,7 +2688,7 @@ export default function AdministrationPage() {
                                 required
                               >
                                 <option value="">-- Odaberi --</option>
-                                {teachers.sort((a,b) => a.surname.localeCompare(b.surname)).map(t => <option key={t.id} value={t.id}>{t.surname} {t.name}</option>)}
+                                {teachers.sort((a,b) => (a.surname || '').localeCompare(b.surname || '')).map(t => <option key={t.id} value={t.id}>{t.surname} {t.name}</option>)}
                               </select>
                             </div>
                             <div className="flex gap-2">
@@ -2675,7 +2808,7 @@ export default function AdministrationPage() {
                            <button onClick={() => setShowEnrollmentModal({ isOpen: false, subjectId: null })}><X size={18}/></button>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                           {students.filter(s => s.classId === selectedClassId).sort((a,b) => a.surname.localeCompare(b.surname)).map(s => {
+                           {students.filter(s => s.classId === selectedClassId).sort((a,b) => (a.surname || '').localeCompare(b.surname || '')).map(s => {
                               const matches = classEnrollments.filter(e => e.studentId === s.id && e.subjectId === showEnrollmentModal.subjectId);
                               const enrollment = matches[0];
                               const isActive = enrollment?.status === 'ACTIVE';
@@ -2805,7 +2938,7 @@ export default function AdministrationPage() {
                            </td>
                         </tr>
                       )}
-                      {students.filter(s => s.classId === effectiveClassId).sort((a,b) => a.surname.localeCompare(b.surname)).map((student, idx) => {
+                      {students.filter(s => s.classId === effectiveClassId).sort((a,b) => (a.surname || '').localeCompare(b.surname || '')).map((student, idx) => {
                          const studentClassEnrollments = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
                          
                          const studentFinalGrades = finalGrades.filter(fg => fg.studentId === student.id);
@@ -2890,7 +3023,24 @@ export default function AdministrationPage() {
               
               <div className="bg-white border border-gray-300 p-4 text-[11px]">
                 <div className="text-[10px] font-black text-[#005c8d] uppercase mb-4 flex justify-between items-center">
-                  <span>{editingStudentId ? 'Uredi učenika' : 'Registriraj novog učenika'}</span>
+                  <div className="flex items-center gap-4">
+                    <span>{editingStudentId ? 'Uredi učenika' : (isBulkAddingStudents ? 'Grupno dodavanje učenika' : 'Registriraj novog učenika')}</span>
+                    {!editingStudentId && (
+                      <button 
+                        type="button"
+                        onClick={() => {
+                            console.log('CURRENT CLASS USED FOR STUDENTS:', selectedClassData);
+                            setIsBulkAddingStudents(!isBulkAddingStudents);
+                            if (!isBulkAddingStudents) {
+                                setBulkStudentClassId(studentForm.classId || (selectedClassId || ''));
+                            }
+                        }}
+                        className="bg-[#005c8d] text-white px-2 py-1.5 rounded-sm shadow-sm hover:bg-[#004a70]"
+                      >
+                        {isBulkAddingStudents ? 'Pojedinačno dodavanje' : 'Grupno dodavanje'}
+                      </button>
+                    )}
+                  </div>
                   {editingStudentId && (
                     <button 
                       onClick={() => {
@@ -2906,6 +3056,64 @@ export default function AdministrationPage() {
                     </button>
                   )}
                 </div>
+                {isBulkAddingStudents ? (
+                  <form onSubmit={handleBulkCreateStudents} className="space-y-4">
+                      {isClassAdminMode ? (
+                        <div className="bg-blue-50 p-3 border border-blue-200 text-blue-800 text-xs font-bold rounded">
+                           <div>Razred: {selectedClassData?.name || 'Nepoznat razred'}</div>
+                           <div>Program: {selectedClassData?.program?.name || (selectedClassData?.programId ? `Program ID: ${selectedClassData.programId}` : <span className="text-red-600">Razred nema dodijeljen program. Prvo dodijelite program u postavkama razreda.</span>)}</div>
+                        </div>
+                      ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                           <label className="text-[10px] font-black text-gray-400 uppercase">Razred <span className="text-red-500">*</span></label>
+                           <select 
+                             required
+                             value={bulkStudentClassId}
+                             onChange={e => setBulkStudentClassId(e.target.value)}
+                             className="w-full border border-gray-300 p-2 outline-none focus:border-[#005c8d] font-bold"
+                           >
+                             <option value="">Odaberi razred...</option>
+                             {activeStudentClasses.filter(c => c.school_id === selectedSchoolId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                           </select>
+                        </div>
+                        <div className="space-y-1">
+                           <label className="text-[10px] font-black text-gray-400 uppercase">Program obrazovanja <span className="text-red-500">*</span></label>
+                           <select 
+                             required
+                             value={bulkStudentProgramId}
+                             onChange={e => setBulkStudentProgramId(e.target.value)}
+                             className="w-full border border-gray-300 p-2 outline-none focus:border-[#005c8d] font-bold"
+                           >
+                             <option value="">Odaberi program...</option>
+                             {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                           </select>
+                        </div>
+                      </div>
+                      )}
+                      <div className="space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase">Lista učenika (1 u redak) <span className="text-red-500">*</span></label>
+                          <textarea 
+                             required
+                             value={bulkStudentText}
+                             onChange={e => setBulkStudentText(e.target.value)}
+                             rows={10}
+                             className="w-full border border-gray-300 p-3 outline-none focus:border-[#005c8d] font-medium font-mono text-sm"
+                             placeholder={`Marko Marković\nAna Anić, ana.anic@email.com\nIvan Ivić`}
+                          ></textarea>
+                          <p className="text-gray-400 text-xs italic mt-1">Lozinke se automatski postavljaju na "yupu8Ev4". Unesite učenike u formatu: Ime Prezime, opcionalni@email.com</p>
+                      </div>
+                      <div className="flex justify-end">
+                          <button 
+                             type="submit"
+                             disabled={loading}
+                             className="bg-green-600 text-white px-6 py-2 border border-green-700 font-black text-[10px] uppercase hover:bg-green-700 disabled:opacity-50"
+                          >
+                            Dodaj učenike
+                          </button>
+                      </div>
+                  </form>
+                ) : (
                 <form onSubmit={handleCreateStudent} className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 gap-3">
                   <input 
                     type="text" required 
@@ -2915,10 +3123,10 @@ export default function AdministrationPage() {
                     className="border border-gray-300 p-2 outline-none focus:border-[#005c8d]" 
                   />
                   <input 
-                    type="email" required 
+                    type="email"
                     value={studentForm.email}
                     onChange={e => setStudentForm({...studentForm, email: e.target.value})}
-                    placeholder="E-mail"
+                    placeholder="E-mail (opcionalno)"
                     className="border border-gray-300 p-2 outline-none focus:border-[#005c8d]" 
                   />
                   <input 
@@ -2966,22 +3174,26 @@ export default function AdministrationPage() {
                     <option value="">Škola...</option>
                     {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
-                  <select 
-                    value={studentForm.programId}
-                    onChange={e => setStudentForm({...studentForm, programId: e.target.value})}
-                    className="border border-gray-300 p-2 outline-none focus:border-[#005c8d] font-bold"
-                  >
-                    <option value="">Program...</option>
-                    {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                  <select 
-                    value={studentForm.classId}
-                    onChange={e => setStudentForm({...studentForm, classId: e.target.value})}
-                    className="border border-gray-300 p-2 outline-none focus:border-[#005c8d] font-bold"
-                  >
-                    <option value="">Razred...</option>
-                    {activeStudentClasses.filter(c => c.school_id === (selectedSchoolId || studentForm.schoolId)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
+                  {!isClassAdminMode && (
+                    <>
+                      <select 
+                        value={studentForm.programId}
+                        onChange={e => setStudentForm({...studentForm, programId: e.target.value})}
+                        className="border border-gray-300 p-2 outline-none focus:border-[#005c8d] font-bold"
+                      >
+                        <option value="">Program...</option>
+                        {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                      <select 
+                        value={studentForm.classId}
+                        onChange={e => setStudentForm({...studentForm, classId: e.target.value})}
+                        className="border border-gray-300 p-2 outline-none focus:border-[#005c8d] font-bold"
+                      >
+                        <option value="">Razred...</option>
+                        {activeStudentClasses.filter(c => c.school_id === (selectedSchoolId || studentForm.schoolId)).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </>
+                  )}
                   {editingStudentId && (
                     <select 
                       value={studentForm.status}
@@ -2999,6 +3211,7 @@ export default function AdministrationPage() {
                     {editingStudentId ? 'Spremi promjene' : 'Registriraj'}
                   </button>
                 </form>
+                )}
               </div>
 
               <div className="bg-white border border-gray-300">
@@ -3657,7 +3870,7 @@ export default function AdministrationPage() {
               {/* Hierarchy Display */}
               <div className="space-y-4">
                 <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest border-b pb-1 mb-2">Popis školskih godina i razreda</div>
-                {schoolYears.sort((a,b) => b.name.localeCompare(a.name)).map(y => (
+                {schoolYears.sort((a,b) => String(b.name || '').localeCompare(String(a.name || ''))).map(y => (
                   <div key={y.id} className={cn("border bg-white shadow-sm overflow-hidden", y.isActive ? "border-[#005c8d]" : "border-gray-200")}>
                     <div className={cn("p-4 flex items-center justify-between", y.isActive ? "bg-blue-50/50" : "bg-gray-50/50")}>
                       <div className="flex items-center gap-3">
@@ -3712,7 +3925,7 @@ export default function AdministrationPage() {
                   <div className="p-4 border-t border-gray-100 bg-gray-50/30">
                     <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Razredni odjeli ({classes.filter(c => c.schoolYearId === y.id).length})</div>
                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                       {classes.filter(c => c.schoolYearId === y.id).sort((a,b) => a.name.localeCompare(b.name)).map(c => (
+                       {classes.filter(c => c.schoolYearId === y.id).sort((a,b) => String(a.name || '').localeCompare(String(b.name || ''))).map(c => (
                          <div key={c.id} className="group relative">
                             <button 
                               onClick={() => openClassDetail(c.id)}
@@ -3743,40 +3956,55 @@ export default function AdministrationPage() {
                          </div>
                          <button onClick={() => setClassCreationYearId(null)} className="text-gray-400 hover:text-gray-600"><X size={14}/></button>
                       </div>
-                      <form onSubmit={handleCreateClass} className="grid grid-cols-4 lg:grid-cols-6 gap-3 items-end">
+                      <form onSubmit={handleCreateClass} className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 items-end">
                         <div className="space-y-1">
                           <label className="text-[8px] font-black text-gray-400 uppercase">Razred (1-8)</label>
                           <input 
                             type="number" min="1" max="8"
-                            value={newClassGrade}
+                            value={newClassVariant.startsWith('CONTINUATION') ? 4 : newClassGrade}
                             onChange={e => setNewClassGrade(parseInt(e.target.value) || 1)}
-                            className="w-full border border-gray-200 p-1.5 text-xs font-bold outline-none focus:border-[#005c8d]"
+                            disabled={newClassVariant.startsWith('CONTINUATION')}
+                            className="w-full border border-gray-200 p-1.5 text-xs font-bold outline-none focus:border-[#005c8d] disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         </div>
                         <div className="space-y-1 text-center">
                           <label className="text-[8px] font-black text-gray-400 uppercase">Oznaka (A, B...)</label>
                           <input 
                             type="text" maxLength={1}
-                            value={newClassSection}
+                            value={newClassVariant === 'CONTINUATION_FREE' ? 'K' : newClassSection}
                             onChange={e => setNewClassSection(e.target.value.toUpperCase())}
-                            className="w-full border border-gray-200 p-1.5 text-xs font-bold outline-none focus:border-[#005c8d] text-center"
+                            disabled={newClassVariant === 'CONTINUATION_FREE'}
+                            className="w-full border border-gray-200 p-1.5 text-xs font-bold outline-none focus:border-[#005c8d] text-center disabled:opacity-50 disabled:cursor-not-allowed"
                           />
                         </div>
-                        <div className="space-y-1 lg:col-span-1">
+                        <div className="space-y-1">
                           <label className="text-[8px] font-black text-gray-400 uppercase">Naziv (automatski)</label>
                           <div className="w-full border border-gray-100 bg-gray-50/50 p-1.5 text-xs font-black text-gray-400 select-none">
-                            {newClassGrade}.{newClassSection}
+                            {newClassName}
                           </div>
                         </div>
                         <div className="space-y-1">
                           <label className="text-[8px] font-black text-gray-400 uppercase">Varijanta</label>
                           <select 
                             value={newClassVariant}
-                            onChange={e => setNewClassVariant(e.target.value as ClassVariant)}
+                            onChange={e => {
+                              const val = e.target.value as ClassVariant;
+                              setNewClassVariant(val);
+                              setNewUserForm(prev => ({ ...prev, programId: '' }));
+                              if (val === 'CONTINUATION_FREE') {
+                                setNewClassGrade(4);
+                                setNewClassSection('K');
+                              } else if (val === 'CONTINUATION_PAID') {
+                                setNewClassGrade(4);
+                              }
+                              console.log('VARIANT CHANGED:', val);
+                              console.log('CLASS FORM:', { grade: newClassGrade, section: newClassSection, name: newClassName });
+                            }}
                             className="w-full border border-gray-200 p-1.5 text-xs font-bold outline-none focus:border-[#005c8d]"
                           >
                             <option value="REGULAR">Redovni program</option>
-                            <option value="CONTINUATION">Nastavak / Razlika</option>
+                            <option value="CONTINUATION_FREE">Nastavak / Razlika - besplatni</option>
+                            <option value="CONTINUATION_PAID">Nastavak / Razlika - plaćeni</option>
                           </select>
                         </div>
                         <div className="space-y-1">
@@ -3787,12 +4015,44 @@ export default function AdministrationPage() {
                             className="w-full border border-gray-200 p-1.5 text-xs font-bold outline-none focus:border-[#005c8d]"
                           >
                             <option value="">-- Odaberi --</option>
-                            {programs.map(p => (
+                            {programs.filter(program => {
+                               if (newClassVariant === 'REGULAR') return ['VOCATIONAL_3Y', 'COMMERCIALIST_4Y'].includes(program.type);
+                               if (newClassVariant === 'CONTINUATION_FREE') return program.type === 'CONTINUATION_FREE';
+                               if (newClassVariant === 'CONTINUATION_PAID') return program.type === 'CONTINUATION_PAID';
+                               return false;
+                             }).map(p => (
                               <option key={p.id} value={p.id}>{p.name}</option>
                             ))}
                           </select>
                         </div>
-                        <div className="flex gap-2 lg:col-span-1">
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black text-gray-400 uppercase">Razrednik <span className="text-red-500">*</span></label>
+                          <select 
+                            value={newClassHomeroomTeacherId}
+                            onChange={e => setNewClassHomeroomTeacherId(e.target.value)}
+                            className="w-full border border-gray-200 p-1.5 text-xs font-bold outline-none focus:border-[#005c8d]"
+                            required
+                          >
+                            <option value="">-- Odaberi --</option>
+                            {teachers.map(t => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[8px] font-black text-gray-400 uppercase">Zamjenik</label>
+                          <select 
+                            value={newClassDeputyTeacherId}
+                            onChange={e => setNewClassDeputyTeacherId(e.target.value)}
+                            className="w-full border border-gray-200 p-1.5 text-xs font-bold outline-none focus:border-[#005c8d]"
+                          >
+                            <option value="">-- Nema (Opcionalno) --</option>
+                            {teachers.filter(t => t.id !== newClassHomeroomTeacherId).map(t => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="flex gap-2">
                           <button 
                             type="submit"
                             disabled={loading}
@@ -4256,7 +4516,7 @@ export default function AdministrationPage() {
                   <div className="text-[10px] font-black text-gray-400 uppercase mb-2 border-b pb-1">Predmeti učenika</div>
                   <div className="text-[10px] text-gray-400 italic mb-4">Upravljanje predmetima koje učenik pohađa ili je iz njih izuzet:</div>
                   <div className="divide-y divide-gray-100">
-                    {allSubjects.sort((a,b) => a.name.localeCompare(b.name)).map(sub => {
+                    {allSubjects.sort((a,b) => String(a.name || '').localeCompare(String(b.name || ''))).map(sub => {
                       const enrollment = enrollments.find(e => e.subjectId === sub.id);
                       const status = enrollment?.status || 'NOT_ASSIGNED';
                       return (
@@ -4349,7 +4609,7 @@ export default function AdministrationPage() {
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <input 
-                          type="email" required placeholder="E-mail"
+                          type="email" placeholder="E-mail (opcionalno)"
                           value={newUserForm.email}
                           onChange={e => setNewUserForm({...newUserForm, email: e.target.value})}
                           className="border border-gray-300 p-2 text-xs outline-none focus:border-[#005c8d]"
@@ -4423,7 +4683,7 @@ export default function AdministrationPage() {
                               // School admin filters users of their school
                               return allUserSchoolRolesState.some(r => r.userId === u.id && r.schoolId === selectedSchoolId);
                             })
-                            .sort((a,b) => a.surname.localeCompare(b.surname))
+                            .sort((a,b) => String(a.surname || '').localeCompare(String(b.surname || '')))
                             .map(u => (
                             <tr key={u.id} className={cn("hover:bg-blue-50/50", selectedUserForRole === u.id && "bg-blue-50")}>
                               <td className="px-3 py-2 border-r">

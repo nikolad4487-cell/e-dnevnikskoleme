@@ -7,7 +7,7 @@ import { Shield, Key, CheckCircle, ArrowRight } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export default function AuthenticatorSetupPage() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, reloadUserData } = useAuth();
   const [step, setStep] = useState(1);
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -50,6 +50,8 @@ export default function AuthenticatorSetupPage() {
 
       if (error) throw error;
 
+      await reloadUserData();
+      
       toast.success('Microsoft Authenticator uspješno postavljen!');
       setStep(3);
     } catch (err: any) {

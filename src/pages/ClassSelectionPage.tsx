@@ -194,6 +194,8 @@ export default function ClassSelectionPage() {
             school_year_id,
             school_year,
             homeroom_teacher_id,
+            deputy_teacher_id,
+            program_type,
             homeroom:user_profiles!classes_homeroom_teacher_id_fkey(name),
             deputy:user_profiles!classes_deputy_teacher_id_fkey(name)
           )
@@ -251,38 +253,13 @@ export default function ClassSelectionPage() {
 
   const selectedYear = schoolYears.find(y => y.id === selectedYearId);
 
-  const handleCreateClass = async () => {
-    if (!isSchoolAdmin || !selectedSchoolId || !selectedYear) return;
-    
-    const name = prompt('Unesite naziv razreda (npr. 1.A):');
-    if (!name) return;
-
-    try {
-      // Basic 1.A parsing
-      const grade = parseInt(name.split('.')[0]) || 1;
-      const section = name.split('.').pop() || 'A';
-
-      const { data, error } = await supabase
-        .from('classes')
-        .insert({
-          school_id: selectedSchoolId,
-          school_year_id: selectedYear.id,
-          school_year: selectedYear.name,
-          name: name,
-          grade_level: grade,
-          section: section,
-          status: 'ACTIVE'
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      toast.success(`Razred ${name} uspješno kreiran.`);
-      await fetchStaffClasses();
-    } catch (error: any) {
-      console.error('Error creating class:', error);
-      toast.error(error.message || 'Greška pri kreiranju razreda');
+  const handleCreateClass = () => {
+    if (!isSchoolAdmin || !selectedSchoolId || !selectedYear) {
+      if (!selectedYear) toast.error('Odaberite školsku godinu.');
+      return;
     }
+    console.log('ADD CLASS CLICKED');
+    navigate(`/admin/school-dashboard?openAddClass=true&schoolYearId=${selectedYear.id}`);
   };
 
   const handleSelect = (cls: ClassWithDetails) => {

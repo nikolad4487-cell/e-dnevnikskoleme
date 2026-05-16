@@ -73,6 +73,14 @@ export default function LoginPage() {
         })
       });
 
+      const contentType = response.headers.get('content-type') || '';
+      
+      if (!contentType.includes('application/json')) {
+        const text = await response.text();
+        console.error('LOGIN NON-JSON RESPONSE:', text);
+        throw new Error('Prijava trenutno nije moguća (komunikacija sa serverom nije uspjela). Molimo pokušajte ponovno.');
+      }
+
       const result = await response.json();
 
       if (!response.ok) {

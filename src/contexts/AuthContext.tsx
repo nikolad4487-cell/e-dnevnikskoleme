@@ -12,6 +12,7 @@ interface AuthContextType {
   loading: boolean;
   error: string | null;
   signOut: () => Promise<void>;
+  reloadUserData: () => Promise<void>;
   isMainAdmin: boolean;
   isStaff: boolean;
   isTeacher: boolean;
@@ -339,6 +340,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .join(', ');
   }, [allRoles]);
 
+  const reloadUserDataWrapper = async () => {
+    if (supabaseUser) {
+      await loadUserData(supabaseUser.id);
+    }
+  };
+
   const value = React.useMemo(() => ({
     user,
     supabaseUser,
@@ -347,6 +354,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loading,
     error,
     signOut,
+    reloadUserData: reloadUserDataWrapper,
     isMainAdmin,
     isStaff,
     isTeacher,

@@ -113,6 +113,138 @@ async function startServer() {
     }
   });
 
+function normalizeForEmail(str: string): string {
+    return (str || '').toLowerCase()
+        .replace(/č/g, 'c')
+        .replace(/ć/g, 'c')
+        .replace(/š/g, 's')
+        .replace(/ž/g, 'z')
+        .replace(/đ/g, 'd')
+        .replace(/[^a-z0-9\s-]/g, '')
+        .trim();
+}
+
+function generateUniqueEmail(firstName: string, lastName: string, existingEmails: Set<string>): string {
+    const normFirst = normalizeForEmail(firstName).replace(/\s+/g, '');
+    const normLast = normalizeForEmail(lastName).replace(/\s+/g, '-');
+    const baseAddress = normLast ? `${normFirst}.${normLast}` : normFirst;
+    const baseEmail = `${baseAddress}@eskole.me`;
+
+    if (!existingEmails.has(baseEmail)) {
+        return baseEmail;
+    }
+
+    let counter = 2;
+    while (true) {
+        const email = `${baseAddress}${counter}@eskole.me`;
+        if (!existingEmails.has(email)) {
+            return email;
+        }
+        counter++;
+    }
+}
+
+  // Admin bulk create users endpoint
+  app.post("/api/admin/bulk-create-users", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      
+      const { students, classId, schoolId, schoolYearId, programId } = req.body;
+      if (!students || !Array.isArray(students) || students.length === 0) {
+        return res.status(400).json({ error: "Lista učenika je prazna." });
+      }
+
+      // Fetch all existing emails to avoid collisions
+      const { data: existingUserList } = await supabaseAdmin.auth.admin.listUsers();
+      const existingEmails = new Set<string>();
+      existingUserList?.users?.forEach((u: any) => {
+        if (u.email) existingEmails.add(u.email);
+      });
+      // Also check user_profiles just in case
+      const { data: existingProfiles } = await supabaseAdmin.from('user_profiles').select('email');
+      existingProfiles?.forEach((p: any) => {
+        if (p.email) existingEmails.add(p.email);
+      });
+
+      const results = [];
+      const password = 'yupu8Ev4';
+
+      for (const student of students) {
+         let email = student.email;
+         if (!email) {
+            email = generateUniqueEmail(student.name, student.surname, existingEmails);
+         } else if (existingEmails.has(email.toLowerCase())) {
+            email = generateUniqueEmail(student.name, student.surname, existingEmails);
+         }
+         existingEmails.add(email.toLowerCase());
+
+         const fullName = student.surname ? `${student.name} ${student.surname}` : student.name;
+
+         const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            password,
+            email_confirm: true,
+            user_metadata: { name: student.name, surname: student.surname }
+         });
+
+         if (authError || !authUser?.user) {
+            results.push({ ...student, success: false, error: authError?.message || 'Greška pri kreiranju zabilježena auth' });
+            continue;
+         }
+
+         const userId = authUser.user.id;
+
+         const { data: profile, error: profileError } = await supabaseAdmin
+           .from('user_profiles')
+           .upsert({
+              auth_user_id: userId,
+              email,
+              name: fullName,
+              is_first_login: true,
+              requires_password_change: false,
+              requires_authenticator_setup: false,
+              password_type: 'standard',
+              program_id: programId || null
+           }, { onConflict: 'auth_user_id' })
+           .select()
+           .single();
+
+         if (profileError) {
+             // Rollback user if profile fails (ideally we would, but ignoring for now or log error)
+            results.push({ ...student, success: false, error: profileError.message });
+            continue;
+         }
+
+         if (schoolId) {
+            await supabaseAdmin.from('user_school_roles').upsert({
+               user_id: profile.id,
+               school_id: schoolId,
+               role: 'STUDENT',
+               status: 'ACTIVE'
+            }, { onConflict: 'user_id,school_id,role' });
+         }
+
+         if (classId) {
+             await supabaseAdmin.from('student_class_enrollments').upsert({
+                 student_id: profile.id,
+                 class_id: classId,
+                 school_year_id: schoolYearId || null,
+                 school_year: '2024/2025',
+                 program_id: programId || null,
+                 status: 'ACTIVE'
+             }, { onConflict: 'student_id,class_id,school_year' });
+         }
+
+         results.push({ ...student, success: true, email, password });
+      }
+
+      res.json({ success: true, results, message: "Korisnici obrađeni." });
+    } catch (err: any) {
+      console.error("[ADMIN_BULK_CREATE]", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Admin create user endpoint
   app.post("/api/admin/create-user", async (req, res) => {
     try {
@@ -128,8 +260,22 @@ async function startServer() {
 
       const programs = Array.isArray(req.body.programs) ? req.body.programs : (Array.isArray(req.body.selectedPrograms) ? req.body.selectedPrograms : []);
 
-      const { email, name, surname, address, oib, schoolId, classId, studentData } = req.body;
+      let { email, name, surname, address, oib, schoolId, classId, studentData } = req.body;
       
+      const { data: existingUserList } = await supabaseAdmin.auth.admin.listUsers();
+      
+      if (!email) {
+          const existingEmails = new Set<string>();
+          existingUserList?.users?.forEach((u: any) => {
+            if (u.email) existingEmails.add(u.email);
+          });
+          const { data: existingProfiles } = await supabaseAdmin.from('user_profiles').select('email');
+          existingProfiles?.forEach((p: any) => {
+            if (p.email) existingEmails.add(p.email);
+          });
+          email = generateUniqueEmail(name || '', surname || '', existingEmails);
+      }
+
       // Determination of password and role requirements
       let finalPassword = req.body.password;
       let requiresPasswordChange = true;
@@ -160,7 +306,6 @@ async function startServer() {
       const mobile = studentData?.mobile || req.body.mobile;
 
       // 1. Auth User
-      const { data: existingUserList } = await supabaseAdmin.auth.admin.listUsers();
       const existingUser = existingUserList?.users?.find((u: any) => u.email === email);
       
       let userId;
@@ -192,6 +337,7 @@ async function startServer() {
           mobile,
           is_first_login: true,
           requires_password_change: requiresPasswordChange,
+          password_type: isStaff ? 'staff_with_authenticator' : 'standard',
           authenticator_secret: authenticatorSecret,
           requires_authenticator_setup: requiresAuthenticatorSetup
         }, { onConflict: 'auth_user_id' })
