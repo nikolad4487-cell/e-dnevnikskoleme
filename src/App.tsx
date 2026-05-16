@@ -80,6 +80,11 @@ const DashboardRedirect = () => {
   }
 
   if (!user) return <Navigate to="/login" replace />;
+  
+  if (user?.requiresAuthenticatorSetup && isStaff) {
+    if (location.pathname === '/auth/setup-authenticator') return null;
+    return <Navigate to="/auth/setup-authenticator" replace />;
+  }
 
   const roleNames = userSchoolRoles.map(r => r.role);
   const hasAdminRole = roleNames.includes(Role.MAIN_ADMIN) || roleNames.includes(Role.ADMIN) || roleNames.includes(Role.SCHOOL_ADMIN);

@@ -4,6 +4,8 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import { authenticator } from "otplib";
+import QRCode from "qrcode";
 
 dotenv.config();
 
@@ -121,6 +123,9 @@ async function startServer() {
       const globalRole = req.body.globalRole;
       if (globalRole && !roles.includes(globalRole)) roles.push(globalRole);
 
+      const isStaff = roles.includes('TEACHER') || roles.includes('ADMIN') || roles.includes('MAIN_ADMIN') || roles.includes('SCHOOL_ADMIN');
+      const isStudent = roles.includes('STUDENT');
+
       const programs = Array.isArray(req.body.programs) ? req.body.programs : (Array.isArray(req.body.selectedPrograms) ? req.body.selectedPrograms : []);
 
       const { email, name, surname, address, oib, schoolId, classId, studentData } = req.body;
@@ -128,13 +133,17 @@ async function startServer() {
       // Determination of password and role requirements
       let finalPassword = req.body.password;
       let requiresPasswordChange = true;
+      let authenticatorSecret = null;
+      let requiresAuthenticatorSetup = false;
 
-      if (roles.includes('STUDENT')) {
+      if (isStudent) {
         finalPassword = 'yupu8Ev4';
         requiresPasswordChange = false;
-      } else if (roles.includes('TEACHER') || roles.includes('ADMIN') || roles.includes('MAIN_ADMIN') || roles.includes('SCHOOL_ADMIN')) {
+      } else if (isStaff) {
         finalPassword = '1234';
         requiresPasswordChange = true;
+        authenticatorSecret = authenticator.generateSecret();
+        requiresAuthenticatorSetup = true;
       }
 
       console.log("CREATE USER DEBUG", { 
@@ -182,12 +191,21 @@ async function startServer() {
           pob,
           mobile,
           is_first_login: true,
-          requires_password_change: requiresPasswordChange
+          requires_password_change: requiresPasswordChange,
+          authenticator_secret: authenticatorSecret,
+          requires_authenticator_setup: requiresAuthenticatorSetup
         }, { onConflict: 'auth_user_id' })
         .select()
         .single();
       
       if (profileError) throw profileError;
+
+      // Generate QR Code if secret was created
+      let qrCodeDataURL = null;
+      if (authenticatorSecret) {
+        const otpauthUrl = `otpauth://totp/e-Dnevnik:${email}?secret=${authenticatorSecret}&issuer=e-Dnevnik`;
+        qrCodeDataURL = await QRCode.toDataURL(otpauthUrl);
+      }
 
       // 3. School Roles
       if (schoolId && roles && Array.isArray(roles)) {
@@ -214,7 +232,16 @@ async function startServer() {
         }, { onConflict: 'student_id,class_id,school_year' });
       }
 
-      res.json({ success: true, userId, profileId: profile.id, password: finalPassword, email: email, message: "Korisnik uspješno kreiran" });
+      res.json({ 
+        success: true, 
+        userId, 
+        profileId: profile.id, 
+        password: finalPassword, 
+        email: email, 
+        message: "Korisnik uspješno kreiran",
+        authenticatorSecret: authenticatorSecret,
+        qrCode: qrCodeDataURL
+      });
     } catch (err: any) {
       console.error("[ADMIN_CREATE] Error:", err);
       res.status(500).json({ error: err.message });
@@ -355,13 +382,13 @@ async function startServer() {
       }
 
       const demoUsers = [
-        { email: 'nikola.duric@eskole.me', password: '123456', name: 'Nikola', surname: 'Đurić', roles: ['MAIN_ADMIN', 'TEACHER'] },
-        { email: 'nikolad4487@gmail.com', password: '123456', name: 'Nikola', surname: 'Dev', roles: ['MAIN_ADMIN', 'TEACHER'] },
-        { email: 'marija.majdic@eskole.me', password: '123456', name: 'Marija', surname: 'Majdić', roles: ['TEACHER'] },
-        { email: 'ivan.horvat@eskole.me', password: '123456', name: 'Ivan', surname: 'Horvat', roles: ['TEACHER', 'HOMEROOM'], homeroomClassId: 'class-1a' },
-        { email: 'ana.kovac@eskole.me', password: '123456', name: 'Ana', surname: 'Kovač', roles: ['TEACHER', 'DEPUTY'], deputyClassId: 'class-1a' },
-        { email: 'ivica.malcic@eskole.me', password: 'Demo1234', name: 'Ivica', surname: 'Malčić', roles: ['STUDENT'], studentClassId: 'class-1a' },
-        { email: 'matija.malcic@gmail.com', password: 'Demo1234', name: 'Matija', surname: 'Malčić', roles: ['PARENT'] },
+        { email: 'nikola.duric@eskole.me', password: '1234', name: 'Nikola', surname: 'Đurić', roles: ['MAIN_ADMIN', 'TEACHER'] },
+        { email: 'nikolad4487@gmail.com', password: '1234', name: 'Nikola', surname: 'Dev', roles: ['MAIN_ADMIN', 'TEACHER'] },
+        { email: 'marija.majdic@eskole.me', password: '1234', name: 'Marija', surname: 'Majdić', roles: ['TEACHER'] },
+        { email: 'ivan.horvat@eskole.me', password: '1234', name: 'Ivan', surname: 'Horvat', roles: ['TEACHER', 'HOMEROOM'], homeroomClassId: 'class-1a' },
+        { email: 'ana.kovac@eskole.me', password: '1234', name: 'Ana', surname: 'Kovač', roles: ['TEACHER', 'DEPUTY'], deputyClassId: 'class-1a' },
+        { email: 'ivica.malcic@eskole.me', password: 'yupu8Ev4', name: 'Ivica', surname: 'Malčić', roles: ['STUDENT'], studentClassId: 'class-1a' },
+        { email: 'matija.malcic@gmail.com', password: 'yupu8Ev4', name: 'Matija', surname: 'Malčić', roles: ['PARENT'] },
       ];
 
       // Fetch existing users
@@ -391,6 +418,22 @@ async function startServer() {
           authUserId = newUser.user.id;
         }
 
+        const isStaff = u.roles.some(r => ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN'].includes(r));
+        const isMainAdmin = u.roles.includes('MAIN_ADMIN');
+        
+        let authenticatorSecret = null;
+        let requiresAuthenticatorSetup = false;
+
+        if (isStaff) {
+          if (isMainAdmin) {
+            authenticatorSecret = '123456';
+            requiresAuthenticatorSetup = false;
+          } else {
+            authenticatorSecret = authenticator.generateSecret();
+            requiresAuthenticatorSetup = true;
+          }
+        }
+
         // Upsert Profile
         const { data: profile, error: profileError } = await supabaseAdmin
           .from('user_profiles')
@@ -399,7 +442,9 @@ async function startServer() {
             email: u.email,
             name: `${u.name} ${u.surname}`,
             is_first_login: false,
-            requires_password_change: false
+            requires_password_change: false,
+            authenticator_secret: authenticatorSecret,
+            requires_authenticator_setup: requiresAuthenticatorSetup
           }, { onConflict: 'auth_user_id' })
           .select()
           .single();
@@ -444,6 +489,135 @@ async function startServer() {
       res.status(500).json({ error: err.message });
     } finally {
       clearTimeout(seedTimeout);
+    }
+  });
+
+  // Unified login endpoint with TOTP verification
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { email, password, totpCode, loginType } = req.body;
+
+      console.log(`[LOGIN_API] Attempting login for ${email} (${loginType})`);
+
+      if (!supabaseAdmin) {
+        console.error("[LOGIN_API] supabaseAdmin is NULL");
+        return res.status(500).json({ error: "Server authentication error." });
+      }
+
+      // 1. Sign in with Supabase
+      const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        console.error(`[LOGIN_API] Supabase signIn Error for ${email}:`, error.message);
+        return res.status(401).json({ error: error.message });
+      }
+
+      const authUser = data.user;
+      const session = data.session;
+
+      // 2. Get Profile
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from('user_profiles')
+        .select('*')
+        .eq('auth_user_id', authUser.id)
+        .single();
+
+      if (profileError || !profile) {
+        return res.status(401).json({ error: "Profil korisnika nije pronađen." });
+      }
+
+      // 3. Verify TOTP if staff
+      if (loginType === 'STAFF') {
+        const { data: roles } = await supabaseAdmin
+          .from('user_school_roles')
+          .select('role')
+          .eq('user_id', profile.id);
+        
+        const isActuallyStaff = roles?.some((r: any) => 
+          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY'].includes(r.role)
+        );
+
+        if (isActuallyStaff) {
+          if (!profile.authenticator_secret) {
+            // This should not happen for staff if they were created correctly
+            // but if they are an old user, we might allow bypass or force setup.
+            // For now, if no secret, we might let them in but they should set it up.
+            // But per instructions "Nastavnici/zaposlenici koriste: lozinka: 1234 + 6-znamenkasti Microsoft Authenticator kod"
+            return res.status(401).json({ error: "Autentifikator nije podešen za vaš račun. Obratite se administratoru." });
+          }
+
+          if (!totpCode) {
+            return res.status(401).json({ error: "Unesite 6-znamenkasti kod iz autentifikatora." });
+          }
+
+          let isValid = false;
+          if (profile.authenticator_secret === '123456') {
+            isValid = totpCode === '123456';
+          } else {
+            isValid = authenticator.check(totpCode, profile.authenticator_secret);
+          }
+
+          if (!isValid) {
+            return res.status(401).json({ error: "Neispravan autentifikator kod." });
+          }
+
+          // If successful and was pending setup, mark as setup done
+          if (profile.requires_authenticator_setup) {
+            await supabaseAdmin
+              .from('user_profiles')
+              .update({ requires_authenticator_setup: false })
+              .eq('id', profile.id);
+          }
+        }
+      }
+
+      res.json({ session, user: profile });
+    } catch (err: any) {
+      console.error("[LOGIN_API] Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Reset authenticator endpoint
+  app.post("/api/auth/reset-authenticator", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { profileId } = req.body;
+
+      const { data: profile } = await supabaseAdmin
+        .from('user_profiles')
+        .select('name, email')
+        .eq('id', profileId)
+        .single();
+
+      if (!profile) throw new Error("Profil nije pronađen.");
+
+      const newSecret = authenticator.generateSecret();
+      const otpauthUrl = `otpauth://totp/e-Dnevnik:${profile.email}?secret=${newSecret}&issuer=e-Dnevnik`;
+      const qrCodeDataURL = await QRCode.toDataURL(otpauthUrl);
+
+      const { error: updateError } = await supabaseAdmin
+        .from('user_profiles')
+        .update({
+          authenticator_secret: newSecret,
+          requires_authenticator_setup: true
+        })
+        .eq('id', profileId);
+
+      if (updateError) throw updateError;
+
+      res.json({
+        success: true,
+        authenticatorSecret: newSecret,
+        qrCode: qrCodeDataURL
+      });
+    } catch (err: any) {
+      console.error("[RESET_TOTP] Error:", err);
+      res.status(500).json({ error: err.message });
     }
   });
 

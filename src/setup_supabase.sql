@@ -58,6 +58,7 @@ CREATE TABLE public.user_profiles (
     requires_password_change BOOLEAN DEFAULT TRUE,
     requires_authenticator_setup BOOLEAN DEFAULT FALSE,
     authenticator_secret TEXT,
+    password_type TEXT DEFAULT 'NORMAL_PASSWORD',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

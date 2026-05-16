@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
-import { User, Lock, MapPin, Save, Shield } from 'lucide-react';
+import { User, Lock, MapPin, Save, Shield, X, Printer } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { QRCodeCanvas } from 'qrcode.react';
 
 export default function SettingsPage() {
-  const { user, formattedRoles, isStaff } = useAuth();
+  const { user, formattedRoles, isStaff, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [resetData, setResetData] = useState<{ secret: string; qrCode: string; otpauthUrl: string } | null>(null);
   const [profileForm, setProfileForm] = useState({
     name: user?.name || '',
     surname: user?.surname || '',
@@ -55,20 +57,15 @@ export default function SettingsPage() {
 
     setLoading(true);
     try {
-      // In Supabase, we can use updatePassword if the user is already authenticated.
-      // Re-authentication is handled differently or sometimes not strictly required depending on config,
-      // but for simple migration we follow the direct update.
       const { error } = await supabase.auth.updateUser({
         password: passForm.newPass
       });
       
       if (error) throw error;
       
-      // Update profile flags
       await supabase.from('user_profiles').update({
         is_first_login: false,
-        requires_password_change: false,
-        password_hash: `HASH:${passForm.newPass}` // Still keeping for legacy compatibility if needed
+        requires_password_change: false
       }).eq('id', user.id);
 
       toast.success('Lozinka uspješno promijenjena');
@@ -78,6 +75,38 @@ export default function SettingsPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResetAuthenticator = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch('/api/auth/reset-authenticator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId: user?.id })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Resetiranje nije uspjelo');
+      
+      const otpauthUrl = `otpauth://totp/e-Dnevnik:${user?.email}?secret=${result.authenticatorSecret}&issuer=e-Dnevnik`;
+      
+      setResetData({
+        secret: result.authenticatorSecret,
+        qrCode: result.qrCode,
+        otpauthUrl
+      });
+      toast.success('Authenticator resetiran. Skenirajte novi kod.');
+    } catch (err: any) {
+      toast.error(err.message || 'Greška pri resetiranju');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFinishReset = async () => {
+    toast.success('Authenticator postavljen. Odjava radi sigurnosti...');
+    await signOut();
+    window.location.href = '/login';
   };
 
   return (
@@ -91,25 +120,14 @@ export default function SettingsPage() {
           <div className="max-w-4xl mx-auto flex items-center gap-3 text-amber-700">
             <Shield className="shrink-0" size={20} />
             <p className="text-xs font-bold uppercase tracking-tight">
-              Potrebno je postaviti Microsoft Authenticator za nastavak korištenja sustava.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {user?.requiresPasswordChange && !user?.requiresAuthenticatorSetup && (
-        <div className="bg-red-50 border-b border-red-200 p-4 animate-in slide-in-from-top duration-500">
-          <div className="max-w-4xl mx-auto flex items-center gap-3 text-red-700">
-            <Shield className="shrink-0" size={20} />
-            <p className="text-xs font-bold uppercase tracking-tight">
-              Obavezna promjena lozinke: Prijavljeni ste s privremenom lozinkom. Molimo postavite novu trajnu lozinku za nastavak korištenja sustava.
+              Potrebno je dovršiti postavljanje autentifikatora.
             </p>
           </div>
         </div>
       )}
 
       <div className="flex-1 overflow-auto p-6">
-        <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 pb-12">
           {/* Profile Section */}
           <section className="space-y-6">
             <div className="border-b-2 border-[#005c8d] pb-2">
@@ -176,7 +194,7 @@ export default function SettingsPage() {
           <section className="space-y-6">
             <div className="border-b-2 border-[#005c8d] pb-2">
               <h3 className="text-sm font-black text-[#005c8d] uppercase flex items-center gap-2">
-                <Shield size={16} /> Sigurnost i Lozinka
+                <Lock size={16} /> Sigurnost i Lozinka
               </h3>
             </div>
 
@@ -227,8 +245,90 @@ export default function SettingsPage() {
               </button>
             </form>
           </section>
+
+          {/* Security / MFA Section */}
+          {isStaff && (
+            <section className="space-y-6 md:col-span-2 pt-6 border-t border-gray-200">
+               <div className="border-b-2 border-red-500 pb-2">
+                <h3 className="text-sm font-black text-red-600 uppercase flex items-center gap-2">
+                  <Shield size={16} /> Napredna sigurnost
+                </h3>
+              </div>
+              <div className="bg-red-50 border border-red-200 p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="space-y-1 text-center md:text-left">
+                  <h4 className="text-[11px] font-black text-red-700 uppercase tracking-tight">Microsoft Authenticator</h4>
+                  <p className="text-xs text-gray-600 max-w-md">
+                    Ako ste izgubili pristup svom autentifikatoru ili ste promijenili uređaj, možete ga resetirati ovdje. 
+                  </p>
+                </div>
+                <button 
+                  type="button"
+                  onClick={handleResetAuthenticator}
+                  disabled={loading}
+                  className="px-6 py-2 bg-white border-2 border-red-500 text-red-600 text-[10px] font-black uppercase hover:bg-red-500 hover:text-white transition-all disabled:opacity-50 whitespace-nowrap"
+                >
+                  Resetiraj Authenticator
+                </button>
+              </div>
+            </section>
+          )}
         </div>
       </div>
+
+      {/* Reset Result Modal */}
+      {resetData && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-white max-w-md w-full shadow-2xl border border-gray-300 overflow-hidden">
+            <div className="p-4 bg-[#005c8d] text-white flex items-center justify-between">
+              <h3 className="text-xs font-black uppercase tracking-tighter flex items-center gap-2">
+                <Shield size={16} /> Postavljanje Microsoft Authenticatora
+              </h3>
+              <button 
+                onClick={() => setResetData(null)}
+                className="hover:bg-black/10 rounded p-1"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6 flex flex-col items-center">
+              <div className="text-center space-y-4">
+                <p className="text-xs font-bold text-gray-600 uppercase tracking-tight">Otvorite Microsoft Authenticator i skenirajte QR kod.</p>
+                <div className="bg-white p-4 border-2 border-gray-100 shadow-sm inline-block">
+                  <QRCodeCanvas value={resetData.otpauthUrl} size={220} />
+                </div>
+              </div>
+
+              <div className="w-full space-y-2">
+                <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center">Setup kod (manualno)</p>
+                <code className="block w-full text-center py-2 bg-gray-50 border border-gray-200 text-sm font-black tracking-widest text-gray-700 select-all">
+                  {resetData.secret}
+                </code>
+              </div>
+
+              <div className="text-center">
+                <p className="text-[10px] font-bold text-[#005c8d] uppercase tracking-tight">{user?.email}</p>
+              </div>
+
+              <div className="flex gap-2 w-full pt-4">
+                <button 
+                  onClick={() => window.print()}
+                  className="flex-1 py-3 border border-gray-300 text-gray-600 text-[10px] font-black uppercase hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+                >
+                  <Printer size={16} /> Printaj
+                </button>
+                <button 
+                  onClick={() => setResetData(null)}
+                  className="flex-1 py-3 bg-[#005c8d] text-white text-[10px] font-black uppercase hover:bg-[#004a70] transition-all shadow-md"
+                >
+                  Zatvori
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

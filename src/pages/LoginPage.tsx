@@ -62,31 +62,40 @@ export default function LoginPage() {
 
       console.log(`[LOGIN] START: ${email}`);
       
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          totpCode: otp,
+          loginType
+        })
       });
 
-      console.log('[LOGIN] Supabase Result:', { data, error: authError });
+      const result = await response.json();
 
-      if (authError) {
-        console.log('[LOGIN] Auth ERROR:', authError);
-        throw authError;
+      if (!response.ok) {
+        throw new Error(result.error || 'Greška pri prijavi.');
       }
 
-      // Verify session exists
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      console.log('[LOGIN] Session Verification:', { session, error: sessionError });
+      console.log('[LOGIN] API Result:', { result });
 
-      if (sessionError || !session) {
-        throw new Error('Sjednica nije kreirana. Molimo pokušajte ponovno.');
+      // Set the session locally using the session from server
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: result.session.access_token,
+        refresh_token: result.session.refresh_token
+      });
+
+      if (sessionError) {
+        throw sessionError;
       }
       
-      console.log('[LOGIN] SIGNED_IN successfully, waiting for AuthContext to load profile...');
+      console.log('[LOGIN] Session set successfully, waiting for AuthContext to load profile...');
       // AuthContext will handle state updates and we'll redirect via the useEffect
     } catch (err: any) {
       console.error('[LOGIN] Error:', err.message);
-      let msg = 'Neispravna e-mail adresa ili lozinka.';
+      let msg = err.message || 'Neispravna e-mail adresa ili lozinka.';
       if (err.message.includes('Invalid login credentials')) msg = 'Neispravna lozinka ili podaci za prijavu.';
       setError(msg);
     } finally {
@@ -263,10 +272,30 @@ export default function LoginPage() {
             </div>
           </div>
           
-          <div className="flex justify-center">
+          <div className="flex justify-center flex-col items-center gap-4">
             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center max-w-[200px]">
               Samo ovlašteni korisnici s važećim certifikatom imaju pristup.
             </p>
+            <button 
+              type="button"
+              onClick={async () => {
+                if (!confirm('Ovo će resetirati ili inicijalizirati demo podatke. Nastaviti?')) return;
+                setLoading(true);
+                try {
+                  const res = await fetch('/api/seed', { method: 'POST' });
+                  const data = await res.json();
+                  if (res.ok) toast.success('Baza podataka uspješno inicijalizirana!');
+                  else throw new Error(data.error);
+                } catch (err: any) {
+                  toast.error('Greška pri inicijalizaciji: ' + err.message);
+                } finally {
+                  setLoading(false);
+                }
+              }}
+              className="text-[8px] font-bold text-gray-300 hover:text-gray-500 uppercase tracking-tighter transition-colors"
+            >
+              Inicijaliziraj demo podatke
+            </button>
           </div>
         </div>
       </div>

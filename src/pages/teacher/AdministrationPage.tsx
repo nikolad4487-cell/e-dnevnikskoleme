@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, Subject, StudentSubjectEnrollment, SchoolYear, RolloverLog, StudentClassEnrollment, School, Program, SchoolType, SecondarySubtype, ClassVariant, ContinuationType, PROGRAM_TYPES, CONTINUATION_TYPES, CLASS_VARIANTS, ProgramType } from '../../types';
-import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2 } from 'lucide-react';
+import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
 import { cn } from '../../lib/utils';
@@ -242,6 +242,14 @@ export default function AdministrationPage() {
     type: PROGRAM_TYPES.VOCATIONAL_3Y
   });
 
+  const [createdStaffTotp, setCreatedStaffTotp] = useState<{
+    email: string;
+    name: string;
+    secret: string;
+    qrCode: string;
+    tempPassword?: string;
+  } | null>(null);
+
   const isSchoolAdmin = allUserSchoolRolesState.some(r => r.role === Role.SCHOOL_ADMIN && r.schoolId === selectedSchoolId);
   const canManageUsers = isMainAdmin || isSchoolAdmin;
 
@@ -256,6 +264,36 @@ export default function AdministrationPage() {
   const generatePassword = (length: number) => {
     const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  };
+
+  const handleResetStaffAuthenticator = async (profileId: string, name: string, surname: string, email: string) => {
+    if (!confirm(`Jeste li sigurni da želite resetirati Microsoft Authenticator za korisnika ${name} ${surname}? Korisnik će se morati ponovno postaviti pri sljedećoj prijavi.`)) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/auth/reset-authenticator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId })
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Greška pri resetiranju');
+
+      setCreatedStaffTotp({
+        email,
+        name: `${name} ${surname}`,
+        secret: result.authenticatorSecret,
+        qrCode: result.qrCode,
+        tempPassword: 'Zadržana postojeća'
+      });
+      toast.success('Authenticator resetiran. Pokažite novi QR kod korisniku.');
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Greška pri resetiranju');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCreateUnifiedUser = async (e: React.FormEvent) => {
@@ -294,11 +332,23 @@ export default function AdministrationPage() {
 
       const generatedPassword = result.password || "Nije vraćena";
       const isStudent = newUserForm.globalRole === Role.STUDENT;
-      
-      toast.success(
-        `Korisnik uspješno kreiran!\nEmail: ${newUserForm.email.toLowerCase()}\nLozinka: ${generatedPassword}${isStudent ? '' : '\n\nKorisnik mora promijeniti lozinku pri prvoj prijavi.'}`,
-        { duration: 10000 }
-      );
+      const isStaff = [Role.TEACHER, Role.SCHOOL_ADMIN, Role.ADMIN].includes(newUserForm.globalRole);
+
+      if (isStaff && result.authenticatorSecret) {
+        setCreatedStaffTotp({
+          email: newUserForm.email.toLowerCase(),
+          name: `${newUserForm.name} ${newUserForm.surname}`,
+          secret: result.authenticatorSecret,
+          qrCode: result.qrCode,
+          tempPassword: generatedPassword
+        });
+        toast.success(`Korisnik ${newUserForm.name} kreiran. Postavite autentifikator.`);
+      } else {
+        toast.success(
+          `Korisnik uspješno kreiran!\nEmail: ${newUserForm.email.toLowerCase()}\nLozinka: ${generatedPassword}${isStudent ? '' : '\n\nKorisnik mora promijeniti lozinku pri prvoj prijavi.'}`,
+          { duration: 10000 }
+        );
+      }
       
       setNewUserForm({
         name: '', surname: '', email: '', username: '', globalRole: Role.TEACHER,
@@ -4431,6 +4481,15 @@ export default function AdministrationPage() {
                                   >
                                     Reset lozinke
                                   </button>
+                                  {([Role.TEACHER, Role.SCHOOL_ADMIN, Role.ADMIN].includes(u.globalRole)) && (
+                                    <button 
+                                      onClick={() => handleResetStaffAuthenticator(u.id, u.name, u.surname, u.email)}
+                                      className="text-[8px] font-bold uppercase text-red-400 hover:text-red-600 mt-1 flex items-center justify-center gap-1"
+                                      title="Resetiraj Authenticator"
+                                    >
+                                      <Shield size={8} /> Reset MFA
+                                    </button>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -4657,6 +4716,164 @@ export default function AdministrationPage() {
               >
                 Zatvori
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Staff TOTP Setup Modal */}
+      {createdStaffTotp && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[110] flex items-center justify-center p-4">
+          <div className="bg-white max-w-lg w-full shadow-2xl border border-gray-300">
+            <div className="p-6 border-b border-gray-200 bg-[#005c8d] text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Shield className="text-white" size={20} />
+                <h3 className="text-sm font-black uppercase tracking-tighter">Postavljanje autentifikatora</h3>
+              </div>
+              <button 
+                onClick={() => setCreatedStaffTotp(null)}
+                className="text-white/70 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6 overflow-y-auto max-h-[80vh]">
+              <div className="text-center space-y-2">
+                <div className="text-lg font-black text-gray-800 uppercase tracking-tight">
+                  {createdStaffTotp.name}
+                </div>
+                <div className="text-sm font-bold text-[#005c8d]">
+                  {createdStaffTotp.email}
+                </div>
+              </div>
+
+              <div className="bg-gray-50 border border-gray-200 p-6 space-y-6">
+                <div className="space-y-4">
+                  <div className="flex flex-col items-center gap-4">
+                    <img src={createdStaffTotp.qrCode} alt="TOTP QR Code" className="w-48 h-48 border-4 border-white shadow-sm" />
+                    <div className="text-center">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 text-center">Setup kod (Manualno)</p>
+                      <code className="text-lg font-black tracking-widest text-gray-700 select-all px-4 py-2 bg-white border border-gray-200 block">
+                        {createdStaffTotp.secret}
+                      </code>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-gray-200">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1">
+                        <p className="text-[9px] font-black text-gray-400 uppercase leading-none">Početna lozinka</p>
+                        <p className="text-sm font-black text-gray-800 tracking-widest bg-white p-2 border border-gray-100">{createdStaffTotp.tempPassword || '1234'}</p>
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[9px] font-black text-gray-400 uppercase leading-none">Tip potvrde</p>
+                        <p className="text-[10px] font-bold text-[#005c8d] uppercase tracking-tight bg-white p-2 border border-gray-100 flex items-center gap-1">
+                           <Shield size={10} /> Microsoft Authenticator
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="text-[10px] font-bold text-gray-500 uppercase leading-relaxed">
+                  <p className="font-black text-[#005c8d] mb-1">Upute za zaposlenika:</p>
+                  <ol className="list-decimal pl-4 space-y-1">
+                    <li>Instalirajte <span className="text-gray-900">Microsoft Authenticator</span> na mobitel.</li>
+                    <li>Odaberite <span className="text-gray-900">Dodaj račun</span> → <span className="text-gray-900">Poslovni ili školski račun</span>.</li>
+                    <li>Skenirajte gornji <span className="text-gray-900">QR kod</span>.</li>
+                    <li>Prijavite se s emailom, lozinkom i 6-znamenkastim kodom.</li>
+                  </ol>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-4">
+                  <button 
+                    onClick={() => {
+                        const printWindow = window.open('', '_blank');
+                        if (printWindow && createdStaffTotp) {
+                          printWindow.document.write(`
+                            <html>
+                              <head>
+                                <title>Authenticator Setup - ${createdStaffTotp.name}</title>
+                                <style>
+                                  body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #333; line-height: 1.5; }
+                                  .slip { border: 2px solid #005c8d; padding: 40px; max-width: 600px; margin: 0 auto; position: relative; }
+                                  .header { border-bottom: 2px solid #005c8d; padding-bottom: 20px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
+                                  .header h1 { margin: 0; font-size: 24px; color: #005c8d; text-transform: uppercase; letter-spacing: -1px; }
+                                  .user-info { margin-bottom: 30px; }
+                                  .user-info div { margin-bottom: 5px; }
+                                  .label { font-size: 10px; font-weight: bold; color: #888; text-transform: uppercase; letter-spacing: 1px; }
+                                  .value { font-size: 18px; font-weight: bold; }
+                                  .setup-container { display: flex; gap: 40px; background: #f8f9fa; padding: 30px; border: 1px solid #eee; }
+                                  .qr-section { text-align: center; }
+                                  .qr-section img { width: 200px; height: 200px; background: white; padding: 10px; border: 1px solid #ddd; }
+                                  .instructions { font-size: 12px; }
+                                  .instructions h3 { margin-top: 0; color: #005c8d; text-transform: uppercase; font-size: 14px; }
+                                  .instructions ol { padding-left: 20px; }
+                                  .instructions li { margin-bottom: 10px; }
+                                  .footer-note { margin-top: 30px; font-size: 10px; font-weight: bold; color: #d32f2f; text-transform: uppercase; text-align: center; }
+                                  .password-box { margin-top: 20px; padding: 15px; border: 2px dashed #005c8d; text-align: center; }
+                                  @media print { .no-print { display: none; } }
+                                </style>
+                              </head>
+                              <body onload="window.print()">
+                                <div class="slip">
+                                  <div class="header">
+                                    <h1>e-Dnevnik Pristup</h1>
+                                    <span style="font-size: 10px; font-weight: bold; color: #888;">${new Date().toLocaleDateString('hr-HR')}</span>
+                                  </div>
+                                  
+                                  <div class="user-info">
+                                    <div class="label">Korisnik</div>
+                                    <div class="value">${createdStaffTotp.name}</div>
+                                    <div class="label" style="margin-top: 15px;">E-mail adresa</div>
+                                    <div class="value" style="color: #005c8d;">${createdStaffTotp.email}</div>
+                                  </div>
+
+                                  <div class="setup-container">
+                                    <div class="qr-section">
+                                      <img src="${createdStaffTotp.qrCode}" />
+                                      <div class="label" style="margin-top: 10px;">Setup kod (manualno)</div>
+                                      <div style="font-weight: bold; font-family: monospace; font-size: 14px; letter-spacing: 2px;">${createdStaffTotp.secret}</div>
+                                    </div>
+                                    <div class="instructions">
+                                      <h3>Upute za aktivaciju</h3>
+                                      <ol>
+                                        <li>Instalirajte <b>Microsoft Authenticator</b> aplikaciju.</li>
+                                        <li>Kliknite na <b>"+" (Dodaj račun)</b>.</li>
+                                        <li>Odaberite <b>"Poslovni ili školski račun"</b>.</li>
+                                        <li>Odaberite <b>"Skeniraj QR kod"</b> i usmjerite kameru prema kodu lijevo.</li>
+                                      </ol>
+                                    </div>
+                                  </div>
+
+                                  <div class="password-box">
+                                    <div class="label">Vaša početna lozinka</div>
+                                    <div style="font-size: 24px; font-weight: bold; letter-spacing: 5px;">${createdStaffTotp.tempPassword || '1234'}</div>
+                                  </div>
+
+                                  <div class="footer-note">Lozinka i autentifikator su tajni. Nemojte ih dijeliti s drugima.</div>
+                                </div>
+                              </body>
+                            </html>
+                          `);
+                          printWindow.document.close();
+                        }
+                    }}
+                    className="flex items-center justify-center gap-2 py-3 bg-[#005c8d] text-white text-[10px] font-black uppercase tracking-widest hover:bg-[#004a70] transition-all shadow-md"
+                  >
+                    <Printer size={16} /> Printaj podatke
+                  </button>
+                  <button 
+                    onClick={() => setCreatedStaffTotp(null)}
+                    className="flex items-center justify-center gap-2 py-3 border border-gray-300 text-gray-600 text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all"
+                  >
+                    Zatvori
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

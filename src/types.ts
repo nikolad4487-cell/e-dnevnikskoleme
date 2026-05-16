@@ -30,6 +30,7 @@ export type User = {
   address?: string;
   isFirstLogin?: boolean;
   requiresAuthenticatorSetup?: boolean;
+  authenticatorSecret?: string;
   requiresPasswordChange?: boolean;
   passwordType?: 'NORMAL_PASSWORD' | 'FIRST_LOGIN_OTP_SETUP';
   oib?: string;

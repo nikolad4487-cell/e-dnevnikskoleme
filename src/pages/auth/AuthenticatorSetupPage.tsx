@@ -14,6 +14,7 @@ export default function AuthenticatorSetupPage() {
   const navigate = useNavigate();
 
   const [secret] = useState(() => {
+    if (user?.authenticatorSecret) return user.authenticatorSecret;
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
     return Array.from({ length: 16 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
   });
