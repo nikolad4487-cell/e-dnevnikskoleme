@@ -120,7 +120,7 @@ export default function PretrazivanjePage() {
                   Rezultati pretrage: {activeTab === 'STUDENTS' ? results.students.length : results.lessons.length} zapisa
                 </div>
                 <div className="divide-y divide-gray-200">
-                  {activeTab === 'STUDENTS' && results.students.sort((a,b) => a.surname.localeCompare(b.surname)).map(u => (
+                  {activeTab === 'STUDENTS' && results.students.sort((a,b) => (String(a.surname || "")).localeCompare(b.surname)).map(u => (
                     <div key={u.id} className="p-4 flex items-center gap-6 hover:bg-blue-50 transition-colors">
                       <div className="w-12 h-12 border border-gray-200 bg-gray-50 flex items-center justify-center text-[#94a3b8] shrink-0">
                         <User size={24} />
@@ -135,7 +135,7 @@ export default function PretrazivanjePage() {
                       <button className="text-[10px] font-black text-[#005c8d] uppercase border border-gray-200 px-3 py-1 hover:bg-[#005c8d] hover:text-white transition-all whitespace-nowrap">Otvori dosje</button>
                     </div>
                   ))}
-                  {activeTab === 'LESSONS' && results.lessons.sort((a,b) => b.date.localeCompare(a.date)).map(l => (
+                  {activeTab === 'LESSONS' && results.lessons.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(l => (
                     <div key={l.id} className="p-4 hover:bg-blue-50 transition-colors flex gap-4">
                        <div className="w-10 h-10 border border-gray-200 bg-gray-50 flex items-center justify-center text-[#94a3b8] shrink-0">
                         <BookOpen size={20} />

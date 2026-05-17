@@ -13,7 +13,8 @@ import {
   Users,
   Filter,
   Check,
-  X
+  X,
+  Plus
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -29,6 +30,10 @@ export default function StudentSubjectEnrollmentPage() {
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [bulkSelectedStudents, setBulkSelectedStudents] = useState<string[]>([]);
+  const [bulkSelectedSubjects, setBulkSelectedSubjects] = useState<string[]>([]);
 
   const isAnyAdmin = isMainAdmin || userSchoolRoles.some(r => r.schoolId === selectedSchoolId && (r.role === Role.SCHOOL_ADMIN || r.role === Role.ADMIN));
 
@@ -52,8 +57,7 @@ export default function StudentSubjectEnrollmentPage() {
 
   const fetchClasses = async () => {
     if (!selectedSchoolId) return;
-    // We use direct classes table
-    setClasses([]); // Clear before fetch
+    setClasses([]); 
     const { data } = await supabase
       .from('classes')
       .select('*')
@@ -69,7 +73,6 @@ export default function StudentSubjectEnrollmentPage() {
     try {
       setLoading(true);
       
-      // 1. Fetch Class Subjects
       const { data: classSubjects } = await supabase
         .from('class_subject_teachers')
         .select('subject:subjects(*)')
@@ -78,7 +81,6 @@ export default function StudentSubjectEnrollmentPage() {
       const mappedSubjects = (classSubjects || []).map(cs => cs.subject).filter(Boolean) as any[] as Subject[];
       setSubjects(mappedSubjects);
 
-      // 2. Fetch Students in Class
       const { data: enrolls } = await supabase
         .from('student_class_enrollments')
         .select('student:user_profiles(*)')
@@ -86,9 +88,10 @@ export default function StudentSubjectEnrollmentPage() {
         .eq('status', 'ACTIVE');
       
       const mappedStudents = (enrolls || []).map(e => e.student).filter(Boolean);
-      setStudents(mappedStudents);
+      
+      const uniqueStudents = Array.from(new Map(mappedStudents.map(s => [s.id, s])).values());
+      setStudents(uniqueStudents);
 
-      // 3. Fetch Subject Enrollments
       const { data: subEnrolls } = await supabase
         .from('student_subject_enrollments')
         .select('*')
@@ -110,35 +113,46 @@ export default function StudentSubjectEnrollmentPage() {
       return;
     }
     
-    const newStatus = (currentStatus === 'ACTIVE') ? 'EXEMPT' : 'ACTIVE';
-    console.log("TOGGLE STUDENT SUBJECT ENROLLMENT CLICKED", { studentId, subjectId, newStatus });
+    const activeClass = classes.find(c => c.id === selectedClassId);
+    const schoolYearId = activeClass?.school_year_id || '2024/2025';
 
-    try {
-      const { data, error } = await supabase
-        .from('student_subject_enrollments')
-        .upsert({
-          student_id: studentId,
-          subject_id: subjectId,
-          class_id: selectedClassId,
-          status: newStatus,
-          school_year: '2024/2025' // Should be dynamic
-        }, { onConflict: 'student_id,subject_id,class_id,school_year' })
-        .select();
-      
-      console.log("TOGGLE ENROLLMENT RESULT:", { data, error });
+    if (currentStatus === 'ACTIVE' || currentStatus === 'EXEMPT') {
+      try {
+        const { error } = await supabase.from('student_subject_enrollments')
+          .delete()
+          .eq('student_id', studentId)
+          .eq('subject_id', subjectId)
+          .eq('class_id', selectedClassId)
+          .eq('school_year', schoolYearId);
 
-      if (error) throw error;
-      
-      toast.success(newStatus === 'ACTIVE' ? 'Sluša predmet' : 'Oslobođen predmeta');
-      
-      // Local update for speed
-      setEnrollments(prev => {
-        const other = prev.filter(e => !(e.student_id === studentId && e.subject_id === subjectId));
-        return [...other, { student_id: studentId, subject_id: subjectId, status: newStatus }];
-      });
-    } catch (err: any) {
-      console.error("TOGGLE ENROLLMENT FAILED:", err);
-      toast.error('Greška pri izmjeni upisa: ' + (err.message || 'Nepoznata greška'));
+        if (error) throw error;
+        toast.success('Predmet uklonjen učeniku');
+        setEnrollments(prev => prev.filter(e => !(e.student_id === studentId && e.subject_id === subjectId)));
+      } catch (err: any) {
+        toast.error('Greška pri uklanjanju upisa: ' + (err.message || 'Nepoznata greška'));
+      }
+    } else {
+      try {
+        const { error } = await supabase
+          .from('student_subject_enrollments')
+          .upsert({
+            student_id: studentId,
+            subject_id: subjectId,
+            class_id: selectedClassId,
+            status: 'ACTIVE',
+            school_year: schoolYearId
+          }, { onConflict: 'student_id,subject_id,class_id,school_year' });
+        
+        if (error) throw error;
+        
+        toast.success('Sluša predmet');
+        setEnrollments(prev => {
+          const other = prev.filter(e => !(e.student_id === studentId && e.subject_id === subjectId));
+          return [...other, { student_id: studentId, subject_id: subjectId, status: 'ACTIVE' }];
+        });
+      } catch (err: any) {
+        toast.error('Greška pri izmjeni upisa: ' + (err.message || 'Nepoznata greška'));
+      }
     }
   };
 
@@ -148,34 +162,71 @@ export default function StudentSubjectEnrollmentPage() {
       return;
     }
     
-    console.log("ASSIGN ALL TO SUBJECT CLICKED", { subjectId, selectedClassId });
-
     if (!window.confirm('Dodijeli ovaj predmet svim učenicima u razredu?')) return;
     try {
+      const activeClass = classes.find(c => c.id === selectedClassId);
+      const schoolYearId = activeClass?.school_year_id || '2024/2025';
+
       const payload = students.map(s => ({
         student_id: s.id,
         subject_id: subjectId,
         class_id: selectedClassId,
         status: 'ACTIVE',
-        school_year: '2024/2025'
+        school_year: schoolYearId
       }));
       
-      const { data, error } = await supabase.from('student_subject_enrollments').upsert(payload, { onConflict: 'student_id,subject_id,class_id,school_year' }).select();
-      console.log("ASSIGN ALL RESULT:", { data, error });
-      
+      const { error } = await supabase.from('student_subject_enrollments').upsert(payload, { onConflict: 'student_id,subject_id,class_id,school_year' });
       if (error) throw error;
       
       toast.success('Predmet dodijeljen svima');
       fetchClassData();
     } catch (err: any) {
-      console.error("ASSIGN ALL FAILED:", err);
       toast.error('Masovni upis nije uspio: ' + (err.message || 'Nepoznata greška'));
+    }
+  };
+
+  const handleBulkAssign = async () => {
+    if (bulkSelectedStudents.length === 0 || bulkSelectedSubjects.length === 0) {
+      toast.error('Odaberite barem jednog učenika i jedan predmet');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const activeClass = classes.find(c => c.id === selectedClassId);
+      const schoolYearId = activeClass?.school_year_id || '2024/2025';
+
+      const payload: any[] = [];
+      bulkSelectedStudents.forEach(stuId => {
+        bulkSelectedSubjects.forEach(subId => {
+          payload.push({
+            student_id: stuId,
+            subject_id: subId,
+            class_id: selectedClassId,
+            status: 'ACTIVE',
+            school_year: schoolYearId
+          });
+        });
+      });
+
+      const { error } = await supabase.from('student_subject_enrollments').upsert(payload, { onConflict: 'student_id,subject_id,class_id,school_year' });
+      if (error) throw error;
+
+      toast.success('Uspješno spremljene kombinacije');
+      setIsBulkModalOpen(false);
+      setBulkSelectedStudents([]);
+      setBulkSelectedSubjects([]);
+      fetchClassData();
+    } catch (err: any) {
+      toast.error('Greška pri masovnom unosu: ' + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
   const filteredStudents = students.filter(s => 
     s.name?.toLowerCase().includes(searchTerm.toLowerCase())
-  ).sort((a,b) => a.name.localeCompare(b.name));
+  ).sort((a,b) => (String(a.name || "")).localeCompare(String(b.name || "")));
 
   return (
     <div className="p-6 font-sans max-w-7xl mx-auto">
@@ -188,7 +239,21 @@ export default function StudentSubjectEnrollmentPage() {
             <ChevronLeft size={12} strokeWidth={3} />
             Natrag na pregled
           </button>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none mb-2">Predmeti učenika</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none mb-2">Predmeti učenika</h1>
+            {selectedClassId && isAnyAdmin && (
+              <button 
+                onClick={() => {
+                  setBulkSelectedStudents([]);
+                  setBulkSelectedSubjects([]);
+                  setIsBulkModalOpen(true);
+                }}
+                className="bg-[#005c8d] text-white px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest flex items-center gap-2 hover:bg-[#004a70] mb-2"
+              >
+                <Plus size={16} /> Dodaj više
+              </button>
+            )}
+          </div>
           <p className="text-slate-500 font-medium text-sm">Masovna dodjela i oslobađanje učenika od predmeta</p>
         </div>
       </div>
@@ -275,11 +340,10 @@ export default function StudentSubjectEnrollmentPage() {
                           onClick={() => toggleEnrollment(student.id, subject.id, enrollment?.status)}
                           className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all shadow-sm mx-auto ${
                             isActive ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 
-                            isExempt ? 'bg-red-50 text-red-600 border border-red-100' : 
                             'bg-slate-50 text-slate-300 border border-slate-100 grayscale opacity-40 hover:grayscale-0 hover:opacity-100'
                           }`}
                         >
-                          {isActive ? <CheckCircle2 size={20} /> : <XCircle size={18} />}
+                          {isActive ? <CheckCircle2 size={20} /> : <div className="w-4 h-4 border-2 border-slate-300 rounded-sm" />}
                         </button>
                       </td>
                     );
@@ -303,6 +367,99 @@ export default function StudentSubjectEnrollmentPage() {
              <p className="font-black uppercase text-xs tracking-widest mb-1">Ovaj razred nema dodijeljenih predmeta</p>
              <p className="text-[11px] font-bold">Prvo dodijelite predmete razredu u sekciji <button onClick={() => navigate(`/admin/razred-predmeti?classId=${selectedClassId}`)} className="underline">Predmeti razreda</button>.</p>
            </div>
+        </div>
+      )}
+
+      {isBulkModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h2 className="text-xl font-black text-slate-800 uppercase">Dodaj više (Masovni upis)</h2>
+              <button 
+                onClick={() => setIsBulkModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 bg-white shadow-sm rounded-full p-2"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 grid grid-cols-2 gap-8 bg-slate-50/50">
+              {/* Učenici */}
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                <div className="flex items-center justify-between mb-4 border-b pb-4">
+                  <h3 className="font-black text-slate-700 text-sm uppercase">Odaberi učenike</h3>
+                  <button 
+                    onClick={() => {
+                      if (bulkSelectedStudents.length === students.length) setBulkSelectedStudents([]);
+                      else setBulkSelectedStudents(students.map(s => s.id));
+                    }}
+                    className="text-[10px] font-bold text-[#005c8d] underline"
+                  >
+                    Odaberi sve
+                  </button>
+                </div>
+                <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-2">
+                  {students.map(s => {
+                    const isChecked = bulkSelectedStudents.includes(s.id);
+                    return (
+                      <label key={s.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 cursor-pointer rounded-lg transition-colors border border-transparent hover:border-slate-100 group">
+                        <div className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors \${isChecked ? 'bg-[#005c8d] border-[#005c8d]' : 'border-slate-300 group-hover:border-slate-400'}`}>
+                          {isChecked && <Check size={14} className="text-white" strokeWidth={3} />}
+                        </div>
+                        <span className="text-sm font-bold text-slate-700">{s.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Predmeti */}
+              <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                <div className="flex items-center justify-between mb-4 border-b pb-4">
+                  <h3 className="font-black text-slate-700 text-sm uppercase">Odaberi predmete</h3>
+                  <button 
+                    onClick={() => {
+                      if (bulkSelectedSubjects.length === subjects.length) setBulkSelectedSubjects([]);
+                      else setBulkSelectedSubjects(subjects.map(s => s.id));
+                    }}
+                    className="text-[10px] font-bold text-[#005c8d] underline"
+                  >
+                    Odaberi sve
+                  </button>
+                </div>
+                <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-2">
+                  {subjects.map(sub => {
+                    const isChecked = bulkSelectedSubjects.includes(sub.id);
+                    return (
+                      <label key={sub.id} className="flex items-center gap-3 p-2 hover:bg-slate-50 cursor-pointer rounded-lg transition-colors border border-transparent hover:border-slate-100 group">
+                        <div className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors \${isChecked ? 'bg-[#005c8d] border-[#005c8d]' : 'border-slate-300 group-hover:border-slate-400'}`}>
+                          {isChecked && <Check size={14} className="text-white" strokeWidth={3} />}
+                        </div>
+                        <span className="text-sm font-bold text-slate-700">{sub.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-white flex justify-end gap-3">
+              <button 
+                onClick={() => setIsBulkModalOpen(false)}
+                className="px-6 py-3 font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-colors"
+                disabled={loading}
+              >
+                Odustani
+              </button>
+              <button 
+                onClick={handleBulkAssign}
+                disabled={loading}
+                className="bg-[#005c8d] hover:bg-[#004a70] text-white px-8 py-3 rounded-xl font-black uppercase tracking-widest transition-colors shadow-lg flex items-center gap-2 disabled:opacity-50"
+              >
+                {loading ? 'Spremanje...' : 'Spremi kombinacije'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

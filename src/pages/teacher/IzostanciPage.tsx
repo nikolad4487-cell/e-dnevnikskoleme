@@ -39,7 +39,10 @@ export default function TeacherIzostanciPage() {
 
       if (enrollError) throw enrollError;
       const studentsList = (enrollData || []).map((e: any) => mappers.user(e.student)).filter(Boolean);
-      setStudents(studentsList);
+      
+const uniqueStudents = Array.from(new Map(studentsList.map(s => [s.id, s])).values());
+setStudents(uniqueStudents);
+
 
       // 2. Fetch Absences
       const { data: absData, error: absError } = await supabase

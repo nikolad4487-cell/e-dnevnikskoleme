@@ -143,7 +143,7 @@ export default function OcjenePage() {
           </div>
 
           <div className="grid grid-cols-1 gap-3">
-            {subjects.sort((a, b) => a.name.localeCompare(b.name)).map(subject => {
+            {subjects.sort((a, b) => (String(a.name || "")).localeCompare(b.name)).map(subject => {
               const subjectGrades = grades.filter(g => g.subjectId === subject.id && !g.isFinal);
               const subjectAvg = subjectGrades.length > 0 
                 ? (subjectGrades.reduce((acc, curr) => acc + curr.value, 0) / subjectGrades.length).toFixed(2)
@@ -307,7 +307,7 @@ export default function OcjenePage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-medium">
-                {activeGrades.sort((a,b) => b.date.localeCompare(a.date)).map(g => (
+                {activeGrades.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(g => (
                   <tr key={g.id} className="hover:bg-slate-50 transition-colors">
                     <td className="p-4 text-center text-xs font-bold text-slate-500 border-r border-slate-200">
                       {new Date(g.date).toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' })}.

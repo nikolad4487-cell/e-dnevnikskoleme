@@ -68,7 +68,10 @@ export default function AdministrationPage() {
       
     const combinedIds = Array.from(new Set(teacherIds));
     const result = allUsers.filter(u => combinedIds.includes(u.id));
-    return result.sort((a,b) => (a.surname || '').localeCompare(b.surname || ''));
+    const uniqueTeachers = Array.from(new Map(result.map(t => [t.id, t])).values());
+    console.log('RAW TEACHERS:', result);
+    console.log('UNIQUE TEACHERS:', uniqueTeachers);
+    return uniqueTeachers.sort((a,b) => (a.surname || '').localeCompare(b.surname || ''));
   }, [allUsers, allUserSchoolRolesState, selectedSchoolId]);
 
 
@@ -1082,7 +1085,12 @@ export default function AdministrationPage() {
       }
 
       const { data: subAll } = await supabase.from('subjects').select('*').eq('school_id', currentSchoolId);
-      if (subAll) setAllSubjects(mapList(subAll, mappers.subject));
+      if (subAll) {
+const mappedSub = mapList(subAll, mappers.subject);
+const uniqueSub = Array.from(new Map(mappedSub.map(s => [s.id, s])).values());
+setAllSubjects(uniqueSub);
+}
+
 
       // Fetch all school students if we are in STUDENTS tab or no class is selected
       if (!classToFetch || activeTab === 'STUDENTS') {
@@ -1116,7 +1124,10 @@ export default function AdministrationPage() {
               school_id: profile.school_id
             };
           });
-          setStudents(mapped as any);
+          
+const uniqueMapped = Array.from(new Map(mapped.map(m => [m.id, m])).values());
+setStudents(uniqueMapped as any);
+
         }
       }
 
@@ -1138,7 +1149,10 @@ export default function AdministrationPage() {
           globalRole: Role.STUDENT,
           classId: row.class_id
         }));
-        setStudents(mapped as any);
+        
+const uniqueMapped = Array.from(new Map(mapped.map(m => [m.id, m])).values());
+setStudents(uniqueMapped as any);
+
       }
 
       const { data: enrollData } = await supabase
@@ -1926,12 +1940,7 @@ export default function AdministrationPage() {
     try {
       const { data, error } = await supabase.from('subjects').insert([{
         name: newSubjectName,
-        school_id: selectedSchoolId,
-        grading_elements: [
-          'Usvojenost nastavnih sadržaja',
-          'Primjena nastavnih sadržaja',
-          'Samostalan rad i aktivnost'
-        ]
+        school_id: selectedSchoolId
       }]).select();
       
       console.log("CREATE SUBJECT RESULT:", { data, error });
@@ -1943,57 +1952,17 @@ export default function AdministrationPage() {
       
       // Update local subjects list
       const { data: updatedSubjects } = await supabase.from('subjects').select('*').eq('school_id', selectedSchoolId);
-      if (updatedSubjects) setAllSubjects(mapList(updatedSubjects, mappers.subject));
+      if (updatedSubjects) {
+const mappedSub2 = mapList(updatedSubjects, mappers.subject);
+const uniqueSub2 = Array.from(new Map(mappedSub2.map(s => [s.id, s])).values());
+setAllSubjects(uniqueSub2);
+}
+
     } catch (err: any) {
       console.error("CREATE SUBJECT ERROR:", err);
       toast.error('Problem kod kreiranja predmeta: ' + err.message);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleAddGradingElement = async (subjectId: string) => {
-    if (!newGradingElement.trim()) return;
-    const subject = allSubjects.find(s => s.id === subjectId);
-    if (!subject) return;
-    const elements = subject.grading_elements || [];
-    try {
-      await supabase.from('subjects').update({
-        grading_elements: [...elements, newGradingElement.trim()]
-      }).eq('id', subjectId);
-      setNewGradingElement('');
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleRemoveGradingElement = async (subjectId: string, element: string) => {
-    // Check if element is used in any grade
-    try {
-      const { data, error } = await supabase
-        .from('grades')
-        .select('id')
-        .eq('subject_id', subjectId)
-        .eq('category', element)
-        .limit(1);
-      
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        toast.error('Element se ne može obrisati jer je već korišten u ocjenama.');
-        return;
-      }
-
-      setDeleteDialog({
-        isOpen: true,
-        id: subjectId,
-        type: 'GRADING_ELEMENT',
-        loading: false,
-        extraData: { element }
-      });
-    } catch (err) {
-      console.error(err);
-      toast.error('Greška pri provjeri elementa');
     }
   };
 
@@ -2254,14 +2223,6 @@ export default function AdministrationPage() {
             setDeleteDialog({ isOpen: false, id: null, type: null, loading: false });
         }
 
-        const subjectId = deleteDialog.id;
-        const element = deleteDialog.extraData.element;
-        const subject = allSubjects.find(s => s.id === subjectId);
-        if (subject) {
-          const elements = (subject.grading_elements || []).filter((e: string) => e !== element);
-          await supabase.from('subjects').update({ grading_elements: elements }).eq('id', subjectId);
-          toast.success('Element ocjenjivanja je uklonjen.');
-        }
       } else if (deleteDialog.type === 'STAFF') {
         await supabase.from('class_subject_teachers').delete().eq('id', deleteDialog.id);
         toast.success('Zaduženje je obrisano.');
@@ -2892,7 +2853,7 @@ export default function AdministrationPage() {
                               onChange={e => setClassDetailForm({...classDetailForm, homeroom_teacher_id: e.target.value})}
                             >
                               <option value="">-- Odaberi --</option>
-                              {teachers.map(t => <option key={t.id} value={t.id}>{t.surname} {t.name}</option>)}
+                              {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
                          </div>
                          <div className="space-y-1">
@@ -2903,7 +2864,7 @@ export default function AdministrationPage() {
                               onChange={e => setClassDetailForm({...classDetailForm, deputy_teacher_id: e.target.value})}
                             >
                               <option value="">-- Nema (Opcionalno) --</option>
-                              {teachers.filter(t => t.id !== classDetailForm.homeroom_teacher_id).map(t => <option key={t.id} value={t.id}>{t.surname} {t.name}</option>)}
+                              {teachers.filter(t => t.id !== classDetailForm.homeroom_teacher_id).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
                          </div>
                          <button 
@@ -2988,7 +2949,7 @@ export default function AdministrationPage() {
                                 required
                               >
                                 <option value="">-- Odaberi --</option>
-                                {teachers.sort((a,b) => (a.surname || '').localeCompare(b.surname || '')).map(t => <option key={t.id} value={t.id}>{t.surname} {t.name}</option>)}
+                                {teachers.sort((a,b) => (a.surname || '').localeCompare(b.surname || '')).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                               </select>
                             </div>
                             <div className="flex gap-2">
@@ -3820,62 +3781,6 @@ export default function AdministrationPage() {
                     
                     {editingSubjectId === s.id && (
                       <div className="p-4 bg-gray-50/50 space-y-4 border-t border-gray-200 text-xs animate-in slide-in-from-top-2 duration-200">
-                        <div>
-                          <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-200 pb-1">Elementi ocjenjivanja (e-Dnevnik struktura)</div>
-                          <table className="w-full text-left border-collapse bg-white border border-gray-300">
-                            <thead>
-                              <tr className="bg-gray-100 border-b border-gray-300 text-[9px] font-black text-gray-500 uppercase">
-                                <th className="px-3 py-1 border-r border-gray-200">Naziv elementa</th>
-                                <th className="px-3 py-1 border-r border-gray-200 w-24">Redoslijed</th>
-                                <th className="px-3 py-1 text-center w-24">Akcije</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                              {(s.gradingElements || []).map((el: string, idx: number) => (
-                                <tr key={idx} className="hover:bg-blue-50">
-                                  <td className="px-3 py-2 border-r border-gray-200 font-bold">{el}</td>
-                                  <td className="px-3 py-2 border-r border-gray-200 text-center font-mono">{idx + 1}</td>
-                                  <td className="px-3 py-2 flex items-center justify-center gap-3">
-                                    <button 
-                                      onClick={() => {
-                                        const newName = prompt('Novi naziv elementa:', el);
-                                        if (newName && newName !== el) {
-                                          const newElements = [...(s.grading_elements || [])];
-                                          newElements[idx] = newName;
-                                          supabase.from('subjects').update({ grading_elements: newElements }).eq('id', s.id).then(() => fetchData());
-                                        }
-                                      }}
-                                      className="text-blue-500 hover:underline font-bold uppercase text-[9px]"
-                                    >
-                                      Uredi
-                                    </button>
-                                    <button 
-                                      onClick={() => handleRemoveGradingElement(s.id, el)}
-                                      className="text-red-500 hover:underline font-bold uppercase text-[9px]"
-                                    >
-                                      Obriši
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        <div className="flex gap-1 pt-2">
-                           <input 
-                             type="text" 
-                             value={newGradingElement}
-                             onChange={e => setNewGradingElement(e.target.value)}
-                             placeholder="Novi element..." 
-                             className="flex-1 border border-gray-300 p-1.5 text-[10px] outline-none"
-                           />
-                           <button 
-                             onClick={() => handleAddGradingElement(s.id)}
-                             className="bg-[#005c8d] text-white px-3 py-1 font-black text-[10px] uppercase border border-[#004a70]"
-                           >
-                             Dodaj
-                           </button>
-                        </div>
                         <button 
                            onClick={() => setDeleteDialog({ isOpen: true, id: s.id, type: 'SUBJECT', loading: false })}
                            className="w-full text-center text-[9px] font-bold text-red-400 hover:text-red-600 uppercase border border-red-100 bg-red-50 py-1"
@@ -3945,7 +3850,7 @@ export default function AdministrationPage() {
                         required
                       >
                         <option value="">-- Odaberi --</option>
-                        {teachers.map(t => <option key={t.id} value={t.id}>{t.surname} {t.name}</option>)}
+                        {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                       </select>
                     </div>
                     <div className="flex items-end gap-2">
@@ -3984,7 +3889,7 @@ export default function AdministrationPage() {
                     {subjectAssignments.sort((a,b) => {
                       const razredA = classes.find(c => c.id === a.classId)?.name || '';
                       const razredB = classes.find(c => c.id === b.classId)?.name || '';
-                      return razredA.localeCompare(razredB);
+                      return (String(razredA || "")).localeCompare(razredB);
                     }).map(a => {
                       const razred = classes.find(c => c.id === a.classId);
                       const sub = allSubjects.find(s => s.id === a.subjectId);
@@ -4122,7 +4027,7 @@ export default function AdministrationPage() {
                     {curriculumPlans.sort((a,b) => {
                       const razredA = classes.find(c => c.id === a.classId)?.name || '';
                       const razredB = classes.find(c => c.id === b.classId)?.name || '';
-                      return razredA.localeCompare(razredB);
+                      return (String(razredA || "")).localeCompare(razredB);
                     }).map(p => {
                       const razred = classes.find(c => c.id === p.classId);
                       const sub = allSubjects.find(s => s.id === p.subjectId);

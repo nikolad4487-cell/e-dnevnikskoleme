@@ -191,7 +191,10 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
             globalRole: Role.STUDENT
           };
         }) as User[];
-        setStudents(studentList);
+        
+const uniqueStudents = Array.from(new Map(studentList.map(s => [s.id, s])).values());
+setStudents(uniqueStudents);
+
 
         const { data: weeksData, error: we } = await supabase
           .from('work_weeks')
@@ -978,7 +981,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {students.sort((a,b) => a.surname.localeCompare(b.surname)).map(s => {
+                    {students.sort((a,b) => (String(a.surname || "")).localeCompare(b.surname)).map(s => {
                       let total = 0;
                       return (
                         <tr key={`absence-row-${s.id}`} className="hover:bg-gray-50 transition-colors">
@@ -1034,7 +1037,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                     {currentClassExams.sort((a,b) => b.date.localeCompare(a.date)).map(exam => {
+                     {currentClassExams.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(exam => {
                        const subject = allSubjects.find(s => s.id === exam.subjectId);
                        return (
                          <tr key={exam.id} className="hover:bg-gray-50 transition-colors">
@@ -1484,7 +1487,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
                         <UserIcon size={14} /> Odaberi učenike koji nisu prisutni
                       </h4>
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                        {students.sort((a,b) => a.surname.localeCompare(b.surname)).map(s => {
+                        {students.sort((a,b) => (String(a.surname || "")).localeCompare(b.surname)).map(s => {
                           const isSelected = selectedAbsentees.includes(s.id);
                           return (
                             <button 

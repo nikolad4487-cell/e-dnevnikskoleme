@@ -49,7 +49,10 @@ export default function BiljeskePage() {
         .eq('status', 'ACTIVE');
 
       const studentsList = (enrollData || []).map((e: any) => mappers.user(e.student)).filter(Boolean);
-      setStudents(studentsList);
+      
+const uniqueStudents = Array.from(new Map(studentsList.map(s => [s.id, s])).values());
+setStudents(uniqueStudents);
+
 
       // 3. Fetch Subjects
       const { data: subData } = await supabase.from('subjects').select('id, name');
@@ -159,7 +162,7 @@ export default function BiljeskePage() {
              <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Aktivnosti i pedagoške mjere</h3>
           </div>
           <div className="grid grid-cols-1 gap-6">
-            {students.sort((a,b) => a.surname?.localeCompare(b.surname || '') || 0).map(s => {
+            {students.sort((a,b) => (String(a.surname || "")).localeCompare(b.surname || '') || 0).map(s => {
               const son = studentOverallNotes.find(n => n.studentId === s.id);
               if (!son || (!son.schoolActivities && !son.extracurricularActivities && !son.disciplinaryActions && !son.homeroomNote)) return null;
               

@@ -197,7 +197,10 @@ export default function ImenikPage() {
             ...u
           };
         }) as User[];
-        setStudents(mappedStudents);
+        
+const uniqueStudents = Array.from(new Map(mappedStudents.map(s => [s.id, s])).values());
+setStudents(uniqueStudents);
+
       } catch (error) {
         console.error(error);
         toast.error('Greška pri učitavanju učenika');
@@ -239,8 +242,10 @@ export default function ImenikPage() {
         const { data } = await supabase
           .from('grading_elements')
           .select('*')
+          .eq('school_id', selectedSchoolId)
           .eq('class_id', effectiveClassId)
           .eq('subject_id', activeSubject.id)
+          .eq('teacher_id', user?.id)
           .order('display_order', { ascending: true });
         if (data) setGradingElements(mapList(data, mappers.gradingElement));
       };
@@ -950,7 +955,7 @@ export default function ImenikPage() {
 
   const navigateStudent = (dir: 'PREV' | 'NEXT') => {
     if (!activeStudent || students.length === 0) return;
-    const sorted = [...students].sort((a,b) => a.surname.localeCompare(b.surname));
+    const sorted = [...students].sort((a,b) => (String(a.surname || "")).localeCompare(b.surname));
     const idx = sorted.findIndex(s => s.id === activeStudent.id);
     if (dir === 'PREV' && idx > 0) setActiveStudent(sorted[idx - 1]);
     else if (dir === 'PREV') setActiveStudent(sorted[sorted.length - 1]);
@@ -1070,7 +1075,7 @@ export default function ImenikPage() {
       return null;
     };
 
-    const studentIndex = students.sort((a,b) => a.surname.localeCompare(b.surname)).findIndex(s => s.id === activeStudent?.id);
+    const studentIndex = students.sort((a,b) => (String(a.surname || "")).localeCompare(b.surname)).findIndex(s => s.id === activeStudent?.id);
     
     const gridGrades: Record<string, Record<string, number[]>> = {};
     gradingElementNames.forEach(cat => gridGrades[cat] = {});
@@ -1242,7 +1247,7 @@ export default function ImenikPage() {
                   <thead><tr className="bg-gray-50 font-bold text-gray-400 uppercase border-b border-gray-300"><th className="p-2">Vrsta</th><th className="p-2">Bilješka</th><th className="p-2 text-center w-12 border-x border-gray-300">Ocjena</th><th className="p-2 w-8"></th></tr></thead>
                   <tbody>
                   {specialExams.length === 0 ? (<tr><td colSpan={4} className="p-4 text-center text-gray-400 italic">Nema podataka</td></tr>) : 
-                  specialExams.sort((a,b) => b.date.localeCompare(a.date)).map(ex => (
+                  specialExams.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(ex => (
                     <tr key={ex.id} className="group hover:bg-gray-50 border-b border-gray-200 last:border-0 text-[11px]">
                       <td className="p-2 font-bold text-[#005c8d]">{ex.type}</td>
                       <td className="p-2 text-gray-600">{ex.note}</td>
@@ -1507,7 +1512,7 @@ export default function ImenikPage() {
                     <tr><th className="p-2 w-64">Učenik</th><th className="p-2 w-32 border-x border-gray-300 text-center">Ocjena</th><th className="p-2">Bilješka</th></tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {students.sort((a,b)=>a.surname.localeCompare(b.surname)).map(s => (
+                    {students.sort((a,b)=>(String(a.surname || "")).localeCompare(b.surname)).map(s => (
                       <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                          <td className="p-2 text-[11px] font-bold text-gray-700">{s.surname} {s.name}</td>
                          <td className="p-1 border-x border-gray-200">
@@ -1561,7 +1566,7 @@ export default function ImenikPage() {
                     <tr><th className="p-2 w-64 border-r border-gray-300">Učenik</th><th className="p-2">Bilješka</th></tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {students.sort((a,b)=>a.surname.localeCompare(b.surname)).map(s=>(
+                    {students.sort((a,b)=>(String(a.surname || "")).localeCompare(b.surname)).map(s=>(
                       <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                         <td className="p-2 text-[11px] font-bold text-gray-700 border-r border-gray-200">{s.surname} {s.name}</td>
                         <td className="p-1"><textarea rows={2} value={groupNoteForm.studentNotes[s.id]||''} onChange={e=>setGroupNoteForm({...groupNoteForm,studentNotes:{...groupNoteForm.studentNotes,[s.id]:e.target.value}})} className="w-full border p-1 text-[11px]" /></td>
@@ -1591,14 +1596,18 @@ export default function ImenikPage() {
           onClose={() => setShowGradingElementsModal(false)} 
           subject={activeSubject}
           classId={effectiveClassId!}
+          schoolId={selectedSchoolId!}
+          teacherId={user?.id!}
           onRefresh={() => {
             // refresh logic
             const fetchGE = async () => {
               const { data } = await supabase
                 .from('grading_elements')
                 .select('*')
+                .eq('school_id', selectedSchoolId)
                 .eq('class_id', effectiveClassId)
                 .eq('subject_id', activeSubject.id)
+                .eq('teacher_id', user?.id)
                 .order('display_order', { ascending: true });
               if (data) setGradingElements(mapList(data, mappers.gradingElement));
             };
@@ -1610,10 +1619,14 @@ export default function ImenikPage() {
   );
 }
 
-function GradingElementsModal({ isOpen, onClose, subject, classId, onRefresh }: { isOpen: boolean, onClose: () => void, subject: Subject, classId: string, onRefresh: () => void }) {
+function GradingElementsModal({ isOpen, onClose, subject, classId, schoolId, teacherId, onRefresh }: { isOpen: boolean, onClose: () => void, subject: Subject, classId: string, schoolId: string, teacherId: string, onRefresh: () => void }) {
   const [elements, setElements] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [newElementName, setNewElementName] = useState('');
+  const [newElementDesc, setNewElementDesc] = useState('');
+  const [editingElementId, setEditingElementId] = useState<string | null>(null);
+  const [editingElementName, setEditingElementName] = useState('');
+  const [editingElementDesc, setEditingElementDesc] = useState('');
 
   const fetchElements = async () => {
     setLoading(true);
@@ -1621,10 +1634,13 @@ function GradingElementsModal({ isOpen, onClose, subject, classId, onRefresh }: 
       const { data } = await supabase
         .from('grading_elements')
         .select('*')
+        .eq('school_id', schoolId)
         .eq('class_id', classId)
         .eq('subject_id', subject.id)
-        .order('display_order', { ascending: true });
-      if (data) setElements(mapList(data, mappers.gradingElement));
+        .eq('teacher_id', teacherId)
+        .order('display_order', { ascending: true })
+        .order('created_at', { ascending: true });
+      if (data) setElements(data); // mapList deleted because we want native DB row shape with description
     } finally {
       setLoading(false);
     }
@@ -1638,32 +1654,61 @@ function GradingElementsModal({ isOpen, onClose, subject, classId, onRefresh }: 
     if (!newElementName.trim()) return;
     try {
       const { error } = await supabase.from('grading_elements').insert([{
+        school_id: schoolId,
+        teacher_id: teacherId,
         class_id: classId,
         subject_id: subject.id,
         name: newElementName.trim(),
+        description: newElementDesc.trim() || null,
         display_order: elements.length
       }]);
       if (error) throw error;
       setNewElementName('');
+      setNewElementDesc('');
       fetchElements();
       onRefresh();
     } catch (err) {
-      toast.error('Greška pri dodavanju elementa. Možda već postoji s istim imenom?');
+      toast.error('Greška pri dodavanju elementa.');
     }
   };
 
-  const handleDelete = async (id: string) => {
-    // Check if used
-    const { count } = await supabase.from('grades').select('*', { count: 'exact', head: true }).eq('category', elements.find(e => e.id === id)?.name);
+  const handleEdit = async () => {
+    if (!editingElementId || !editingElementName.trim()) return;
+    try {
+      const { error } = await supabase
+        .from('grading_elements')
+        .update({
+          name: editingElementName.trim(),
+          description: editingElementDesc.trim() || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', editingElementId)
+        .eq('teacher_id', teacherId);
+        
+      if (error) throw error;
+      setEditingElementId(null);
+      setEditingElementName('');
+      setEditingElementDesc('');
+      fetchElements();
+      onRefresh();
+      toast.success('Element uspješno ažuriran.');
+    } catch (err) {
+      toast.error('Greska pri ažuriranju.');
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    const { count } = await supabase.from('grades').select('*', { count: 'exact', head: true }).eq('category', name);
     if (count && count > 0) {
       toast.error('Element se ne može obrisati jer postoje ocjene u toj kategoriji.');
       return;
     }
     
     try {
-      await supabase.from('grading_elements').delete().eq('id', id);
+      await supabase.from('grading_elements').delete().eq('id', id).eq('teacher_id', teacherId);
       fetchElements();
       onRefresh();
+      toast.success('Element uspješno obrisan.');
     } catch (err) {
       toast.error('Greska pri brisanju.');
     }
@@ -1681,9 +1726,12 @@ function GradingElementsModal({ isOpen, onClose, subject, classId, onRefresh }: 
     try {
       const updates = newElements.map((e, index) => ({
         id: e.id,
+        school_id: schoolId,
+        teacher_id: teacherId,
         class_id: classId,
         subject_id: subject.id,
         name: e.name,
+        description: e.description,
         display_order: index
       }));
       await supabase.from('grading_elements').upsert(updates);
@@ -1696,32 +1744,77 @@ function GradingElementsModal({ isOpen, onClose, subject, classId, onRefresh }: 
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[400] p-4">
-      <div className="bg-white max-w-md w-full border border-gray-400">
-        <div className="p-2 bg-[#005c8d] text-white flex justify-between items-center text-[10px] font-bold uppercase">
+      <div className="bg-white max-w-md w-full border border-gray-400 shadow-2xl">
+        <div className="p-3 bg-[#005c8d] text-white flex justify-between items-center text-[11px] font-black uppercase tracking-widest">
           <span>Elementi ocjenjivanja: {subject.name}</span>
-          <button onClick={onClose}><X size={14}/></button>
+          <button onClick={onClose} className="hover:text-amber-300 transition-colors"><X size={16}/></button>
         </div>
-        <div className="p-4 space-y-4">
-          <div className="space-y-2">
-            {elements.map((e, idx) => (
-              <div key={e.id} className="flex items-center gap-2 p-2 bg-gray-50 border border-gray-200">
-                <span className="text-[11px] font-bold flex-1">{e.name}</span>
-                <div className="flex gap-1">
-                   <button onClick={() => handleMove(e.id, 'UP')} className="p-1 hover:bg-gray-200"><Plus size={12} className="rotate-180"/></button>
-                   <button onClick={() => handleMove(e.id, 'DOWN')} className="p-1 hover:bg-gray-200"><Plus size={12}/></button>
-                   <button onClick={() => handleDelete(e.id)} className="p-1 text-red-500 hover:bg-red-50"><Trash2 size={12}/></button>
-                </div>
+        <div className="p-6 space-y-6">
+          <div className="space-y-3">
+            {elements.length === 0 && (
+               <div className="text-center p-6 bg-slate-50 border-2 border-dashed border-slate-200 text-xs font-bold text-slate-400 uppercase tracking-widest">
+                 Nema definiranih elemenata.
+               </div>
+            )}
+            {elements.map((e) => (
+              <div key={e.id} className="flex flex-col gap-2 p-3 bg-slate-50 border-l-[3px] border-[#005c8d] shadow-sm">
+                {editingElementId === e.id ? (
+                  <div className="flex flex-col gap-2">
+                    <input 
+                      type="text" 
+                      value={editingElementName} 
+                      onChange={ev => setEditingElementName(ev.target.value)} 
+                      className="px-3 py-1.5 border-2 border-[#005c8d] bg-white text-xs font-bold text-slate-900 outline-none"
+                      placeholder="Naziv elementa"
+                      autoFocus
+                    />
+                    <input 
+                      type="text" 
+                      value={editingElementDesc} 
+                      onChange={ev => setEditingElementDesc(ev.target.value)} 
+                      className="px-3 py-1.5 border border-slate-300 bg-white text-xs text-slate-600 outline-none"
+                      placeholder="Opis (opcionalno)"
+                    />
+                    <div className="flex gap-2 justify-end mt-1">
+                      <button onClick={handleEdit} className="p-1.5 px-3 bg-[#005c8d] text-white hover:bg-[#004a70] text-[10px] font-bold uppercase flex items-center gap-1"><Check size={12}/> Spremi</button>
+                      <button onClick={() => setEditingElementId(null)} className="p-1.5 px-3 bg-slate-200 text-slate-600 hover:bg-slate-300 text-[10px] uppercase font-bold flex items-center gap-1"><X size={12}/> Odustani</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[11px] font-black text-slate-800 uppercase tracking-tight">{e.name}</span>
+                      <div className="flex gap-1.5 items-center">
+                         <button onClick={() => { setEditingElementId(e.id); setEditingElementName(e.name); setEditingElementDesc(e.description || ''); }} className="text-[9px] font-black uppercase text-[#005c8d] hover:underline">Uredi</button>
+                         <span className="text-slate-300 text-[9px]">|</span>
+                         <button onClick={() => handleDelete(e.id, e.name)} className="text-[9px] font-black uppercase text-red-600 hover:underline">Obriši</button>
+                      </div>
+                    </div>
+                    {e.description && <p className="text-[10px] text-slate-500 italic">{e.description}</p>}
+                  </div>
+                )}
               </div>
             ))}
           </div>
-          <div className="flex gap-2">
+
+          <div className="flex flex-col gap-2 pt-4 border-t border-slate-100">
             <input 
+              type="text" 
               value={newElementName} 
               onChange={e => setNewElementName(e.target.value)}
-              placeholder="Novi element..." 
-              className="flex-1 border p-1 text-[11px]" 
+              placeholder="Novi element (npr. Domaća zadaća)"
+              className="px-3 py-2 border-2 border-slate-200 bg-white text-xs font-bold text-slate-900 outline-none focus:border-[#005c8d]"
+              onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
             />
-            <button onClick={handleAdd} className="bg-[#005c8d] text-white px-3 py-1 text-[10px] font-bold uppercase">Dodaj</button>
+            <input 
+              type="text" 
+              value={newElementDesc} 
+              onChange={e => setNewElementDesc(e.target.value)}
+              placeholder="Opis (opcionalno)"
+              className="px-3 py-2 border border-slate-200 bg-white text-xs text-slate-600 outline-none focus:border-[#005c8d]"
+              onKeyDown={e => { if (e.key === 'Enter') handleAdd(); }}
+            />
+            <button onClick={handleAdd} className="mt-1 bg-[#005c8d] text-white px-4 py-2 text-[10px] font-black uppercase hover:bg-[#004a70] transition-colors leading-none tracking-widest">Dodaj element</button>
           </div>
         </div>
       </div>

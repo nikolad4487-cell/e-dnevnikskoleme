@@ -302,7 +302,7 @@ export default function ClassStudentsPage() {
           <div className="bg-white rounded-3xl border-2 border-[#005c8d]/10 shadow-xl overflow-hidden min-h-[400px]">
             <table className="w-full text-left border-collapse">
               <tbody className="divide-y divide-slate-50">
-                {classStudents.sort((a,b) => a.surname.localeCompare(b.surname)).map((s, idx) => (
+                {classStudents.sort((a,b) => (String(a.surname || "")).localeCompare(b.surname)).map((s, idx) => (
                   <tr key={s.id} className="hover:bg-slate-50/50 group">
                     <td className="p-4 w-12 text-center text-[10px] font-black text-slate-300 border-r">{idx + 1}.</td>
                     <td className="p-4">

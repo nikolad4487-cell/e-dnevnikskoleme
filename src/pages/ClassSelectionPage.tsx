@@ -373,7 +373,7 @@ export default function ClassSelectionPage() {
           ) : (
             <div className="divide-y divide-[#dee2e6]">
               {filteredClasses
-                .sort((a, b) => a.name.localeCompare(b.name))
+                .sort((a, b) => (String(a.name || "")).localeCompare(b.name))
                 .map((cls) => (
                   <div 
                     key={cls.id} 
