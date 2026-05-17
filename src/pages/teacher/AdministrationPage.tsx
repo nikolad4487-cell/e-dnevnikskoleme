@@ -74,7 +74,8 @@ export default function AdministrationPage() {
 
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
-    id: string;
+    id?: string;
+    item?: any;
     type: 'CLASS' | 'SUBJECT' | 'STUDENT' | 'GRADING_ELEMENT' | 'STAFF' | 'PLANNING' | 'PROGRAM' | 'SCHOOL_YEAR' | null;
     loading: boolean;
     extraData?: any;
@@ -1022,12 +1023,11 @@ export default function AdministrationPage() {
         setAllUsers(mapped);
       }
 
-      // 1. Fetch Classes for this school and year
+      // 1. Fetch Classes for this school
       const { data: clsData, error: clsError } = await supabase
         .from('classes')
         .select('*')
         .eq('school_id', currentSchoolId)
-        .eq('school_year_id', selectedYearId)
         .order('grade_level')
         .order('section');
 
@@ -1133,8 +1133,8 @@ export default function AdministrationPage() {
       if (enrollments) {
         const mapped = enrollments.map(row => ({
           ...mappers.user(row.student), // Use mapper consistently
-          name: row.student.name?.split(' ')[0] || '',
-          surname: row.student.surname || row.student.name?.split(' ').slice(1).join(' ') || '',
+          name: row.student.name || '',
+          surname: row.student.surname || '',
           globalRole: Role.STUDENT,
           classId: row.class_id
         }));
@@ -1205,16 +1205,13 @@ export default function AdministrationPage() {
       toast.success('Postavke razreda spremljene');
       
       // Refetch and verify
-      const { data: verifiedRow } = await supabase.from('classes')
-        .select(`
-          *,
-          program:program_id(*),
-          homeroom:homeroom_teacher_id(*),
-          deputy:deputy_teacher_id(*)
-        `)
+      console.log('FETCHING CLASS ID', selectedClassId);
+      const { data: verifiedRow, error: verifiedError } = await supabase.from('classes')
+        .select('*')
         .eq('id', selectedClassId)
         .single();
-      console.log('SQL VERIFICATION FETCH (after save):', verifiedRow);
+      console.log('CLASS FETCH RESULT', verifiedRow);
+      console.log('CLASS FETCH ERROR', verifiedError);
       
       await fetchData(); 
     } catch (err: any) {
@@ -1700,7 +1697,6 @@ export default function AdministrationPage() {
             address: studentForm.address,
             mobile: studentForm.mobile,
             class_id: studentForm.classId || null,
-            program_id: studentForm.programId || null,
             school_id: selectedSchoolId,
             school_year_id: currentYear?.id || null
         };
@@ -1778,19 +1774,19 @@ export default function AdministrationPage() {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Neuspješno kreiranje učenika');
 
-        // Ensure user_profiles has class_id and program_id
+        // Ensure user_profiles has class_id, school_id, and school_year_id
         await supabase.from('user_profiles').update({ 
             class_id: classIdToUse, 
-            program_id: programIdToUse 
+            school_id: classToUse?.school_id || selectedSchoolId,
+            school_year_id: classToUse?.school_year_id || null
         }).eq('id', result.profileId);
 
         // Enrollment should be handled by the server, but we'll ensure it here too for the specified school year
-        const currentYear = schoolYears.find(y => y.isActive);
         const enrollmentPayload = {
             student_id: result.profileId,
             class_id: classIdToUse,
-            school_year: currentYear?.name || '2024/2025',
-            school_year_id: currentYear?.id || null,
+            school_year_id: classToUse?.school_year_id || null,
+            school_year: classToUse?.schoolYear || '2024/2025',
             program_id: programIdToUse,
             status: 'ACTIVE'
         };
@@ -1814,52 +1810,35 @@ export default function AdministrationPage() {
 
         if (enrollErr) {
             console.error('Enrollment Error:', enrollErr);
-            toast.error('Profil stvoren, ali upis u razred nije uspio: ' + enrollErr.message);
-        } else {
-            toast.success(`Učenik ${studentForm.name} stvoren i upisan u razred.`);
-            setStudentForm({
-              name: '',
-              email: '',
-              classId: '',
-              schoolId: selectedSchoolId || '',
-              programId: '',
-              oib: '',
-              dob: '',
-              pob: '',
-              address: '',
-              mobile: '',
-              status: 'ACTIVE',
-              isContinuation: false,
-              continuationType: null,
-              parentName: '',
-              parentPhone: '',
-              parentEmail: '',
-              parentNotes: ''
-            });
-            await fetchData();
-            setActiveTab('CLASS_DETAIL');
+            throw new Error('Enrollment failed: ' + enrollErr.message);
         }
+        
+        toast.success(`Učenik ${studentForm.name} stvoren i upisan u razred.`);
+        setStudentForm({
+          name: '',
+          email: '',
+          classId: '',
+          schoolId: selectedSchoolId || '',
+          programId: '',
+          oib: '',
+          dob: '',
+          pob: '',
+          address: '',
+          mobile: '',
+          status: 'ACTIVE',
+          isContinuation: false,
+          continuationType: null,
+          parentName: '',
+          parentPhone: '',
+          parentEmail: '',
+          parentNotes: ''
+        });
+        await fetchData();
+        setActiveTab('CLASS_DETAIL');
         
         console.log('LOAD STUDENTS FOR CLASS', classIdToUse);
         await fetchData();
       }
-
-      setStudentForm({ 
-        name: '', 
-        email: '', 
-        classId: '', 
-        schoolId: selectedSchoolId || '', 
-        programId: '',
-        oib: '',
-        dob: '',
-        pob: '',
-        address: '',
-        mobile: '',
-        status: 'ACTIVE',
-        isContinuation: false,
-        continuationType: null
-      });
-      fetchData();
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -1885,9 +1864,8 @@ export default function AdministrationPage() {
         const fullName = parts[0].trim();
         const email = parts[1]?.trim();
         
-        const names = fullName.split(' ');
-        const name = names[0];
-        const surname = names.slice(1).join(' ');
+        const name = fullName;
+        const surname = '';
 
         parsedStudents.push({ name, surname, email: email || undefined });
     }
@@ -2140,17 +2118,40 @@ export default function AdministrationPage() {
 
           console.log("CASCADE CLEANUP RESULTS:", cleanupResults);
 
-          const { error: deleteError } = await supabase.from('classes').delete().eq('id', classId);
+          const { error: deleteError, count } = await supabase
+            .from('classes')
+            .delete({ count: 'exact' })
+            .eq('id', classId);
+            
+          console.log('DELETE CLASS RESULT', { error: deleteError, count });
+
           if (deleteError) {
             console.error("SUPABASE DELETE ERROR:", deleteError);
             throw deleteError;
           }
           
+          if (count === 0) {
+            console.warn('Razred nije obrisan jer nije pronađen u bazi.');
+          }
+          
           toast.success('Razred i svi povezani podaci su obrisani.');
+          await fetchData();
         } else {
-          const { error: deleteError } = await supabase.from('classes').delete().eq('id', classId);
+          const { error: deleteError, count } = await supabase
+            .from('classes')
+            .delete({ count: 'exact' })
+            .eq('id', classId);
+            
+          console.log('DELETE CLASS RESULT', { error: deleteError, count });
+          
           if (deleteError) throw deleteError;
+          
+          if (count === 0) {
+            console.warn('Razred nije obrisan jer nije pronađen u bazi.');
+          }
+          
           toast.success('Razred je obrisan.');
+          await fetchData();
         }
       } else if ((deleteDialog.type as string) === 'SCHOOL_YEAR') {
         const yearId = deleteDialog.id;
@@ -2192,31 +2193,53 @@ export default function AdministrationPage() {
           toast.success('Predmet je obrisan.');
         }
       } else if (deleteDialog.type === 'STUDENT') {
-        const authUserId = deleteDialog.id;
-        const { data: profile } = await supabase.from('user_profiles').select('id').eq('auth_user_id', authUserId).single();
+        const student = deleteDialog.item;
         
-        if (isMainAdmin && profile) {
-          if (confirm('Jeste li sigurni da želite obrisati ovog učenika i SVE njegove podatke?')) {
-            await Promise.all([
-              supabase.from('grades').delete().eq('student_id', profile.id),
-              supabase.from('absences').delete().eq('student_id', profile.id),
-              supabase.from('student_class_enrollments').delete().eq('student_id', profile.id),
-              supabase.from('student_subject_enrollments').delete().eq('student_id', profile.id),
-              supabase.from('student_year_summaries').delete().eq('student_id', profile.id),
-              supabase.from('student_overall_notes').delete().eq('student_id', profile.id),
-              supabase.from('user_school_roles').delete().eq('user_id', profile.id),
-            ]);
-            
-            // Delete profile
-            await supabase.from('user_profiles').delete().eq('id', profile.id);
-            // Delete auth user if possible (requires admin API, but profile delete might be enough for UI)
-            toast.success('Učenik je obrisan.');
-          }
-        } else {
-          await supabase.from('user_profiles').delete().eq('auth_user_id', authUserId);
-          toast.success('Učenik je obrisan.');
+        if (!student || !student.id) {
+            toast.error('Nije odabran učenik za brisanje.');
+            setDeleteDialog(prev => ({ ...prev, loading: false }));
+            return;
         }
-      } else if (deleteDialog.type === 'GRADING_ELEMENT') {
+
+        console.log('STUDENT TO DELETE:', student);
+        const studentId = student.id;
+
+        try {
+            console.log('DELETE STUDENT ID', studentId);
+
+            // Sequential deletion to ensure robust error handling
+            const tablesToDeleteFrom = [
+                { table: 'grades', column: 'student_id', id: studentId },
+                { table: 'absences', column: 'student_id', id: studentId },
+                { table: 'student_class_enrollments', column: 'student_id', id: studentId },
+                { table: 'student_subject_enrollments', column: 'student_id', id: studentId },
+                { table: 'student_year_summaries', column: 'student_id', id: studentId },
+                { table: 'student_overall_notes', column: 'student_id', id: studentId },
+                { table: 'user_school_roles', column: 'user_id', id: studentId },
+            ];
+
+            for (const item of tablesToDeleteFrom) {
+                const { error, count } = await supabase.from(item.table).delete({ count: 'exact' }).eq(item.column, item.id);
+                console.log(`DELETE ${item.table} RESULT`, { error, count });
+                if (error) throw new Error(`Greška pri brisanju iz ${item.table}: ${error.message}`);
+            }
+            
+            // Delete actual profile
+            const { error: profileDeleteError, count: profileCount } = await supabase.from('user_profiles').delete({ count: 'exact' }).eq('id', studentId);
+            console.log('DELETE USER_PROFILES RESULT', { error: profileDeleteError, count: profileCount });
+            
+            if (profileDeleteError) throw new Error(`Greška pri brisanju profila: ${profileDeleteError.message}`);
+            if (profileCount === 0) throw new Error('Profil nije pronađen u bazi.');
+
+            toast.success('Učenik i svi povezani podaci su obrisani.');
+            await fetchData();
+        } catch (err: any) {
+            console.error('STUDENT DELETE ERROR', err);
+            toast.error(err.message || 'Došlo je do pogreške pri brisanju učenika.');
+        } finally {
+            setDeleteDialog({ isOpen: false, id: null, type: null, loading: false });
+        }
+
         const subjectId = deleteDialog.id;
         const element = deleteDialog.extraData.element;
         const subject = allSubjects.find(s => s.id === subjectId);
@@ -2706,7 +2729,7 @@ export default function AdministrationPage() {
                 </div>
                 
                 <div className="flex gap-2">
-                  {selectedYearId && classes.filter(c => c.school_year_id === selectedYearId).length === 0 && (
+                  {!selectedYearId || classes.filter(c => !selectedYearId || c.school_year_id === selectedYearId).length === 0 && (
                     <button 
                       onClick={createInitialClassesForYear}
                       className="bg-amber-600 text-white px-4 py-2 font-black text-[10px] uppercase hover:bg-amber-700 flex items-center gap-2"
@@ -3297,7 +3320,7 @@ export default function AdministrationPage() {
                 </div>
                 {isAnyAdmin && (
                    <button 
-                     onClick={() => setDeleteDialog({ isOpen: true, id: selectedStudentId || '', type: 'STUDENT', loading: false })}
+                     onClick={() => setDeleteDialog({ isOpen: true, item: selectedStudentData, type: 'STUDENT', loading: false })}
                      className="text-red-500 font-bold uppercase text-[10px] flex items-center gap-1 hover:underline"
                    >
                       <Trash2 size={14}/> Obriši učenika
@@ -3701,7 +3724,7 @@ export default function AdministrationPage() {
                       return (
                         <tr key={s.id} className="hover:bg-gray-50">
                           <td className="px-4 py-2 border-r border-gray-200">
-                             <div className="font-bold text-[#005c8d] uppercase">{s.name}</div>
+                             <div className="font-bold text-[#005c8d] uppercase">{s.surname} {s.name}</div>
                           </td>
                           <td className="px-4 py-2 border-r border-gray-200 text-center font-black text-gray-700">
                              {razred?.name || '—'}
@@ -3727,7 +3750,7 @@ export default function AdministrationPage() {
                           </td>
                           <td className="px-4 py-2 text-center">
                             <button 
-                              onClick={() => setDeleteDialog({ isOpen: true, id: s.id, type: 'STUDENT', loading: false })}
+                              onClick={() => setDeleteDialog({ isOpen: true, item: s, type: 'STUDENT', loading: false })}
                               className="text-gray-300 hover:text-red-600 transition-colors"
                             >
                               <Trash2 size={14} />
@@ -3776,7 +3799,7 @@ export default function AdministrationPage() {
                     >
                       <div className="flex items-center gap-3">
                          <div className={cn("w-6 h-6 border flex items-center justify-center text-[10px] font-black transition-colors", editingSubjectId === s.id ? "border-white/30 text-white" : "border-gray-200 text-gray-400")}>{s.name[0]}</div>
-                         <span className="font-black text-[11px] uppercase tracking-widest">{s.name}</span>
+                         <span className="font-black text-[11px] uppercase tracking-widest">{s.surname} {s.name}</span>
                       </div>
                       <ChevronDown size={14} className={cn("transition-transform", editingSubjectId === s.id && "rotate-180")} />
                     </div>

@@ -168,9 +168,7 @@ export default function ImenikPage() {
           const u = mappers.user(r.user);
           return {
             ...u,
-            globalRole: r.role,
-            name: u.name?.split(' ')[0] || '',
-            surname: u.name?.split(' ').slice(1).join(' ') || ''
+            globalRole: r.role
           };
         }) as User[];
         setTeachers(mappedTeachers);
@@ -196,9 +194,7 @@ export default function ImenikPage() {
         const mappedStudents = (data || []).map(row => {
           const u = mappers.user(row.student);
           return {
-            ...u,
-            name: u.name?.split(' ')[0] || '',
-            surname: u.name?.split(' ').slice(1).join(' ') || ''
+            ...u
           };
         }) as User[];
         setStudents(mappedStudents);
@@ -987,10 +983,10 @@ export default function ImenikPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {students.sort((a,b) => a.surname.localeCompare(b.surname)).map((s, idx) => (
+            {students.sort((a,b) => (a.name || '').localeCompare(b.name || '')).map((s, idx) => (
               <tr key={s.id} onClick={() => { setActiveStudent(s); setViewMode('SUBJECTS'); }} className="group hover:bg-[#eff6ff] cursor-pointer transition-colors">
                 <td className="px-3 py-2 text-center font-bold text-gray-500 border-r border-gray-200">{idx + 1}.</td>
-                <td className="px-4 py-2 font-bold text-[#005c8d] border-r border-gray-200 group-hover:underline">{s.surname} {s.name}</td>
+                <td className="px-4 py-2 font-bold text-[#005c8d] border-r border-gray-200 group-hover:underline">{s.name}</td>
                 <td className="px-4 py-2 border-r border-gray-200">
                   <div className="text-[10px] font-bold text-gray-600 uppercase italic opacity-70">{s.program || 'Opći'}</div>
                   <div className="text-[10px] font-bold">{s.oib || 'N/A'}</div>

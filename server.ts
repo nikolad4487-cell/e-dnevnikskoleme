@@ -156,6 +156,13 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         return res.status(400).json({ error: "Lista učenika je prazna." });
       }
 
+      // Fetch class details if available
+      let classDetails = { id: classId, school_id: schoolId, school_year_id: finalYearId, school_year: '2024/2025', program_id: programId };
+      if (classId) {
+        const { data: clsData } = await supabaseAdmin.from('classes').select('id, school_id, school_year_id, school_year, program_id').eq('id', classId).single();
+        if (clsData) classDetails = { ...classDetails, ...clsData };
+      }
+
       // Fetch all existing emails to avoid collisions
       const { data: existingUserList } = await supabaseAdmin.auth.admin.listUsers();
       const existingEmails = new Set<string>();
@@ -206,35 +213,41 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
               requires_password_change: false,
               requires_authenticator_setup: false,
               password_type: 'standard',
-              program_id: programId || null
+              class_id: classDetails.id || null,
+              school_id: classDetails.school_id || schoolId,
+              school_year_id: classDetails.school_year_id || null
            }, { onConflict: 'auth_user_id' })
            .select()
            .single();
 
          if (profileError) {
-             // Rollback user if profile fails (ideally we would, but ignoring for now or log error)
             results.push({ ...student, success: false, error: profileError.message });
             continue;
          }
 
-         if (schoolId) {
+         if (classDetails.school_id) {
             await supabaseAdmin.from('user_school_roles').upsert({
                user_id: profile.id,
-               school_id: schoolId,
+               school_id: classDetails.school_id,
                role: 'STUDENT',
                status: 'ACTIVE'
             }, { onConflict: 'user_id,school_id,role' });
          }
 
-         if (classId) {
-             await supabaseAdmin.from('student_class_enrollments').upsert({
+         if (classDetails.id) {
+             const { error: enrollmentError } = await supabaseAdmin.from('student_class_enrollments').upsert({
                  student_id: profile.id,
-                 class_id: classId,
-                 school_year_id: schoolYearId || null,
-                 school_year: '2024/2025',
-                 program_id: programId || null,
+                 class_id: classDetails.id,
+                 school_year_id: classDetails.school_year_id,
+                 school_year: classDetails.school_year || '2024/2025',
+                 program_id: classDetails.program_id || null,
                  status: 'ACTIVE'
              }, { onConflict: 'student_id,class_id,school_year' });
+
+             if (enrollmentError) {
+                 results.push({ ...student, success: false, error: enrollmentError.message });
+                 continue;
+             }
          }
 
          results.push({ ...student, success: true, email, password });
