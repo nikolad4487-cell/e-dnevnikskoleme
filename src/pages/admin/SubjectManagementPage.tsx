@@ -24,13 +24,18 @@ export default function SubjectManagementPage() {
   const [code, setCode] = useState('');
 
   useEffect(() => {
-    fetchSubjects();
-  }, []);
+    if (selectedSchoolId) {
+      fetchSubjects();
+    } else {
+      setSubjects([]);
+    }
+  }, [selectedSchoolId]);
 
   const fetchSubjects = async () => {
+    if (!selectedSchoolId) return;
     try {
       setLoading(true);
-      const { data, error } = await supabase.from('subjects').select('*').order('name');
+      const { data, error } = await supabase.from('subjects').select('*').eq('school_id', selectedSchoolId).order('name');
       if (error) throw error;
       setSubjects(data || []);
     } catch (err: any) {
@@ -46,9 +51,18 @@ export default function SubjectManagementPage() {
       console.warn("Attempted subject create/update without admin permissions");
       return;
     }
+
+    if (!selectedSchoolId) {
+      toast.error("Nije odabrana škola.");
+      return;
+    }
     
-    const payload = { name, code: code || null };
-    console.log(`${editingSubject ? 'UPDATE' : 'CREATE'} SUBJECT CLICKED`, payload);
+    const payload = { 
+      name, 
+      code: code || null,
+      school_id: selectedSchoolId
+    };
+    console.log("SUBJECT INSERT PAYLOAD", payload);
 
     try {
       if (editingSubject) {
@@ -141,8 +155,8 @@ export default function SubjectManagementPage() {
             <ChevronLeft size={12} strokeWidth={3} />
             Natrag na pregled
           </button>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none mb-2">Globalni predmeti</h1>
-          <p className="text-slate-500 font-medium text-sm">Popis svih nastavnih predmeta dostupnih u sustavu</p>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none mb-2">Predmeti</h1>
+          <p className="text-slate-500 font-medium text-sm">Popis svih nastavnih predmeta dostupnih u školi</p>
         </div>
         
         {isAnyAdmin && (
