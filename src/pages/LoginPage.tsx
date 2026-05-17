@@ -102,7 +102,7 @@ export default function LoginPage() {
       console.log('[LOGIN] Session set successfully, waiting for AuthContext to load profile...');
       // AuthContext will handle state updates and we'll redirect via the useEffect
     } catch (err: any) {
-      console.error('[LOGIN] Error:', err.message);
+      console.error('LOGIN REQUEST FAILED', err);
       let msg = err.message || 'Neispravna e-mail adresa ili lozinka.';
       if (err.message.includes('Invalid login credentials')) msg = 'Neispravna lozinka ili podaci za prijavu.';
       setError(msg);

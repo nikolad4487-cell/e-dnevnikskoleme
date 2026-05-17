@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
@@ -786,18 +785,27 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
   });
 
   // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    // Only serve static files if not on Vercel
+    if (!process.env.VERCEL) {
+        const distPath = path.join(process.cwd(), 'dist');
+        app.use(express.static(distPath));
+        app.get('*', (req, res) => {
+            res.sendFile(path.join(distPath, 'index.html'));
+        });
+    }
+  }
+
+  // Export app for Vercel Serverless Functions
+  if (process.env.VERCEL) {
+      return app;
   }
 
   app.listen(PORT, "0.0.0.0", () => {
@@ -809,4 +817,4 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
   }
 }
 
-startServer();
+export const appPromise = startServer();

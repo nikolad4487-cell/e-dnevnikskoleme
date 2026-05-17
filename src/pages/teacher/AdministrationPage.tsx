@@ -1704,12 +1704,25 @@ export default function AdministrationPage() {
             updatePayload.email = studentForm.email.toLowerCase();
         }
 
-        const { error: profileError } = await supabase
+        console.log('UPDATE STUDENT ID:', editingStudentId);
+        console.log('UPDATE PAYLOAD:', updatePayload);
+
+        const { data: updatedProfile, error: profileError } = await supabase
           .from('user_profiles')
           .update(updatePayload)
-          .eq('id', editingStudentId);
+          .eq('id', editingStudentId)
+          .select()
+          .single();
         
+        console.log('UPDATE RESULT:', updatedProfile);
+        console.log('UPDATE ERROR:', profileError);
+
         if (profileError) throw profileError;
+
+        if (!updatedProfile) {
+          toast.error('Nijedan zapis nije ažuriran.');
+          return;
+        }
 
         // 2. Update/Upsert enrollment - for program and class history
         const { error: enrollmentError } = await supabase
@@ -1718,6 +1731,7 @@ export default function AdministrationPage() {
             student_id: editingStudentId,
             class_id: studentForm.classId || null,
             school_year_id: currentYear?.id,
+            school_year: currentYear?.name,
             program_id: studentForm.programId || null,
             status: studentForm.status || 'ACTIVE'
           }, {
