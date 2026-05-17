@@ -19,7 +19,7 @@ const SelectionContext = createContext<SelectionContextType | undefined>(undefin
 export function SelectionProvider({ children }: { children: React.ReactNode }) {
   const { user, userSchoolRoles, loading: authLoading } = useAuth();
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(() => localStorage.getItem('selectedSchoolId'));
-  const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(() => localStorage.getItem('selectedClassId'));
   const [selectedChildId, setSelectedChildId] = useState<string | null>(() => localStorage.getItem('selectedChildId'));
   const [isArchived, setIsArchived] = useState<boolean>(() => localStorage.getItem('isArchived') === 'true');
 
@@ -81,6 +81,11 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     if (selectedSchoolId) localStorage.setItem('selectedSchoolId', selectedSchoolId);
     else localStorage.removeItem('selectedSchoolId');
   }, [selectedSchoolId]);
+
+  useEffect(() => {
+    if (selectedClassId) localStorage.setItem('selectedClassId', selectedClassId);
+    else localStorage.removeItem('selectedClassId');
+  }, [selectedClassId]);
 
   useEffect(() => {
     if (selectedChildId) localStorage.setItem('selectedChildId', selectedChildId);

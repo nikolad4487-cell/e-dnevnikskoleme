@@ -52,7 +52,7 @@ export default function ClassSelectionPage() {
       setLoading(false);
     };
     init();
-  }, [user, selectedSchoolId, selectedChildId, isStaff]);
+  }, [user, selectedSchoolId, selectedChildId, isStaff, isSchoolAdmin]);
 
   useEffect(() => {
     console.log("DEBUG: selectedSchoolId", selectedSchoolId);
@@ -106,8 +106,9 @@ export default function ClassSelectionPage() {
         .from('classes')
         .select(`
           *,
-          homeroom:user_profiles!classes_homeroom_teacher_id_fkey(name),
-          deputy:user_profiles!classes_deputy_teacher_id_fkey(name)
+          program:program_id(*),
+          homeroom:homeroom_teacher_id(*),
+          deputy:deputy_teacher_id(*)
         `)
         .eq('school_id', selectedSchoolId);
 

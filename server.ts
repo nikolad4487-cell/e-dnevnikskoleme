@@ -149,7 +149,9 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       
-      const { students, classId, schoolId, schoolYearId, programId } = req.body;
+      const { students, classId, schoolId, schoolYearId, school_year_id, programId } = req.body;
+      const finalYearId = school_year_id || schoolYearId;
+      
       if (!students || !Array.isArray(students) || students.length === 0) {
         return res.status(400).json({ error: "Lista učenika je prazna." });
       }
@@ -369,10 +371,13 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       // 4. Student Enrollment
       if (roles.includes('STUDENT') && classId) {
+        const { data: clsInfo } = await supabaseAdmin.from('classes').select('school_year, school_year_id').eq('id', classId).single();
+
         await supabaseAdmin.from('student_class_enrollments').upsert({
           student_id: profile.id,
           class_id: classId,
-          school_year: '2024/2025',
+          school_year_id: clsInfo?.school_year_id || null,
+          school_year: clsInfo?.school_year || '2024/2025',
           program_id: programId,
           status: 'ACTIVE'
         }, { onConflict: 'student_id,class_id,school_year' });

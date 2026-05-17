@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, Subject, User, Role } from '../../types';
+import { mappers, mapList } from '../../lib/mappers';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   ChevronLeft, 
@@ -55,17 +56,16 @@ export default function ScheduleManagementPage() {
   }, [selectedClassId, shift]);
 
   const fetchClasses = async () => {
+    if (!selectedSchoolId) return;
     const { data } = await supabase
-      .from('active_classes_current_year')
+      .from('classes')
       .select('*')
       .eq('school_id', selectedSchoolId)
       .order('name');
     
-    // Deduplicate by ID
-    const uniqueClasses = Array.from(
-      new Map((data || []).map(c => [c.id, c])).values()
-    );
-    setClasses(uniqueClasses);
+    if (data) {
+      setClasses(mapList(data, mappers.class));
+    }
   };
 
   const fetchClassData = async () => {

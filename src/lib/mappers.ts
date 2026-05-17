@@ -52,7 +52,7 @@ export const mappers = {
   class: (raw: any) => ({
     id: raw.id,
     schoolId: raw.school_id,
-    schoolYearId: raw.school_year_id,
+    school_year_id: raw.school_year_id,
     schoolYear: raw.school_year,
     name: raw.name,
     gradeLevel: raw.grade_level,
@@ -66,6 +66,7 @@ export const mappers = {
     variant: raw.variant,
     homeroom: raw.homeroom ? mappers.user(raw.homeroom) : undefined,
     deputy: raw.deputy ? mappers.user(raw.deputy) : undefined,
+    program: raw.program ? mappers.program(raw.program) : undefined,
   }),
 
   subject: (raw: any) => ({
@@ -217,7 +218,7 @@ export const mappers = {
     id: raw.id,
     studentId: raw.student_id,
     classId: raw.class_id,
-    schoolYearId: raw.school_year_id,
+    school_year_id: raw.school_year_id,
     schoolYear: raw.school_year,
     average: raw.average,
     behavior: raw.behavior,

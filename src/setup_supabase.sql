@@ -54,6 +54,7 @@ CREATE TABLE public.user_profiles (
     pob TEXT,
     mobile TEXT,
     program_id UUID,
+    class_id TEXT, -- Added for current class cache
     is_first_login BOOLEAN DEFAULT TRUE,
     requires_password_change BOOLEAN DEFAULT TRUE,
     requires_authenticator_setup BOOLEAN DEFAULT FALSE,
@@ -429,7 +430,33 @@ CREATE TABLE public.rollover_logs (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 23. View for Active Classes (Used for Student Registration)
+-- 23. Student Parent Contacts
+CREATE TABLE IF NOT EXISTS public.student_parent_contacts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id uuid REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  parent_name text,
+  parent_phone text,
+  parent_email text,
+  notes text,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+-- Enable RLS
+ALTER TABLE public.student_parent_contacts ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated manage" ON public.student_parent_contacts FOR ALL TO authenticated USING (true);
+
+-- 24. View for Active Classes (Used for Student Registration)
+CREATE OR REPLACE VIEW public.active_classes_current_year AS
+SELECT
+  c.*,
+  sy.is_active as school_year_active
+FROM public.classes c
+JOIN public.school_years sy
+  ON sy.id = c.school_year_id
+WHERE
+  sy.is_active = true;
+
 CREATE OR REPLACE VIEW public.active_classes_for_students AS
 SELECT
   c.id,

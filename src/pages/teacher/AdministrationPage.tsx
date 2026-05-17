@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, Subject, StudentSubjectEnrollment, SchoolYear, RolloverLog, StudentClassEnrollment, School, Program, SchoolType, SecondarySubtype, ClassVariant, ContinuationType, PROGRAM_TYPES, CONTINUATION_TYPES, CLASS_VARIANTS, ProgramType } from '../../types';
-import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield } from 'lucide-react';
+import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
 import { cn } from '../../lib/utils';
@@ -15,7 +15,7 @@ export default function AdministrationPage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const [searchParams] = useSearchParams();
   const { user, isMainAdmin, signOut, userSchoolRoles } = useAuth();
-  const { selectedSchoolId, isArchived } = useSelection();
+  const { selectedSchoolId, isArchived, setSelectedSchoolId } = useSelection();
 
   const isAnyAdmin = React.useMemo(() => {
     // Current user's roles for the selected school
@@ -37,15 +37,18 @@ export default function AdministrationPage() {
   }, [userSchoolRoles, isMainAdmin, selectedSchoolId]);
   
   const effectiveClassId = routeClassId;
+  const isClassAdminMode = !!effectiveClassId;
 
   const [classes, setClasses] = useState<Class[]>([]);
   const [activeStudentClasses, setActiveStudentClasses] = useState<any[]>([]);
-  const setClassesUnified = (newClasses: Class[]) => {
-    // Deduplicate by ID and replace existing state
-    const uniqueClasses = Array.from(
-      new Map(newClasses.map(c => [c.id, c])).values()
-    );
-    setClasses(uniqueClasses);
+  const setClassesUnified = (newClasses: Class[] | ((prev: Class[]) => Class[])) => {
+    setClasses(prev => {
+      const updated = typeof newClasses === 'function' ? newClasses(prev) : newClasses;
+      const uniqueClasses = Array.from(
+        new Map(updated.map(c => [c.id, c])).values()
+      );
+      return uniqueClasses;
+    });
   };
   const [students, setStudents] = useState<User[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
@@ -91,6 +94,9 @@ export default function AdministrationPage() {
 
   const selectedClassData = classes.find(c => c.id === selectedClassId);
 
+  // If we are in class administration mode but data hasn't arrived yet
+  const isMissingClassData = isClassAdminMode && !selectedClassData && !loading;
+
   const filteredPrograms = React.useMemo(() => {
     if (!selectedClassData || !programs) return [];
     console.log('CURRENT CLASS USED FOR STUDENTS:', selectedClassData);
@@ -114,7 +120,6 @@ export default function AdministrationPage() {
   }, [selectedClassData, programs]);
 
   const isSchoolAdminMode = location.pathname.startsWith('/admin/');
-  const isClassAdminMode = !!effectiveClassId;
 
   // Modals / Tabs
   const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN'>(
@@ -232,7 +237,11 @@ export default function AdministrationPage() {
     mobile: '',
     status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE',
     isContinuation: false,
-    continuationType: null as ContinuationType
+    continuationType: null as ContinuationType,
+    parentName: '',
+    parentPhone: '',
+    parentEmail: '',
+    parentNotes: ''
   });
 
   const [assignmentForm, setAssignmentForm] = useState({
@@ -492,7 +501,7 @@ export default function AdministrationPage() {
       if (sourceError) throw sourceError;
       
       const sourceClasses = mapList(sourceClassesRaw || [], mappers.class);
-      const targetClasses = classes.filter(c => c.schoolYearId === targetYearId);
+      const targetClasses = classes.filter(c => c.school_year_id === targetYearId);
       
       const newMappings = sourceClasses.map(fromClass => {
         // Find program info
@@ -619,6 +628,7 @@ export default function AdministrationPage() {
         // Ensure target class exists
         let targetClassId = mapping.toClassId;
         
+        console.log('Saving class with school_year_id:', rolloverWizard.targetYearId);
         if (mapping.isNew || !targetClassId) {
           const { grade, section } = parseClassName(mapping.toClassName);
           const { data: newClass, error: classError } = await supabase.from('classes').insert([{
@@ -757,7 +767,7 @@ export default function AdministrationPage() {
         student_id: studentId,
         class_id: graduatesAdmin.targetClassId,
         school_year: targetClass.schoolYear,
-        school_year_id: targetClass.schoolYearId,
+        school_year_id: targetClass.school_year_id,
         status: 'ACTIVE'
       }));
 
@@ -791,7 +801,12 @@ export default function AdministrationPage() {
       const years = mapList(data, mappers.schoolYear);
       setSchoolYears(years);
       const active = years.find(y => y.isActive);
-      if (active) setActiveYearId(active.id);
+      if (active) {
+        setActiveYearId(active.id);
+        if (!selectedYearId) {
+          setSelectedYearId(active.id);
+        }
+      }
     }
   };
 
@@ -811,11 +826,11 @@ export default function AdministrationPage() {
         const currentYear = new Date().getFullYear();
         const nextYear = currentYear + 1;
         const name = `${currentYear}./${nextYear}.`;
+        console.log('Creating school year for school:', selectedSchoolId);
         
         const { data: newYear, error: createError } = await supabase
           .from('school_years')
           .insert([{
-            id: `sy-${selectedSchoolId}-${currentYear}`,
             school_id: selectedSchoolId,
             name,
             starts_at: `${currentYear}-09-01`,
@@ -839,48 +854,6 @@ export default function AdministrationPage() {
     };
 
     checkAndCreateSchoolYear();
-    
-    supabase
-      .from('active_classes_current_year')
-      .select('*')
-      .eq('school_id', selectedSchoolId)
-      .then(({ data }) => data && setClassesUnified(mapList(data, mappers.class)));
-    
-    // Fetch active classes for students using the view
-    supabase
-      .from('active_classes_current_year')
-      .select('id, name, grade_level, section, school_id')
-      .eq('school_id', selectedSchoolId)
-      .order('grade_level')
-      .order('section')
-      .then(({ data }) => {
-        if (data) {
-          const unique = Array.from(new Map(data.map(c => [c.id, c])).values());
-          setActiveStudentClasses(unique);
-        }
-      });
-
-    supabase.from('subjects').select('*').eq('school_id', selectedSchoolId).then(({ data }) => data && setAllSubjects(mapList(data, mappers.subject)));
-    supabase.from('user_school_roles').select('*').then(({ data }) => data && setAllUserSchoolRoles(mapList(data || [], mappers.userSchoolRole)));
-    
-    supabase.from('user_profiles').select('*').then(({ data }) => {
-      if (data) {
-        const mapped = data.map(p => {
-          const u = mappers.user(p);
-          return {
-            ...u,
-            name: u.name?.split(' ')[0] || '',
-            surname: u.name?.split(' ').slice(1).join(' ') || '',
-          };
-        });
-        setAllUsers(mapped);
-      }
-    });
-
-    supabase.from('schools').select('*').then(({ data }) => data && setSchools(mapList(data, mappers.school)));
-    supabase.from('programs').select('*').eq('school_id', selectedSchoolId).order('name').then(({ data }) => data && setPrograms(mapList(data, mappers.program)));
-    supabase.from('class_subject_teachers').select('*').eq('school_id', selectedSchoolId).then(({ data }) => data && setSubjectAssignments(mapList(data, mappers.classSubjectTeacher)));
-    supabase.from('curriculum_plans').select('*').eq('school_id', selectedSchoolId).then(({ data }) => data && setCurriculumPlans(mapList(data, mappers.curriculumPlan)));
   }, [selectedSchoolId, isMainAdmin, isSchoolAdmin]);
 
   useEffect(() => {
@@ -990,47 +963,125 @@ export default function AdministrationPage() {
   // Define fetchData for parts that still need manual re-fetching
   const fetchData = async () => {
     const classToFetch = effectiveClassId || selectedClassId;
+    let currentSchoolId = selectedSchoolId;
+
+    console.log('DEBUG: fetchData START', { classToFetch, currentSchoolId, effectiveClassId, selectedClassId });
     
     try {
+      // 0. Recover school context if missing but class is present
+      if (classToFetch && !currentSchoolId) {
+        console.log('DEBUG: Missing school context, attempting recovery from class:', classToFetch);
+        const { data: clsInfo, error: infoErr } = await supabase
+          .from('classes')
+          .select('school_id')
+          .eq('id', classToFetch)
+          .single();
+        
+        if (clsInfo?.school_id) {
+          console.log('DEBUG: Recovered school_id:', clsInfo.school_id);
+          currentSchoolId = clsInfo.school_id;
+          if (setSelectedSchoolId) setSelectedSchoolId(clsInfo.school_id);
+        } else if (infoErr) {
+          console.error('DEBUG: School recovery error:', infoErr);
+        }
+      }
+
+      if (!currentSchoolId) {
+        console.warn('DEBUG: fetchData aborted - no school context');
+        return;
+      }
+
       // Global fetches
       const { data: schoolsData } = await supabase.from('schools').select('*');
       if (schoolsData) setSchools(mapList(schoolsData, mappers.school));
 
-      const { data: progsData, error: progsError } = await supabase.from('programs').select('*').eq('school_id', selectedSchoolId).order('name');
-      console.log('currentSchoolId (selectedSchoolId)', selectedSchoolId);
-      console.log('loaded programs', progsData);
-      if (progsError) console.log('programs error', progsError);
+      const { data: progsData, error: progsError } = await supabase.from('programs').select('*').eq('school_id', currentSchoolId).order('name');
       if (progsData) setPrograms(mapList(progsData, mappers.program));
 
-      const { data: yearRoles } = await supabase.from('user_school_roles').select('*');
+      const { data: yearRoles } = await supabase.from('user_school_roles').select('*').eq('school_id', currentSchoolId);
       if (yearRoles) setAllUserSchoolRoles(mapList(yearRoles, mappers.userSchoolRole));
 
-      const { data: teachersData } = await supabase.from('user_profiles').select('*');
+      // Fetch assignments and curriculum plans
+      const { data: assignmentsData } = await supabase.from('class_subject_teachers').select('*').eq('school_id', currentSchoolId);
+      if (assignmentsData) setSubjectAssignments(mapList(assignmentsData, mappers.classSubjectTeacher));
+
+      const { data: curricData } = await supabase.from('curriculum_plans').select('*').eq('school_id', currentSchoolId);
+      if (curricData) setCurriculumPlans(mapList(curricData, mappers.curriculumPlan));
+
+      // Fetch teachers/staff for this school
+      const staffUserIds = (yearRoles || []).map(r => r.user_id);
+      const { data: teachersData } = await supabase.from('user_profiles').select('*').in('id', staffUserIds);
       if (teachersData) {
         const mapped = teachersData.map(p => {
           const u = mappers.user(p);
           return {
             ...u,
-            // Keep full name from profile
             name: p.name || '',
           };
         });
         setAllUsers(mapped);
       }
 
-      const { data: clsData } = await supabase.from('active_classes_current_year').select('*').eq('school_id', selectedSchoolId);
-      if (clsData) setClassesUnified(mapList(clsData, mappers.class));
+      // 1. Fetch Classes for this school and year
+      const { data: clsData, error: clsError } = await supabase
+        .from('classes')
+        .select('*')
+        .eq('school_id', currentSchoolId)
+        .eq('school_year_id', selectedYearId)
+        .order('grade_level')
+        .order('section');
 
-      const { data: activeClsData } = await supabase
-        .from('active_classes_current_year')
-        .select('id, name, grade_level, section, school_id')
-        .eq('school_id', selectedSchoolId);
-      if (activeClsData) {
-        const unique = Array.from(new Map(activeClsData.map(c => [c.id, c])).values());
-        setActiveStudentClasses(unique);
+      console.log('CLASSES FETCH RESULT (Raw Data):', clsData);                
+      console.log('ACTIVE FILTERS', { school_id: currentSchoolId, school_year_id: selectedYearId, status: 'ACTIVE' });
+
+      if (clsError) {
+        console.error('LOAD ADMIN CLASSES ERROR:', clsError);
+        throw clsError;
       }
 
-      const { data: subAll } = await supabase.from('subjects').select('*').eq('school_id', selectedSchoolId);
+      if (clsData) {
+        const mappedClasses = mapList(clsData, mappers.class);
+        console.log('MAPPED CLASSES (to be set in state):', mappedClasses);
+        setClassesUnified(mappedClasses);
+        setActiveStudentClasses(clsData); 
+        
+        // If we have a specific class we're looking for, and it's not in the list (maybe because of filters), fetch it
+        let fetchedClass = clsData.find(c => c.id === classToFetch);
+        
+        if (classToFetch && !fetchedClass) {
+          console.log('DEBUG: Class not found in filtered results, fetching specifically:', classToFetch);
+          const { data: specificClass, error: specError } = await supabase
+            .from('classes')
+            .select(`
+              *,
+              program:program_id(*),
+              homeroom:homeroom_teacher_id(*),
+              deputy:deputy_teacher_id(*)
+            `)
+            .eq('id', classToFetch)
+            .single();
+          
+          if (specError) {
+             console.error('DEBUG: SPECIFIC CLASS FETCH ERROR:', specError);
+          }
+
+          if (specificClass) {
+            console.log('DEBUG: Specific class found:', specificClass.name);
+            fetchedClass = specificClass;
+            // Add to the list if not there
+            setClassesUnified(prev => {
+              if (prev.find(p => p.id === specificClass.id)) return prev;
+              const mapped = mappers.class(specificClass);
+              console.log('ADDING FETCHED SPECIFIC CLASS TO STATE:', mapped);
+              return [...prev, mapped];
+            });
+          }
+        }
+
+        console.log('DEBUG: FINAL FETCHED CLASS:', fetchedClass ? mappers.class(fetchedClass).name : 'NOT FOUND');
+      }
+
+      const { data: subAll } = await supabase.from('subjects').select('*').eq('school_id', currentSchoolId);
       if (subAll) setAllSubjects(mapList(subAll, mappers.subject));
 
       // Fetch all school students if we are in STUDENTS tab or no class is selected
@@ -1038,11 +1089,10 @@ export default function AdministrationPage() {
         const { data: allSchoolEnrollments, error: allErr } = await supabase
           .from('user_school_roles')
           .select('*, user:user_profiles(*)')
-          .eq('school_id', selectedSchoolId)
+          .eq('school_id', currentSchoolId)
           .eq('role', 'STUDENT');
         
         if (allSchoolEnrollments) {
-          // We also need their current class if possible
           const { data: currentEnrollments } = await supabase
             .from('student_class_enrollments')
             .select('student_id, class_id, program_id, status')
@@ -1124,7 +1174,7 @@ export default function AdministrationPage() {
 
   useEffect(() => {
     fetchData();
-  }, [selectedClassId, activeTab, selectedSchoolId]);
+  }, [selectedClassId, activeTab, selectedSchoolId, selectedYearId]);
 
   const handleUpdateClass = async () => {
     if (isArchived) {
@@ -1133,15 +1183,43 @@ export default function AdministrationPage() {
     }
     if (!selectedClassId) return;
     setLoading(true);
+    
+    const payload = {
+      homeroom_teacher_id: classDetailForm.homeroom_teacher_id || null,
+      deputy_teacher_id: classDetailForm.deputy_teacher_id || null,
+      program_id: classDetailForm.program_id || null
+    };
+    
+    console.log('SAVE CLASS SETTINGS PAYLOAD', payload);
+    console.log('CURRENT CLASS ID', selectedClassId);
+
     try {
-      await supabase.from('classes').update({
-        homeroom_teacher_id: classDetailForm.homeroom_teacher_id || null,
-        deputy_teacher_id: classDetailForm.deputy_teacher_id || null,
-        program_id: classDetailForm.program_id || null
-      }).eq('id', selectedClassId);
+      const { data: beforeUpdate } = await supabase.from('classes').select('*').eq('id', selectedClassId).single();
+      console.log('CLASS DATA BEFORE UPDATE:', beforeUpdate);
+
+      const { data: updatedRow, error } = await supabase.from('classes').update(payload).eq('id', selectedClassId).select().single();
+      if (error) throw error;
+      
+      console.log('CLASS DATA AFTER UPDATE (returned row):', updatedRow);
+      
       toast.success('Postavke razreda spremljene');
-    } catch (err) {
+      
+      // Refetch and verify
+      const { data: verifiedRow } = await supabase.from('classes')
+        .select(`
+          *,
+          program:program_id(*),
+          homeroom:homeroom_teacher_id(*),
+          deputy:deputy_teacher_id(*)
+        `)
+        .eq('id', selectedClassId)
+        .single();
+      console.log('SQL VERIFICATION FETCH (after save):', verifiedRow);
+      
+      await fetchData(); 
+    } catch (err: any) {
       console.error(err);
+      toast.error('Greška pri spremanju postavki: ' + err.message);
     } finally {
       setLoading(false);
     }
@@ -1289,7 +1367,7 @@ export default function AdministrationPage() {
       const payload = {
         student_id: studentId,
         class_id: selectedClassId,
-        school_year_id: selectedClassData.schoolYearId,
+        school_year_id: selectedClassData.school_year_id,
         school_year: selectedClassData.schoolYear,
         behavior,
       };
@@ -1383,7 +1461,7 @@ export default function AdministrationPage() {
           const payload = {
             student_id: student.id,
             class_id: classId,
-            school_year_id: selectedClassData.schoolYearId,
+            school_year_id: selectedClassData.school_year_id,
             school_year: selectedClassData.schoolYear,
             average: Number(avg.toFixed(2)),
             final_result: finalResultGrade,
@@ -1418,6 +1496,17 @@ export default function AdministrationPage() {
       setLoading(false);
     }
   };
+  const getProgramRule = (grade: number | string, section: string) => {
+    if (['1', '2', '3'].includes(String(grade)) && section === 'A') return { name: 'Kuhar/Kuharica', type: 'VOCATIONAL_3Y' };
+    if (['1', '2', '3'].includes(String(grade)) && section === 'B') return { name: 'Konobar/Konobarica', type: 'VOCATIONAL_3Y' };
+    if (['1', '2', '3'].includes(String(grade)) && section === 'C') return { name: 'Slastičar/Slastičarka', type: 'VOCATIONAL_3Y' };
+    if (['1', '2', '3', '4'].includes(String(grade)) && section === 'D') return { name: 'Tehničar za ugostiteljstvo / Tehničarka za ugostiteljstvo', type: 'COMMERCIALIST_4Y' };
+    if (String(grade) === '4' && ['A', 'B', 'C'].includes(section)) return { name: 'Turističko-hotelijerski komercijalist', type: 'CONTINUATION_PAID' };
+    if (String(grade) === '4' && section === 'K') return { name: 'Turističko-hotelijerski komercijalist', type: 'CONTINUATION_FREE' };
+    if (String(grade) === '4' && section === 'I') return { name: 'Turističko-hotelijerski komercijalist', type: 'COMMERCIALIST_4Y' };
+    return null;
+  };
+
   const handleCreateClass = async (e: React.FormEvent) => {
     e.preventDefault();
     const yearId = classCreationYearId;
@@ -1452,16 +1541,80 @@ export default function AdministrationPage() {
     
     setLoading(true);
     try {
-      const schoolYear = schoolYears.find(y => y.id === yearId);
+      const rule = getProgramRule(finalGradeLevel, finalSection);
+      let programIdToUse = newUserForm.programId || null;
+
+      if (rule) {
+          const { data: programsData, error: progError } = await supabase
+            .from('programs')
+            .select('*')
+            .eq('school_id', selectedSchoolId)
+            .eq('name', rule.name)
+            .eq('type', rule.type);
+
+          console.log('SCHOOL ID:', selectedSchoolId);
+          console.log('RULE:', rule);
+          console.log('LOADED PROGRAMS:', programsData);
+
+          if (progError) throw progError;
+          if (programsData && programsData.length > 0) {
+              programIdToUse = programsData[0].id;
+              console.log('SELECTED PROGRAM ID:', programIdToUse);
+          } else {
+              toast.error("Nije pronađen odgovarajući program za ovaj razred. Prvo ga dodajte u Smjerovi / Programi.");
+              setLoading(false);
+              return;
+          }
+      }
+
+      const currentYear = schoolYears.find(y => y.id === yearId);
+      console.log('Saving class with school_year_id:', yearId);
+
+      // PRE-INSERT CHECK: Check if class with same name already exists in this school year
+      const { data: existingClass, error: checkError } = await supabase
+        .from('classes')
+        .select('*')
+        .eq('school_id', selectedSchoolId)
+        .eq('school_year_id', yearId)
+        .eq('name', finalName)
+        .maybeSingle();
+      
+      if (checkError) {
+        console.error('PRE-INSERT CHECK ERROR:', checkError);
+      }
+
+      if (existingClass) {
+        toast.error(
+          (t) => (
+            <div className="flex flex-col gap-2">
+              <span className="font-bold">Razred {finalName} već postoji u ovoj školskoj godini.</span>
+              <button 
+                onClick={() => {
+                  toast.dismiss(t.id);
+                  setSelectedClassId(existingClass.id);
+                  setActiveTab('CLASS_DETAIL');
+                }}
+                className="bg-white text-[#005c8d] px-3 py-1 rounded text-[10px] font-black uppercase border border-[#005c8d] hover:bg-blue-50"
+              >
+                Otvori taj razred
+              </button>
+            </div>
+          ),
+          { duration: 6000 }
+        );
+        setLoading(false);
+        return;
+      }
+
       const { data, error } = await supabase.from('classes').insert([{
         name: finalName,
         school_id: selectedSchoolId,
         school_year_id: yearId,
-        school_year: schoolYear?.name || '',
+        school_year: currentYear?.name || '',
         grade_level: finalGradeLevel,
         section: finalSection,
         variant: newClassVariant,
-        program_id: newUserForm.programId || null,
+        program_id: programIdToUse,
         status: 'ACTIVE',
         homeroom_teacher_id: newClassHomeroomTeacherId,
         deputy_teacher_id: newClassDeputyTeacherId || null
@@ -1474,12 +1627,8 @@ export default function AdministrationPage() {
       } else {
         setClassCreationYearId(null);
         toast.success('Razredni odjel uspješno kreiran');
-        // Fetch all classes again
-        const { data: updatedClasses } = await supabase
-          .from('active_classes_current_year')
-          .select('*')
-          .eq('school_id', selectedSchoolId);
-        if (updatedClasses) setClassesUnified(mapList(updatedClasses, mappers.class));
+        // Fetch all classes again using the main data fetcher
+        await fetchData();
       }
     } catch (err: any) {
       console.error("CREATE CLASS ERROR:", err);
@@ -1489,8 +1638,21 @@ export default function AdministrationPage() {
     }
   };
 
-  const handleEditStudent = (student: any) => {
+  const openStudentDetail = (student: any) => {
+    setSelectedStudentId(student.id);
+    handleEditStudent(student);
+    setActiveTab('STUDENT_DETAIL');
+  };
+  const handleEditStudent = async (student: any) => {
     setEditingStudentId(student.id);
+    
+    // Fetch parent contact info
+    const { data: parentData } = await supabase
+      .from('student_parent_contacts')
+      .select('*')
+      .eq('student_id', student.id)
+      .maybeSingle();
+
     setStudentForm({
       name: student.name || '',
       email: student.email || '',
@@ -1504,7 +1666,11 @@ export default function AdministrationPage() {
       mobile: student.mobile || '',
       status: (student.status as any) || 'ACTIVE',
       isContinuation: false,
-      continuationType: null
+      continuationType: null,
+      parentName: parentData?.parent_name || '',
+      parentPhone: parentData?.parent_phone || '',
+      parentEmail: parentData?.parent_email || '',
+      parentNotes: parentData?.notes || ''
     });
   };
 
@@ -1534,6 +1700,7 @@ export default function AdministrationPage() {
             address: studentForm.address,
             mobile: studentForm.mobile,
             class_id: studentForm.classId || null,
+            program_id: studentForm.programId || null,
             school_id: selectedSchoolId,
             school_year_id: currentYear?.id || null
         };
@@ -1563,42 +1730,118 @@ export default function AdministrationPage() {
 
         if (enrollmentError) throw enrollmentError;
 
+        // 3. Update parent contacts
+        await supabase
+          .from('student_parent_contacts')
+          .upsert({
+            student_id: editingStudentId,
+            parent_name: studentForm.parentName,
+            parent_phone: studentForm.parentPhone,
+            parent_email: studentForm.parentEmail,
+            notes: studentForm.parentNotes
+          }, {
+            onConflict: 'student_id'
+          });
+
         toast.success('Učenik uspješno ažuriran');
         setEditingStudentId(null);
       } else {
         // CREATE NEW STUDENT
         const classIdToUse = isClassAdminMode ? selectedClassId : studentForm.classId;
-        const programIdToUse = isClassAdminMode ? selectedClassData?.programId : studentForm.programId;
+        const classToUse = classes.find(c => c.id === classIdToUse);
+        const programIdToUse = classToUse?.programId || studentForm.programId || null;
+
+        const profilePayload = {
+          email: studentForm.email?.toLowerCase() || '',
+          name: studentForm.name,
+          globalRole: Role.STUDENT,
+          schoolId: selectedSchoolId,
+          studentData: {
+            oib: studentForm.oib || Math.floor(Math.random() * 100000000000).toString(),
+            dob: studentForm.dob,
+            pob: studentForm.pob,
+            mobile: studentForm.mobile,
+            address: studentForm.address || '',
+            classId: classIdToUse,
+            programId: programIdToUse
+          }
+        };
+
+        console.log('CREATE STUDENT PROFILE', profilePayload);
 
         const response = await fetch('/api/admin/create-user', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: studentForm.email?.toLowerCase() || '',
-            name: studentForm.name,
-            globalRole: Role.STUDENT,
-            schoolId: selectedSchoolId,
-            studentData: {
-              oib: studentForm.oib || Math.floor(Math.random() * 100000000000).toString(),
-              dob: studentForm.dob,
-              pob: studentForm.pob,
-              mobile: studentForm.mobile,
-              address: studentForm.address || '',
-              classId: classIdToUse,
-              programId: programIdToUse
-            }
-          })
+          body: JSON.stringify(profilePayload)
         });
 
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || 'Neuspješno kreiranje učenika');
 
-        const generatedPassword = result.password || "Nije vraćena";
+        // Ensure user_profiles has class_id and program_id
+        await supabase.from('user_profiles').update({ 
+            class_id: classIdToUse, 
+            program_id: programIdToUse 
+        }).eq('id', result.profileId);
 
-        toast.success(
-          `Učenik registriran!\nEmail: ${result.email || ''}\nLozinka: ${generatedPassword}`,
-          { duration: 10000 }
-        );
+        // Enrollment should be handled by the server, but we'll ensure it here too for the specified school year
+        const currentYear = schoolYears.find(y => y.isActive);
+        const enrollmentPayload = {
+            student_id: result.profileId,
+            class_id: classIdToUse,
+            school_year: currentYear?.name || '2024/2025',
+            school_year_id: currentYear?.id || null,
+            program_id: programIdToUse,
+            status: 'ACTIVE'
+        };
+
+        console.log('CREATE STUDENT ENROLLMENT', enrollmentPayload);
+
+        const { error: enrollErr } = await supabase.from('student_class_enrollments').upsert(enrollmentPayload, {
+            onConflict: 'student_id,class_id,school_year'
+        });
+
+        // 4. Save parent contacts for new student
+        await supabase
+          .from('student_parent_contacts')
+          .insert({
+            student_id: result.profileId,
+            parent_name: studentForm.parentName,
+            parent_phone: studentForm.parentPhone,
+            parent_email: studentForm.parentEmail,
+            notes: studentForm.parentNotes
+          });
+
+        if (enrollErr) {
+            console.error('Enrollment Error:', enrollErr);
+            toast.error('Profil stvoren, ali upis u razred nije uspio: ' + enrollErr.message);
+        } else {
+            toast.success(`Učenik ${studentForm.name} stvoren i upisan u razred.`);
+            setStudentForm({
+              name: '',
+              email: '',
+              classId: '',
+              schoolId: selectedSchoolId || '',
+              programId: '',
+              oib: '',
+              dob: '',
+              pob: '',
+              address: '',
+              mobile: '',
+              status: 'ACTIVE',
+              isContinuation: false,
+              continuationType: null,
+              parentName: '',
+              parentPhone: '',
+              parentEmail: '',
+              parentNotes: ''
+            });
+            await fetchData();
+            setActiveTab('CLASS_DETAIL');
+        }
+        
+        console.log('LOAD STUDENTS FOR CLASS', classIdToUse);
+        await fetchData();
       }
 
       setStudentForm({ 
@@ -1660,7 +1903,7 @@ export default function AdministrationPage() {
                 classId: classIdToUse,
                 schoolId: selectedSchoolId,
                 programId: programIdToUse,
-                schoolYearId: currentYear?.id
+                school_year_id: currentYear?.id
             })
         });
         
@@ -1999,13 +2242,6 @@ export default function AdministrationPage() {
     } finally {
       setDeleteDialog({ isOpen: false, id: '', type: null, loading: false });
       if (typeof fetchData === 'function') fetchData();
-      // Ensure classes list is refreshed specifically after delete
-      if (selectedSchoolId) {
-        supabase.from('classes')
-          .select('*')
-          .eq('school_id', selectedSchoolId)
-          .then(({ data }) => data && setClassesUnified(mapList(data, mappers.class)));
-      }
     }
   };
 
@@ -2182,7 +2418,6 @@ export default function AdministrationPage() {
          const currentYear = new Date().getFullYear();
          const nextYear = currentYear + 1;
          const { data: newYear, error: createError } = await supabase.from('school_years').insert([{
-           id: `sy-${selectedSchoolId}-${currentYear}`,
            name: `${currentYear}./${nextYear}.`,
            school_id: selectedSchoolId,
            is_active: true,
@@ -2210,8 +2445,8 @@ export default function AdministrationPage() {
         if (!yearId) {
           const yearMatch = name.match(/(\d{4})/);
           const startYear = yearMatch ? yearMatch[1] : new Date().getFullYear().toString();
+          console.log('Creating legacy school year by name:', name);
           const { data, error: insertError } = await supabase.from('school_years').insert([{
-            id: `sy-${selectedSchoolId}-${startYear}-${Math.random().toString(36).substr(2, 4)}`,
             name,
             school_id: selectedSchoolId,
             is_active: false,
@@ -2229,8 +2464,9 @@ export default function AdministrationPage() {
           }
         }
         if (yearId) {
-          const orphans = classes.filter(c => c.schoolYear === name && !c.schoolYearId);
+          const orphans = classes.filter(c => c.schoolYear === name && !c.school_year_id);
           if (orphans.length > 0) {
+            console.log('Linking orphan classes to year_id:', yearId);
             const { error: updateError } = await supabase.from('classes').update({ 
                school_year_id: yearId 
             }).in('id', orphans.map(o => o.id));
@@ -2242,8 +2478,9 @@ export default function AdministrationPage() {
       }
 
       // Part B: Link total orphans (no name, no id) or name-mismatch orphans to ACTIVE year
-      const totalOrphans = classes.filter(c => !c.schoolYearId);
+      const totalOrphans = classes.filter(c => !c.school_year_id);
       if (totalOrphans.length > 0) {
+        console.log('Linking ALL remaining orphans to active year:', activeYear.id);
         const { error: updateOrphansError } = await supabase.from('classes').update({ 
           school_year_id: activeYear.id,
           school_year: activeYear.name 
@@ -2295,7 +2532,33 @@ export default function AdministrationPage() {
 
   return (
     <div className="flex flex-col h-full bg-white font-sans text-[13px]">
-      <div className="ed-header !bg-[#005c8d] !text-white h-8 !px-3">
+      {isMissingClassData && (
+        <div className="flex-1 flex flex-col items-center justify-center bg-red-50 p-10 text-center">
+           <ShieldAlert size={48} className="text-red-500 mb-4" />
+           <h2 className="text-xl font-black text-red-700 uppercase">Pogreška: Kontekst razreda nije učitan</h2>
+           <p className="text-sm text-red-600 mt-2 max-w-md">
+             Sustav nije uspio dohvatiti podatke za razred ID: <span className="font-mono font-bold bg-white px-1">{selectedClassId}</span>. 
+             Moguće je da razred ne postoji, da je izbrisanan ili da nemate ovlaštenja za pristup.
+           </p>
+           <div className="mt-6 flex gap-4">
+              <button 
+                onClick={() => fetchData()}
+                className="bg-[#005c8d] text-white px-6 py-2 font-black text-[10px] uppercase hover:bg-[#004a70]"
+              >
+                Pokušaj ponovno
+              </button>
+              <button 
+                onClick={() => navigate('/teacher/administration')}
+                className="bg-white border border-gray-300 text-gray-600 px-6 py-2 font-black text-[10px] uppercase hover:bg-gray-50"
+              >
+                Povratak na listu
+              </button>
+           </div>
+        </div>
+      )}
+      {!isMissingClassData && (
+        <>
+          <div className="ed-header !bg-[#005c8d] !text-white h-8 !px-3">
         <h2 className="text-[12px] font-bold flex items-center gap-2 uppercase tracking-tight">
           Administracija škole
         </h2>
@@ -2443,7 +2706,7 @@ export default function AdministrationPage() {
                 </div>
                 
                 <div className="flex gap-2">
-                  {selectedYearId && classes.filter(c => c.schoolYearId === selectedYearId).length === 0 && (
+                  {selectedYearId && classes.filter(c => c.school_year_id === selectedYearId).length === 0 && (
                     <button 
                       onClick={createInitialClassesForYear}
                       className="bg-amber-600 text-white px-4 py-2 font-black text-[10px] uppercase hover:bg-amber-700 flex items-center gap-2"
@@ -2465,7 +2728,7 @@ export default function AdministrationPage() {
                 </div>
               </div>
 
-              {classes.filter(c => !selectedYearId || c.schoolYearId === selectedYearId).length === 0 ? (
+              {classes.filter(c => !selectedYearId || c.school_year_id === selectedYearId).length === 0 ? (
                 <div className="h-48 border-2 border-dashed border-gray-200 flex flex-col items-center justify-center text-gray-400">
                   <BookOpen size={40} className="mb-2 opacity-20" />
                   <div className="text-xs font-black uppercase">Nema pronađenih razreda za odabrane kriterije</div>
@@ -2473,10 +2736,10 @@ export default function AdministrationPage() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   {classes
-                    .filter(c => !selectedYearId || c.schoolYearId === selectedYearId)
+                    .filter(c => !selectedYearId || c.school_year_id === selectedYearId)
                     .sort((a,b) => String(a.name || '').localeCompare(String(b.name || '')))
                     .map(cls => {
-                    const year = schoolYears.find(y => y.id === cls.schoolYearId);
+                    const year = schoolYears.find(y => y.id === cls.school_year_id);
                     return (
                       <div key={cls.id} className="bg-white border-2 border-gray-100 p-4 hover:border-[#005c8d] transition-all group relative">
                         <div className="flex justify-between items-start mb-2">
@@ -2622,10 +2885,10 @@ export default function AdministrationPage() {
                    <div className="bg-white border border-gray-300 p-4">
                       <div className="text-[10px] font-black text-gray-400 uppercase mb-4 border-b pb-1">Učenici ({students.filter(s => s.classId === selectedClassId).length})</div>
                       <div className="space-y-1 max-h-[400px] overflow-auto">
-                        {students.filter(s => s.classId === selectedClassId).sort((a,b) => (a.surname || '').localeCompare(b.surname || '')).map((s, idx) => (
+                        {students.filter(s => s.classId === selectedClassId).sort((a,b) => (a.name || '').localeCompare(b.name || '')).map((s, idx) => (
                            <div key={s.id} className="flex items-center justify-between p-2 border border-gray-100 hover:bg-gray-50">
-                              <span className="text-[11px] font-bold text-gray-600">{idx+1}. {s.surname} {s.name}</span>
-                              <button onClick={() => { setSelectedStudentId(s.id); setActiveTab('STUDENT_DETAIL'); }} className="text-[#005c8d] hover:underline text-[9px] font-black uppercase">Prikaz</button>
+                              <span className="text-[11px] font-bold text-gray-600">{idx+1}. {s.name}</span>
+                              <button onClick={() => openStudentDetail(s)} className="text-[#005c8d] hover:underline text-[9px] font-black uppercase">Prikaz</button>
                            </div>
                         ))}
                       </div>
@@ -2938,7 +3201,7 @@ export default function AdministrationPage() {
                            </td>
                         </tr>
                       )}
-                      {students.filter(s => s.classId === effectiveClassId).sort((a,b) => (a.surname || '').localeCompare(b.surname || '')).map((student, idx) => {
+                      {students.filter(s => s.classId === effectiveClassId).sort((a,b) => (a.name || '').localeCompare(b.name || '')).map((student, idx) => {
                          const studentClassEnrollments = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
                          
                          const studentFinalGrades = finalGrades.filter(fg => fg.studentId === student.id);
@@ -2966,7 +3229,7 @@ export default function AdministrationPage() {
                               <td className="px-4 py-3 border-r border-gray-200">
                                  <div className="flex items-center gap-2">
                                     <span className="text-gray-400 font-bold">{idx + 1}.</span>
-                                    <span className="font-black text-[#005c8d] uppercase">{student.surname} {student.name}</span>
+                                    <span className="font-black text-[#005c8d] uppercase">{student.name}</span>
                                  </div>
                               </td>
                               <td className="px-4 py-3 border-r border-gray-200">
@@ -3012,6 +3275,210 @@ export default function AdministrationPage() {
                    </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'STUDENT_DETAIL' && (
+            <div className="max-w-6xl space-y-6 animate-in fade-in duration-500">
+               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => {
+                        setActiveTab('CLASS_DETAIL');
+                        setEditingStudentId(null);
+                    }} 
+                    className="text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <ChevronLeft size={20}/>
+                  </button>
+                  <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">
+                    Profil učenika: {selectedStudentData?.name}
+                  </h3>
+                </div>
+                {isAnyAdmin && (
+                   <button 
+                     onClick={() => setDeleteDialog({ isOpen: true, id: selectedStudentId || '', type: 'STUDENT', loading: false })}
+                     className="text-red-500 font-bold uppercase text-[10px] flex items-center gap-1 hover:underline"
+                   >
+                      <Trash2 size={14}/> Obriši učenika
+                   </button>
+                )}
+              </div>
+
+              <form onSubmit={handleCreateStudent} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="md:col-span-2 space-y-6">
+                  {/* Basic Information */}
+                  <div className="bg-white border border-gray-300 p-6 shadow-sm space-y-6">
+                    <div className="text-[10px] font-black text-gray-400 uppercase mb-4 border-b pb-1 flex items-center gap-2">
+                       <UserIcon size={14}/> Osnovni podaci
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Ime i prezime</label>
+                        <input 
+                          required
+                          value={studentForm.name}
+                          onChange={e => setStudentForm({...studentForm, name: e.target.value})}
+                          className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none bg-gray-50/30"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Email (prijava)</label>
+                        <input 
+                          value={studentForm.email}
+                          onChange={e => setStudentForm({...studentForm, email: e.target.value})}
+                          className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none bg-gray-50/30 text-gray-500"
+                          disabled
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">OIB</label>
+                        <input 
+                          value={studentForm.oib}
+                          onChange={e => setStudentForm({...studentForm, oib: e.target.value})}
+                          className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Datum rođenja</label>
+                        <input 
+                          type="date"
+                          value={studentForm.dob}
+                          onChange={e => setStudentForm({...studentForm, dob: e.target.value})}
+                          className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Mjesto rođenja</label>
+                        <input 
+                          value={studentForm.pob}
+                          onChange={e => setStudentForm({...studentForm, pob: e.target.value})}
+                          className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Mobitel</label>
+                        <input 
+                          value={studentForm.mobile}
+                          onChange={e => setStudentForm({...studentForm, mobile: e.target.value})}
+                          className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Adresa prebivališta</label>
+                      <input 
+                        value={studentForm.address}
+                        onChange={e => setStudentForm({...studentForm, address: e.target.value})}
+                        className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Program & Class */}
+                  <div className="bg-white border border-gray-300 p-6 shadow-sm space-y-6">
+                    <div className="text-[10px] font-black text-gray-400 uppercase mb-4 border-b pb-1 flex items-center gap-2">
+                       <GraduationCap size={14}/> Školovanje
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                       <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Razredni odjel</label>
+                        <select 
+                          value={studentForm.classId}
+                          onChange={e => setStudentForm({...studentForm, classId: e.target.value})}
+                          className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none text-[#005c8d]"
+                        >
+                          <option value="">-- Odaberi --</option>
+                          {activeStudentClasses.filter(c => c.school_id === selectedSchoolId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Program obrazovanja</label>
+                        <select 
+                          value={studentForm.programId}
+                          onChange={e => setStudentForm({...studentForm, programId: e.target.value})}
+                          className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                        >
+                          <option value="">-- Odaberi --</option>
+                          {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-6">
+                  {/* Parent Information */}
+                  <div className="bg-white border border-gray-300 p-6 shadow-sm space-y-4">
+                    <div className="text-[10px] font-black text-gray-400 uppercase mb-4 border-b pb-1 flex items-center gap-2">
+                       <Info size={14}/> Kontakt roditelja / skrbnika
+                    </div>
+                    <div className="space-y-4">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Ime i prezime roditelja</label>
+                        <input 
+                          value={studentForm.parentName}
+                          onChange={e => setStudentForm({...studentForm, parentName: e.target.value})}
+                          className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                          placeholder="npr. Ivan Horvat"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Kontakt telefon</label>
+                        <input 
+                          value={studentForm.parentPhone}
+                          onChange={e => setStudentForm({...studentForm, parentPhone: e.target.value})}
+                          className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                          placeholder="+385 91..."
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Email adresa</label>
+                        <input 
+                          type="email"
+                          value={studentForm.parentEmail}
+                          onChange={e => setStudentForm({...studentForm, parentEmail: e.target.value})}
+                          className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                          placeholder="roditelj@email.com"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Napomene o kontaktu</label>
+                        <textarea 
+                          value={studentForm.parentNotes}
+                          onChange={e => setStudentForm({...studentForm, parentNotes: e.target.value})}
+                          className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none min-h-[80px]"
+                          placeholder="Dodatne informacije o kontaktu..."
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-3 sticky top-4">
+                    <button 
+                      type="submit"
+                      disabled={loading}
+                      className="w-full bg-[#005c8d] text-white py-3 border border-[#004a71] font-black uppercase tracking-widest text-[11px] hover:bg-[#004a71] transition-all flex items-center justify-center gap-2"
+                    >
+                      {loading ? (
+                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <>Spremi promjene profila</>
+                      )}
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                          setActiveTab('CLASS_DETAIL');
+                          setEditingStudentId(null);
+                      }}
+                      className="w-full bg-white text-gray-500 font-black uppercase tracking-[0.2em] text-[9px] border border-gray-300 py-3 hover:bg-gray-50 transition-colors"
+                    >
+                      Odustani
+                    </button>
+                  </div>
+                </div>
+              </form>
             </div>
           )}
 
@@ -3245,7 +3712,7 @@ export default function AdministrationPage() {
                           <td className="px-4 py-2 border-x border-gray-300 text-center">
                             <div className="flex justify-center gap-2">
                               <button 
-                                onClick={() => { setSelectedStudentId(s.id); setActiveTab('STUDENT_DETAIL'); }}
+                                onClick={() => openStudentDetail(s)}
                                 className="text-[10px] font-black text-[#005c8d] uppercase hover:underline"
                               >
                                 Pregled
@@ -3417,7 +3884,7 @@ export default function AdministrationPage() {
                         required
                       >
                         <option value="">-- Odaberi --</option>
-                        {classes.filter(c => !selectedYearId || c.schoolYearId === selectedYearId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {classes.filter(c => !selectedYearId || c.school_year_id === selectedYearId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -3555,7 +4022,7 @@ export default function AdministrationPage() {
                         required
                       >
                         <option value="">-- Odaberi --</option>
-                        {classes.filter(c => !selectedYearId || c.schoolYearId === selectedYearId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        {classes.filter(c => !selectedYearId || c.school_year_id === selectedYearId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -3727,7 +4194,7 @@ export default function AdministrationPage() {
                           }}
                         >
                           <option value="">-- Odaberite razred --</option>
-                          {classes.filter(c => c.schoolYearId === graduatesAdmin.sourceYearId).map(c => (
+                          {classes.filter(c => c.school_year_id === graduatesAdmin.sourceYearId).map(c => (
                             <option key={c.id} value={c.id}>{c.name}</option>
                           ))}
                         </select>
@@ -3778,7 +4245,7 @@ export default function AdministrationPage() {
                           onChange={e => setGraduatesAdmin(prev => ({ ...prev, targetClassId: e.target.value }))}
                         >
                           <option value="">-- Odaberite cilj --</option>
-                          {classes.filter(c => schoolYears.find(y => y.id === c.schoolYearId)?.isActive).map(c => (
+                          {classes.filter(c => schoolYears.find(y => y.id === c.school_year_id)?.isActive).map(c => (
                             <option key={c.id} value={c.id}>{c.name} ({c.schoolYear})</option>
                           ))}
                         </select>
@@ -3923,28 +4390,38 @@ export default function AdministrationPage() {
                   
                   {/* Classes List inside Year */}
                   <div className="p-4 border-t border-gray-100 bg-gray-50/30">
-                    <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Razredni odjeli ({classes.filter(c => c.schoolYearId === y.id).length})</div>
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                       {classes.filter(c => c.schoolYearId === y.id).sort((a,b) => String(a.name || '').localeCompare(String(b.name || ''))).map(c => (
-                         <div key={c.id} className="group relative">
-                            <button 
-                              onClick={() => openClassDetail(c.id)}
-                              className="w-full p-2 bg-white border border-gray-200 text-[#005c8d] font-black text-[11px] uppercase text-center hover:border-[#005c8d] transition-all hover:shadow-sm"
-                            >
-                              {c.name}
-                            </button>
-                            <button 
-                              onClick={() => setDeleteDialog({ isOpen: true, id: c.id, type: 'CLASS', loading: false })}
-                              className="absolute -top-1 -right-1 bg-white text-gray-300 hover:text-red-500 rounded-full border border-gray-100 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
-                              <X size={8}/>
-                            </button>
-                         </div>
-                       ))}
-                       {classes.filter(c => c.schoolYearId === y.id).length === 0 && (
-                         <div className="col-span-full text-[10px] text-gray-300 italic py-2">Nema definiranih razreda za ovu godinu.</div>
-                       )}
-                    </div>
+                    {(() => {
+                      const yearClasses = classes.filter(c => c.school_year_id === y.id);
+                      console.log('SCHOOL YEAR CARD:', y.id, y.name);
+                      console.log('ALL CLASSES IN ADMIN:', classes);
+                      console.log('CLASSES FOR THIS YEAR (DEBUG):', yearClasses);
+                      return (
+                        <>
+                          <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Razredni odjeli ({yearClasses.length})</div>
+                          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
+                             {yearClasses.sort((a,b) => String(a.name || '').localeCompare(String(b.name || ''))).map(c => (
+                               <div key={c.id} className="group relative">
+                                  <button 
+                                    onClick={() => openClassDetail(c.id)}
+                                    className="w-full p-2 bg-white border border-gray-200 text-[#005c8d] font-black text-[11px] uppercase text-center hover:border-[#005c8d] transition-all hover:shadow-sm"
+                                  >
+                                    {c.name}
+                                  </button>
+                                  <button 
+                                    onClick={() => setDeleteDialog({ isOpen: true, id: c.id, type: 'CLASS', loading: false })}
+                                    className="absolute -top-1 -right-1 bg-white text-gray-300 hover:text-red-500 rounded-full border border-gray-100 p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  >
+                                    <X size={8}/>
+                                  </button>
+                               </div>
+                             ))}
+                             {yearClasses.length === 0 && (
+                               <div className="col-span-full text-[10px] text-gray-300 italic py-2">Nema definiranih razreda za ovu godinu.</div>
+                             )}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
 
                   {/* Inline Class Creation Form */}
@@ -4324,9 +4801,7 @@ export default function AdministrationPage() {
                       // 2. Create Default School Year
                       const currentYear = new Date().getFullYear();
                       const nextYear = currentYear + 1;
-                      const yearId = `sy-${schoolId}-${currentYear}`;
                       await supabase.from('school_years').insert([{
-                        id: yearId,
                         name: `${currentYear}./${nextYear}.`,
                         school_id: schoolId,
                         is_active: true,
@@ -5138,8 +5613,10 @@ export default function AdministrationPage() {
           </div>
         </div>
       )}
+          </div>
         </div>
-      </div>
+      </>
+    )}
     </div>
   );
 }

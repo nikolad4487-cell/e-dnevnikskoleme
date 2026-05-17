@@ -42,7 +42,12 @@ export default function ClassDashboardPage() {
       // 1. Fetch class details
       const { data: rawClass, error: classError } = await supabase
         .from('classes')
-        .select('*')
+        .select(`
+          *,
+          program:program_id(*),
+          homeroom:homeroom_teacher_id(*),
+          deputy:deputy_teacher_id(*)
+        `)
         .eq('id', classId)
         .single();
 
@@ -59,7 +64,7 @@ export default function ClassDashboardPage() {
       const { data: yearData } = await supabase
         .from('school_years')
         .select('is_active')
-        .eq('id', mappedClass.schoolYearId)
+        .eq('id', mappedClass.school_year_id)
         .maybeSingle();
       
       const archived = mappedClass.status === 'ARCHIVED' || (yearData && !yearData.is_active);

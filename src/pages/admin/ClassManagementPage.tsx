@@ -38,6 +38,8 @@ export default function ClassManagementPage() {
   const [deputyHomeroomTeacherId, setDeputyHomeroomTeacherId] = useState('');
   const [programId, setProgramId] = useState('');
   const [variant, setVariant] = useState<string>('REGULAR');
+  const [schoolYears, setSchoolYears] = useState<any[]>([]);
+  const [selectedYearId, setSelectedYearId] = useState<string>('');
   const [programs, setPrograms] = useState<any[]>([]);
 
   useEffect(() => {
@@ -58,20 +60,32 @@ export default function ClassManagementPage() {
     try {
       setLoading(true);
       
-      // Fetch Classes from view to avoid current-year duplicates
+      // Fetch Classes directly from table to ensure we see all for this school
       const { data: classData, error: classError } = await supabase
-        .from('active_classes_current_year')
+        .from('classes')
         .select(`
           *,
-          homeroom:user_profiles!classes_homeroom_teacher_id_fkey(*),
-          deputy:user_profiles!classes_deputy_teacher_id_fkey(*)
+          program:program_id(*),
+          homeroom:homeroom_teacher_id(*),
+          deputy:deputy_teacher_id(*)
         `)
         .eq('school_id', selectedSchoolId)
         .order('grade_level')
         .order('section');
       
-      if (classError) throw classError;
+      if (classError) {
+        console.error('LOAD ADMIN CLASSES ERROR:', classError);
+        throw classError;
+      }
       setClassesUnified(mapList(classData || [], mappers.class));
+
+      // Fetch School Years
+      const { data: yearsData } = await supabase
+        .from('school_years')
+        .select('*')
+        .eq('school_id', selectedSchoolId)
+        .order('name', { ascending: false });
+      setSchoolYears(yearsData || []);
 
       // Fetch potential homeroom teachers
       const { data: teacherData, error: teacherError } = await supabase
@@ -109,6 +123,7 @@ export default function ClassManagementPage() {
       setGradeLevel(cls.gradeLevel || 1);
       setSection(cls.section || 'A');
       setSchoolYear(cls.schoolYear || '2024/2025');
+      setSelectedYearId(cls.school_year_id || '');
       setHomeroomTeacherId(cls.homeroomTeacherId || '');
       setDeputyHomeroomTeacherId(cls.deputyTeacherId || '');
       setProgramId(cls.programId || '');
@@ -118,7 +133,14 @@ export default function ClassManagementPage() {
       setName('');
       setGradeLevel(1);
       setSection('A');
-      setSchoolYear('2024/2025');
+      // Default to the first found year if available
+      if (schoolYears.length > 0) {
+        setSelectedYearId(schoolYears[0].id);
+        setSchoolYear(schoolYears[0].name);
+      } else {
+        setSchoolYear('2024/2025');
+        setSelectedYearId('');
+      }
       setHomeroomTeacherId('');
       setDeputyHomeroomTeacherId('');
       setProgramId('');
@@ -157,6 +179,7 @@ export default function ClassManagementPage() {
       grade_level: finalGradeLevel,
       section: finalSection,
       school_year: schoolYear,
+      school_year_id: selectedYearId,
       school_id: selectedSchoolId,
       status: 'ACTIVE',
       homeroom_teacher_id: homeroomTeacherId || null,
@@ -173,6 +196,19 @@ export default function ClassManagementPage() {
     console.log(`${editingClass ? 'UPDATE' : 'CREATE'} CLASS CLICKED`, payload);
 
     try {
+      // PRE-INSERT CHECK: Check if class with same name already exists in this school year
+      const { data: existingClass, error: checkError } = await supabase
+        .from('classes')
+        .select('id, name')
+        .eq('school_year_id', selectedYearId)
+        .eq('name', finalName)
+        .maybeSingle();
+      
+      if (existingClass && (!editingClass || existingClass.id !== editingClass.id)) {
+        toast.error(`Razred ${finalName} već postoji u ovoj školskoj godini.`);
+        return;
+      }
+
       if (editingClass) {
         const { data, error } = await supabase.from('classes').update(payload).eq('id', editingClass.id).select();
         console.log("UPDATE CLASS RESULT:", { data, error });
@@ -447,13 +483,21 @@ export default function ClassManagementPage() {
 
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Školska godina</label>
-                <input 
-                  type="text" 
-                  value={schoolYear}
-                  onChange={e => setSchoolYear(e.target.value)}
+                <select 
+                  value={selectedYearId}
+                  onChange={e => {
+                    setSelectedYearId(e.target.value);
+                    const year = schoolYears.find(y => y.id === e.target.value);
+                    if (year) setSchoolYear(year.name);
+                  }}
                   className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
                   required
-                />
+                >
+                  <option value="">Odaberi godinu...</option>
+                  {schoolYears.map(y => (
+                    <option key={y.id} value={y.id}>{y.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div>

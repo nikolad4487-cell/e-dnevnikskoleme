@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Subject, Role } from '../../types';
+import { mappers, mapList } from '../../lib/mappers';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
   ChevronLeft, 
@@ -50,20 +51,18 @@ export default function StudentSubjectEnrollmentPage() {
   }, [selectedClassId]);
 
   const fetchClasses = async () => {
-    // We use the view for current year classes to avoid legacy duplicates
+    if (!selectedSchoolId) return;
+    // We use direct classes table
     setClasses([]); // Clear before fetch
     const { data } = await supabase
-      .from('active_classes_current_year')
+      .from('classes')
       .select('*')
       .eq('school_id', selectedSchoolId)
       .order('name');
       
-    // Deduplicate by ID just in case
-    const uniqueClasses = Array.from(
-      new Map((data || []).map(c => [c.id, c])).values()
-    );
-      
-    setClasses(uniqueClasses);
+    if (data) {
+      setClasses(mapList(data, mappers.class));
+    }
   };
 
   const fetchClassData = async () => {

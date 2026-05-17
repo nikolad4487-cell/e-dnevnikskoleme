@@ -75,7 +75,7 @@ export type ClassVariant = typeof CLASS_VARIANTS[keyof typeof CLASS_VARIANTS];
 export type Class = {
   id: string;
   schoolId: string;
-  schoolYearId: string;
+  school_year_id: string;
   schoolYear: string;
   name: string;
   gradeLevel: number;
@@ -243,7 +243,7 @@ export type StudentYearSummary = {
   id: string;
   studentId: string;
   classId: string;
-  schoolYearId: string;
+  school_year_id: string;
   schoolYear: string;
   average: number;
   behavior: string;
