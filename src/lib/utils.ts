@@ -4,3 +4,8 @@ import { twMerge } from 'tailwind-merge';
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
+
+export function formatName(item: { name?: string | null, surname?: string | null }) {
+  if (item.name && item.name.length > 0) return item.name;
+  return [item.name, item.surname].filter(s => s && s.trim().length > 0).join(' ');
+}

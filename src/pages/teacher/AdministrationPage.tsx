@@ -251,7 +251,8 @@ export default function AdministrationPage() {
   const [assignmentForm, setAssignmentForm] = useState({
     subjectId: '',
     classId: '',
-    teacherId: ''
+    teacherId: '',
+    groupName: ''
   });
   const [curriculumForm, setCurriculumForm] = useState({
     subjectId: '',
@@ -1992,17 +1993,20 @@ setAllSubjects(uniqueSub2);
         if (error) throw error;
         toast.success('Zaduženje ažurirano');
       } else {
+        /*
         const exists = subjectAssignments.find(a => a.subject_id === assignmentForm.subjectId && a.class_id === assignmentForm.classId);
         if (exists) {
           toast.error('Ovaj predmet u ovom razredu već ima dodijeljenog nastavnika');
           setLoading(false);
           return;
         }
+        */
         const { data, error } = await supabase.from('class_subject_teachers').insert([{
           subject_id: assignmentForm.subjectId,
           class_id: assignmentForm.classId,
           teacher_id: assignmentForm.teacherId,
-          school_id: selectedSchoolId
+          school_id: selectedSchoolId,
+          group_name: assignmentForm.groupName || null
         }]).select();
         
         console.log("CREATE ASSIGNMENT RESULT:", { data, error });
@@ -2063,9 +2067,9 @@ setAllSubjects(uniqueSub2);
   };
 
   const confirmDelete = async () => {
-    if (!deleteDialog.id || !deleteDialog.type) return;
+    console.log("CONFIRM DELETE CLICKED", deleteDialog);
 
-    console.log("DELETE ACTION TRIGGERED", { type: deleteDialog.type, id: deleteDialog.id });
+    if (!deleteDialog.type) return;
 
     // Permissions check
     if (!isAnyAdmin) {
@@ -3295,7 +3299,7 @@ setAllSubjects(uniqueSub2);
                 </div>
                 {isAnyAdmin && (
                    <button 
-                     onClick={() => setDeleteDialog({ isOpen: true, item: selectedStudentData, type: 'STUDENT', loading: false })}
+                     onClick={() => setDeleteDialog({ isOpen: true, id: selectedStudentData.id, item: selectedStudentData, type: 'STUDENT', loading: false })}
                      className="text-red-500 font-bold uppercase text-[10px] flex items-center gap-1 hover:underline"
                    >
                       <Trash2 size={14}/> Obriši učenika
@@ -3725,7 +3729,7 @@ setAllSubjects(uniqueSub2);
                           </td>
                           <td className="px-4 py-2 text-center">
                             <button 
-                              onClick={() => setDeleteDialog({ isOpen: true, item: s, type: 'STUDENT', loading: false })}
+                              onClick={() => setDeleteDialog({ isOpen: true, id: s.id, item: s, type: 'STUDENT', loading: false })}
                               className="text-gray-300 hover:text-red-600 transition-colors"
                             >
                               <Trash2 size={14} />

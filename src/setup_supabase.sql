@@ -150,6 +150,7 @@ CREATE TABLE public.class_subject_teachers (
     subject_id TEXT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
     teacher_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
     school_id TEXT REFERENCES public.schools(id) ON DELETE CASCADE,
+    group_name TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(class_id, subject_id, teacher_id)

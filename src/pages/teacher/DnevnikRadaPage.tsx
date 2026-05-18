@@ -466,6 +466,14 @@ setStudents(uniqueStudents);
 
   const handleCreateWeek = async () => {
     if (!effectiveClassId) return;
+    
+    // Ensure we are using current class context correctly
+    const currentClass = classes.find(c => c.id === effectiveClassId);
+    if (!currentClass) {
+        toast.error('Razred nije pronađen');
+        return;
+    }
+
     try {
       const studentCount = students.length || 1;
       const startIdx = (weeks.length * 2) % studentCount;
@@ -485,10 +493,10 @@ setStudents(uniqueStudents);
         current.setDate(current.getDate() + 1);
       }
 
-      const { data, error } = await supabase
-        .from('work_weeks')
-        .insert({
+      const payload = {
           class_id: effectiveClassId,
+          school_year_id: currentClass.schoolYearId, // Ensure we use school_year_id
+          school_year: currentClass.schoolYear,
           school_id: selectedSchoolId,
           name: newWeek.name,
           start_date: newWeek.startDate,
@@ -497,11 +505,22 @@ setStudents(uniqueStudents);
           teaching_days: days,
           shift: newWeek.shift,
           is_teaching_week: newWeek.isTeachingWeek
-        })
+      };
+      
+      console.log("WORK WEEK INSERT PAYLOAD:", payload);
+
+      const { data, error } = await supabase
+        .from('work_weeks')
+        .insert(payload)
         .select()
         .single();
         
-      if (error) throw error;
+      console.log("WORK WEEK INSERT ERROR:", error);
+
+      if (error) {
+        toast.error('Greška pri kreiranju radnog tjedna: ' + error.message);
+        throw error;
+      }
 
       setWeeks([...weeks, mappers.week(data)]);
       setShowWeekModal(false);
@@ -514,9 +533,9 @@ setStudents(uniqueStudents);
         isTeachingWeek: true,
         dailyTeachingStatus: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: false, 0: false }
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Greška pri kreiranju tjedna');
+      toast.error('Greška pri kreiranju radnog tjedna: ' + err.message);
     }
   };
 

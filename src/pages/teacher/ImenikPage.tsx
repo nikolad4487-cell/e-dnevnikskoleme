@@ -4,9 +4,9 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, Grade, Subject, StudentNote, SpecialExam, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary } from '../../types';
-import { cn } from '../../lib/utils';
+import { cn, formatName } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
-import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2 } from 'lucide-react';
+import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2, Check } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
 
@@ -29,6 +29,8 @@ export default function ImenikPage() {
 
   const [classes, setClasses] = useState<Class[]>([]);
   const [students, setStudents] = useState<User[]>([]);
+  const [studentEnrollments, setStudentEnrollments] = useState<any[]>([]);
+  const [programs, setPrograms] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<User[]>([]);
   const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
   const [subjectAssignments, setSubjectAssignments] = useState<SubjectTeachingAssignment[]>([]);
@@ -41,13 +43,7 @@ export default function ImenikPage() {
 
   const [gradingElements, setGradingElements] = useState<any[]>([]);
 
-  const gradingElementNames = gradingElements.length > 0 
-    ? gradingElements.map(ge => ge.name)
-    : [
-        'usvojenost, razumijevanje i primjena programskih sadržaja - usmeno',
-        'usvojenost, razumijevanje i primjena programskih sadržaja - pisano',
-        'usvojenost, razumijevanje i primjena programskih sadržaja - domaći uradak'
-      ];
+  const gradingElementNames = gradingElements.map(ge => ge.name);
 
   const MONTHS_ORDER = ['IX', 'X', 'XI', 'XII', 'I', 'II', 'III', 'IV', 'V', 'VI'];
   const MONTH_MAP = { 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII', 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI' };
@@ -157,6 +153,13 @@ export default function ImenikPage() {
         if (se) throw se;
         setAllSubjects(mapList(subjectsRaw || [], mappers.subject));
 
+        const { data: programsRaw, error: pe } = await supabase
+          .from('programs')
+          .select('*')
+          .eq('school_id', selectedSchoolId);
+        if (pe) throw pe;
+        setPrograms(programsRaw || []);
+
         const { data: teachersRaw, error: te } = await supabase
           .from('user_school_roles')
           .select('*, user:user_profiles(*)')
@@ -198,8 +201,10 @@ export default function ImenikPage() {
           };
         }) as User[];
         
-const uniqueStudents = Array.from(new Map(mappedStudents.map(s => [s.id, s])).values());
-setStudents(uniqueStudents);
+        setStudentEnrollments(data || []);
+        
+        const uniqueStudents = Array.from(new Map(mappedStudents.map(s => [s.id, s])).values());
+        setStudents(uniqueStudents);
 
       } catch (error) {
         console.error(error);
@@ -556,7 +561,7 @@ setStudents(uniqueStudents);
         <div className="flex items-center justify-between border-b border-gray-200 pb-2 mb-4">
           <div className="flex items-center gap-3">
               <div>
-                <h2 className="text-lg font-bold text-[#005c8d] uppercase tracking-tight leading-none">{activeStudent.surname} {activeStudent.name}</h2>
+                <h2 className="text-lg font-bold text-[#005c8d] uppercase tracking-tight leading-none">{activeStudent ? formatName(activeStudent) : ''}</h2>
                 <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5 tracking-tight">Bilješke i podaci</p>
               </div>
           </div>
@@ -588,7 +593,7 @@ setStudents(uniqueStudents);
           
           <Section 
             title="Razrednik" 
-            content={classOverallNotes?.homeroomInfo || (homeroomTeacher ? `${homeroomTeacher.name} ${homeroomTeacher.surname}` : '')}
+            content={classOverallNotes?.homeroomInfo || (homeroomTeacher ? formatName(homeroomTeacher) : '')}
             field="homeroomInfo"
             canEdit={isHomeroom}
             isClassLevel
@@ -596,7 +601,7 @@ setStudents(uniqueStudents);
 
           <Section 
             title="Zamjenik razrednika" 
-            content={classOverallNotes?.deputyInfo || (deputyTeacher ? `${deputyTeacher.name} ${deputyTeacher.surname}` : '')}
+            content={classOverallNotes?.deputyInfo || (deputyTeacher ? formatName(deputyTeacher) : '')}
             field="deputyInfo"
             canEdit={isDeputy || isHomeroom}
             isClassLevel
@@ -955,12 +960,41 @@ setStudents(uniqueStudents);
 
   const navigateStudent = (dir: 'PREV' | 'NEXT') => {
     if (!activeStudent || students.length === 0) return;
-    const sorted = [...students].sort((a,b) => (String(a.surname || "")).localeCompare(b.surname));
+    const sorted = [...students].sort((a,b) => (a.surname || '').localeCompare(b.surname || ''));
     const idx = sorted.findIndex(s => s.id === activeStudent.id);
-    if (dir === 'PREV' && idx > 0) setActiveStudent(sorted[idx - 1]);
-    else if (dir === 'PREV') setActiveStudent(sorted[sorted.length - 1]);
-    else if (dir === 'NEXT' && idx < sorted.length - 1) setActiveStudent(sorted[idx + 1]);
-    else if (dir === 'NEXT') setActiveStudent(sorted[0]);
+    
+    if (idx === -1) return;
+    
+    const previousStudent = idx > 0 ? sorted[idx - 1] : null;
+    const nextStudent = idx < sorted.length - 1 ? sorted[idx + 1] : null;
+
+    console.log("CURRENT INDEX:", idx);
+    console.log("PREVIOUS:", previousStudent);
+    console.log("NEXT:", nextStudent);
+
+    if (dir === 'PREV' && previousStudent) setActiveStudent(previousStudent);
+    else if (dir === 'NEXT' && nextStudent) setActiveStudent(nextStudent);
+  };
+
+  const getMonthFromDate = (dateString: string) => new Date(dateString).getMonth() + 1;
+  const getCurrentSchoolYearMonth = () => {
+    const now = new Date();
+    const month = now.getMonth() + 1; // 1-12
+    return month;
+  };
+
+  const canEnterGrade = (monthNumber: number) => {
+    const now = new Date();
+    const currentMonth = now.getMonth() + 1;
+    
+    // Previous month logic
+    let previousMonth = currentMonth - 1;
+    if (currentMonth === 1) previousMonth = 12; // Jan -> Dec
+
+    // School year months for checking: 9, 10, 11, 12, 1, 2, 3, 4, 5, 6
+    const allowedMonths = [currentMonth, previousMonth];
+    
+    return allowedMonths.includes(monthNumber);
   };
 
   const handleRandomStudent = () => {
@@ -983,7 +1017,7 @@ setStudents(uniqueStudents);
             <tr className="bg-gray-100 border-b border-gray-300">
               <th className="px-3 py-2 font-black uppercase text-gray-500 w-12 text-center border-r border-gray-300">R.br.</th>
               <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Prezime i ime</th>
-              <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Program / OIB</th>
+              <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Program</th>
               <th className="px-4 py-2 font-black uppercase text-gray-500">E-mail</th>
             </tr>
           </thead>
@@ -992,10 +1026,16 @@ setStudents(uniqueStudents);
               <tr key={s.id} onClick={() => { setActiveStudent(s); setViewMode('SUBJECTS'); }} className="group hover:bg-[#eff6ff] cursor-pointer transition-colors">
                 <td className="px-3 py-2 text-center font-bold text-gray-500 border-r border-gray-200">{idx + 1}.</td>
                 <td className="px-4 py-2 font-bold text-[#005c8d] border-r border-gray-200 group-hover:underline">{s.name}</td>
-                <td className="px-4 py-2 border-r border-gray-200">
-                  <div className="text-[10px] font-bold text-gray-600 uppercase italic opacity-70">{s.program || 'Opći'}</div>
-                  <div className="text-[10px] font-bold">{s.oib || 'N/A'}</div>
-                </td>
+            <td className="px-4 py-2 border-r border-gray-200">
+              {(() => {
+                const enrollment = studentEnrollments.find(e => e.student_id === s.id);
+                const progId = enrollment?.program_id || classes.find(c => c.id === effectiveClassId)?.programId;
+                const prog = programs.find(p => p.id === progId);
+                return (
+                  <div className="text-[10px] font-bold text-gray-600 uppercase italic opacity-70">{prog ? prog.name : "Nije dodijeljen program"}</div>
+                );
+              })()}
+            </td>
                 <td className="px-4 py-2 text-gray-500 text-[11px]">{s.email}</td>
               </tr>
             ))}
@@ -1009,7 +1049,7 @@ setStudents(uniqueStudents);
     <div className="p-4 space-y-4">
       <div className="border-b border-gray-200 pb-2 flex items-end justify-between">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 leading-none">{activeStudent?.surname} {activeStudent?.name}</h1>
+          <h1 className="text-xl font-bold text-gray-900 leading-none">{activeStudent ? formatName(activeStudent) : ''}</h1>
           <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Učenička kartica - Popis predmeta</p>
         </div>
       </div>
@@ -1046,7 +1086,7 @@ setStudents(uniqueStudents);
                         <div>
                           <div className="text-sm">{sub.name}</div>
                           <div className="text-[10px] text-gray-400 font-normal uppercase tracking-wider">
-                            {teacher ? `${teacher.name} ${teacher.surname}` : 'Nema dodijeljenog nastavnika'}
+                            {teacher ? formatName(teacher) : 'Nema dodijeljenog nastavnika'}
                           </div>
                         </div>
                       </div>
@@ -1103,8 +1143,12 @@ setStudents(uniqueStudents);
               </div>
             </div>
             <div className="flex items-center gap-1">
-               <button onClick={() => navigateStudent('PREV')} className="px-3 py-1 bg-gray-100 border border-gray-300 text-[10px] font-bold hover:bg-gray-200 uppercase">Prethodni</button>
-               <button onClick={() => navigateStudent('NEXT')} className="px-3 py-1 bg-[#005c8d] text-white border border-[#004a70] text-[10px] font-bold hover:bg-[#004a70] uppercase">Sljedeći</button>
+               {studentIndex > 0 && (
+                 <button onClick={() => navigateStudent('PREV')} className="px-3 py-1 bg-gray-100 border border-gray-300 text-[10px] font-bold hover:bg-gray-200 uppercase">Prethodni</button>
+               )}
+               {studentIndex < students.length - 1 && (
+                 <button onClick={() => navigateStudent('NEXT')} className="px-3 py-1 bg-[#005c8d] text-white border border-[#004a70] text-[10px] font-bold hover:bg-[#004a70] uppercase">Sljedeći</button>
+               )}
                <button onClick={handleRandomStudent} className="px-3 py-1 bg-gray-800 text-white border border-black text-[10px] font-bold hover:bg-black ml-2 uppercase">Slučajni</button>
             </div>
         </div>
@@ -1129,26 +1173,34 @@ setStudents(uniqueStudents);
                {gradingElementNames.map(cat => (
                  <tr key={cat}>
                     <td className="p-2 border border-gray-300 text-[11px] font-bold text-gray-700 bg-white align-top">{cat}</td>
-                    {MONTHS_ORDER.map(m => (
-                      <td 
-                        key={m} 
-                        onClick={() => { 
-                          if (isArchived) return;
-                          setNewGrade({ ...newGrade, category: cat, note: '', value: 5 }); 
-                          setShowGradeModal(true); 
-                        }} 
-                        className={cn(
-                          "p-1 border border-gray-300 bg-white hover:bg-blue-50 transition-colors align-top text-center",
-                          !isArchived && "cursor-pointer"
-                        )}
-                      >
-                        <div className="flex flex-wrap items-center justify-center gap-1">
-                          {gridGrades[cat]?.[m]?.map((v, i) => (
-                            <span key={i} className={cn("inline-flex w-5 h-5 items-center justify-center text-[10px] font-bold border", v === 1 ? "bg-red-50 border-red-200 text-red-600" : "bg-blue-50 border-blue-200 text-[#005c8d]")}>{v}</span>
-                          ))}
-                        </div>
-                      </td>
-                    ))}
+                    {MONTHS_ORDER.map(m => {
+                      const MONTH_TO_NUMBER_MAP: Record<string, number> = { 'IX': 9, 'X': 10, 'XI': 11, 'XII': 12, 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6 };
+                      const monthNumber = MONTH_TO_NUMBER_MAP[m];
+                      return (
+                        <td 
+                          key={m} 
+                          onClick={() => { 
+                            if (isArchived) return;
+                            if (!canEnterGrade(monthNumber)) {
+                              toast.error("Ocjene se mogu unositi samo za trenutni i prethodni mjesec.");
+                              return;
+                            }
+                            setNewGrade({ ...newGrade, category: cat, note: '', value: 5 }); 
+                            setShowGradeModal(true); 
+                          }} 
+                          className={cn(
+                            "p-1 border border-gray-300 bg-white hover:bg-blue-50 transition-colors align-top text-center",
+                            !isArchived && "cursor-pointer"
+                          )}
+                        >
+                          <div className="flex flex-wrap items-center justify-center gap-1">
+                            {gridGrades[cat]?.[m]?.map((v, i) => (
+                              <span key={i} className={cn("inline-flex w-5 h-5 items-center justify-center text-[10px] font-bold border", v === 1 ? "bg-red-50 border-red-200 text-red-600" : "bg-blue-50 border-blue-200 text-[#005c8d]")}>{v}</span>
+                            ))}
+                          </div>
+                        </td>
+                      );
+                    })}
                  </tr>
                ))}
                <tr className="bg-gray-50">
@@ -1423,7 +1475,7 @@ setStudents(uniqueStudents);
           <div className="bg-white max-w-lg w-full relative overflow-hidden border border-gray-400">
             <div className="p-2 bg-[#005c8d] text-white flex justify-between items-center text-[11px] font-bold uppercase"><h3 className="tracking-tight">Unos ocjene</h3><button onClick={() => setShowGradeModal(false)}><X size={16}/></button></div>
             <div className="p-6 space-y-4">
-              <div className="text-center"><h4 className="text-base font-bold text-gray-900 leading-tight">{activeStudent?.name} {activeStudent?.surname}</h4><p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">{activeSubject?.name}</p></div>
+              <div className="text-center"><h4 className="text-base font-bold text-gray-900 leading-tight">{activeStudent ? formatName(activeStudent) : ''}</h4><p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">{activeSubject?.name}</p></div>
               <div className="flex justify-center gap-1">
                 {[1,2,3,4,5].map(v => (<button key={v} onClick={() => setNewGrade({...newGrade, value: v})} className={cn("w-10 h-10 border font-bold text-lg", newGrade.value === v ? "bg-[#005c8d] text-white border-[#005c8d]" : "bg-white text-gray-400 border-gray-300 hover:border-[#005c8d]")}>{v}</button>))}
               </div>
@@ -1652,22 +1704,39 @@ function GradingElementsModal({ isOpen, onClose, subject, classId, schoolId, tea
 
   const handleAdd = async () => {
     if (!newElementName.trim()) return;
+    
+    const payload = {
+      school_id: schoolId,
+      class_id: classId,
+      subject_id: subject.id,
+      teacher_id: teacherId,
+      name: newElementName.trim(),
+      description: newElementDesc.trim() || null,
+      display_order: elements.length
+    };
+    
+    console.log("GRADING ELEMENT INSERT PAYLOAD:", payload);
+
     try {
-      const { error } = await supabase.from('grading_elements').insert([{
-        school_id: schoolId,
-        teacher_id: teacherId,
-        class_id: classId,
-        subject_id: subject.id,
-        name: newElementName.trim(),
-        description: newElementDesc.trim() || null,
-        display_order: elements.length
-      }]);
-      if (error) throw error;
+      const { data, error } = await supabase
+        .from("grading_elements")
+        .insert([payload])
+        .select()
+        .single();
+        
+      console.log("GRADING ELEMENT INSERT RESULT:", data);
+      console.log("GRADING ELEMENT INSERT ERROR:", error);
+
+      if (error) {
+        toast.error("Greška pri dodavanju elementa: " + error.message);
+        return;
+      }
+
       setNewElementName('');
       setNewElementDesc('');
       fetchElements();
       onRefresh();
-    } catch (err) {
+    } catch (err: any) {
       toast.error('Greška pri dodavanju elementa.');
     }
   };
