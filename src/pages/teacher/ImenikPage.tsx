@@ -116,6 +116,7 @@ export default function ImenikPage() {
   const [gradeEditForm, setGradeEditForm] = useState({ note: '' });
   const [deleteConfirmationCode, setDeleteConfirmationCode] = useState('');
   const [showAdminDeleteAuth, setShowAdminDeleteAuth] = useState(false);
+  const [randomSelectedStudentId, setRandomSelectedStudentId] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchInitial = async () => {
@@ -1133,9 +1134,25 @@ export default function ImenikPage() {
   };
 
   const handleRandomStudent = () => {
-    if (students.length === 0) return;
-    const rnd = Math.floor(Math.random() * students.length);
-    setActiveStudent(students[rnd]);
+    console.log("RANDOM BUTTON CLICKED");
+    if (!students || students.length === 0) {
+      toast.error("Nema učenika za slučajni odabir.");
+      return;
+    }
+
+    const randomIndex = Math.floor(Math.random() * students.length);
+    const selected = students[randomIndex];
+
+    console.log("STUDENTS FOR RANDOM:", students);
+    console.log("RANDOM INDEX:", randomIndex);
+    console.log("RANDOM STUDENT SELECTED:", selected);
+
+    setRandomSelectedStudentId(selected.id);
+    setActiveStudent(selected);
+    
+    if (viewMode === 'STUDENTS') {
+      setViewMode('SUBJECTS');
+    }
   };
 
   const renderStudents = () => (
@@ -1173,7 +1190,18 @@ export default function ImenikPage() {
               const hasPending = classWarnings.pendingAbsences[s.id];
 
               return (
-                <tr key={s.id} onClick={() => { setActiveStudent(s); setViewMode('SUBJECTS'); }} className="group hover:bg-[#eff6ff] cursor-pointer transition-colors">
+                <tr 
+                  key={s.id} 
+                  onClick={() => { 
+                    setActiveStudent(s); 
+                    setViewMode('SUBJECTS'); 
+                    setRandomSelectedStudentId(null);
+                  }} 
+                  className={cn(
+                    "group cursor-pointer transition-colors",
+                    s.id === randomSelectedStudentId ? "bg-blue-100 border-l-4 border-l-[#005c8d]" : "hover:bg-[#eff6ff]"
+                  )}
+                >
                   <td className="px-3 py-2 text-center font-bold text-gray-500 border-r border-gray-200">{idx + 1}.</td>
                   <td className="px-4 py-2 font-bold text-[#005c8d] border-r border-gray-200 group-hover:underline">{s.name}</td>
                   <td className="px-4 py-2 border-r border-gray-200">
