@@ -350,6 +350,35 @@ export default function AdministrationPage() {
     }
   };
 
+  const handleResetStudentPassword = async (profileId: string, type: 'DEFAULT' | 'GENERATE') => {
+    if (!confirm(`Jeste li sigurni da želite resetirati lozinku za učenika?`)) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/admin/reset-student-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId, type })
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Greška pri resetiranju');
+
+      setResetModal({
+        isOpen: true,
+        user: students.find(s => s.id === profileId) || null,
+        newPass: result.newPassword,
+        generatedAt: new Date().toLocaleTimeString()
+      });
+      toast.success('Lozinka je uspješno resetirana.');
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Greška pri resetiranju lozinke');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCreateUnifiedUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newUserForm.name || !newUserForm.surname) {
@@ -1985,38 +2014,31 @@ setAllSubjects(uniqueSub2);
     
     setLoading(true);
     try {
+      const payload = {
+        subject_id: assignmentForm.subjectId,
+        class_id: assignmentForm.classId,
+        teacher_id: assignmentForm.teacherId,
+        school_id: selectedSchoolId,
+        group_name: assignmentForm.groupName || null
+      };
+
+      console.log("CLASS SUBJECT TEACHER PAYLOAD", payload);
+      console.log("GROUP NAME", assignmentForm.groupName);
+
       if (editingAssignmentId) {
-        const { data, error } = await supabase.from('class_subject_teachers').update({
-          subject_id: assignmentForm.subjectId,
-          class_id: assignmentForm.classId,
-          teacher_id: assignmentForm.teacherId
-        }).eq('id', editingAssignmentId).select();
+        const { data, error } = await supabase.from('class_subject_teachers').update(payload).eq('id', editingAssignmentId).select();
         
         console.log("UPDATE ASSIGNMENT RESULT:", { data, error });
         if (error) throw error;
         toast.success('Zaduženje ažurirano');
       } else {
-        /*
-        const exists = subjectAssignments.find(a => a.subject_id === assignmentForm.subjectId && a.class_id === assignmentForm.classId);
-        if (exists) {
-          toast.error('Ovaj predmet u ovom razredu već ima dodijeljenog nastavnika');
-          setLoading(false);
-          return;
-        }
-        */
-        const { data, error } = await supabase.from('class_subject_teachers').insert([{
-          subject_id: assignmentForm.subjectId,
-          class_id: assignmentForm.classId,
-          teacher_id: assignmentForm.teacherId,
-          school_id: selectedSchoolId,
-          group_name: assignmentForm.groupName || null
-        }]).select();
+        const { data, error } = await supabase.from('class_subject_teachers').insert([payload]).select();
         
         console.log("CREATE ASSIGNMENT RESULT:", { data, error });
         if (error) throw error;
         toast.success('Zaduženje kreirano');
       }
-      setAssignmentForm({ subjectId: '', classId: '', teacherId: '' });
+      setAssignmentForm({ subjectId: '', classId: '', teacherId: '', groupName: '' });
       setEditingAssignmentId(null);
       
       // Refresh assignments
@@ -2933,7 +2955,7 @@ setAllSubjects(uniqueSub2);
                           <div className="text-[10px] font-black text-gray-500 uppercase mb-3">
                             {editingAssignmentId ? 'Uređivanje postojećeg predmeta' : 'Dodjela novog predmeta razredu'}
                           </div>
-                          <form onSubmit={handleCreateAssignment} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                          <form onSubmit={handleCreateAssignment} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                             <div className="space-y-1">
                               <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Nastavni predmet</label>
                               <select 
@@ -2963,6 +2985,16 @@ setAllSubjects(uniqueSub2);
                     }).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                               </select>
                             </div>
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Naziv grupe (opcionalno)</label>
+                              <input 
+                                type="text"
+                                value={assignmentForm.groupName}
+                                onChange={e => setAssignmentForm({...assignmentForm, groupName: e.target.value})}
+                                placeholder="npr. Grupa A, Izborna..."
+                                className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                              />
+                            </div>
                             <div className="flex gap-2">
                               <button 
                                 type="submit"
@@ -2989,83 +3021,131 @@ setAllSubjects(uniqueSub2);
                          <thead>
                             <tr className="bg-gray-50 border-b border-gray-300 font-black text-gray-500 uppercase text-[9px]">
                                <th className="px-4 py-2 border-r border-gray-200">Nastavni predmet</th>
-                               <th className="px-4 py-2 border-r border-gray-200">Zaduženi nastavnik</th>
+                               <th className="px-4 py-2 border-r border-gray-200">Zaduženi nastavnici</th>
                                <th className="px-4 py-2 border-r border-gray-200 text-center w-24">Učenika</th>
                                <th className="px-4 py-2 text-center w-64">Akcije (Učenici)</th>
-                               <th className="px-4 py-2 border-r border-gray-200 text-center w-24 border-x border-gray-300">Upravljanje</th>
+                               <th className="px-4 py-2 text-center w-24 border-x border-gray-300">Dodaj</th>
                             </tr>
                          </thead>
                          <tbody className="divide-y divide-gray-200">
-                            {subjectAssignments.filter(a => a.classId === selectedClassId).map(a => {
-                               const subject = allSubjects.find(s => s.id === a.subjectId);
-                               const teacher = teachers.find(t => t.id === a.teacherId);
-                               const activeEnrollCount = classEnrollments.filter(e => e.subjectId === a.subjectId && e.status === 'ACTIVE').length;
-                               const isManager = isAnyAdmin || selectedClassData?.homeroom_teacher_id === user?.id;
+                            {(() => {
+                              const assignmentsInClass = subjectAssignments.filter(a => a.classId === selectedClassId);
+                              const uniqueSubjectIds = Array.from(new Set(assignmentsInClass.map(a => a.subjectId))).filter(Boolean) as string[];
+                              
+                              return uniqueSubjectIds.map(sid => {
+                                const assignmentsForThisSubject = assignmentsInClass.filter(a => a.subjectId === sid);
+                                const subject = allSubjects.find(s => s.id === sid);
+                                const activeEnrollCount = classEnrollments.filter(e => e.subjectId === sid && e.status === 'ACTIVE').length;
+                                const isManager = isAnyAdmin || selectedClassData?.homeroom_teacher_id === user?.id;
 
-                               return (
-                                 <tr key={a.id} className="hover:bg-blue-50/30">
-                                   <td className="px-4 py-3 border-r border-gray-200 font-black text-[#005c8d] uppercase">{subject?.name}</td>
-                                   <td className="px-4 py-3 border-r border-gray-200 font-bold uppercase text-gray-600">
-                                      {teacher ? `${teacher.surname} ${teacher.name}` : <span className="text-red-400 font-black italic">NIJE DODIJELJEN</span>}
-                                   </td>
-                                   <td className="px-4 py-3 border-r border-gray-200 text-center font-black">
-                                       {activeEnrollCount}
-                                   </td>
-                                   <td className="px-4 py-3 border-r border-gray-200">
-                                      <div className="flex items-center justify-center gap-2">
+                                return (
+                                  <tr key={sid} className="hover:bg-blue-50/30">
+                                    <td className="px-4 py-3 border-r border-gray-200 font-black text-[#005c8d] uppercase">{subject?.name}</td>
+                                    <td className="px-4 py-3 border-r border-gray-200 space-y-2">
+                                       {assignmentsForThisSubject.map(a => {
+                                         const t = teachers.find(teach => teach.id === a.teacherId);
+                                         return (
+                                           <div key={a.id} className="flex items-center justify-between group/teach">
+                                              <span className="font-bold uppercase text-gray-600">
+                                                {t ? `${t.surname} ${t.name}` : <span className="text-red-400 font-black italic">NIJE DODIJELJEN</span>}
+                                                {a.groupName && <span className="ml-2 text-[9px] text-[#005c8d] bg-blue-50 px-1 border border-blue-100">({a.groupName})</span>}
+                                              </span>
+                                              {isManager && (
+                                                <div className="flex gap-2 opacity-0 group-hover/teach:opacity-100 transition-opacity">
+                                                  <button 
+                                                    onClick={() => {
+                                                      setEditingAssignmentId(a.id);
+                                                      setAssignmentForm({ 
+                                                        subjectId: a.subjectId, 
+                                                        classId: a.classId, 
+                                                        teacherId: a.teacherId,
+                                                        groupName: a.groupName || ''
+                                                      });
+                                                    }}
+                                                    className="text-[#005c8d] hover:scale-110"
+                                                  >
+                                                    <Settings size={12}/>
+                                                  </button>
+                                                  <button 
+                                                    onClick={() => setDeleteDialog({
+                                                      isOpen: true,
+                                                      type: 'STAFF',
+                                                      id: a.id,
+                                                      loading: false,
+                                                      message: `Jeste li sigurni da želite maknuti nastavnika s predmeta?`
+                                                    })}
+                                                    className="text-red-400 hover:text-red-600"
+                                                  >
+                                                    <Trash2 size={12}/>
+                                                  </button>
+                                                </div>
+                                              )}
+                                           </div>
+                                         );
+                                       })}
+                                       {isManager && (
                                          <button 
-                                           onClick={() => handleBulkEnroll(a.subjectId, 'ACTIVE')}
-                                           disabled={!isManager}
-                                           className="bg-white border border-gray-300 text-gray-400 hover:text-green-600 px-2 py-1 text-[9px] font-black uppercase tracking-tighter disabled:opacity-30"
+                                           onClick={() => {
+                                             setEditingAssignmentId(null);
+                                             setAssignmentForm({ subjectId: sid, teacherId: '', classId: selectedClassId || '', groupName: '' });
+                                           }}
+                                           className="text-[9px] font-black text-gray-400 uppercase hover:text-[#005c8d] flex items-center gap-1"
                                          >
-                                            Dodijeli svima
+                                           <Plus size={10}/> Dodaj nastavnika
                                          </button>
-                                         <button 
-                                           onClick={() => handleBulkEnroll(a.subjectId, 'EXEMPT')}
-                                           disabled={!isManager}
-                                           className="bg-white border border-gray-300 text-gray-400 hover:text-red-600 px-2 py-1 text-[9px] font-black uppercase tracking-tighter disabled:opacity-30"
-                                         >
-                                            Izuzmi učenike
-                                         </button>
-                                         <button 
-                                           onClick={() => setShowEnrollmentModal({ isOpen: true, subjectId: a.subjectId })}
-                                           disabled={!isManager}
-                                           className="text-[#005c8d] font-black uppercase text-[9px] flex items-center gap-1 hover:underline ml-2 disabled:opacity-30"
-                                         >
-                                            Dodijeli pojedinačno
-                                         </button>
-                                      </div>
-                                   </td>
-                                   <td className="px-4 py-3 text-center border-x border-gray-300">
-                                      <div className="flex items-center justify-center gap-3">
-                                        {isManager && (
+                                       )}
+                                    </td>
+                                    <td className="px-4 py-3 border-r border-gray-200 text-center font-black">
+                                        {activeEnrollCount}
+                                    </td>
+                                    <td className="px-4 py-3 border-r border-gray-200 text-center">
+                                       <div className="flex items-center justify-center gap-2">
                                           <button 
-                                            onClick={() => {
-                                              setEditingAssignmentId(a.id);
-                                              setAssignmentForm({ subjectId: a.subjectId, classId: a.classId, teacherId: a.teacherId });
-                                            }}
-                                            className="text-gray-400 hover:text-[#005c8d]"
+                                            onClick={() => handleBulkEnroll(sid, 'ACTIVE')}
+                                            disabled={!isManager}
+                                            className="bg-white border border-gray-300 text-gray-400 hover:text-green-600 px-2 py-1 text-[9px] font-black uppercase tracking-tighter disabled:opacity-30"
                                           >
-                                            <Settings size={14}/>
+                                             Dodijeli svima
                                           </button>
-                                        )}
-                                        {isManager && (
                                           <button 
-                                            onClick={() => setDeleteDialog({ isOpen: true, id: a.id, type: 'STAFF', loading: false })}
-                                            className="text-gray-300 hover:text-red-500"
+                                            onClick={() => handleBulkEnroll(sid, 'EXEMPT')}
+                                            disabled={!isManager}
+                                            className="bg-white border border-gray-300 text-gray-400 hover:text-red-600 px-2 py-1 text-[9px] font-black uppercase tracking-tighter disabled:opacity-30"
                                           >
-                                            <Trash2 size={14}/>
+                                             Izuzmi učenike
                                           </button>
-                                        )}
-                                      </div>
-                                   </td>
-                                 </tr>
-                               );
-                            })}
+                                          <button 
+                                            onClick={() => setShowEnrollmentModal({ isOpen: true, subjectId: sid })}
+                                            disabled={!isManager}
+                                            className="text-[#005c8d] font-black uppercase text-[9px] flex items-center gap-1 hover:underline ml-2 disabled:opacity-30"
+                                          >
+                                             Dodijeli pojedinačno
+                                          </button>
+                                       </div>
+                                    </td>
+                                    <td className="px-4 py-3 text-center border-x border-gray-300">
+                                       <div className="flex items-center justify-center gap-3">
+                                         {isManager && (
+                                           <button 
+                                             onClick={() => {
+                                               setEditingAssignmentId(null);
+                                               setAssignmentForm({ subjectId: sid, classId: selectedClassId || '', teacherId: '' });
+                                             }}
+                                             className="text-gray-400 hover:text-[#005c8d]"
+                                           >
+                                             <Plus size={14}/>
+                                           </button>
+                                         )}
+                                       </div>
+                                    </td>
+                                  </tr>
+                                );
+                              });
+                            })()}
                             {subjectAssignments.filter(a => a.classId === selectedClassId).length === 0 && (
-                              <tr>
-                                <td colSpan={5} className="p-8 text-center text-gray-400 italic">Nema definiranih predmeta za ovaj razred. Koristite modul "Zaduženja" za dodavanje.</td>
-                              </tr>
+                               <tr>
+                                 <td colSpan={5} className="p-8 text-center text-gray-400 italic">Nema definiranih predmeta za ovaj razred. Koristite gumb iznad za dodavanje prvi put.</td>
+                               </tr>
                             )}
                          </tbody>
                       </table>
@@ -3831,7 +3911,7 @@ setAllSubjects(uniqueSub2);
                   <div className="text-[10px] font-black text-gray-400 uppercase mb-4 border-b pb-1">
                     {editingAssignmentId ? 'Uredi zaduženje' : 'Dodaj novu dodjelu nastavnika predmetu'}
                   </div>
-                  <form onSubmit={handleCreateAssignment} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <form onSubmit={handleCreateAssignment} className="grid grid-cols-1 md:grid-cols-5 gap-4">
                     <div className="space-y-1">
                       <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Razredni odjel</label>
                       <select 
@@ -3867,6 +3947,16 @@ setAllSubjects(uniqueSub2);
                         <option value="">-- Odaberi --</option>
                         {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                       </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Grupa</label>
+                      <input 
+                        type="text"
+                        value={assignmentForm.groupName}
+                        onChange={e => setAssignmentForm({...assignmentForm, groupName: e.target.value})}
+                        placeholder="Opcionalno"
+                        className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                      />
                     </div>
                     <div className="flex items-end gap-2">
                       <button 
@@ -3913,13 +4003,21 @@ setAllSubjects(uniqueSub2);
                         <tr key={a.id} className="hover:bg-blue-50/50">
                           <td className="px-4 py-3 border-r border-gray-200 font-black text-[#005c8d]">{razred?.name}</td>
                           <td className="px-4 py-3 border-r border-gray-200 font-bold uppercase tracking-tighter">{sub?.name}</td>
-                          <td className="px-4 py-3 border-r border-gray-200 font-bold text-gray-600 uppercase">{tea?.surname} {tea?.name}</td>
+                          <td className="px-4 py-3 border-r border-gray-200 font-bold text-gray-600 uppercase">
+                            {tea?.surname} {tea?.name}
+                            {a.groupName && <span className="ml-2 text-[9px] text-[#005c8d] font-black">[{a.groupName}]</span>}
+                          </td>
                           {user?.role === Role.ADMIN && (
                             <td className="px-4 py-3 text-center flex items-center justify-center gap-4">
                                <button 
                                  onClick={() => {
                                    setEditingAssignmentId(a.id);
-                                   setAssignmentForm({ subjectId: a.subjectId, classId: a.classId, teacherId: a.teacherId });
+                                   setAssignmentForm({ 
+                                     subjectId: a.subjectId, 
+                                     classId: a.classId, 
+                                     teacherId: a.teacherId,
+                                     groupName: a.groupName || ''
+                                   });
                                  }}
                                  className="text-[#005c8d] font-black uppercase text-[10px] hover:underline"
                                >
@@ -4940,7 +5038,22 @@ setAllSubjects(uniqueSub2);
             <div className="max-w-5xl space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center gap-4">
                 <button onClick={() => setActiveTab('STUDENTS')} className="text-gray-400 hover:text-gray-600 transition-colors"><ChevronLeft size={20}/></button>
-                <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Kartica učenika: {selectedStudentData.surname} {selectedStudentData.name}</h3>
+                <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Kartica učenika: {selectedStudentData.name}</h3>
+              </div>
+
+              <div className="flex gap-2">
+                 <button 
+                   onClick={() => handleResetStudentPassword(selectedStudentData.id, 'DEFAULT')}
+                   className="px-3 py-1 bg-yellow-50 text-yellow-700 border border-yellow-200 text-[10px] font-black uppercase hover:bg-yellow-100 transition-colors"
+                 >
+                   Resetiraj na zadano (yupu8Ev4)
+                 </button>
+                 <button 
+                   onClick={() => handleResetStudentPassword(selectedStudentData.id, 'GENERATE')}
+                   className="px-3 py-1 bg-[#005c8d] text-white border border-[#004a70] text-[10px] font-black uppercase hover:bg-[#004a70] transition-colors"
+                 >
+                   Generiraj novu lozinku
+                 </button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -5569,6 +5682,61 @@ setAllSubjects(uniqueSub2);
                     Zatvori
                   </button>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resetModal.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white max-w-sm w-full animate-in zoom-in-95 duration-200 shadow-2xl relative overflow-hidden ring-1 ring-black/10">
+            <div className="p-4 bg-yellow-500 text-white flex justify-between items-center text-xs font-black uppercase tracking-widest">
+              <div className="flex items-center gap-2">
+                <ShieldAlert size={14}/>
+                Nova lozinka za učenika
+              </div>
+              <button 
+                onClick={() => setResetModal({ ...resetModal, isOpen: false })} 
+                className="hover:rotate-90 transition-transform p-1 bg-white/10"
+              >
+                <X size={16}/>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="text-center space-y-1">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Učenik</p>
+                <h4 className="text-xl font-black text-gray-800 uppercase tracking-tighter">{resetModal.user?.name}</h4>
+              </div>
+
+              <div className="bg-gray-50 border-2 border-dashed border-gray-200 p-6 text-center space-y-3">
+                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Nova pristupna lozinka</p>
+                 <div className="text-3xl font-black text-[#005c8d] tracking-[0.3em] font-mono break-all bg-white py-4 shadow-inner ring-1 ring-black/5">
+                   {resetModal.newPass}
+                 </div>
+                 <p className="text-[9px] font-bold text-gray-400">Vrijeme generiranja: {resetModal.generatedAt}</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-3 bg-blue-50 border border-blue-100 rounded-sm">
+                  <div className="flex gap-3">
+                    <Info size={16} className="text-blue-500 shrink-0 mt-0.5" />
+                    <p className="text-[10px] font-bold text-blue-700 leading-relaxed uppercase">
+                      Zabilježite lozinku i predajte je učeniku. Lozinka je stalna i neće se tražiti promjena pri prijavi.
+                    </p>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(resetModal.newPass);
+                    toast.success('Kopirano u međuspremnik!');
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-gray-800 text-white text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
+                >
+                   Kopiraj lozinku
+                </button>
               </div>
             </div>
           </div>

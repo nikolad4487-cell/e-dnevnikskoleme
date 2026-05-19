@@ -111,6 +111,12 @@ export default function ImenikPage() {
     studentNotes: {} as Record<string, string>
   });
 
+  const [selectedGrade, setSelectedGrade] = useState<Grade | null>(null);
+  const [isEditingGrade, setIsEditingGrade] = useState(false);
+  const [gradeEditForm, setGradeEditForm] = useState({ note: '' });
+  const [deleteConfirmationCode, setDeleteConfirmationCode] = useState('');
+  const [showAdminDeleteAuth, setShowAdminDeleteAuth] = useState(false);
+
   useEffect(() => {
     const fetchInitial = async () => {
       if (!selectedSchoolId || !user) return;
@@ -301,21 +307,39 @@ export default function ImenikPage() {
       };
 
       const fetchGrades = async () => {
-        const { data } = await supabase
+        const selectedClass = classes.find(c => c.id === effectiveClassId);
+        const isClassAdmin = isMainAdmin || selectedClass?.homeroomTeacherId === user?.id || selectedClass?.deputyTeacherId === user?.id;
+
+        let query = supabase
           .from('grades')
           .select('*')
           .eq('student_id', activeStudent.id)
           .eq('subject_id', activeSubject.id)
           .eq('is_final', false);
+        
+        if (!isClassAdmin) {
+          query = query.eq('teacher_id', user?.id);
+        }
+
+        const { data } = await query;
         if (data) setCurrentGrades(mapList(data, mappers.grade));
       };
       
       const fetchNotes = async () => {
-        const { data } = await supabase
+        const selectedClass = classes.find(c => c.id === effectiveClassId);
+        const isClassAdmin = isMainAdmin || selectedClass?.homeroomTeacherId === user?.id || selectedClass?.deputyTeacherId === user?.id;
+
+        let query = supabase
           .from('student_notes')
           .select('*')
           .eq('student_id', activeStudent.id)
           .eq('subject_id', activeSubject.id);
+
+        if (!isClassAdmin) {
+          query = query.eq('teacher_id', user?.id);
+        }
+
+        const { data } = await query;
         if (data) setCurrentNotes(mapList(data, mappers.note) as any);
       };
 
@@ -743,16 +767,75 @@ export default function ImenikPage() {
     }
   };
 
-  const handleDeleteGrade = async (gradeId: string) => {
+  const handleUpdateGradeNote = async () => {
+    if (!selectedGrade) return;
+    try {
+       const { error } = await supabase
+         .from('grades')
+         .update({ note: gradeEditForm.note, updated_at: new Date().toISOString() })
+         .eq('id', selectedGrade.id);
+       
+       if (error) throw error;
+       toast.success('Bilješka ažurirana');
+       setIsEditingGrade(false);
+       fetchGradesAndNotes();
+    } catch (err) {
+       console.error(err);
+       toast.error('Greška pri ažuriranju bilješke');
+    }
+  };
+
+  const handleDeleteGrade = async (gradeId: string, adminOverride = false) => {
     const grade = currentGrades.find(g => g.id === gradeId);
     if (!grade) return;
-    
-    if (!isMainAdmin && grade.teacherId !== user?.id) {
-      toast.error('Niste ovlašteni za brisanje ove ocjene.');
+
+    const createdAt = grade.createdAt ? new Date(grade.createdAt) : new Date();
+    const now = new Date();
+    const diffMinutes = (now.getTime() - createdAt.getTime()) / (1000 * 60);
+
+    const selectedClass = classes.find(c => c.id === effectiveClassId);
+    const isClassAdmin = isMainAdmin || selectedClass?.homeroomTeacherId === user?.id || selectedClass?.deputyTeacherId === user?.id;
+
+    if (!isClassAdmin && diffMinutes > 45) {
+      toast.error('Ocjena se može obrisati samo unutar 45 minuta od unosa. Nakon toga je može obrisati samo admin.');
       return;
     }
 
-    setDeleteDialog({ isOpen: true, id: gradeId, type: 'GRADE', loading: false });
+    if (isClassAdmin && diffMinutes > 45 && !adminOverride) {
+      setShowAdminDeleteAuth(true);
+      return;
+    }
+
+    if (isClassAdmin && diffMinutes > 45 && adminOverride) {
+      if (deleteConfirmationCode !== '8899') {
+         toast.error('Neispravan autorizacijski kod.');
+         return;
+      }
+    }
+
+    if (!confirm('Jeste li sigurni da želite obrisati ovu ocjenu?')) return;
+
+    try {
+      setLoading(true);
+      const { error } = await supabase
+        .from('grades')
+        .delete()
+        .eq('id', gradeId);
+      
+      if (error) throw error;
+      
+      toast.success('Ocjena obrisana');
+      setSelectedGrade(null);
+      setShowAdminDeleteAuth(false);
+      setDeleteConfirmationCode('');
+      fetchGradesAndNotes();
+      fetchWarningData();
+    } catch (error) {
+      console.error(error);
+      toast.error('Greška pri brisanju ocjene');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDeleteNote = async (noteId: string) => {
@@ -1158,17 +1241,20 @@ export default function ImenikPage() {
                 return subjectAssignments.some(a => a.classId === effectiveClassId && a.subjectId === sub.id && a.teacherId === user?.id);
               })
               .map(sub => {
-                const assignment = subjectAssignments.find(a => a.classId === effectiveClassId && a.subjectId === sub.id);
-                const teacher = teachers.find(t => t.id === assignment?.teacherId);
+                const assignments = subjectAssignments.filter(a => a.classId === effectiveClassId && a.subjectId === sub.id);
+                const assignedTeachers = assignments.map(a => teachers.find(t => t.id === a.teacherId)).filter(Boolean) as User[];
+                
                 return (
                   <tr key={sub.id} onClick={() => { setActiveSubject(sub); setViewMode('GRADES'); }} className="group hover:bg-[#eff6ff] cursor-pointer transition-colors">
                     <td className="px-4 py-3 font-bold text-gray-700">
                       <div className="flex items-center gap-3">
-                        <BookOpen size={14} className="text-gray-300" />
+                        < BookOpen size={14} className="text-gray-300" />
                         <div>
                           <div className="text-sm">{sub.name}</div>
                           <div className="text-[10px] text-gray-400 font-normal uppercase tracking-wider">
-                            {teacher ? formatName(teacher) : 'Nema dodijeljenog nastavnika'}
+                            {assignedTeachers.length > 0 
+                              ? assignedTeachers.map(t => t.name).join(', ') 
+                              : 'Nema dodijeljenog nastavnika'}
                           </div>
                         </div>
                       </div>
@@ -1204,13 +1290,13 @@ export default function ImenikPage() {
     });
     const studentIndex = sortedStudents.findIndex(s => s.id === activeStudent?.id);
     
-    const gridGrades: Record<string, Record<string, number[]>> = {};
+    const gridGrades: Record<string, Record<string, Grade[]>> = {};
     gradingElementNames.forEach(cat => gridGrades[cat] = {});
     currentGrades.forEach(g => {
       const m = MONTH_MAP[new Date(g.date).getMonth() + 1 as keyof typeof MONTH_MAP];
       if (m && gridGrades[g.category]) {
         if (!gridGrades[g.category][m]) gridGrades[g.category][m] = [];
-        gridGrades[g.category][m].push(g.value);
+        gridGrades[g.category][m].push(g);
       }
     });
 
@@ -1266,23 +1352,35 @@ export default function ImenikPage() {
                       return (
                         <td 
                           key={m} 
-                          onClick={() => { 
-                            if (isArchived) return;
-                            if (!canEnterGrade(monthNumber)) {
-                              toast.error("Ocjene se mogu unositi samo za trenutni i prethodni mjesec.");
-                              return;
-                            }
-                            setNewGrade({ ...newGrade, category: cat, note: '', value: 5 }); 
-                            setShowGradeModal(true); 
-                          }} 
                           className={cn(
                             "p-1 border border-gray-300 bg-white hover:bg-blue-50 transition-colors align-top text-center",
                             !isArchived && "cursor-pointer"
                           )}
                         >
-                          <div className="flex flex-wrap items-center justify-center gap-1">
-                            {gridGrades[cat]?.[m]?.map((v, i) => (
-                              <span key={i} className={cn("inline-flex w-5 h-5 items-center justify-center text-[10px] font-bold border", v === 1 ? "bg-red-50 border-red-200 text-red-600" : "bg-blue-50 border-blue-200 text-[#005c8d]")}>{v}</span>
+                          <div className="flex flex-wrap items-center justify-center gap-1 min-h-[20px]" onClick={(e) => {
+                            if (isArchived) return;
+                            if (e.target === e.currentTarget) {
+                              if (!canEnterGrade(monthNumber)) {
+                                toast.error("Ocjene se mogu unositi samo za trenutni i prethodni mjesec.");
+                                return;
+                              }
+                              setNewGrade({ ...newGrade, category: cat, note: '', value: 5 }); 
+                              setShowGradeModal(true);
+                            }
+                          }}>
+                            {gridGrades[cat]?.[m]?.map((g, i) => (
+                              <button 
+                                key={g.id} 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedGrade(g);
+                                  setIsEditingGrade(false);
+                                  setGradeEditForm({ note: g.note || '' });
+                                }}
+                                className={cn("inline-flex w-5 h-5 items-center justify-center text-[10px] font-bold border", g.value === 1 ? "bg-red-50 border-red-200 text-red-600" : "bg-blue-50 border-blue-200 text-[#005c8d]")}
+                              >
+                                {g.value}
+                              </button>
                             ))}
                           </div>
                         </td>
@@ -1750,7 +1848,6 @@ export default function ImenikPage() {
           schoolId={selectedSchoolId!}
           teacherId={user?.id!}
           onRefresh={() => {
-            // refresh logic
             const fetchGE = async () => {
               const { data } = await supabase
                 .from('grading_elements')
@@ -1766,6 +1863,153 @@ export default function ImenikPage() {
           }}
         />
       )}
+
+      {selectedGrade && (
+        <GradeDetailsModal 
+          grade={selectedGrade}
+          onClose={() => setSelectedGrade(null)}
+          onUpdateNote={handleUpdateGradeNote}
+          onDelete={handleDeleteGrade}
+          isEditing={isEditingGrade}
+          setIsEditing={setIsEditingGrade}
+          editForm={gradeEditForm}
+          setEditForm={setGradeEditForm}
+          user={user}
+          classes={classes}
+          effectiveClassId={effectiveClassId}
+          isMainAdmin={isMainAdmin}
+          showAdminAuth={showAdminDeleteAuth}
+          setShowAdminAuth={setShowAdminDeleteAuth}
+          authCode={deleteConfirmationCode}
+          setAuthCode={setDeleteConfirmationCode}
+        />
+      )}
+    </div>
+  );
+}
+
+function GradeDetailsModal({ 
+  grade, 
+  onClose, 
+  onUpdateNote, 
+  onDelete, 
+  isEditing, 
+  setIsEditing, 
+  editForm, 
+  setEditForm,
+  user,
+  classes,
+  effectiveClassId,
+  isMainAdmin,
+  showAdminAuth,
+  setShowAdminAuth,
+  authCode,
+  setAuthCode
+}: any) {
+  const createdAt = grade.createdAt ? new Date(grade.createdAt) : new Date();
+  const now = new Date();
+  const diffMinutes = (now.getTime() - createdAt.getTime()) / (1000 * 60);
+  
+  const selectedClass = classes.find((c: any) => c.id === effectiveClassId);
+  const isClassAdmin = isMainAdmin || selectedClass?.homeroomTeacherId === user?.id || selectedClass?.deputyTeacherId === user?.id;
+  const canDeleteDirectly = diffMinutes <= 45 || (isClassAdmin && diffMinutes <= 45);
+  const canDeleteWithAuth = isClassAdmin && diffMinutes > 45;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] flex items-center justify-center p-4">
+      <div className="bg-white max-w-md w-full border border-gray-400 shadow-2xl relative overflow-hidden">
+        <div className="p-3 bg-[#005c8d] text-white flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
+           <div className="flex items-center gap-2"><TableIcon size={14}/> Detalji ocjene</div>
+           <button onClick={onClose} className="hover:rotate-90 transition-transform"><X size={16}/></button>
+        </div>
+
+        <div className="p-6 space-y-6">
+           <div className="flex justify-between items-start">
+             <div>
+               <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Element ocjenjivanja</p>
+               <h4 className="text-sm font-black text-gray-800 uppercase tracking-tight">{grade.category}</h4>
+             </div>
+             <div className={cn(
+               "w-12 h-12 flex items-center justify-center text-2xl font-black border-2",
+               grade.value === 1 ? "bg-red-50 border-red-200 text-red-600" : "bg-blue-50 border-blue-200 text-[#005c8d]"
+             )}>
+               {grade.value}
+             </div>
+           </div>
+
+           <div className="grid grid-cols-2 gap-4 border-y border-gray-100 py-4">
+              <div>
+                <p className="text-[9px] font-black text-gray-400 uppercase leading-none mb-1">Datum unosa</p>
+                <p className="text-xs font-bold text-gray-700">{new Date(grade.date).toLocaleDateString('hr-HR')}</p>
+              </div>
+              <div>
+                <p className="text-[9px] font-black text-gray-400 uppercase leading-none mb-1">Vrijeme unosa</p>
+                <p className="text-xs font-bold text-gray-700">{createdAt.toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' })}</p>
+              </div>
+           </div>
+
+           <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[9px] font-black text-gray-400 uppercase leading-none">Bilješka / Napomena</p>
+                {!isEditing && (
+                  <button onClick={() => setIsEditing(true)} className="text-[9px] font-black text-[#005c8d] uppercase hover:underline flex items-center gap-1">
+                    <Edit2 size={10}/> Uredi bilješku
+                  </button>
+                )}
+              </div>
+              <div className="bg-gray-50 p-3 border border-gray-200 min-h-[80px]">
+                 {isEditing ? (
+                   <div className="space-y-3">
+                     <textarea 
+                       value={editForm.note}
+                       onChange={e => setEditForm({...editForm, note: e.target.value})}
+                       className="w-full text-xs p-2 border border-[#005c8d] outline-none"
+                       rows={4}
+                     />
+                     <div className="flex gap-2">
+                        <button onClick={onUpdateNote} className="flex-1 bg-[#005c8d] text-white py-1.5 text-[10px] font-black uppercase hover:bg-[#004a70]">Spremi</button>
+                        <button onClick={() => setIsEditing(false)} className="px-4 py-1.5 bg-white border border-gray-300 text-gray-400 text-[10px] font-black uppercase hover:bg-gray-50">Odustani</button>
+                     </div>
+                   </div>
+                 ) : (
+                   <p className="text-xs text-gray-600 leading-relaxed italic">{grade.note || 'Nema bilješke'}</p>
+                 )}
+              </div>
+           </div>
+
+           {showAdminAuth ? (
+              <div className="p-4 bg-red-50 border border-red-100 space-y-3 animate-in fade-in slide-in-from-top-2">
+                 <p className="text-[10px] font-black text-red-700 uppercase text-center">Admin autorizacija za brisanje (45min+)</p>
+                 <input 
+                   type="password" 
+                   value={authCode}
+                   onChange={e => setAuthCode(e.target.value)}
+                   placeholder="Unesite kod s authenticatora"
+                   className="w-full border border-red-200 p-2 text-center font-mono tracking-[0.5em] focus:outline-red-500"
+                   autoFocus
+                 />
+                 <div className="flex gap-2">
+                    <button onClick={() => onDelete(grade.id, true)} className="flex-1 bg-red-600 text-white py-2 text-[10px] font-black uppercase hover:bg-red-700">Potvrdi brisanje</button>
+                    <button onClick={() => { setShowAdminAuth(false); setAuthCode(''); }} className="px-4 py-2 border border-red-200 text-red-700 text-[10px] font-black uppercase hover:bg-white">Odustani</button>
+                 </div>
+              </div>
+           ) : (
+             <div className="pt-4 border-t border-gray-100">
+               {(canDeleteDirectly || canDeleteWithAuth) && (
+                 <button 
+                   onClick={() => onDelete(grade.id, false)}
+                   className="w-full py-2 bg-white border border-red-200 text-red-500 text-[10px] font-black uppercase hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
+                 >
+                   <Trash2 size={12}/> Obriši ocjenu
+                 </button>
+               )}
+               {diffMinutes > 45 && !isClassAdmin && (
+                 <p className="text-[9px] text-gray-400 italic text-center">Ocjena je starija od 45 minuta i ne može se obrisati.</p>
+               )}
+             </div>
+           )}
+        </div>
+      </div>
     </div>
   );
 }

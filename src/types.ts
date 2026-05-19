@@ -32,7 +32,7 @@ export type User = {
   requiresAuthenticatorSetup?: boolean;
   authenticatorSecret?: string;
   requiresPasswordChange?: boolean;
-  passwordType?: 'NORMAL_PASSWORD' | 'FIRST_LOGIN_OTP_SETUP';
+  password_type?: 'standard' | 'student_static' | 'staff_with_authenticator' | 'NORMAL_PASSWORD' | 'FIRST_LOGIN_OTP_SETUP';
   oib?: string;
   dob?: string;
   pob?: string;
@@ -105,6 +105,7 @@ export type ClassSubjectTeacher = {
   subjectId: string;
   teacherId: string;
   schoolId?: string;
+  groupName?: string;
 };
 
 export type StudentClassEnrollment = {
@@ -212,6 +213,7 @@ export type Grade = {
   weight: number;
   isImportant: boolean;
   date: string;
+  createdAt?: string;
 };
 
 export type Exam = {

@@ -175,7 +175,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       });
 
       const results = [];
-      const password = 'yupu8Ev4';
+      const studentPassword = 'yupu8Ev4';
 
       for (const student of students) {
          let email = student.email;
@@ -190,7 +190,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
          const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
-            password,
+            password: studentPassword,
             email_confirm: true,
             user_metadata: { name: student.name, surname: student.surname }
          });
@@ -211,7 +211,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
               is_first_login: true,
               requires_password_change: false,
               requires_authenticator_setup: false,
-              password_type: 'standard',
+              password_type: 'student_static',
               class_id: classDetails.id || null,
               school_id: classDetails.school_id || schoolId,
               school_year_id: classDetails.school_year_id || null
@@ -249,7 +249,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
              }
          }
 
-         results.push({ ...student, success: true, email, password });
+         results.push({ ...student, success: true, email, password: studentPassword });
       }
 
       res.json({ success: true, results, message: "Korisnici obrađeni." });
@@ -295,15 +295,18 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       let requiresPasswordChange = true;
       let authenticatorSecret = null;
       let requiresAuthenticatorSetup = false;
+      let passwordType: any = 'standard';
 
       if (isStudent) {
         finalPassword = 'yupu8Ev4';
         requiresPasswordChange = false;
+        passwordType = 'student_static';
       } else if (isStaff) {
         finalPassword = '1234';
         requiresPasswordChange = true;
         authenticatorSecret = authenticator.generateSecret();
         requiresAuthenticatorSetup = true;
+        passwordType = 'staff_with_authenticator';
       }
 
       console.log("CREATE USER DEBUG", { 
@@ -351,7 +354,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           mobile,
           is_first_login: true,
           requires_password_change: requiresPasswordChange,
-          password_type: isStaff ? 'staff_with_authenticator' : 'standard',
+          password_type: passwordType,
           authenticator_secret: authenticatorSecret,
           requires_authenticator_setup: requiresAuthenticatorSetup
         }, { onConflict: 'auth_user_id' })
@@ -780,6 +783,64 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       });
     } catch (err: any) {
       console.error("[RESET_TOTP] Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Reset student password endpoint
+  app.post("/api/admin/reset-student-password", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { profileId, type } = req.body; // type: 'DEFAULT' or 'GENERATE'
+
+      const { data: profile } = await supabaseAdmin
+        .from('user_profiles')
+        .select('*')
+        .eq('id', profileId)
+        .maybeSingle();
+
+      if (!profile) throw new Error("Profil nije pronađen.");
+
+      let newPassword = 'yupu8Ev4';
+      if (type === 'GENERATE') {
+        const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        const numbers = "0123456789";
+        const symbols = "!?-" ;
+        const all = letters + numbers;
+        
+        let pass = "";
+        // 6 characters from letters/numbers
+        for (let i = 0 ; i < 6; i++) {
+          pass += all.charAt(Math.floor(Math.random() * all.length));
+        }
+        // 1 number (to be sure)
+        pass += numbers.charAt(Math.floor(Math.random() * numbers.length));
+        // 1 symbol
+        pass += symbols.charAt(Math.floor(Math.random() * symbols.length));
+        
+        // Shuffle
+        newPassword = pass.split('').sort(() => Math.random() - 0.5).join('');
+      }
+
+      // Update Auth Password
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(profile.auth_user_id, {
+        password: newPassword
+      });
+
+      if (authError) throw authError;
+
+      // Update profile flags just in case they were set
+      await supabaseAdmin.from('user_profiles').update({
+        requires_password_change: false,
+        password_type: 'student_static'
+      }).eq('id', profileId);
+
+      res.json({
+        success: true,
+        newPassword
+      });
+    } catch (err: any) {
+      console.error("[RESET_STUDENT_PASS] Error:", err);
       res.status(500).json({ error: err.message });
     }
   });
