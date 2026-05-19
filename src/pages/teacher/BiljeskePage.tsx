@@ -4,10 +4,29 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { User, StudentNote, Class, ClassNotes, StudentNotes } from '../../types';
-import { cn } from '../../lib/utils';
-import { MessageSquare, Plus, Search, Calendar, User as UserIcon } from 'lucide-react';
+import { cn, formatName } from '../../lib/utils';
+import { MessageSquare, Plus, Search, Calendar, User as UserIcon, Edit2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mappers, mapList } from '../../lib/mappers';
+
+// Modal component for editing Notes
+const NotesModal = ({ isOpen, onClose, title, content, onSave, loading }: { isOpen: boolean, onClose: () => void, title: string, content: string, onSave: (val: string) => void, loading: boolean }) => {
+  const [val, setVal] = useState(content);
+  useEffect(() => setVal(content), [content]);
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+      <div className="bg-white max-w-lg w-full p-6 shadow-xl">
+        <h3 className="font-bold text-lg mb-4">{title}</h3>
+        <textarea className="w-full h-32 border border-gray-300 p-2 text-sm mb-4" value={val} onChange={e => setVal(e.target.value)} />
+        <div className="flex justify-end gap-2">
+          <button className="px-4 py-2 border border-gray-300 text-sm font-bold" onClick={onClose}>Odustani</button>
+          <button className="px-4 py-2 bg-[#005c8d] text-white text-sm font-bold" onClick={() => onSave(val)} disabled={loading}>{loading ? 'Spremanje...' : 'Spremi'}</button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function BiljeskePage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
@@ -23,6 +42,10 @@ export default function BiljeskePage() {
   const [activeClass, setActiveClass] = useState<Class | null>(null);
   const [classNotes, setClassNotes] = useState<ClassNotes | null>(null);
   const [studentOverallNotes, setStudentOverallNotes] = useState<StudentNotes[]>([]);
+
+  // Editing state
+  const [editTarget, setEditTarget] = useState<{ type: 'HOMEROOM' | 'DEPUTY' | 'STUDENT', field: string, id: string, studentId?: string, initialValue: string } | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (effectiveClassId) {
@@ -92,6 +115,54 @@ setStudents(uniqueStudents);
   const isHomeroom = user?.id === activeClass?.homeroomTeacherId;
   const isDeputy = user?.id === activeClass?.deputyTeacherId;
 
+  const handleSaveNote = async (val: string) => {
+    if (!editTarget) return;
+    setIsSaving(true);
+    try {
+      if (editTarget.type === 'HOMEROOM' || editTarget.type === 'DEPUTY') {
+        // Handle ClassNotes
+        if (classNotes?.id) {
+          const { error } = await supabase.from('class_notes').update({
+            [editTarget.field]: val
+          }).eq('id', classNotes.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('class_notes').insert({
+            class_id: effectiveClassId,
+            schoolyear: activeClass?.schoolYear || '2024/2025',
+            [editTarget.field]: val
+          });
+          if (error) throw error;
+        }
+      } else if (editTarget.type === 'STUDENT') {
+        // Handle StudentNotes
+        if (editTarget.id !== 'new') {
+          const { error } = await supabase.from('student_overall_notes').update({
+            [editTarget.field]: val
+          }).eq('id', editTarget.id);
+          if (error) throw error;
+        } else {
+          // New student note record
+          const { error } = await supabase.from('student_overall_notes').insert({
+            student_id: editTarget.studentId,
+            class_id: effectiveClassId,
+            school_year: activeClass?.schoolYear || '2024/2025',
+            [editTarget.field]: val
+          });
+          if (error) throw error;
+        }
+      }
+      
+      toast.success('Bilješka spremljena');
+      fetchData();
+      setEditTarget(null);
+    } catch (err: any) {
+      toast.error('Greška pri spremanju: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const filteredNotes = notes.filter(note => {
     const student = students.find(s => s.id === note.studentId);
     const studentName = student ? (student.name + ' ' + (student.surname || '')).toLowerCase() : '';
@@ -113,6 +184,7 @@ setStudents(uniqueStudents);
 
   return (
     <div className="flex flex-col h-full bg-white font-sans">
+      <NotesModal isOpen={!!editTarget} onClose={() => setEditTarget(null)} title={editTarget?.type === 'HOMEROOM' ? 'Uredi bilješku razrednika' : 'Uredi bilješku zamjenika'} content={editTarget?.initialValue || ''} onSave={val => handleSaveNote(val)} loading={isSaving} />
       <div className="bg-[#f8f9fa] border-b border-gray-300 p-6 flex flex-col gap-4">
         <div className="flex items-center justify-between">
           <div>
@@ -144,13 +216,19 @@ setStudents(uniqueStudents);
              <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Službene bilješke razreda</h3>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white border border-gray-300 p-4 shadow-sm">
+            <div className="bg-white border border-gray-300 p-4 shadow-sm relative">
                <div className="text-[10px] font-black text-[#005c8d] uppercase mb-2">Razrednik</div>
                <div className="text-[12px] font-bold text-gray-700 whitespace-pre-wrap">{classNotes?.homeroomInfo || 'Nema upisanih podataka'}</div>
+               {(isHomeroom) && (
+                 <button className="absolute top-2 right-2 text-gray-400 hover:text-[#005c8d]" onClick={() => setEditTarget({ type: 'HOMEROOM', field: 'homeroom_info', id: classNotes?.id || '', initialValue: classNotes?.homeroomInfo || '' })}><Edit2 size={14}/></button>
+               )}
             </div>
-            <div className="bg-white border border-gray-300 p-4 shadow-sm">
+            <div className="bg-white border border-gray-300 p-4 shadow-sm relative">
                <div className="text-[10px] font-black text-[#005c8d] uppercase mb-2">Zamjenik razrednika</div>
                <div className="text-[12px] font-bold text-gray-700 whitespace-pre-wrap">{classNotes?.deputyInfo || 'Nema upisanih podataka'}</div>
+               {(isDeputy) && (
+                 <button className="absolute top-2 right-2 text-gray-400 hover:text-[#005c8d]" onClick={() => setEditTarget({ type: 'DEPUTY', field: 'deputy_info', id: classNotes?.id || '', initialValue: classNotes?.deputyInfo || '' })}><Edit2 size={14}/></button>
+               )}
             </div>
           </div>
         </section>
@@ -164,42 +242,34 @@ setStudents(uniqueStudents);
           <div className="grid grid-cols-1 gap-6">
             {students.sort((a,b) => (String(a.surname || "")).localeCompare(b.surname || '') || 0).map(s => {
               const son = studentOverallNotes.find(n => n.studentId === s.id);
-              if (!son || (!son.schoolActivities && !son.extracurricularActivities && !son.disciplinaryActions && !son.homeroomNote)) return null;
               
               return (
                 <div key={s.id} className="bg-white border border-gray-300 shadow-sm overflow-hidden">
                   <div className="bg-gray-100 px-4 py-2 border-b border-gray-200 flex justify-between items-center">
-                    <span className="text-[11px] font-black text-[#005c8d] uppercase tracking-tighter">{s.surname} {s.name}</span>
+                    <span className="text-[11px] font-black text-[#005c8d] uppercase tracking-tighter">{formatName(s)}</span>
                   </div>
-                  <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    {son.schoolActivities && (
-                      <div className="space-y-1">
-                        <div className="text-[9px] font-black text-gray-400 uppercase">Izvannastavne aktivnosti</div>
-                        <div className="text-[11px] font-bold text-gray-600">{son.schoolActivities}</div>
+                  <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[
+                      {label: 'Izvannastavne aktivnosti', field: 'school_activities', val: son?.schoolActivities},
+                      {label: 'Izvanškolske aktivnosti', field: 'extracurricular_activities', val: son?.extracurricularActivities},
+                      {label: 'Pedagoške mjere', field: 'disciplinary_actions', val: son?.disciplinaryActions},
+                      {label: 'Bilješka razrednika', field: 'homeroom_note', val: son?.homeroomNote},
+                    ].map(item => (
+                      <div key={item.field} className="space-y-1 relative group border border-transparent p-2 hover:border-gray-200">
+                        <div className="text-[9px] font-black text-gray-400 uppercase">{item.label}</div>
+                        <div className="text-[11px] font-bold text-gray-600 min-h-[1.5em]">{item.val || '-'}</div>
+                        {(isHomeroom || isDeputy) && (
+                          <button className="absolute top-2 right-2 text-gray-300 group-hover:text-[#005c8d] opacity-0 group-hover:opacity-100" 
+                                  onClick={() => setEditTarget({ type: 'STUDENT', field: item.field, id: son?.id || 'new', studentId: s.id, initialValue: item.val || '' })}>
+                             <Edit2 size={12}/>
+                          </button>
+                        )}
                       </div>
-                    )}
-                    {son.extracurricularActivities && (
-                      <div className="space-y-1">
-                        <div className="text-[9px] font-black text-gray-400 uppercase">Izvanškolske aktivnosti</div>
-                        <div className="text-[11px] font-bold text-gray-600">{son.extracurricularActivities}</div>
-                      </div>
-                    )}
-                    {son.disciplinaryActions && (
-                      <div className="space-y-1">
-                        <div className="text-[9px] font-black text-red-400 uppercase">Pedagoške mjere</div>
-                        <div className="text-[11px] font-bold text-red-700">{son.disciplinaryActions}</div>
-                      </div>
-                    )}
-                     {son.homeroomNote && (
-                      <div className="space-y-1">
-                        <div className="text-[9px] font-black text-gray-400 uppercase">Bilješka razrednika</div>
-                        <div className="text-[11px] font-bold text-gray-600 italic">"{son.homeroomNote}"</div>
-                      </div>
-                    )}
+                    ))}
                   </div>
                 </div>
               );
-            }).filter(Boolean)}
+            })}
           </div>
         </section>
 

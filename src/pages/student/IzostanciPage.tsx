@@ -47,7 +47,7 @@ export default function IzostanciPage() {
     total: absences.length,
     justified: absences.filter(a => a.status === AbsenceStatus.OPRAVDANO).length,
     unjustified: absences.filter(a => a.status === AbsenceStatus.NEOPRAVDANO).length,
-    pending: absences.filter(a => a.status === AbsenceStatus.CEKA).length,
+    pending: absences.filter(a => a.status === AbsenceStatus.PENDING).length,
   };
 
   return (
@@ -99,13 +99,13 @@ export default function IzostanciPage() {
                     </td>
                     <td className="p-3">
                       <div className="flex items-center gap-2">
-                        {abs.status === AbsenceStatus.CEKA && <Clock size={16} className="text-orange-500" />}
+                        {abs.status === AbsenceStatus.PENDING && <Clock size={16} className="text-orange-500" />}
                         {abs.status === AbsenceStatus.OPRAVDANO && <CheckCircle2 size={16} className="text-green-600" />}
                         {abs.status === AbsenceStatus.NEOPRAVDANO && <XCircle size={16} className="text-red-500" />}
                         
                         <span className={cn(
                           "font-bold uppercase text-[10px] px-2 py-0.5 rounded-full",
-                          abs.status === AbsenceStatus.CEKA ? "bg-orange-50 text-orange-600 border border-orange-200" :
+                          abs.status === AbsenceStatus.PENDING ? "bg-orange-50 text-orange-600 border border-orange-200" :
                           abs.status === AbsenceStatus.OPRAVDANO ? "bg-green-50 text-green-700 border border-green-200" :
                           "bg-red-50 text-red-700 border border-red-200"
                         )}>

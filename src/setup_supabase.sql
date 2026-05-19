@@ -173,6 +173,8 @@ CREATE TABLE public.curriculum_plans (
 CREATE TABLE public.work_weeks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    school_id TEXT REFERENCES public.schools(id) ON DELETE CASCADE,
+    school_year_id TEXT REFERENCES public.school_years(id) ON DELETE SET NULL,
     school_year TEXT NOT NULL,
     name TEXT NOT NULL,
     start_date DATE NOT NULL,
@@ -192,6 +194,9 @@ CREATE TABLE public.lessons (
     class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
     subject_id TEXT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
     teacher_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+    school_id TEXT REFERENCES public.schools(id) ON DELETE CASCADE,
+    school_year_id TEXT REFERENCES public.school_years(id) ON DELETE SET NULL,
+    work_week_id UUID REFERENCES public.work_weeks(id) ON DELETE SET NULL,
     date DATE NOT NULL,
     hour INTEGER NOT NULL,
     topic TEXT NOT NULL,
@@ -212,15 +217,19 @@ CREATE TABLE public.lessons (
 CREATE TABLE public.absences (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     student_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
-    lesson_id UUID REFERENCES public.lessons(id) ON DELETE SET NULL,
+    lesson_id UUID REFERENCES public.lessons(id) ON DELETE CASCADE,
     class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
     date DATE NOT NULL,
     hour INTEGER,
     status TEXT DEFAULT 'CEKA',
     note TEXT,
     teacher_id UUID REFERENCES public.user_profiles(id),
+    absence_type TEXT,
+    justified_by UUID REFERENCES public.user_profiles(id),
+    justified_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(student_id, lesson_id, hour)
 );
 
 -- 12. Grades

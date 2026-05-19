@@ -177,9 +177,10 @@ export type Lesson = {
 };
 
 export enum AbsenceStatus {
-  CEKA = 'CEKA',
+  PENDING = 'PENDING',
   OPRAVDANO = 'OPRAVDANO',
-  NEOPRAVDANO = 'NEOPRAVDANO'
+  NEOPRAVDANO = 'NEOPRAVDANO',
+  OSTALO = 'OSTALO'
 }
 
 export type Absence = {

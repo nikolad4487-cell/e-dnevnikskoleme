@@ -611,24 +611,25 @@ setStudents(uniqueStudents);
     try {
       if (deleteDialog.type === 'LESSON') {
         const lessonId = deleteDialog.id;
-        // 1. Delete the lesson
-        const { error: le } = await supabase
-          .from('lessons')
-          .delete()
-          .eq('id', lessonId);
-        if (le) throw le;
         
-        // 2. Clear from local state
-        setDailyLessons(prev => prev.filter(l => l.id !== lessonId));
-        
-        // 3. Delete associated absences
+        // 1. Delete associated absences first
         const { error: ae } = await supabase
           .from('absences')
           .delete()
           .eq('lesson_id', lessonId);
         if (ae) throw ae;
 
-        // Also refresh the local absences if we are in a view that uses them
+        // 2. Delete the lesson
+        const { error: le } = await supabase
+          .from('lessons')
+          .delete()
+          .eq('id', lessonId);
+        if (le) throw le;
+        
+        // 3. Update local state
+        setDailyLessons(prev => prev.filter(l => l.id !== lessonId));
+        
+        // Refresh absences in state
         if (view === 'ABSENCES') {
           setCurrentWeekAbsences(prev => prev.filter(a => a.lessonId !== lessonId));
         }
@@ -680,6 +681,8 @@ setStudents(uniqueStudents);
        return;
     }
 
+    const currentClass = classes.find(c => c.id === effectiveClassId);
+
     try {
       const isEditing = !!lessonForm.id;
       const count = isEditing ? 1 : (lessonForm.blockCount || 1); 
@@ -708,6 +711,8 @@ setStudents(uniqueStudents);
         const lessonData: any = {
           class_id: effectiveClassId,
           school_id: selectedSchoolId,
+          school_year_id: currentClass?.schoolYearId,
+          work_week_id: selectedWeek?.id,
           date: selectedDate,
           hour: currentHour,
           is_held: lessonForm.isHeld,
@@ -747,20 +752,27 @@ setStudents(uniqueStudents);
         }
 
         if (finalId) {
+          // Sync absences: first find existing to avoid unnecessary delete-insert if possible
+          // But with current design, just deleting for this lesson hour is fine.
           await supabase.from('absences').delete().eq('lesson_id', finalId);
+          
           if (selectedAbsentees.length > 0) {
             const absencesPayload = selectedAbsentees.map(sid => ({
               student_id: sid,
               lesson_id: finalId,
               class_id: effectiveClassId,
-              school_id: selectedSchoolId,
               date: selectedDate,
               hour: currentHour,
-              status: 'CEKA',
-              teacher_id: user.id,
-              timestamp: new Date().toISOString()
+              status: 'PENDING',
+              teacher_id: user.id
             }));
-            await supabase.from('absences').insert(absencesPayload);
+            console.log("SYNC ABSENCES FOR LESSON", finalId);
+            console.log("ABSENCE PAYLOAD", absencesPayload);
+            const { error: absError } = await supabase.from('absences').insert(absencesPayload);
+            if (absError) {
+              console.log("ABSENCE ERROR", absError);
+              toast.error("Greška pri unosu izostanka: " + absError.message);
+            }
           }
         }
       }
@@ -986,7 +998,15 @@ setStudents(uniqueStudents);
         {view === 'ABSENCES' && selectedClass && (
           <div className="max-w-6xl mx-auto">
              <div className="bg-white border border-gray-300 shadow-sm overflow-hidden overflow-x-auto">
-                <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-[#005c8d] text-[11px] uppercase tracking-tight">Tjedni pregled izostanaka: {selectedWeek?.name}</div>
+                <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-[#005c8d] text-[11px] uppercase tracking-tight flex items-center justify-between">
+                    <span>Tjedni pregled izostanaka: {selectedWeek?.name}</span>
+                    <div className="flex gap-4 text-[9px]">
+                       <div className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500"/> Opravdano</div>
+                       <div className="flex items-center gap-1"><span className="w-3 h-3 bg-red-500"/> Neopravdano</div>
+                       <div className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-400"/> Ostalo</div>
+                       <div className="flex items-center gap-1"><span className="w-3 h-3 bg-orange-500"/> Čeka odluku</div>
+                    </div>
+                 </div>
                 <table className="w-full border-collapse min-w-[800px] ed-table-dense">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-300">
@@ -1009,14 +1029,25 @@ setStudents(uniqueStudents);
                             const count = currentWeekAbsences.filter(abs => abs.studentId === s.id && abs.date === date).length;
                             total += count;
                             return (
-                              <td key={`absence-cell-${s.id}-${date}`} className="p-2 text-center border-r border-gray-200">
-                                {count > 0 ? (
-                                  <span className="font-bold text-red-600">
-                                    {count}
-                                  </span>
-                                ) : (
-                                  <span className="text-gray-200">—</span>
-                                )}
+                              <td key={`absence-cell-${s.id}-${date}`} className="p-2 border-r border-gray-200">
+                               <div className="flex flex-wrap gap-1 items-center justify-center">
+                                 {currentWeekAbsences
+                                   .filter(abs => abs.studentId === s.id && abs.date === date)
+                                   .map(abs => (
+                                     <div 
+                                       key={abs.id} 
+                                       className={cn(
+                                         "w-5 h-5 flex items-center justify-center text-[9px] font-bold text-white rounded-sm",
+                                         abs.status === 'OPRAVDANO' ? 'bg-green-500' :
+                                         abs.status === 'NEOPRAVDANO' ? 'bg-red-500' :
+                                         abs.status === 'OSTALO' ? 'bg-yellow-400' :
+                                         'bg-orange-500' // PENDING
+                                       )}
+                                     >
+                                       {abs.hour}
+                                     </div>
+                                   ))}
+                               </div>
                               </td>
                             );
                           })}
