@@ -188,72 +188,78 @@ export default function ImenikPage() {
     pendingAbsences: Record<string, boolean>
   }>({ failingGrades: {}, pendingAbsences: {} });
 
-  useEffect(() => {
+  const fetchWarningData = async () => {
     if (!effectiveClassId) return;
-    const fetchWarnings = async () => {
-      try {
-        const { data: grades } = await supabase
-          .from('grades')
-          .select('student_id')
-          .eq('class_id', effectiveClassId)
-          .eq('value', 1);
-        
-        const { data: absences } = await supabase
-          .from('absences')
-          .select('student_id')
-          .eq('class_id', effectiveClassId)
-          .eq('status', 'PENDING');
+    try {
+      console.log("REFETCH WARNINGS - Class:", effectiveClassId);
+      const { data: grades } = await supabase
+        .from('grades')
+        .select('student_id')
+        .eq('class_id', effectiveClassId)
+        .eq('value', 1);
+      
+      const { data: absences } = await supabase
+        .from('absences')
+        .select('student_id')
+        .eq('class_id', effectiveClassId)
+        .eq('status', 'PENDING');
 
-        const failing: Record<string, number> = {};
-        grades?.forEach(g => {
-          failing[g.student_id] = (failing[g.student_id] || 0) + 1;
-        });
+      const failing: Record<string, number> = {};
+      grades?.forEach(g => {
+        failing[g.student_id] = (failing[g.student_id] || 0) + 1;
+      });
 
-        const pending: Record<string, boolean> = {};
-        absences?.forEach(a => {
-          pending[a.student_id] = true;
-        });
+      const pending: Record<string, boolean> = {};
+      absences?.forEach(a => {
+        pending[a.student_id] = true;
+      });
 
-        setClassWarnings({ failingGrades: failing, pendingAbsences: pending });
-      } catch (e) {
-        console.error("Error fetching warnings:", e);
-      }
-    };
-    fetchWarnings();
+      const newData = { failingGrades: failing, pendingAbsences: pending };
+      console.log("WARNING DATA UPDATED", newData);
+      setClassWarnings(newData);
+    } catch (e) {
+      console.error("Error fetching warnings:", e);
+    }
+  };
+
+  const fetchStudentsData = async () => {
+    if (!effectiveClassId) return;
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('student_class_enrollments')
+        .select('*, student:user_profiles(*)')
+        .eq('class_id', effectiveClassId)
+        .eq('status', 'ACTIVE');
+      if (error) throw error;
+      const mappedStudents = (data || []).map(row => {
+        const u = mappers.user(row.student);
+        return { ...u };
+      }) as User[];
+      
+      setStudentEnrollments(data || []);
+      const uniqueStudents = Array.from(new Map(mappedStudents.map(s => [s.id, s])).values());
+      setStudents(uniqueStudents);
+    } catch (error) {
+      console.error(error);
+      toast.error('Greška pri učitavanju učenika');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (effectiveClassId) {
+      fetchStudentsData();
+      fetchWarningData();
+    }
   }, [effectiveClassId]);
 
   useEffect(() => {
-    if (!effectiveClassId) return;
-    const fetchStudents = async () => {
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('student_class_enrollments')
-          .select('*, student:user_profiles(*)')
-          .eq('class_id', effectiveClassId)
-          .eq('status', 'ACTIVE');
-        if (error) throw error;
-        const mappedStudents = (data || []).map(row => {
-          const u = mappers.user(row.student);
-          return {
-            ...u
-          };
-        }) as User[];
-        
-        setStudentEnrollments(data || []);
-        
-        const uniqueStudents = Array.from(new Map(mappedStudents.map(s => [s.id, s])).values());
-        setStudents(uniqueStudents);
-
-      } catch (error) {
-        console.error(error);
-        toast.error('Greška pri učitavanju učenika');
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchStudents();
-  }, [effectiveClassId]);
+    if (viewMode === 'STUDENTS' && effectiveClassId) {
+      fetchWarningData();
+    }
+  }, [viewMode, effectiveClassId, activeStudent?.id, activeSubject?.id]);
 
   useEffect(() => {
     // Real-time listener for enrollments (DISABLED)
@@ -730,7 +736,8 @@ export default function ImenikPage() {
         throw error;
       }
       setShowGradeModal(false);
-      fetchGradesAndNotes();
+      await fetchGradesAndNotes();
+      await fetchWarningData();
     } catch (err) {
       console.error(err);
     }
@@ -901,7 +908,8 @@ export default function ImenikPage() {
       const { error } = await supabase.from(tableName).delete().eq('id', deleteDialog.id);
       if (error) throw error;
       toast.success('Zapis je uspješno obrisan.');
-      fetchGradesAndNotes();
+      await fetchGradesAndNotes();
+      await fetchWarningData();
     } catch (err) {
       console.error(err);
       toast.error('Brisanje nije uspjelo.');
@@ -957,6 +965,7 @@ export default function ImenikPage() {
         if (error) throw error;
       }
       setShowGroupGradeModal(false);
+      await fetchWarningData();
     } catch (err) {
       console.error(err);
       toast.error('Greška pri grupnom upisu ocjena');
@@ -1215,7 +1224,7 @@ export default function ImenikPage() {
               </button>
               <div>
                 <h1 className="text-lg font-bold text-[#005c8d] leading-none uppercase tracking-tight">
-                  {studentIndex + 1}. {activeStudent?.surname} {activeStudent?.name}
+                  {studentIndex + 1}. {activeStudent?.name}
                 </h1>
                 <p className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-tight">Učenička kartica · {activeSubject?.name}</p>
               </div>
@@ -1526,7 +1535,11 @@ export default function ImenikPage() {
            <div className="mt-auto p-4 border-t border-gray-200">
               {activeStudent && (
                 <button 
-                  onClick={() => { setViewMode('STUDENTS'); setActiveStudent(null); }} 
+                  onClick={async () => { 
+                    await fetchWarningData();
+                    setViewMode('STUDENTS'); 
+                    setActiveStudent(null); 
+                  }} 
                   className="w-full py-1.5 bg-gray-100 text-gray-500 border border-gray-300 text-[10px] font-bold uppercase hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all"
                 >
                   Zatvori karticu
@@ -1579,7 +1592,7 @@ export default function ImenikPage() {
           <div className="bg-white max-w-xl w-full relative overflow-hidden border border-gray-400">
              <div className="p-2 bg-[#005c8d] text-white flex justify-between items-center text-[11px] font-bold uppercase"><h3>Upis bilješke</h3><button onClick={()=>setShowNoteModal(false)}><X size={16}/></button></div>
              <div className="p-6 space-y-4">
-                <div><h4 className="font-bold text-[#005c8d] text-base leading-tight">{activeStudent?.name} {activeStudent?.surname}</h4><div className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">{activeSubject?.name}</div></div>
+                <div><h4 className="font-bold text-[#005c8d] text-base leading-tight">{activeStudent?.name}</h4><div className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">{activeSubject?.name}</div></div>
                 <div className="text-left"><label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Datum</label><input type="date" value={newNote.customDate} onChange={e => setNewNote({...newNote, customDate: e.target.value})} className="border p-1 text-[11px] font-bold" /></div>
                 <div className="text-left"><label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Sadržaj bilješke</label><textarea value={newNote.content} onChange={e => setNewNote({...newNote, content: e.target.value})} rows={5} className="w-full border p-2 text-[11px]" /></div>
                 <button onClick={handleAddNote} className="px-8 py-2 bg-[#005c8d] text-white font-bold uppercase text-[11px]">Spremi bilješku</button>
