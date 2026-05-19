@@ -34,7 +34,7 @@ export default function OcjenePage() {
 
         // Fetch target student profile if it's parent view
         if (isParent) {
-          const { data: profile } = await supabase.from('user_profiles').select('*').eq('id', targetStudentId).single();
+          const { data: profile } = await supabase.from('user_profiles').select('*').eq('id', targetStudentId).maybeSingle();
           if (profile) {
             setTargetStudent(mappers.user(profile) as User);
           }

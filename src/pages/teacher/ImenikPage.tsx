@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, Grade, Subject, StudentNote, SpecialExam, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary } from '../../types';
-import { cn, formatName } from '../../lib/utils';
+import { cn, formatName, getSurname } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2, Check } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
@@ -182,6 +182,45 @@ export default function ImenikPage() {
     };
     fetchInitial();
   }, [selectedSchoolId]);
+
+  const [classWarnings, setClassWarnings] = useState<{
+    failingGrades: Record<string, number>,
+    pendingAbsences: Record<string, boolean>
+  }>({ failingGrades: {}, pendingAbsences: {} });
+
+  useEffect(() => {
+    if (!effectiveClassId) return;
+    const fetchWarnings = async () => {
+      try {
+        const { data: grades } = await supabase
+          .from('grades')
+          .select('student_id')
+          .eq('class_id', effectiveClassId)
+          .eq('value', 1);
+        
+        const { data: absences } = await supabase
+          .from('absences')
+          .select('student_id')
+          .eq('class_id', effectiveClassId)
+          .eq('status', 'PENDING');
+
+        const failing: Record<string, number> = {};
+        grades?.forEach(g => {
+          failing[g.student_id] = (failing[g.student_id] || 0) + 1;
+        });
+
+        const pending: Record<string, boolean> = {};
+        absences?.forEach(a => {
+          pending[a.student_id] = true;
+        });
+
+        setClassWarnings({ failingGrades: failing, pendingAbsences: pending });
+      } catch (e) {
+        console.error("Error fetching warnings:", e);
+      }
+    };
+    fetchWarnings();
+  }, [effectiveClassId]);
 
   useEffect(() => {
     if (!effectiveClassId) return;
@@ -960,7 +999,11 @@ export default function ImenikPage() {
 
   const navigateStudent = (dir: 'PREV' | 'NEXT') => {
     if (!activeStudent || students.length === 0) return;
-    const sorted = [...students].sort((a,b) => (a.surname || '').localeCompare(b.surname || ''));
+    const sorted = [...students].sort((a, b) => {
+      const surnameA = getSurname(String(a.name || ''));
+      const surnameB = getSurname(String(b.name || ''));
+      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+    });
     const idx = sorted.findIndex(s => s.id === activeStudent.id);
     
     if (idx === -1) return;
@@ -1009,6 +1052,13 @@ export default function ImenikPage() {
         <div>
           <h1 className="text-xl font-bold text-gray-900">Imenik</h1>
         </div>
+        <button 
+          onClick={handleRandomStudent}
+          className="bg-[#005c8d] text-white px-4 py-2 rounded-lg font-black uppercase tracking-widest text-[10px] hover:bg-[#004a71] transition-all shadow-md active:scale-95 flex items-center gap-2"
+        >
+          <Users size={16} />
+          Slučajan odabir
+        </button>
       </div>
 
       <div className="bg-white border border-gray-300">
@@ -1018,27 +1068,50 @@ export default function ImenikPage() {
               <th className="px-3 py-2 font-black uppercase text-gray-500 w-12 text-center border-r border-gray-300">R.br.</th>
               <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Prezime i ime</th>
               <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Program</th>
-              <th className="px-4 py-2 font-black uppercase text-gray-500">E-mail</th>
+              <th className="px-4 py-2 font-black uppercase text-gray-500">Upozorenja</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {students.sort((a,b) => (a.name || '').localeCompare(b.name || '')).map((s, idx) => (
-              <tr key={s.id} onClick={() => { setActiveStudent(s); setViewMode('SUBJECTS'); }} className="group hover:bg-[#eff6ff] cursor-pointer transition-colors">
-                <td className="px-3 py-2 text-center font-bold text-gray-500 border-r border-gray-200">{idx + 1}.</td>
-                <td className="px-4 py-2 font-bold text-[#005c8d] border-r border-gray-200 group-hover:underline">{s.name}</td>
-            <td className="px-4 py-2 border-r border-gray-200">
-              {(() => {
-                const enrollment = studentEnrollments.find(e => e.student_id === s.id);
-                const progId = enrollment?.program_id || classes.find(c => c.id === effectiveClassId)?.programId;
-                const prog = programs.find(p => p.id === progId);
-                return (
-                  <div className="text-[10px] font-bold text-gray-600 uppercase italic opacity-70">{prog ? prog.name : "Nije dodijeljen program"}</div>
-                );
-              })()}
-            </td>
-                <td className="px-4 py-2 text-gray-500 text-[11px]">{s.email}</td>
-              </tr>
-            ))}
+            {students.sort((a, b) => {
+              const surnameA = getSurname(String(a.name || ''));
+              const surnameB = getSurname(String(b.name || ''));
+              return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+            }).map((s, idx) => {
+              const failingCount = classWarnings.failingGrades[s.id] || 0;
+              const hasPending = classWarnings.pendingAbsences[s.id];
+
+              return (
+                <tr key={s.id} onClick={() => { setActiveStudent(s); setViewMode('SUBJECTS'); }} className="group hover:bg-[#eff6ff] cursor-pointer transition-colors">
+                  <td className="px-3 py-2 text-center font-bold text-gray-500 border-r border-gray-200">{idx + 1}.</td>
+                  <td className="px-4 py-2 font-bold text-[#005c8d] border-r border-gray-200 group-hover:underline">{s.name}</td>
+                  <td className="px-4 py-2 border-r border-gray-200">
+                    {(() => {
+                      const enrollment = studentEnrollments.find(e => e.student_id === s.id);
+                      const progId = enrollment?.program_id || classes.find(c => c.id === effectiveClassId)?.programId;
+                      const prog = programs.find(p => p.id === progId);
+                      return (
+                        <div className="text-[10px] font-bold text-gray-600 uppercase italic opacity-70">{prog ? prog.name : "Nije dodijeljen program"}</div>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-4 py-2">
+                    <div className="flex items-center gap-3">
+                      {failingCount > 0 && (
+                        <div className="flex items-center gap-1 text-red-600 font-black px-1.5 py-0.5 rounded bg-red-50 border border-red-100" title={`Učenik ima ${failingCount} negativnih ocjena`}>
+                          <span className="text-[14px]">⚠</span>
+                          <span className="text-[11px]">{failingCount}</span>
+                        </div>
+                      )}
+                      {hasPending && (
+                        <div className="text-red-500" title="Učenik ima neažurirane izostanke">
+                          <span className="text-[16px] animate-pulse">🕒</span>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1115,7 +1188,12 @@ export default function ImenikPage() {
       return null;
     };
 
-    const studentIndex = students.sort((a,b) => (String(a.surname || "")).localeCompare(b.surname)).findIndex(s => s.id === activeStudent?.id);
+    const sortedStudents = [...students].sort((a, b) => {
+      const surnameA = getSurname(String(a.name || ''));
+      const surnameB = getSurname(String(b.name || ''));
+      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+    });
+    const studentIndex = sortedStudents.findIndex(s => s.id === activeStudent?.id);
     
     const gridGrades: Record<string, Record<string, number[]>> = {};
     gradingElementNames.forEach(cat => gridGrades[cat] = {});
@@ -1564,9 +1642,13 @@ export default function ImenikPage() {
                     <tr><th className="p-2 w-64">Učenik</th><th className="p-2 w-32 border-x border-gray-300 text-center">Ocjena</th><th className="p-2">Bilješka</th></tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {students.sort((a,b)=>(String(a.surname || "")).localeCompare(b.surname)).map(s => (
+                    {students.sort((a, b) => {
+                      const surnameA = getSurname(String(a.name || ''));
+                      const surnameB = getSurname(String(b.name || ''));
+                      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+                    }).map(s => (
                       <tr key={s.id} className="hover:bg-gray-50 transition-colors">
-                         <td className="p-2 text-[11px] font-bold text-gray-700">{s.surname} {s.name}</td>
+                         <td className="p-2 text-[11px] font-bold text-gray-700">{s.name}</td>
                          <td className="p-1 border-x border-gray-200">
                             <select 
                               value={groupGradeForm.studentGrades[s.id]?.value || ''} 
@@ -1618,9 +1700,13 @@ export default function ImenikPage() {
                     <tr><th className="p-2 w-64 border-r border-gray-300">Učenik</th><th className="p-2">Bilješka</th></tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {students.sort((a,b)=>(String(a.surname || "")).localeCompare(b.surname)).map(s=>(
+                    {students.sort((a, b) => {
+                      const surnameA = getSurname(String(a.name || ''));
+                      const surnameB = getSurname(String(b.name || ''));
+                      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+                    }).map(s=>(
                       <tr key={s.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="p-2 text-[11px] font-bold text-gray-700 border-r border-gray-200">{s.surname} {s.name}</td>
+                        <td className="p-2 text-[11px] font-bold text-gray-700 border-r border-gray-200">{s.name}</td>
                         <td className="p-1"><textarea rows={2} value={groupNoteForm.studentNotes[s.id]||''} onChange={e=>setGroupNoteForm({...groupNoteForm,studentNotes:{...groupNoteForm.studentNotes,[s.id]:e.target.value}})} className="w-full border p-1 text-[11px]" /></td>
                       </tr>
                     ))}
@@ -1722,7 +1808,7 @@ function GradingElementsModal({ isOpen, onClose, subject, classId, schoolId, tea
         .from("grading_elements")
         .insert([payload])
         .select()
-        .single();
+        .maybeSingle();
         
       console.log("GRADING ELEMENT INSERT RESULT:", data);
       console.log("GRADING ELEMENT INSERT ERROR:", error);

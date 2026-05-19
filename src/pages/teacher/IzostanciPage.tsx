@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Absence, AbsenceStatus, User, Lesson, Subject } from '../../types';
-import { cn } from '../../lib/utils';
+import { cn, getSurname } from '../../lib/utils';
 import { UserX, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mappers, mapList } from '../../lib/mappers';
@@ -59,33 +59,6 @@ export default function TeacherIzostanciPage() {
     }
   };
 
-  const handleUpdateStatus = async (absenceId: string, status: AbsenceStatus) => {
-    try {
-      const { error } = await supabase
-        .from('absences')
-        .update({ 
-          status,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', absenceId);
-
-      if (error) throw error;
-      toast.success('Status izmijenjen');
-      fetchData();
-    } catch (error) {
-      console.error(error);
-      toast.error('Greška pri spremanju');
-    }
-  };
-
-  const filteredAbsences = absences.filter(abs => {
-    const student = students.find(s => s.id === abs.studentId);
-    const studentName = student ? (student.name + ' ' + student.surname).toLowerCase() : '';
-    const matchesSearch = studentName.includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || abs.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
   const studentStats = useMemo(() => {
     return students.map(s => {
       const studAbs = absences.filter(a => a.studentId === s.id);
@@ -96,7 +69,11 @@ export default function TeacherIzostanciPage() {
         unjustified: studAbs.filter(a => a.status === AbsenceStatus.NEOPRAVDANO).length,
         pending: studAbs.filter(a => a.status === AbsenceStatus.PENDING).length
       };
-    }).sort((a,b) => (a.surname || "").localeCompare(b.surname || ""));
+    }).sort((a, b) => {
+      const surnameA = getSurname(String(a.name || ''));
+      const surnameB = getSurname(String(b.name || ''));
+      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+    });
   }, [students, absences]);
 
   const stats = useMemo(() => ({
@@ -151,7 +128,7 @@ export default function TeacherIzostanciPage() {
             <tbody className="divide-y text-[12px]">
               {studentStats.map(s => (
                 <tr key={s.id} onClick={() => setSelectedStudent(s)} className="hover:bg-blue-50 cursor-pointer">
-                  <td className="p-3 border-r font-bold">{s.surname} {s.name}</td>
+                  <td className="p-3 border-r font-bold">{s.name}</td>
                   <td className="p-3 text-center font-bold">{s.total}</td>
                   <td className="p-3 text-center font-bold text-green-600">{s.justified}</td>
                   <td className="p-3 text-center font-bold text-red-600">{s.unjustified}</td>

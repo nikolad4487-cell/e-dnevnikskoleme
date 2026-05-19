@@ -44,7 +44,7 @@ export default function RasporedPage() {
             .from('user_profiles')
             .select('*')
             .eq('id', targetStudentId)
-            .single();
+            .maybeSingle();
           currentStudent = sData;
           setStudentData(currentStudent);
         }
@@ -54,7 +54,7 @@ export default function RasporedPage() {
             .from('classes')
             .select('*')
             .eq('id', selectedClassId)
-            .single();
+            .maybeSingle();
           setClassData(cData as Class);
 
           // Fetch Enrollments for THIS class

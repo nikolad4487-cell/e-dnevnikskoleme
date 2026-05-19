@@ -38,7 +38,7 @@ export default function BiljeskePage() {
       try {
         let currentStudent = studentData;
         if (!currentStudent) {
-          const { data: sData } = await supabase.from('user_profiles').select('*').eq('id', targetStudentId).single();
+          const { data: sData } = await supabase.from('user_profiles').select('*').eq('id', targetStudentId).maybeSingle();
           if (sData) {
             currentStudent = { 
               id: sData.id, 
@@ -51,16 +51,16 @@ export default function BiljeskePage() {
         }
 
         if (selectedClassId) {
-          const { data: cData } = await supabase.from('classes').select('*').eq('id', selectedClassId).single();
+          const { data: cData } = await supabase.from('classes').select('*').eq('id', selectedClassId).maybeSingle();
           if (cData) {
             setClassData(cData as Class);
 
             if (cData.homeroom_teacher_id) {
-              const { data: tData } = await supabase.from('user_profiles').select('*').eq('id', cData.homeroom_teacher_id).single();
+              const { data: tData } = await supabase.from('user_profiles').select('*').eq('id', cData.homeroom_teacher_id).maybeSingle();
               if (tData) setHomeroomTeacher({ id: tData.id, name: tData.name.split(' ')[0], surname: tData.name.split(' ').slice(1).join(' ') } as User);
             }
             if (cData.deputy_homeroom_teacher_id) {
-              const { data: dData } = await supabase.from('user_profiles').select('*').eq('id', cData.deputy_homeroom_teacher_id).single();
+              const { data: dData } = await supabase.from('user_profiles').select('*').eq('id', cData.deputy_homeroom_teacher_id).maybeSingle();
               if (dData) setDeputyTeacher({ id: dData.id, name: dData.name.split(' ')[0], surname: dData.name.split(' ').slice(1).join(' ') } as User);
             }
 

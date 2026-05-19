@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { User, StudentNote, Class, ClassNotes, StudentNotes } from '../../types';
-import { cn, formatName } from '../../lib/utils';
+import { cn, formatName, getSurname } from '../../lib/utils';
 import { MessageSquare, Plus, Search, Calendar, User as UserIcon, Edit2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mappers, mapList } from '../../lib/mappers';
@@ -165,7 +165,7 @@ setStudents(uniqueStudents);
 
   const filteredNotes = notes.filter(note => {
     const student = students.find(s => s.id === note.studentId);
-    const studentName = student ? (student.name + ' ' + (student.surname || '')).toLowerCase() : '';
+    const studentName = student ? (student.name || '').toLowerCase() : '';
     const content = note.content.toLowerCase();
     const category = (note.category || '').toLowerCase();
     const matchesSearch = studentName.includes(searchTerm.toLowerCase()) || 
@@ -240,7 +240,11 @@ setStudents(uniqueStudents);
              <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Aktivnosti i pedagoške mjere</h3>
           </div>
           <div className="grid grid-cols-1 gap-6">
-            {students.sort((a,b) => (String(a.surname || "")).localeCompare(b.surname || '') || 0).map(s => {
+            {students.sort((a, b) => {
+              const surnameA = getSurname(String(a.name || ''));
+              const surnameB = getSurname(String(b.name || ''));
+              return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+            }).map(s => {
               const son = studentOverallNotes.find(n => n.studentId === s.id);
               
               return (
@@ -288,7 +292,7 @@ setStudents(uniqueStudents);
                  <div className="bg-[#005c8d] px-4 py-2 flex items-center justify-between">
                     <div className="flex items-center gap-2 text-white">
                       <UserIcon size={12} className="opacity-50" />
-                      <span className="text-[10px] font-black uppercase tracking-tight">{student?.name} {student?.surname}</span>
+                      <span className="text-[10px] font-black uppercase tracking-tight">{student?.name}</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="text-[9px] font-black uppercase bg-white/20 text-white px-2 py-0.5">

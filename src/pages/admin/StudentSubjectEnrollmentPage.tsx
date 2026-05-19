@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Subject, Role } from '../../types';
+import { getSurname } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
@@ -89,7 +90,7 @@ export default function StudentSubjectEnrollmentPage() {
       
       const mappedStudents = (enrolls || []).map(e => e.student).filter(Boolean);
       
-      const uniqueStudents = Array.from(new Map(mappedStudents.map(s => [s.id, s])).values());
+      const uniqueStudents = Array.from(new Map(mappedStudents.map((s: any) => [s.id, s])).values());
       setStudents(uniqueStudents);
 
       const { data: subEnrolls } = await supabase
@@ -225,8 +226,12 @@ export default function StudentSubjectEnrollmentPage() {
   };
 
   const filteredStudents = students.filter(s => 
-    s.name?.toLowerCase().includes(searchTerm.toLowerCase())
-  ).sort((a,b) => (String(a.name || "")).localeCompare(String(b.name || "")));
+    (s.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  ).sort((a,b) => {
+    const surnameA = getSurname(String(a.name || ''));
+    const surnameB = getSurname(String(b.name || ''));
+    return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+  });
 
   return (
     <div className="p-6 font-sans max-w-7xl mx-auto">

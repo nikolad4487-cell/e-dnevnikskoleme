@@ -133,9 +133,9 @@ export default function ScheduleManagementPage() {
             onConflict: "class_id,day_of_week,shift,period_number"
           })
           .select()
-          .single();
+          .maybeSingle();
         
-        if (cellError) throw cellError;
+        if (cellError || !newCell) throw cellError || new Error("Cell creation failed");
         cell = newCell;
       }
 

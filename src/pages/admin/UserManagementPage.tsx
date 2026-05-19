@@ -92,7 +92,10 @@ export default function UserManagementPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
+      console.log("USER FILTER", roleFilter);
+      
+      // Fetch users from user_school_roles
+      const { data: roleData, error: roleError } = await supabase
         .from('user_school_roles')
         .select(`
           id,
@@ -102,10 +105,24 @@ export default function UserManagementPage() {
         `)
         .eq('school_id', selectedSchoolId);
       
-      if (error) throw error;
+      console.log("FETCHED ROLES DATA", roleData);
+      if (roleError) {
+        console.error("FETCH USERS ERROR", roleError);
+        throw roleError;
+      }
+
+      // Fetch students via class enrollments just in case they are missing from roles
+      const { data: enrollData, error: enrollError } = await supabase
+        .from('student_class_enrollments')
+        .select('student:user_profiles(*), classes!inner(school_id)')
+        .eq('classes.school_id', selectedSchoolId);
+      
+      console.log("FETCHED ENROLLMENTS DATA", enrollData);
       
       const usersMap = new Map();
-      data?.forEach(row => {
+      
+      // Process roles
+      roleData?.forEach(row => {
         const profile = row.user as any;
         const userId = profile?.id;
         if (!userId) return;
@@ -113,10 +130,27 @@ export default function UserManagementPage() {
         if (!usersMap.has(userId)) {
           usersMap.set(userId, { ...profile, roles: [] });
         }
-        usersMap.get(userId).roles.push(row.role);
+        if (!usersMap.get(userId).roles.includes(row.role)) {
+          usersMap.get(userId).roles.push(row.role);
+        }
+      });
+
+      // Process students from enrollments
+      enrollData?.forEach(row => {
+        const profile = row.student as any;
+        const userId = profile?.id;
+        if (!userId) return;
+
+        if (!usersMap.has(userId)) {
+          usersMap.set(userId, { ...profile, roles: [Role.STUDENT] });
+        } else if (!usersMap.get(userId).roles.includes(Role.STUDENT)) {
+          usersMap.get(userId).roles.push(Role.STUDENT);
+        }
       });
       
-      setUsers(Array.from(usersMap.values()));
+      const combinedUsers = Array.from(usersMap.values());
+      console.log("COMBINED USERS", combinedUsers);
+      setUsers(combinedUsers);
     } catch (err: any) {
       toast.error('Greška pri učitavanju korisnika');
       console.error(err);
@@ -234,13 +268,12 @@ export default function UserManagementPage() {
   const filteredUsers = users.filter(profile => {
     const matchesSearch = 
       profile?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      profile?.surname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       profile?.email?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesRole = roleFilter === 'ALL' || (profile.roles && profile.roles.includes(roleFilter));
     
     return matchesSearch && matchesRole;
-  });
+  }).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
 
   const getRoleBadge = (role: string) => {
     switch (role) {
@@ -328,7 +361,7 @@ export default function UserManagementPage() {
                       <UserIcon size={20} />
                     </div>
                     <div className="font-black text-slate-900 uppercase text-xs tracking-tight">
-                      {item.name} {item.surname}
+                      {item.name}
                     </div>
                   </div>
                 </td>

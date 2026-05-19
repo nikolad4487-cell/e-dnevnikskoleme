@@ -158,7 +158,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       // Fetch class details if available
       let classDetails = { id: classId, school_id: schoolId, school_year_id: finalYearId, school_year: '2024/2025', program_id: programId };
       if (classId) {
-        const { data: clsData } = await supabaseAdmin.from('classes').select('id, school_id, school_year_id, school_year, program_id').eq('id', classId).single();
+        const { data: clsData } = await supabaseAdmin.from('classes').select('id, school_id, school_year_id, school_year, program_id').eq('id', classId).maybeSingle();
         if (clsData) classDetails = { ...classDetails, ...clsData };
       }
 
@@ -217,9 +217,9 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
               school_year_id: classDetails.school_year_id || null
            }, { onConflict: 'auth_user_id' })
            .select()
-           .single();
+           .maybeSingle();
 
-         if (profileError) {
+         if (profileError || !profile) {
             results.push({ ...student, success: false, error: profileError.message });
             continue;
          }
@@ -356,9 +356,9 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           requires_authenticator_setup: requiresAuthenticatorSetup
         }, { onConflict: 'auth_user_id' })
         .select()
-        .single();
+        .maybeSingle();
       
-      if (profileError) throw profileError;
+      if (profileError || !profile) throw profileError || new Error("Profile creation failed");
 
       // Generate QR Code if secret was created
       let qrCodeDataURL = null;
@@ -383,7 +383,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       // 4. Student Enrollment
       if (roles.includes('STUDENT') && classId) {
-        const { data: clsInfo } = await supabaseAdmin.from('classes').select('school_year, school_year_id').eq('id', classId).single();
+        const { data: clsInfo } = await supabaseAdmin.from('classes').select('school_year, school_year_id').eq('id', classId).maybeSingle();
 
         await supabaseAdmin.from('student_class_enrollments').upsert({
           student_id: profile.id,
@@ -687,7 +687,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         .from('user_profiles')
         .select('*')
         .eq('auth_user_id', authUser.id)
-        .single();
+        .maybeSingle();
 
       if (profileError || !profile) {
         return res.status(401).json({ error: "Profil korisnika nije pronađen." });
@@ -755,7 +755,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         .from('user_profiles')
         .select('name, email')
         .eq('id', profileId)
-        .single();
+        .maybeSingle();
 
       if (!profile) throw new Error("Profil nije pronađen.");
 

@@ -7,7 +7,7 @@ import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, Cu
 import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
-import { cn } from '../../lib/utils';
+import { cn, getSurname } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 
 export default function AdministrationPage() {
@@ -71,7 +71,11 @@ export default function AdministrationPage() {
     const uniqueTeachers = Array.from(new Map(result.map(t => [t.id, t])).values());
     console.log('RAW TEACHERS:', result);
     console.log('UNIQUE TEACHERS:', uniqueTeachers);
-    return uniqueTeachers.sort((a,b) => (a.surname || '').localeCompare(b.surname || ''));
+    return uniqueTeachers.sort((a: any, b: any) => {
+      const surnameA = getSurname(String(a.name || ''));
+      const surnameB = getSurname(String(b.name || ''));
+      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+    });
   }, [allUsers, allUserSchoolRolesState, selectedSchoolId]);
 
 
@@ -451,7 +455,7 @@ export default function AdministrationPage() {
   const handleUpdateGlobalRole = async (userId: string, role: Role) => {
     try {
       // Find the user's profile ID first
-      const { data: profile } = await supabase.from('user_profiles').select('id').eq('auth_user_id', userId).single();
+      const { data: profile } = await supabase.from('user_profiles').select('id').eq('auth_user_id', userId).maybeSingle();
       if (!profile) throw new Error('Profil nije pronađen');
 
       // Update or insert role in user_school_roles
@@ -980,7 +984,7 @@ export default function AdministrationPage() {
           .from('classes')
           .select('school_id')
           .eq('id', classToFetch)
-          .single();
+          .maybeSingle();
         
         if (clsInfo?.school_id) {
           console.log('DEBUG: Recovered school_id:', clsInfo.school_id);
@@ -1063,7 +1067,7 @@ export default function AdministrationPage() {
               deputy:deputy_teacher_id(*)
             `)
             .eq('id', classToFetch)
-            .single();
+            .maybeSingle();
           
           if (specError) {
              console.error('DEBUG: SPECIFIC CLASS FETCH ERROR:', specError);
@@ -1146,7 +1150,6 @@ setStudents(uniqueMapped as any);
         const mapped = enrollments.map(row => ({
           ...mappers.user(row.student), // Use mapper consistently
           name: row.student.name || '',
-          surname: row.student.surname || '',
           globalRole: Role.STUDENT,
           classId: row.class_id
         }));
@@ -2953,7 +2956,11 @@ setAllSubjects(uniqueSub2);
                                 required
                               >
                                 <option value="">-- Odaberi --</option>
-                                {teachers.sort((a,b) => (a.surname || '').localeCompare(b.surname || '')).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {teachers.sort((a, b) => {
+                      const surnameA = getSurname(String(a.name || ''));
+                      const surnameB = getSurname(String(b.name || ''));
+                      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+                    }).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                               </select>
                             </div>
                             <div className="flex gap-2">
@@ -3073,7 +3080,11 @@ setAllSubjects(uniqueSub2);
                            <button onClick={() => setShowEnrollmentModal({ isOpen: false, subjectId: null })}><X size={18}/></button>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                           {students.filter(s => s.classId === selectedClassId).sort((a,b) => (a.surname || '').localeCompare(b.surname || '')).map(s => {
+                           {students.filter(s => s.classId === selectedClassId).sort((a, b) => {
+                             const surnameA = getSurname(String(a.name || ''));
+                             const surnameB = getSurname(String(b.name || ''));
+                             return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+                           }).map(s => {
                               const matches = classEnrollments.filter(e => e.studentId === s.id && e.subjectId === showEnrollmentModal.subjectId);
                               const enrollment = matches[0];
                               const isActive = enrollment?.status === 'ACTIVE';
@@ -3126,7 +3137,7 @@ setAllSubjects(uniqueSub2);
                                     isActive ? "bg-green-50 border-green-200 text-green-700 font-bold" : "bg-gray-50 border-gray-200 text-gray-400"
                                   )}
                                 >
-                                   <span className="text-[10px] truncate">{s.surname} {s.name}</span>
+                                   <span className="text-[10px] truncate">{s.name}</span>
                                    {isActive ? <CheckCircle size={10}/> : <XCircle size={10}/>}
                                 </button>
                               );
@@ -3703,7 +3714,7 @@ setAllSubjects(uniqueSub2);
                       return (
                         <tr key={s.id} className="hover:bg-gray-50">
                           <td className="px-4 py-2 border-r border-gray-200">
-                             <div className="font-bold text-[#005c8d] uppercase">{s.surname} {s.name}</div>
+                             <div className="font-bold text-[#005c8d] uppercase">{s.name}</div>
                           </td>
                           <td className="px-4 py-2 border-r border-gray-200 text-center font-black text-gray-700">
                              {razred?.name || '—'}
@@ -3778,7 +3789,7 @@ setAllSubjects(uniqueSub2);
                     >
                       <div className="flex items-center gap-3">
                          <div className={cn("w-6 h-6 border flex items-center justify-center text-[10px] font-black transition-colors", editingSubjectId === s.id ? "border-white/30 text-white" : "border-gray-200 text-gray-400")}>{s.name[0]}</div>
-                         <span className="font-black text-[11px] uppercase tracking-widest">{s.surname} {s.name}</span>
+                         <span className="font-black text-[11px] uppercase tracking-widest">{s.name}</span>
                       </div>
                       <ChevronDown size={14} className={cn("transition-transform", editingSubjectId === s.id && "rotate-180")} />
                     </div>
@@ -4163,10 +4174,10 @@ setAllSubjects(uniqueSub2);
                                    }}
                                    className="w-4 h-4 rounded border-gray-300 text-[#005c8d] focus:ring-[#005c8d]"
                                  />
-                                 <div className="flex-1">
-                                   <div className="text-xs font-black text-gray-700 group-hover:text-[#005c8d]">{s.name} {s.surname}</div>
-                                   <div className="text-[9px] text-gray-400 font-bold uppercase">{s.email}</div>
-                                 </div>
+                                  <div className="flex-1">
+                                    <div className="text-xs font-black text-gray-700 group-hover:text-[#005c8d]">{s.name}</div>
+                                    <div className="text-[9px] text-gray-400 font-bold uppercase">{s.email}</div>
+                                  </div>
                                </label>
                              ))}
                              {graduatesAdminStudents.length === 0 && (
@@ -5104,11 +5115,15 @@ setAllSubjects(uniqueSub2);
                               // School admin filters users of their school
                               return allUserSchoolRolesState.some(r => r.userId === u.id && r.schoolId === selectedSchoolId);
                             })
-                            .sort((a,b) => String(a.surname || '').localeCompare(String(b.surname || '')))
+                            .sort((a, b) => {
+                              const surnameA = getSurname(String(a.name || ''));
+                              const surnameB = getSurname(String(b.name || ''));
+                              return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+                            })
                             .map(u => (
                             <tr key={u.id} className={cn("hover:bg-blue-50/50", selectedUserForRole === u.id && "bg-blue-50")}>
                               <td className="px-3 py-2 border-r">
-                                <div className="font-bold text-gray-700">{u.surname} {u.name}</div>
+                                <div className="font-bold text-gray-700">{u.name}</div>
                                 <div className="text-[9px] text-gray-400">{u.email}</div>
                               </td>
                               <td className="px-3 py-2 border-r">

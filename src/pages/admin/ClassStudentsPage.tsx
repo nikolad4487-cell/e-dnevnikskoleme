@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Class, User, Role } from '../../types';
+import { getSurname } from '../../lib/utils';
 import { 
   Plus, 
   Trash2, 
@@ -60,8 +61,7 @@ export default function ClassStudentsPage() {
 
       const mappedInClass = (enrollments || []).map(row => ({
         id: row.student.id,
-        name: row.student.name?.split(' ')[0] || '',
-        surname: row.student.name?.split(' ').slice(1).join(' ') || '',
+        name: row.student.name || '',
         email: row.student.email,
         globalRole: Role.STUDENT
       })) as User[];
@@ -97,8 +97,7 @@ export default function ClassStudentsPage() {
           const enrollment = allEnrollments?.find(e => e.student_id === u.id);
           return {
             id: u.id,
-            name: u.name?.split(' ')[0] || '',
-            surname: u.name?.split(' ').slice(1).join(' ') || '',
+            name: u.name || '',
             email: u.email,
             globalRole: Role.STUDENT,
             classId: enrollment?.class_id
@@ -211,8 +210,8 @@ export default function ClassStudentsPage() {
   };
 
   const filteredAvailable = availableStudents.filter(s => 
-    `${s.name} ${s.surname}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.email?.toLowerCase().includes(searchTerm.toLowerCase())
+    (s.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (s.email || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   if (loading) return <div className="p-10 font-black uppercase text-slate-300 animate-pulse text-center">Učitavanje...</div>;
@@ -266,7 +265,7 @@ export default function ClassStudentsPage() {
                           <UserIcon size={14} />
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900 text-sm">{s.surname} {s.name}</p>
+                          <p className="font-bold text-slate-900 text-sm">{s.name}</p>
                           <p className="text-[10px] text-slate-400 uppercase font-black">{s.classId ? 'Već u drugom razredu' : 'Nije raspoređen'}</p>
                         </div>
                       </div>
@@ -302,7 +301,11 @@ export default function ClassStudentsPage() {
           <div className="bg-white rounded-3xl border-2 border-[#005c8d]/10 shadow-xl overflow-hidden min-h-[400px]">
             <table className="w-full text-left border-collapse">
               <tbody className="divide-y divide-slate-50">
-                {classStudents.sort((a,b) => (String(a.surname || "")).localeCompare(b.surname)).map((s, idx) => (
+                {classStudents.sort((a, b) => {
+                  const surnameA = getSurname(String(a.name || ''));
+                  const surnameB = getSurname(String(b.name || ''));
+                  return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+                }).map((s, idx) => (
                   <tr key={s.id} className="hover:bg-slate-50/50 group">
                     <td className="p-4 w-12 text-center text-[10px] font-black text-slate-300 border-r">{idx + 1}.</td>
                     <td className="p-4">
@@ -310,7 +313,7 @@ export default function ClassStudentsPage() {
                         <div className="w-8 h-8 bg-[#005c8d]/10 text-[#005c8d] rounded-full flex items-center justify-center">
                           <UserIcon size={14} />
                         </div>
-                        <p className="font-black text-slate-900 text-sm tracking-tight uppercase">{s.surname} {s.name}</p>
+                        <p className="font-black text-slate-900 text-sm tracking-tight uppercase">{s.name}</p>
                       </div>
                     </td>
                     <td className="p-4 text-right">

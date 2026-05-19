@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
-import { cn } from '../../lib/utils';
+import { cn, getSurname } from '../../lib/utils';
 import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2 } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
@@ -155,11 +155,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
 
         const uniqueTeachers = Array.from(new Map(staffRoles.map(r => {
           const u = mappers.user(r.user);
-          return [u.id, {
-            ...u,
-            name: u.name?.split(' ')[0] || '',
-            surname: u.name?.split(' ').slice(1).join(' ') || '',
-          }];
+          return [u.id, u];
         })).values());
         
         setTeachers(uniqueTeachers as User[]);
@@ -186,8 +182,6 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
           const u = mappers.user(row.student);
           return {
             ...u,
-            name: u.name?.split(' ')[0] || '',
-            surname: u.name?.split(' ').slice(1).join(' ') || '',
             globalRole: Role.STUDENT
           };
         }) as User[];
@@ -373,9 +367,9 @@ setStudents(uniqueStudents);
             onConflict: "class_id,day_of_week,shift,period_number"
           })
           .select()
-          .single();
+          .maybeSingle();
 
-        if (ce) throw ce;
+        if (ce || !newCellData) throw ce || new Error("Cell creation failed");
         cellId = newCellData.id;
         
         let newCell = mappers.scheduleCell(newCellData);
@@ -402,9 +396,9 @@ setStudents(uniqueStudents);
           classroom: cellSubjectForm.classroom
         })
         .select()
-        .single();
+        .maybeSingle();
 
-      if (se) throw se;
+      if (se || !subData) throw se || new Error("Subject assignment failed");
 
       const mappedSub = mappers.scheduleCellSubject(subData);
       setScheduleSubjects([...scheduleSubjects, mappedSub]);
@@ -745,8 +739,8 @@ setStudents(uniqueStudents);
             .from('lessons')
             .insert({ ...lessonData, created_at: new Date().toISOString() })
             .select()
-            .single();
-          if (error) throw error;
+            .maybeSingle();
+          if (error || !data) throw error || new Error("Lesson creation failed");
           finalId = data.id;
           setDailyLessons(prev => [...prev, mappers.lesson(data)]);
         }
@@ -801,8 +795,8 @@ setStudents(uniqueStudents);
           created_at: new Date().toISOString()
         })
         .select()
-        .single();
-      if (error) throw error;
+        .maybeSingle();
+      if (error || !data) throw error || new Error("Exam creation failed");
 
       setCurrentClassExams(prev => [...prev, mappers.exam(data)]);
       setShowExamModal(false);
@@ -924,9 +918,9 @@ setStudents(uniqueStudents);
                           </div>
                           <div className="text-[9px] text-gray-400 font-bold uppercase">{w.shift}</div>
                        </td>
-                       <td className="px-4 py-2 border-r border-gray-200 text-[11px] text-gray-500">
-                          {Array.from(new Set(w.onDutyStudentIds || [])).map(sid => students.find(s => s.id === sid)?.surname).filter(Boolean).join(', ') || 'Nema dežurnih'}
-                       </td>
+                      <td className="px-4 py-2 border-r border-gray-200 text-[11px] text-gray-500">
+                         {Array.from(new Set(w.onDutyStudentIds || [])).map(sid => students.find(s => s.id === sid)?.name).filter(Boolean).join(', ') || 'Nema dežurnih'}
+                      </td>
                        <td className="px-4 py-2 text-center">
                           {(isMainAdmin || user?.role === Role.ADMIN) && (
                             <button 
@@ -1020,11 +1014,15 @@ setStudents(uniqueStudents);
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {students.sort((a,b) => (String(a.surname || "")).localeCompare(b.surname)).map(s => {
+                    {students.sort((a, b) => {
+                      const surnameA = getSurname(String(a.name || ''));
+                      const surnameB = getSurname(String(b.name || ''));
+                      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+                    }).map(s => {
                       let total = 0;
                       return (
                         <tr key={`absence-row-${s.id}`} className="hover:bg-gray-50 transition-colors">
-                          <td className="p-2 font-bold text-gray-700 bg-gray-50/20 border-r border-gray-200">{s.surname} {s.name}</td>
+                          <td className="p-2 font-bold text-gray-700 bg-gray-50/20 border-r border-gray-200">{s.name}</td>
                           {selectedWeek?.teachingDays?.map(date => {
                             const count = currentWeekAbsences.filter(abs => abs.studentId === s.id && abs.date === date).length;
                             total += count;
@@ -1537,7 +1535,11 @@ setStudents(uniqueStudents);
                         <UserIcon size={14} /> Odaberi učenike koji nisu prisutni
                       </h4>
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                        {students.sort((a,b) => (String(a.surname || "")).localeCompare(b.surname)).map(s => {
+                        {students.sort((a, b) => {
+                          const surnameA = getSurname(String(a.name || ''));
+                          const surnameB = getSurname(String(b.name || ''));
+                          return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+                        }).map(s => {
                           const isSelected = selectedAbsentees.includes(s.id);
                           return (
                             <button 
@@ -1552,7 +1554,7 @@ setStudents(uniqueStudents);
                               )}
                             >
                               <div className={cn("w-2 h-2 border", isSelected ? "bg-white border-white" : "bg-gray-100 border-gray-300")} />
-                              <span className="text-[10px] font-bold truncate">{s.surname} {s.name}</span>
+                              <span className="text-[10px] font-bold truncate">{s.name}</span>
                             </button>
                           );
                         })}
