@@ -1769,15 +1769,23 @@ setStudents(uniqueMapped as any);
           .update(updatePayload)
           .eq('id', editingStudentId)
           .select()
-          .single();
+          .maybeSingle();
         
-        console.log('UPDATE RESULT:', updatedProfile);
-        console.log('UPDATE ERROR:', profileError);
+        // Define aliases to match requested logs format precisely
+        const student = { id: editingStudentId };
+        const payload = updatePayload;
+        const data = updatedProfile;
+        const error = profileError;
+        console.log("EDIT STUDENT ID", student.id);
+        console.log("EDIT STUDENT PAYLOAD", payload);
+        console.log("EDIT STUDENT RESULT", data);
+        console.log("EDIT STUDENT ERROR", error);
 
         if (profileError) throw profileError;
 
         if (!updatedProfile) {
           toast.error('Nijedan zapis nije ažuriran.');
+          setLoading(false);
           return;
         }
 
@@ -3171,7 +3179,9 @@ setAllSubjects(uniqueSub2);
                          <tbody className="divide-y divide-gray-200">
                             {(() => {
                               const assignmentsInClass = subjectAssignments.filter(a => a.classId === selectedClassId);
-                              const uniqueSubjectIds = Array.from(new Set(assignmentsInClass.map(a => a.subjectId))).filter(Boolean) as string[];
+                              const classSubjectIds = classSubjects.filter(cs => cs.classId === selectedClassId).map(cs => cs.subjectId);
+                              const assignmentSubjectIds = assignmentsInClass.map(a => a.subjectId);
+                              const uniqueSubjectIds = Array.from(new Set([...classSubjectIds, ...assignmentSubjectIds])).filter(Boolean) as string[];
                               
                               return uniqueSubjectIds.map(sid => {
                                 const assignmentsForThisSubject = assignmentsInClass.filter(a => a.subjectId === sid);
@@ -5226,7 +5236,9 @@ setAllSubjects(uniqueSub2);
                   <div className="divide-y divide-gray-100">
                     {(() => {
                       const assignmentsInClass = subjectAssignments.filter(a => a.classId === selectedStudentData?.classId);
-                      const uniqueSubjectIds = Array.from(new Set(assignmentsInClass.map(a => a.subjectId))).filter(Boolean) as string[];
+                      const classSubjectIds = classSubjects.filter(cs => cs.classId === selectedStudentData?.classId).map(cs => cs.subjectId);
+                      const assignmentSubjectIds = assignmentsInClass.map(a => a.subjectId);
+                      const uniqueSubjectIds = Array.from(new Set([...classSubjectIds, ...assignmentSubjectIds])).filter(Boolean) as string[];
                       const classSubs = uniqueSubjectIds.map(sid => allSubjects.find(s => s.id === sid)).filter(Boolean) as Subject[];
                       return classSubs.sort((a,b) => String(a.name || '').localeCompare(String(b.name || ''))).map(sub => {
                         const enrollment = enrollments.find(e => e.subjectId === sub.id);

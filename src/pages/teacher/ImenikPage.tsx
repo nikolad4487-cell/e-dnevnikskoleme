@@ -120,6 +120,9 @@ export default function ImenikPage() {
 
   const [classSubjects, setClassSubjects] = useState<any[]>([]);
 
+  const activeClassSubject = classSubjects.find(cs => cs.subjectId === activeSubject?.id && cs.classId === effectiveClassId);
+  const subjectDisplayName = activeSubject ? formatSubjectDisplayName(activeSubject.name || '', activeClassSubject?.subjectType || 'redovni') : '';
+
   useEffect(() => {
     const fetchInitial = async () => {
       if (!selectedSchoolId || !user) return;
@@ -1281,7 +1284,12 @@ export default function ImenikPage() {
                       <div className="flex items-center gap-3">
                         < BookOpen size={14} className="text-gray-300" />
                         <div>
-                          <div className="text-sm">{sub.name}</div>
+                          <div className="text-sm">
+                            {(() => {
+                              const cs = classSubjects.find(cs => cs.subjectId === sub.id && cs.classId === effectiveClassId);
+                              return formatSubjectDisplayName(sub.name || '', cs?.subjectType || 'redovni');
+                            })()}
+                          </div>
                           <div className="text-[10px] text-gray-400 font-normal uppercase tracking-wider">
                             {assignedTeachers.length > 0 
                               ? assignedTeachers.map(t => t.name).join(', ') 
@@ -1343,7 +1351,7 @@ export default function ImenikPage() {
                 <h1 className="text-lg font-bold text-[#005c8d] leading-none uppercase tracking-tight">
                   {studentIndex + 1}. {activeStudent?.name}
                 </h1>
-                <p className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-tight">Učenička kartica · {activeSubject?.name}</p>
+                <p className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-tight">Učenička kartica · {subjectDisplayName}</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -1729,7 +1737,7 @@ export default function ImenikPage() {
           <div className="bg-white max-w-xl w-full relative overflow-hidden border border-gray-400">
              <div className="p-2 bg-[#005c8d] text-white flex justify-between items-center text-[11px] font-bold uppercase"><h3>Upis bilješke</h3><button onClick={()=>setShowNoteModal(false)}><X size={16}/></button></div>
              <div className="p-6 space-y-4">
-                <div><h4 className="font-bold text-[#005c8d] text-base leading-tight">{activeStudent?.name}</h4><div className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">{activeSubject?.name}</div></div>
+                <div><h4 className="font-bold text-[#005c8d] text-base leading-tight">{activeStudent?.name}</h4><div className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">{subjectDisplayName}</div></div>
                 <div className="text-left"><label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Datum</label><input type="date" value={newNote.customDate} onChange={e => setNewNote({...newNote, customDate: e.target.value})} className="border p-1 text-[11px] font-bold" /></div>
                 <div className="text-left"><label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Sadržaj bilješke</label><textarea value={newNote.content} onChange={e => setNewNote({...newNote, content: e.target.value})} rows={5} className="w-full border p-2 text-[11px]" /></div>
                 <button onClick={handleAddNote} className="px-8 py-2 bg-[#005c8d] text-white font-bold uppercase text-[11px]">Spremi bilješku</button>
@@ -1776,7 +1784,7 @@ export default function ImenikPage() {
         <div className="fixed inset-0 bg-[#005c8d]/60 backdrop-blur-none flex items-start justify-center z-[300] p-4 overflow-y-auto pt-4">
            <div className="bg-white w-full max-w-6xl relative overflow-hidden flex flex-col min-h-[500px] mb-4 border border-gray-400">
               <div className="p-2 bg-[#005c8d] text-white flex justify-between items-center text-[11px] font-bold uppercase shrink-0">
-                 <h3 className="tracking-tight">Grupni unos ocjena: {activeSubject?.name}</h3>
+                 <h3 className="tracking-tight">Grupni unos ocjena: {subjectDisplayName}</h3>
                  <button onClick={()=>setShowGroupGradeModal(false)}><X size={16}/></button>
               </div>
               <div className="p-4 bg-gray-50 border-b border-gray-300 shrink-0">
@@ -1826,7 +1834,7 @@ export default function ImenikPage() {
         <div className="fixed inset-0 bg-[#005c8d]/60 backdrop-blur-none flex items-start justify-center z-[300] p-4 overflow-y-auto pt-4">
            <div className="bg-white w-full max-w-6xl relative overflow-hidden flex flex-col min-h-[500px] mb-4 border border-gray-400">
               <div className="p-2 bg-[#005c8d] text-white flex justify-between items-center text-[11px] font-bold uppercase shrink-0">
-                 <h3 className="tracking-tight">Grupni unos bilješki: {activeSubject?.name}</h3>
+                 <h3 className="tracking-tight">Grupni unos bilješki: {subjectDisplayName}</h3>
                  <button onClick={()=>setShowGroupNoteModal(false)}><X size={16}/></button>
               </div>
               <div className="p-4 bg-gray-50 border-b border-gray-300 shrink-0">

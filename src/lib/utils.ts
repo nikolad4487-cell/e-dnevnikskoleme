@@ -16,11 +16,11 @@ export function formatName(item: { name?: string | null, surname?: string | null
   return [item.name, item.surname].filter(s => s && s.trim().length > 0).join(' ');
 }
 
-export function formatSubjectDisplayName(subjectName: string, subjectType: string, isForeignLanguage?: boolean) {
+export function formatSubjectDisplayName(subjectName: string, subjectType: string) {
   if (!subjectType || subjectType.toLowerCase() === 'redovni') {
     return subjectName;
   }
-  let suffix = subjectType.toLowerCase();
+  const suffix = subjectType.toLowerCase();
   
   return `${subjectName} (${suffix})`;
 }
