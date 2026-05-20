@@ -4,7 +4,7 @@ import { User, LogOut, ChevronDown, Menu as MenuIcon, Settings } from 'lucide-re
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { Role } from '../types';
-import { cn } from '../lib/utils';
+import { cn, formatPersonName } from '../lib/utils';
 
 interface NavItem {
   label: string;
@@ -113,7 +113,7 @@ export function Header({ navItems = [], onMenuToggle, showNav = true }: HeaderPr
             className="flex items-center gap-2 hover:bg-white/10 px-2 py-1 transition-colors rounded cursor-pointer"
           >
             <div className="hidden sm:flex flex-col items-end">
-              <span className="text-[11px] font-bold leading-tight">{user?.name}</span>
+              <span className="text-[11px] font-bold leading-tight">{formatPersonName(user)}</span>
               <span className="text-[9px] text-white/70 uppercase">
                 {formattedRoles}
               </span>
@@ -127,7 +127,7 @@ export function Header({ navItems = [], onMenuToggle, showNav = true }: HeaderPr
           {isMenuOpen && (
             <div className="absolute right-0 top-full mt-1 w-48 bg-white border border-gray-200 shadow-xl rounded py-1 z-[100] animate-in fade-in zoom-in-95 duration-100">
               <div className="px-4 py-2 border-b border-gray-100 sm:hidden text-right">
-                <div className="text-[11px] font-bold text-gray-800">{user?.name}</div>
+                <div className="text-[11px] font-bold text-gray-800">{formatPersonName(user)}</div>
                 <div className="text-[9px] text-gray-500 uppercase">{formattedRoles}</div>
               </div>
               <Link 

@@ -162,6 +162,13 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         if (clsData) classDetails = { ...classDetails, ...clsData };
       }
 
+      // Fetch subjects assigned to this class for automatic enrollments
+      let classSubjects: any[] = [];
+      if (classDetails.id) {
+        const { data: subData } = await supabaseAdmin.from('class_subject_teachers').select('subject_id').eq('class_id', classDetails.id);
+        if (subData) classSubjects = subData;
+      }
+
       // Fetch all existing emails to avoid collisions
       const { data: existingUserList } = await supabaseAdmin.auth.admin.listUsers();
       const existingEmails = new Set<string>();
@@ -208,6 +215,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
               auth_user_id: userId,
               email,
               name: fullName,
+              role: 'STUDENT',
               is_first_login: true,
               requires_password_change: false,
               requires_authenticator_setup: false,
@@ -246,6 +254,23 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
              if (enrollmentError) {
                  results.push({ ...student, success: false, error: enrollmentError.message });
                  continue;
+             }
+
+             // Also enroll in class subjects immediately if available
+             if (classSubjects.length > 0) {
+                 const uniqueSubjectIds = Array.from(new Set(classSubjects.map((cs: any) => cs.subject_id)));
+                 const subjectEnrollments = uniqueSubjectIds.map((subId: any) => ({
+                     student_id: profile.id,
+                     subject_id: subId,
+                     class_id: classDetails.id,
+                     school_year_id: classDetails.school_year_id,
+                     school_year: classDetails.school_year || '2024/2025',
+                     status: 'ACTIVE'
+                 }));
+
+                 await supabaseAdmin
+                     .from('student_subject_enrollments')
+                     .upsert(subjectEnrollments, { onConflict: 'student_id,subject_id,class_id,school_year' });
              }
          }
 
@@ -326,9 +351,11 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       const existingUser = existingUserList?.users?.find((u: any) => u.email === email);
       
       let userId;
+      let createdAuthUser;
       if (existingUser) {
         userId = existingUser.id;
         await supabaseAdmin.auth.admin.updateUserById(userId, { password: finalPassword });
+        createdAuthUser = existingUser;
       } else {
         const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email,
@@ -338,6 +365,18 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         });
         if (authError) throw authError;
         userId = authUser.user.id;
+        createdAuthUser = authUser.user;
+      }
+
+      if (req.body.authOnly) {
+        return res.json({
+          success: true,
+          userId,
+          createdAuthUser,
+          password: finalPassword,
+          email: email,
+          message: "Korisnik uspješno kreiran (Auth samo)"
+        });
       }
       
       // 2. Profile

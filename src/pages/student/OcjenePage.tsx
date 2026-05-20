@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
-import { Grade, Subject, User, ClassSubjectTeacher } from '../../types';
-import { cn } from '../../lib/utils';
+import { Grade, Subject, User, ClassSubjectTeacher, specialExamTypes, specialExamTypeLabels } from '../../types';
+import { cn, formatPersonName } from '../../lib/utils';
 import { BookOpen, GraduationCap, ChevronRight, ArrowLeft } from 'lucide-react';
 import { mappers, mapList } from '../../lib/mappers';
 
@@ -11,12 +11,50 @@ export default function OcjenePage() {
   const { user, isParent } = useAuth();
   const { selectedClassId, selectedChildId } = useSelection();
   const [grades, setGrades] = useState<Grade[]>([]);
+  const [finalGrades, setFinalGrades] = useState<any[]>([]);
+  const [specialExams, setSpecialExams] = useState<any[]>([]);
+  const [currentClass, setCurrentClass] = useState<any | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [subjectTeachers, setSubjectTeachers] = useState<ClassSubjectTeacher[]>([]);
   const [teachers, setTeachers] = useState<Record<string, User>>({});
   const [loading, setLoading] = useState(true);
   const [targetStudent, setTargetStudent] = useState<User | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+
+  const fetchSpecialExams = async () => {
+    if (!targetStudent?.id || !selectedClassId || !selectedSubject || !currentClass?.school_year_id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('exams')
+        .select('*')
+        .eq('student_id', targetStudent.id)
+        .eq('class_id', selectedClassId)
+        .eq('subject_id', selectedSubject)
+        .eq('school_year_id', currentClass.school_year_id)
+        .in('exam_type', specialExamTypes);
+      
+      console.log("INITIAL SPECIAL EXAMS LOAD");
+      console.log("SPECIAL EXAMS FILTERS", { student_id: targetStudent.id, class_id: selectedClassId, subject_id: selectedSubject, school_year_id: currentClass.school_year_id, exam_type: specialExamTypes });
+      console.log("SPECIAL EXAMS INITIAL RESULT", data);
+      console.log("SPECIAL EXAMS INITIAL ERROR", error);
+
+      if (error) throw error;
+      setSpecialExams(mapList(data || [], mappers.exam));
+    } catch (error) {
+      console.error("Error fetching special exams:", error);
+    }
+  };
+
+  useEffect(() => {
+    if (!targetStudent?.id || !selectedClassId || !selectedSubject || !currentClass?.school_year_id) return;
+    fetchSpecialExams();
+  }, [
+    targetStudent?.id,
+    selectedClassId,
+    selectedSubject,
+    currentClass?.school_year_id
+  ]);
 
   useEffect(() => {
     if (!user || !selectedClassId) return;
@@ -31,6 +69,10 @@ export default function OcjenePage() {
           setLoading(false);
           return;
         }
+
+        // Get class
+        const { data: classData } = await supabase.from('classes').select('*').eq('id', selectedClassId).single();
+        if (classData) setCurrentClass(classData);
 
         // Fetch target student profile if it's parent view
         if (isParent) {
@@ -94,7 +136,7 @@ export default function OcjenePage() {
           setTeachers(teacherMap);
         }
 
-        // 5. Get student's grades for THIS class (including final)
+        // 5. Get student's grades for THIS class
         const { data: gradesData } = await supabase
           .from('grades')
           .select('*')
@@ -102,6 +144,15 @@ export default function OcjenePage() {
           .eq('class_id', selectedClassId);
         
         setGrades(mapList(gradesData, mappers.grade));
+
+        // 6. Get final grades
+        const { data: finalGradesData } = await supabase
+          .from('final_grades')
+          .select('*')
+          .eq('student_id', targetStudentId)
+          .eq('class_id', selectedClassId);
+        
+        setFinalGrades(mapList(finalGradesData, mappers.finalGrade));
 
       } catch (error) {
         console.error(error);
@@ -143,19 +194,34 @@ export default function OcjenePage() {
           </div>
 
           <div className="grid grid-cols-1 gap-3">
-            {subjects.sort((a, b) => (String(a.name || "")).localeCompare(b.name)).map(subject => {
-              const subjectGrades = grades.filter(g => g.subjectId === subject.id && !g.isFinal);
+            {Object.values(subjects.reduce((acc, curr) => {
+              if (!acc[curr.name]) {
+                acc[curr.name] = { ...curr, ids: [curr.id] };
+              } else {
+                acc[curr.name].ids.push(curr.id);
+              }
+              return acc;
+            }, {} as Record<string, Subject & { ids: string[] }>)).sort((a, b) => (String(a.name || "")).localeCompare(b.name)).map(subject => {
+              const subjectGrades = grades.filter(g => subject.ids.includes(g.subjectId) && !g.isFinal);
               const subjectAvg = subjectGrades.length > 0 
                 ? (subjectGrades.reduce((acc, curr) => acc + curr.value, 0) / subjectGrades.length).toFixed(2)
                 : '-';
               
-              const teacherId = subjectTeachers.find(c => c.subjectId === subject.id)?.teacherId;
-              const teacher = teacherId ? teachers[teacherId] : null;
+              const matchedCsts = subjectTeachers.filter(c => subject.ids.includes(c.subjectId));
+              const matchedTeachers = matchedCsts
+                .map(c => teachers[c.teacherId])
+                .filter(Boolean);
+              
+              const uniqueTeachers = Array.from(new Map(matchedTeachers.map(item => [item.id, item])).values());
+              
+              const teachersString = uniqueTeachers.length > 0 
+                ? uniqueTeachers.map(t => formatPersonName(t)).join(', ')
+                : 'Nastavnik nije dodijeljen';
 
               return (
                 <button
-                  key={subject.id}
-                  onClick={() => setSelectedSubject(subject.id)}
+                  key={subject.name}
+                  onClick={() => setSelectedSubject(subject.ids[0])}
                   className="group bg-white border border-slate-200 rounded-xl p-5 flex items-center justify-between hover:border-[#005c8d] hover:shadow-md transition-all text-left"
                 >
                   <div className="flex items-center gap-4">
@@ -165,7 +231,7 @@ export default function OcjenePage() {
                     <div>
                       <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm leading-none mb-1">{subject.name}</h3>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                        {teacher ? `${teacher.name} ${teacher.surname || ''}` : 'Nastavnik nije dodijeljen'}
+                        {teachersString}
                       </p>
                     </div>
                   </div>
@@ -200,8 +266,8 @@ export default function OcjenePage() {
 
   // --- SUBJECT DETAIL VIEW ---
   const activeSubject = subjects.find(s => s.id === selectedSubject)!;
-  const activeGrades = grades.filter(g => g.subjectId === activeSubject.id && !g.isFinal);
-  const activeFinalGrades = grades.filter(g => g.subjectId === activeSubject.id && g.isFinal);
+  const activeGrades = grades.filter(g => g.subjectId === activeSubject.id);
+  const activeFinalGrades = finalGrades.filter(g => g.subjectId === activeSubject.id);
   const average = activeGrades.length > 0 
     ? (activeGrades.reduce((acc, curr) => acc + curr.value, 0) / activeGrades.length).toFixed(2)
     : '0.00';
@@ -276,8 +342,8 @@ export default function OcjenePage() {
                   {MONTHS_ORDER.map(m => {
                     const isSemester1 = ['XII'].includes(m);
                     const isSemester2 = ['VI'].includes(m);
-                    const fg = activeFinalGrades.find(f => f.period === (m === 'XII' ? '1' : 'FINAL'));
-                    const val = fg ? (fg.value === 0 ? fg.note : fg.value) : '';
+                    const fg = activeFinalGrades.find(f => f.term === (m === 'XII' ? 'FIRST_SEMESTER' : 'FINAL'));
+                    const val = fg ? fg.value : '';
                     return (
                       <td key={m} className="p-2 border-r border-slate-300 text-center text-red-600 text-lg">
                         {(isSemester1 || isSemester2) ? val : ''}
@@ -330,6 +396,52 @@ export default function OcjenePage() {
             </table>
           </div>
         </div>
+
+        {/* Special exams section */}
+        {specialExams.filter(se => se.subjectId === activeSubject.id).length > 0 && (
+          <div className="space-y-6 pt-4 border-t-2 border-slate-100">
+            <div className="flex items-center gap-2 border-b-2 border-slate-100 pb-2">
+              <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest">Dopunski i razlikovni ispiti</h2>
+            </div>
+            
+            <div className="bg-white border border-slate-300 overflow-hidden shadow-sm">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-300 text-slate-400">
+                    <th className="p-4 text-[9px] font-black uppercase tracking-widest text-center w-28 border-r border-slate-200">Datum</th>
+                    <th className="p-4 text-[9px] font-black uppercase tracking-widest border-r border-slate-200">Vrsta ispita</th>
+                    <th className="p-4 text-[9px] font-black uppercase tracking-widest text-center w-20 border-r border-slate-200">Ocjena</th>
+                    <th className="p-4 text-[9px] font-black uppercase tracking-widest border-r border-slate-200">Nastavnik</th>
+                    <th className="p-4 text-[9px] font-black uppercase tracking-widest">Bilješka</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 font-medium">
+                  {specialExams
+                    .filter(se => se.subjectId === activeSubject.id)
+                    .sort((a,b) => (String(b.date || "")).localeCompare(a.date))
+                    .map(se => {
+                      const teacherStr = teachers[se.teacherId] ? formatPersonName(teachers[se.teacherId]) : (teachers[se.createdBy] ? formatPersonName(teachers[se.createdBy]) : '—');
+                      return (
+                        <tr key={se.id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-4 text-center text-xs font-bold text-slate-500 border-r border-slate-200">
+                            {new Date(se.date).toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' })}.
+                          </td>
+                          <td className="p-4 text-xs font-black text-slate-800 uppercase tracking-wide border-r border-slate-200">{specialExamTypeLabels[se.type] || se.type}</td>
+                          <td className="p-4 text-center text-lg font-black text-[#005c8d] border-r border-slate-200">{se.gradeValue || '—'}</td>
+                          <td className="p-4 text-xs font-bold text-slate-600 border-r border-slate-200">
+                            {teacherStr}
+                          </td>
+                          <td className="p-4 text-xs text-slate-600 leading-relaxed italic">
+                            {se.note || '—'}
+                          </td>
+                        </tr>
+                      );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

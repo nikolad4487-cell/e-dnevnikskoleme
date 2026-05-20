@@ -9,9 +9,22 @@ export default function SettingsPage() {
   const { user, formattedRoles, isStaff, signOut } = useAuth();
   const [loading, setLoading] = useState(false);
   const [resetData, setResetData] = useState<{ secret: string; qrCode: string; otpauthUrl: string } | null>(null);
+  const getInitialNameParts = () => {
+    if (!user?.name) return { first: '', last: '' };
+    const cleanName = String(user.name).trim();
+    const parts = cleanName.split(' ');
+    if (parts.length <= 1) return { first: cleanName, last: '' };
+    return {
+      first: parts.slice(0, parts.length - 1).join(' '),
+      last: parts[parts.length - 1]
+    };
+  };
+
+  const initialNameParts = getInitialNameParts();
+
   const [profileForm, setProfileForm] = useState({
-    name: user?.name || '',
-    surname: user?.surname || '',
+    name: initialNameParts.first,
+    surname: initialNameParts.last || user?.surname || '',
     address: user?.address || ''
   });
 
@@ -29,7 +42,7 @@ export default function SettingsPage() {
       const { error } = await supabase
         .from('user_profiles')
         .update({
-          name: `${profileForm.name} ${profileForm.surname}`,
+          name: `${profileForm.name} ${profileForm.surname}`.trim(),
           address: profileForm.address
         })
         .eq('id', user.id);

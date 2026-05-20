@@ -11,9 +11,29 @@ export const getSurname = (fullName?: string) => {
   return parts[parts.length - 1] || '';
 };
 
-export function formatName(item: { name?: string | null, surname?: string | null }) {
-  if (item.name && item.name.length > 0) return item.name;
-  return [item.name, item.surname].filter(s => s && s.trim().length > 0).join(' ');
+export function formatPersonName(person: any): string {
+  if (!person) return '';
+
+  if (person.name && String(person.name).trim()) {
+    const n = String(person.name).trim();
+    if (n.toLowerCase() !== 'undefined' && n.toLowerCase() !== 'null') {
+      return n;
+    }
+  }
+
+  const first = person.firstName || person.first_name || '';
+  const last = person.lastName || person.last_name || person.surname || '';
+
+  return [first, last]
+    .filter(Boolean)
+    .map(String)
+    .map(v => v.trim())
+    .filter(v => v && v.toLowerCase() !== 'undefined' && v.toLowerCase() !== 'null')
+    .join(' ');
+}
+
+export function formatName(item: any) {
+  return formatPersonName(item);
 }
 
 export function formatSubjectDisplayName(subjectName: string, subjectType: string) {

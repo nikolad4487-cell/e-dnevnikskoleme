@@ -1,58 +1,286 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { ChatGroup, Message } from '../../types';
-import { cn } from '../../lib/utils';
-import { Send, Hash, Users, Info, MoreVertical, Paperclip, Smile, Search } from 'lucide-react';
+import { useSelection } from '../../contexts/SelectionContext';
+import { ChatGroup, Message, User, Role } from '../../types';
+import { mappers, mapList } from '../../lib/mappers';
+import { cn, formatPersonName } from '../../lib/utils';
+import { Send, Users, Info, MoreVertical, Search, UserPlus, BookOpen, MessageSquare, ArrowLeft, Check, Shield } from 'lucide-react';
+
+interface RecipientDetails {
+  id: string;
+  name: string;
+  role: string;
+  classId?: string;
+  className?: string;
+  schoolId?: string;
+  schoolName?: string;
+  email?: string;
+}
+
+interface ChatGroupWithMeta extends ChatGroup {
+  recipient: RecipientDetails | null;
+  lastMessage?: string;
+  lastMessageTime?: string;
+}
 
 export default function InformativkaPage() {
   const { user } = useAuth();
-  const [groups, setGroups] = useState<ChatGroup[]>([]);
+  const { selectedClassId, selectedChildId } = useSelection();
+  
+  // Core State
+  const [activeTab, setActiveTab] = useState<'PERSONAL' | 'CHANNELS'>('PERSONAL');
+  const [groups, setGroups] = useState<ChatGroupWithMeta[]>([]);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // Contacts / "New Chat" State
+  const [isNewChatOpen, setIsNewChatOpen] = useState(false);
+  const [availableContacts, setAvailableContacts] = useState<RecipientDetails[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // Determine user context
+  const isTeacher = user?.globalRole === Role.TEACHER || user?.globalRole === Role.SCHOOL_ADMIN || user?.globalRole === Role.ADMIN || user?.globalRole === Role.MAIN_ADMIN;
+  const isParent = user?.globalRole === Role.PARENT;
+  const isStudent = user?.globalRole === Role.STUDENT;
+
+  // Sync Subject Channels
+  useEffect(() => {
+    if (!user || !selectedClassId) return;
+
+    const syncChannels = async () => {
+      const { data: classSubjects } = await supabase
+        .from('class_subjects')
+        .select('subject_id, subject:subjects(name)')
+        .eq('class_id', selectedClassId);
+      
+      if (!classSubjects) return;
+
+      for (const cs of classSubjects) {
+        let channelId;
+        const { data: existingChannel } = await supabase
+          .from('chat_groups')
+          .select('id')
+          .eq('type', 'SUBJECT_CHANNEL')
+          .eq('class_id', selectedClassId)
+          .eq('subject_id', cs.subject_id)
+          .maybeSingle();
+
+        if (!existingChannel) {
+          console.log("CREATING SUBJECT CHANNEL", cs.subject?.name);
+          const { data: newChannel, error } = await supabase
+            .from('chat_groups')
+            .insert([{
+              name: cs.subject?.name,
+              type: 'SUBJECT_CHANNEL',
+              class_id: selectedClassId,
+              subject_id: cs.subject_id,
+              created_by: user.id
+            }])
+            .select();
+          
+          if (newChannel) {
+            console.log("CREATED SUBJECT CHANNEL", newChannel[0]);
+            channelId = newChannel[0].id;
+          }
+        } else {
+          channelId = existingChannel.id;
+        }
+
+        if (channelId) {
+          // Sync members - students
+          const { data: students } = await supabase.from('student_subject_enrollments').select('student_id').eq('subject_id', cs.subject_id);
+          // Sync members - teachers
+          const { data: teachers } = await supabase.from('class_subject_teachers').select('teacher_id').eq('class_id', selectedClassId).eq('subject_id', cs.subject_id);
+          
+          const members = [
+            ...(students || []).map(s => ({ group_id: channelId, user_id: s.student_id })),
+            ...(teachers || []).map(t => ({ group_id: channelId, user_id: t.teacher_id }))
+          ];
+
+          if (members.length > 0) {
+            await supabase.from('chat_group_members').upsert(members, { onConflict: 'group_id,user_id' });
+          }
+        }
+      }
+    };
+    syncChannels();
+  }, [user, selectedClassId]);
+
+  // 1. Fetch Chat Groups and resolve recipient profiles
   useEffect(() => {
     if (!user) return;
-    
-    // Fetch user's groups
-    const fetchGroups = async () => {
-      const { data, error } = await supabase
-        .from('chat_groups')
-        .select('*')
-        .contains('members', [user.id]);
-      
-      if (error) {
-        console.error('Informativka Groups Error:', error);
-      } else {
-        setGroups(data || []);
-        if (data && data.length > 0 && !selectedGroup) setSelectedGroup(data[0].id);
+
+    const fetchGroupsAndRecipients = async () => {
+      setLoading(true);
+      try {
+        // Fetch groups where user is a member
+        const { data: rawGroups, error: groupErr } = await supabase
+          .from('chat_groups')
+          .select(`
+            *,
+            chat_group_members!inner(user_id)
+          `)
+          .eq('chat_group_members.user_id', user.id);
+
+        if (groupErr) throw groupErr;
+
+        const activeGroups = rawGroups || [];
+        console.log("ALL CHAT GROUPS", activeGroups);
+        console.log(
+          "CHANNELS",
+          activeGroups.filter(g => g.type !== 'PRIVATE')
+        );
+
+        if (activeGroups.length === 0) {
+          setGroups([]);
+          setLoading(false);
+          return;
+        }
+
+        // Get all unique recipient IDs from groups (members other than current user)
+        const recipientIds: string[] = [];
+        
+        // Fetch all members for these groups to find other participants
+        const { data: allMembers, error: membersErr } = await supabase
+          .from('chat_group_members')
+          .select('group_id, user_id')
+          .in('group_id', activeGroups.map(g => g.id));
+        
+        if (membersErr) throw membersErr;
+
+        activeGroups.forEach(g => {
+          const membersList = (allMembers || []).filter(m => m.group_id === g.id).map(m => m.user_id);
+          membersList.forEach((mid: string) => {
+            if (mid !== user.id && !recipientIds.includes(mid)) {
+              recipientIds.push(mid);
+            }
+          });
+        });
+
+        // Fetch recipient profiles, classes, and schools
+        let recipientMap = new Map<string, RecipientDetails>();
+
+        if (recipientIds.length > 0) {
+          const { data: profiles } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .in('id', recipientIds);
+
+          const fetchedProfiles = profiles || [];
+          
+          // Fetch class names for student recipients
+          const classIds = [...new Set(fetchedProfiles.filter(p => p.role === 'STUDENT').map(p => p.class_id).filter(Boolean))];
+          let classesMap = new Map<string, string>();
+          if (classIds.length > 0) {
+            const { data: classesData } = await supabase
+              .from('classes')
+              .select('id, name')
+              .in('id', classIds);
+            (classesData || []).forEach(c => classesMap.set(c.id, c.name));
+          }
+
+          // Fetch school names
+          const schoolIds = [...new Set(fetchedProfiles.map(p => p.school_id).filter(Boolean))];
+          let schoolsMap = new Map<string, string>();
+          if (schoolIds.length > 0) {
+            const { data: schoolsData } = await supabase
+              .from('schools')
+              .select('id, name')
+              .in('id', schoolIds);
+            (schoolsData || []).forEach(s => schoolsMap.set(s.id, s.name));
+          }
+
+          fetchedProfiles.forEach(p => {
+            const matchedUser = mappers.user(p) as User;
+            recipientMap.set(matchedUser.id, {
+              id: matchedUser.id,
+              name: formatPersonName(matchedUser),
+              role: p.role,
+              classId: p.class_id,
+              className: p.class_id ? classesMap.get(p.class_id) : undefined,
+              schoolId: p.school_id,
+              schoolName: p.school_id ? schoolsMap.get(p.school_id) : undefined,
+              email: p.email,
+            });
+          });
+        }
+
+        // Fetch last message for each group to show previews
+        let lastMsgMap = new Map<string, { text: string; time: string }>();
+        const groupIds = activeGroups.map(g => g.id);
+        
+        // This query fetches the latest message for each group
+        const { data: lastMessages } = await supabase
+          .from('messages')
+          .select('*')
+          .in('group_id', groupIds)
+          .order('timestamp', { ascending: false });
+
+        if (lastMessages) {
+          // Since it's ordered descending, the first insert per group key is the latest
+          lastMessages.forEach(m => {
+            if (!lastMsgMap.has(m.group_id)) {
+              lastMsgMap.set(m.group_id, {
+                text: m.text,
+                time: m.timestamp,
+              });
+            }
+          });
+        }
+
+        const groupsWithMeta: ChatGroupWithMeta[] = activeGroups.map(g => {
+          // Find the recipient member
+          const membersList = (allMembers || []).filter(m => m.group_id === g.id).map(m => m.user_id);
+          const otherMemberId = membersList.find((mid: string) => mid !== user.id) || null;
+          const recipient = otherMemberId ? recipientMap.get(otherMemberId) || null : null;
+          const lastMsg = lastMsgMap.get(g.id);
+
+          return {
+            id: g.id,
+            name: recipient ? recipient.name : g.name,
+            type: g.type,
+            created_by: g.created_by,
+            recipient: recipient,
+            lastMessage: lastMsg?.text,
+            lastMessageTime: lastMsg?.time,
+          };
+        });
+
+        // Sort by last message time descending or name
+        groupsWithMeta.sort((a, b) => {
+          if (a.lastMessageTime && b.lastMessageTime) {
+            return b.lastMessageTime.localeCompare(a.lastMessageTime);
+          }
+          return a.name.localeCompare(b.name);
+        });
+
+        setGroups(groupsWithMeta);
+        
+        // Auto-select first group if none is selected
+        if (groupsWithMeta.length > 0 && !selectedGroup) {
+          setSelectedGroup(groupsWithMeta[0].id);
+        }
+      } catch (err) {
+        console.error('Error loading Informativka groups:', err);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     };
 
-    fetchGroups();
+    fetchGroupsAndRecipients();
 
-    // Listen for group changes (DISABLED)
-    /*
-    const channel = supabase
-      .channel('chat_groups_changes')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'chat_groups',
-        filter: `members=cs.{${user.id}}`
-      }, fetchGroups)
-      .subscribe();
-    */
+    // Set up polling for new messages every 8 seconds to deliver smooth feel
+    const interval = setInterval(fetchGroupsAndRecipients, 8000);
+    return () => clearInterval(interval);
+  }, [user, selectedGroup]);
 
-    return () => {
-      // supabase.removeChannel(channel);
-    };
-  }, [user]);
-
+  // 2. Fetch Messages when group selection changes
   useEffect(() => {
     if (!selectedGroup) return;
 
@@ -61,7 +289,7 @@ export default function InformativkaPage() {
         .from('messages')
         .select('*')
         .eq('group_id', selectedGroup)
-        .order('timestamp', { ascending: false });
+        .order('timestamp', { ascending: true }); // order ascending so they list chronologically down
       
       if (error) {
         console.error('Informativka Messages Error:', error);
@@ -73,192 +301,632 @@ export default function InformativkaPage() {
           text: m.text,
           timestamp: m.timestamp
         })));
+        
+        // Scroll to bottom immediately
+        setTimeout(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }
+        }, 80);
       }
     };
 
     fetchMessages();
 
-    // Real-time messages (DISABLED)
-    /*
-    const channel = supabase
-      .channel(`group_messages_${selectedGroup}`)
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'messages',
-        filter: `group_id=eq.${selectedGroup}`
-      }, (payload) => {
-        const newMsg = payload.new as any;
-        setMessages(prev => [{
-          id: newMsg.id,
-          groupId: newMsg.group_id,
-          senderId: newMsg.sender_id,
-          text: newMsg.text,
-          timestamp: newMsg.timestamp
-        }, ...prev]);
-      })
-      .subscribe();
-    */
-
-    return () => {
-      // supabase.removeChannel(channel);
-    };
+    // Set up rapid polling for active chat messages (every 3 seconds)
+    const interval = setInterval(fetchMessages, 3000);
+    return () => clearInterval(interval);
   }, [selectedGroup]);
 
+  // Auto scroll to bottom when message list expands
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  // 3. Load Contacts for initiating a new chat
+  const loadContacts = async () => {
+    if (!user) return;
+    setContactsLoading(true);
+    setIsNewChatOpen(true);
+
+    try {
+      console.log("INFORMATIVKA FETCHING CONTACTS", { role: user.globalRole, classId: selectedClassId });
+      let contacts: RecipientDetails[] = [];
+
+      // Unified base profiles fetch
+      const { data: allProfiles } = await supabase.from('user_profiles').select('*');
+      const profiles = allProfiles || [];
+
+      if (isTeacher) {
+        // Teacher view: all students in class, plus other teachers
+        const classStudents = profiles.filter(p => p.role === 'STUDENT' && p.class_id === selectedClassId);
+        const otherTeachers = profiles.filter(p => p.role === 'NASTAVNIK' && p.id !== user.id);
+
+        classStudents.forEach(p => {
+          contacts.push({ id: p.id, name: formatPersonName(p as any), role: 'STUDENT', classId: p.class_id });
+        });
+        otherTeachers.forEach(p => {
+          contacts.push({ id: p.id, name: formatPersonName(p as any), role: 'NASTAVNIK' });
+        });
+      } else {
+        // Student view: classmates, subject teachers, homeroom
+        const classmates = profiles.filter(p => p.role === 'STUDENT' && p.class_id === selectedClassId && p.id !== user.id);
+        
+        // Fetch teachers
+        const { data: teachersData } = await supabase
+          .from('class_subject_teachers')
+          .select('teacher:user_profiles(*)')
+          .eq('class_id', selectedClassId);
+
+        const teacherProfiles = (teachersData || []).map(t => t.teacher as any).filter(Boolean);
+        
+        classmates.forEach(p => {
+          contacts.push({ id: p.id, name: formatPersonName(p as any), role: 'STUDENT', classId: p.class_id });
+        });
+        teacherProfiles.forEach(p => {
+          contacts.push({ id: p.id, name: formatPersonName(p), role: 'NASTAVNIK' });
+        });
+      }
+      
+      const uniqueContacts = Array.from(new Map(contacts.map(item => [item.id, item])).values());
+      console.log("INFORMATIVKA USERS FETCHED", uniqueContacts);
+      setAvailableContacts(uniqueContacts.sort((a, b) => a.name.localeCompare(b.name)));
+    } catch (err) {
+      console.error('Error loading contacts:', err);
+    } finally {
+      setContactsLoading(false);
+    }
+  };
+
+  // 4. Start a new chat or open existing
+  const handleStartChatWithRecipient = async (recipient: RecipientDetails) => {
+    if (!user) return;
+    console.log("SELECTED CHAT USER", recipient);
+
+    try {
+      // Check if chat group already exists with this recipient
+      const existingGroup = groups.find(g => g.recipient?.id === recipient.id);
+
+      if (existingGroup) {
+        console.log("OPEN OR CREATE PRIVATE CHAT RESULT (existing)", existingGroup);
+        setSelectedGroup(existingGroup.id);
+        setIsNewChatOpen(false);
+        return;
+      }
+
+      // Create a brand new chat group
+      const newGroupRow = {
+        name: recipient.name,
+        type: 'PRIVATE',
+        created_by: user.id,
+      };
+
+      const { data: newGroups, error: createError } = await supabase
+        .from('chat_groups')
+        .insert([newGroupRow])
+        .select();
+
+      if (createError) throw createError;
+      
+      const newGroupId = newGroups[0].id;
+      
+      // Add members to chat_group_members
+      const { error: memberError } = await supabase
+        .from('chat_group_members')
+        .insert([
+            { group_id: newGroupId, user_id: user.id },
+            { group_id: newGroupId, user_id: recipient.id }
+        ]);
+
+      if (memberError) throw memberError;
+
+      if (newGroups && newGroups.length > 0) {
+        const createdGroupId = newGroups[0].id;
+        console.log("OPEN OR CREATE PRIVATE CHAT RESULT (new)", newGroups[0]);
+        console.log("ACTIVE CHAT", newGroups[0]);
+        setSelectedGroup(createdGroupId);
+        setIsNewChatOpen(false);
+        
+        // Force refresh groups list immediately
+        const mappedNewGroup: ChatGroupWithMeta = {
+          id: createdGroupId,
+          name: recipient.name,
+          type: 'PRIVATE',
+          created_by: user.id,
+          recipient: recipient,
+        };
+        setGroups(prev => [mappedNewGroup, ...prev]);
+      }
+    } catch (err) {
+      console.error('Error starting chat:', err);
+    }
+  };
+
+  // 5. Send a chat message
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedGroup || !user) return;
 
+    const messageText = newMessage.trim();
+    const payload = {
+      group_id: selectedGroup,
+      sender_id: user.id,
+      content: messageText,
+    };
+
+    setNewMessage('');
+
     try {
-      const { error } = await supabase.from('messages').insert([{
-        group_id: selectedGroup,
-        sender_id: user.id,
-        text: newMessage,
-        timestamp: new Date().toISOString(),
-      }]);
+      console.log("SEND MESSAGE PAYLOAD", payload);
+      const { data, error } = await supabase
+        .from('messages')
+        .insert([payload])
+        .select()
+        .single();
       
-      if (error) throw error;
-      setNewMessage('');
+      console.log("SEND MESSAGE RESULT", data);
+      
+      if (error) {
+        console.error("SEND MESSAGE ERROR", error);
+        throw error;
+      }
+
+      if (data) {
+        setMessages(prev => [...prev, {
+          id: data.id,
+          groupId: data.group_id,
+          senderId: data.sender_id,
+          text: data.content,
+          timestamp: data.created_at,
+        }]);
+
+        // Update the last message preview immediately in sidebar groups
+        setGroups(prev => prev.map(g => {
+          if (g.id === selectedGroup) {
+            return {
+              ...g,
+              lastMessage: messageText,
+              lastMessageTime: data.created_at
+            };
+          }
+          return g;
+        }));
+      }
     } catch (err) {
-      console.error(err);
+      console.error('Error sending message:', err);
     }
   };
 
-  const group = groups.find(g => g.id === selectedGroup);
+  const selectedActiveGroup = groups.find(g => g.id === selectedGroup);
+  const activeRecipient = selectedActiveGroup?.recipient;
+
+  // Search filter
+  const filteredGroups = groups.filter(g =>
+    g.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    g.recipient?.className?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
-    <div className="flex h-full bg-[#f3f4f6]">
-      {/* LEFT: Groups List */}
-      <div className="w-20 md:w-80 bg-white border-r border-gray-200 flex flex-col shadow-sm">
-        <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="hidden md:block font-bold text-gray-800">Informativka</h2>
-          <button className="p-2 hover:bg-gray-100 rounded">
-            <Search size={18} className="text-gray-400" />
-          </button>
-        </div>
-        <div className="flex-1 overflow-auto">
-          {groups.map((g) => (
-            <button
-              key={g.id}
-              onClick={() => setSelectedGroup(g.id)}
-              className={cn(
-                "w-full flex items-center gap-3 p-3 transition-colors text-left",
-                selectedGroup === g.id ? "bg-[#005c8d]/10 border-r-4 border-[#005c8d]" : "hover:bg-gray-50 border-r-4 border-transparent"
+    <div className="flex-1 flex h-full bg-[#f8fafc] overflow-hidden">
+      
+      {/* LEFT COLUMN: Sidebar with list of groups */}
+      <div className={cn(
+        "bg-white border-r border-gray-300 flex flex-col w-full md:w-80 shrink-0 shadow-xs",
+        selectedGroup && "hidden md:flex" // Hide sidebar on small mobile displays if chat is open
+      )}>
+        <div className="p-4 border-b border-gray-200 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="text-[#005c8d]" size={18} />
+              <h2 className="font-black text-gray-800 tracking-wide text-xs uppercase">Informativka</h2>
+            </div>
+            <button 
+              onClick={loadContacts}
+              className="p-1.5 bg-blue-50 text-[#005c8d] hover:bg-[#005c8d] hover:text-white transition-all rounded shadow-3xs cursor-pointer"
+              title="Pokreni novi razgovor"
+            >
+              <UserPlus size={16} />
+            </button>
+          </div>
+          <div className="flex p-0.5 bg-gray-100 rounded">
+            <button 
+              onClick={() => setActiveTab('PERSONAL')}
+              className={cn("flex-1 flex items-center justify-center gap-2 py-1.5 text-[9px] font-black uppercase tracking-wide rounded transition-all", 
+                activeTab === 'PERSONAL' ? "bg-white text-[#005c8d] shadow-sm" : "text-gray-500 hover:text-gray-700"
               )}
             >
-              <div className="w-12 h-12 rounded bg-gray-100 flex items-center justify-center shrink-0 text-[#005c8d]">
-                {g.type === 'CLASS' ? <Users size={24} /> : <Hash size={24} />}
-              </div>
-              <div className="hidden md:block flex-1 overflow-hidden">
-                <div className="font-bold text-sm truncate">{g.name}</div>
-                <div className="text-xs text-gray-400 truncate uppercase mt-0.5">{g.type}</div>
-              </div>
+              <Send size={10} /> Osobno
             </button>
-          ))}
+            <button 
+              onClick={() => setActiveTab('CHANNELS')}
+              className={cn("flex-1 flex items-center justify-center gap-2 py-1.5 text-[9px] font-black uppercase tracking-wide rounded transition-all", 
+                activeTab === 'CHANNELS' ? "bg-white text-[#005c8d] shadow-sm" : "text-gray-500 hover:text-gray-700"
+              )}
+            >
+              <Users size={10} /> Kanali
+            </button>
+          </div>
+        </div>
+
+        {/* Search bar */}
+        <div className="p-3 border-b border-gray-100">
+          <div className="relative flex items-center bg-gray-50 border border-gray-300 rounded px-2.5 py-1.5 focus-within:border-[#005c8d] focus-within:bg-white transition-all text-sm">
+            <Search className="text-gray-400 shrink-0 mr-2" size={15} />
+            <input
+              type="text"
+              placeholder="Pretraži razgovore..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-transparent border-none outline-none focus:ring-0 text-xs w-full text-slate-700"
+            />
+          </div>
+        </div>
+
+        {/* Conversations List */}
+        <div className="flex-1 overflow-auto divide-y divide-gray-100">
+          {loading ? (
+            <div className="text-center py-10 text-gray-400 text-[10px] font-bold uppercase tracking-widest leading-none">
+              Učitavanje...
+            </div>
+          ) : filteredGroups.length === 0 ? (
+            <div className="p-8 text-center text-gray-400 italic text-xs">
+              Nema aktivnih razgovora. Kliknite gumb (+) gore za pokretanje novog razgovora.
+            </div>
+          ) : (
+            filteredGroups
+              .filter(g => activeTab === 'PERSONAL' ? (g.type === 'PRIVATE' || g.type === 'PRIVATE_GROUP') : (g.type === 'SUBJECT_CHANNEL' || g.type === 'CUSTOM_CHANNEL'))
+              .map((g) => {
+                const isActive = selectedGroup === g.id;
+                return (
+                  <button
+                    key={g.id}
+                    onClick={() => setSelectedGroup(g.id)}
+                    className={cn(
+                      "w-full flex items-center gap-3 p-4 transition-all text-left group border-l-4",
+                      isActive 
+                        ? "bg-slate-50 border-[#005c8d] shadow-2xs" 
+                        : "hover:bg-slate-50/50 border-transparent"
+                    )}
+                  >
+                    <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 text-[#005c8d] flex items-center justify-center shrink-0">
+                      {activeTab === 'PERSONAL' ? <Users size={16} /> : <BookOpen size={16} />}
+                    </div>
+                    <div className="flex-1 overflow-hidden space-y-0.5">
+                      <div className="flex justify-between items-baseline gap-2">
+                        <span className="font-bold text-gray-900 text-xs truncate">
+                          {g.name}
+                        </span>
+                        {g.lastMessageTime && (
+                          <span className="text-[9px] text-gray-400 font-semibold shrink-0">
+                            {new Date(g.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[11px] text-gray-500 truncate italic">
+                        {g.lastMessage ? g.lastMessage : 'Nema poruka.'}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })
+          )}
         </div>
       </div>
 
-      {/* CENTER: Chat Area */}
-      <div className="flex-1 flex flex-col bg-white">
+      {/* CENTER COLUMN: Real-Time Chat Engine */}
+      <div className={cn(
+        "flex-1 flex flex-col bg-slate-50 relative",
+        !selectedGroup && "hidden md:flex" // Show on mobile only if a group is actually selected
+      )}>
         {selectedGroup ? (
           <>
-            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50/50">
+            {/* Active chat header */}
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-white shadow-xs">
               <div className="flex items-center gap-3">
-                <div className="font-bold text-gray-800">{group?.name}</div>
+                {/* Back button on mobile */}
+                <button 
+                  onClick={() => setSelectedGroup(null)}
+                  className="md:hidden p-1.5 hover:bg-slate-100 rounded text-slate-700 border border-slate-200 mr-1"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+                <div>
+                  <div className="font-black text-slate-900 text-xs uppercase tracking-wide">
+                    {selectedActiveGroup?.name}
+                  </div>
+                  {activeRecipient && (
+                    <div className="text-[10px] text-[#005c8d] font-bold uppercase tracking-wider mt-0.5 flex items-center gap-1">
+                      <Shield size={10} /> {activeRecipient.role} {activeRecipient.className ? `• Razred: ${activeRecipient.className}` : ''}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button className="p-2 text-gray-400 hover:text-gray-600"><Info size={20} /></button>
-                <button className="p-2 text-gray-400 hover:text-gray-600 lg:hidden"><MoreVertical size={20} /></button>
-              </div>
+              {selectedActiveGroup?.type === 'PRIVATE' && (
+                <button 
+                  onClick={async () => {
+                    if (!confirm("Jeste li sigurni da želite obrisati razgovor? Sve poruke će biti trajno obrisane.")) return;
+                    try {
+                      // 1. Delete message_attachments
+                      const { data: messagesToDelete } = await supabase
+                        .from('messages')
+                        .select('id')
+                        .eq('group_id', selectedGroup);
+                      
+                      if (messagesToDelete && messagesToDelete.length > 0) {
+                        const messageIds = messagesToDelete.map(m => m.id);
+                        await supabase
+                          .from('message_attachments')
+                          .delete()
+                          .in('message_id', messageIds);
+                      }
+                      // 2. Delete messages
+                      await supabase.from('messages').delete().eq('group_id', selectedGroup);
+                      // 3. Delete members
+                      await supabase.from('chat_group_members').delete().eq('group_id', selectedGroup);
+                      // 4. Delete group
+                      const { error: delError } = await supabase.from('chat_groups').delete().eq('id', selectedGroup);
+                      
+                      if (delError) throw delError;
+                      
+                      console.log("DELETE CHAT RESULT", "Success");
+                      setSelectedGroup(null);
+                      setGroups(prev => prev.filter(g => g.id !== selectedGroup));
+                    } catch (err) {
+                      console.error("Error deleting chat:", err);
+                    }
+                  }}
+                  className="text-[10px] text-red-500 hover:text-red-700 font-bold uppercase cursor-pointer"
+                >
+                  Obriši razgovor
+                </button>
+              )}
             </div>
 
+            {/* Messages body rendering */}
             <div 
               ref={scrollRef}
-              className="flex-1 overflow-auto p-4 space-y-4 bg-gray-50/30"
+              className="flex-1 overflow-auto p-4 space-y-3.5 bg-slate-50"
             >
-              {messages.map((msg, i) => {
-                const isMe = msg.senderId === user?.id;
-                const showAvatar = i === 0 || messages[i-1].senderId !== msg.senderId;
-                
-                return (
-                  <div key={msg.id} className={cn("flex items-start gap-2", isMe ? "flex-row-reverse" : "flex-row")}>
-                    {!isMe && (
-                      <div className="w-8 h-8 rounded bg-[#005c8d] text-white flex items-center justify-center text-[10px] uppercase font-bold shrink-0">
-                        {msg.senderId.slice(0, 2)}
-                      </div>
-                    )}
-                    <div className={cn(
-                      "max-w-[70%] px-4 py-2 rounded-lg text-sm shadow-sm",
-                      isMe ? "bg-[#005c8d] text-white" : "bg-white border border-gray-200 text-gray-800"
-                    )}>
-                      {msg.text}
-                      <div className={cn("text-[9px] mt-1 opacity-60", isMe ? "text-right" : "text-left")}>
-                        {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {messages.length === 0 ? (
+                <div className="text-center py-10 text-gray-400 italic text-xs">
+                  Razgovor je otvoren. Napišite prvu poruku i pošaljite je.
+                </div>
+              ) : (
+                messages.map((msg, idx) => {
+                  const isMe = msg.senderId === user?.id;
+                  
+                  return (
+                    <div 
+                      key={msg.id} 
+                      className={cn(
+                        "flex items-end gap-2.5 max-w-[80%]", 
+                        isMe ? "ml-auto flex-row-reverse" : "mr-auto"
+                      )}
+                    >
+                      {!isMe && (
+                        <div className="w-7 h-7 rounded-full bg-slate-200 border border-slate-300 text-slate-600 font-bold text-[10px] flex items-center justify-center shrink-0 tracking-wider font-mono">
+                          {selectedActiveGroup?.name?.slice(0, 2).toUpperCase()}
+                        </div>
+                      )}
+                      
+                      <div className="space-y-1">
+                        <div className={cn(
+                          "px-4 py-2.5 text-xs shadow-xs border relative",
+                          isMe 
+                            ? "bg-[#005c8d] text-white border-[#004a70] rounded-t-xl rounded-bl-xl" 
+                            : "bg-white text-gray-800 border-gray-200 rounded-t-xl rounded-br-xl"
+                        )}>
+                          <div className="whitespace-pre-wrap leading-relaxed">
+                            {msg.text}
+                          </div>
+                        </div>
+                        <div className={cn("text-[8px] font-bold uppercase text-gray-400 px-1 leading-none tracking-wider", isMe ? "text-right" : "text-left")}>
+                          {new Date(msg.timestamp).toLocaleDateString('hr-HR')} • {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
 
+            {/* Form message submission */}
             <form onSubmit={handleSendMessage} className="p-4 border-t border-gray-200 bg-white">
-              <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-1">
-                <button type="button" className="p-2 text-gray-400 hover:text-gray-600"><Paperclip size={20} /></button>
+              <div className="flex items-center gap-2 bg-slate-50 border border-gray-300 rounded focus-within:border-[#005c8d] focus-within:bg-white px-3 py-1.5 transition-all">
+                <button 
+                  type="button"
+                  onClick={() => document.getElementById('file-upload')?.click()}
+                  className="p-1.5 text-gray-400 hover:text-[#005c8d] transition-all rounded cursor-pointer"
+                  title="Priloži datoteku"
+                >
+                  <svg className="w-5 h-5 rotate-45" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.586 6.586a6 6 0 108.486 8.486L18 13" />
+                  </svg>
+                </button>
+                <input id="file-upload" type="file" className="hidden" onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file || !selectedGroup || !user) return;
+                  
+                  try {
+                    const fileExt = file.name.split('.').pop();
+                    const fileName = `${Math.random()}.${fileExt}`;
+                    const filePath = `chat_attachments/${fileName}`;
+                    
+                    const { error: uploadError } = await supabase.storage
+                      .from('attachments')
+                      .upload(filePath, file);
+                      
+                    if (uploadError) throw uploadError;
+                    
+                    const { data: { publicUrl } } = supabase.storage
+                      .from('attachments')
+                      .getPublicUrl(filePath);
+                      
+                    // Create message with attachment
+                    const { data: msgData, error: msgError } = await supabase
+                      .from('messages')
+                      .insert({
+                        group_id: selectedGroup,
+                        sender_id: user.id,
+                        content: `Prilog: ${file.name}`
+                      })
+                      .select()
+                      .single();
+                      
+                    if (msgError) throw msgError;
+                    
+                    // Save attachment metadata
+                    await supabase.from('message_attachments').insert({
+                      message_id: msgData.id,
+                      file_url: publicUrl,
+                      file_name: file.name,
+                      file_type: file.type,
+                      file_size: file.size
+                    });
+                    
+                    console.log("UPLOAD ATTACHMENT RESULT", "Success");
+                    
+                    // Refresh messages
+                    setMessages(prev => [...prev, {
+                      id: msgData.id,
+                      groupId: msgData.group_id,
+                      senderId: msgData.sender_id,
+                      text: msgData.content,
+                      timestamp: msgData.created_at
+                    }]);
+                    
+                  } catch (err) {
+                    console.error("UPLOAD ATTACHMENT ERROR", err);
+                  }
+                }} />
                 <input
                   type="text"
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Napišite poruku..."
-                  className="flex-1 bg-transparent border-none focus:ring-0 text-sm py-2"
+                  placeholder="Upišite Vašu poruku i pošaljite..."
+                  className="flex-1 bg-transparent border-none outline-none focus:ring-0 text-xs text-slate-700 py-1.5"
                 />
-                <button type="button" className="p-2 text-gray-400 hover:text-gray-600"><Smile size={20} /></button>
+
                 <button 
                   type="submit" 
                   disabled={!newMessage.trim()}
-                  className="p-2 text-[#005c8d] disabled:opacity-30 disabled:grayscale transition-all hover:scale-110 active:scale-95"
+                  className="p-1.5 bg-[#005c8d] hover:bg-[#004a71] text-white transition-all disabled:opacity-30 disabled:pointer-events-none rounded cursor-pointer"
                 >
-                  <Send size={20} />
+                  <Send size={14} />
                 </button>
               </div>
             </form>
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-8">
-            <div className="w-24 h-24 rounded-full bg-gray-100 flex items-center justify-center mb-6">
-              <Send size={48} className="opacity-20" />
+            <div className="w-16 h-16 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center mb-4 text-slate-300">
+              <MessageSquare size={28} className="opacity-60" />
             </div>
-            <h3 className="text-xl font-bold text-gray-500 mb-2">Vaše poruke</h3>
-            <p className="text-sm text-center max-w-xs">Tražite grupu, roditelja ili kolegu i započnite razgovor.</p>
+            <h3 className="text-sm font-black uppercase text-gray-500 tracking-wider">Poruke i Informativka</h3>
+            <p className="text-xs text-center text-gray-400 max-w-xs mt-1 leading-relaxed">
+              Odaberite aktivni razgovor iz popisa s lijeve strane ili pritisnite ikonu za novi razgovor za pisanje nastavnicima ili učenicima.
+            </p>
           </div>
         )}
       </div>
 
-      {/* RIGHT: Group Info (Desktop only) */}
-      <div className="hidden xl:w-80 bg-white border-l border-gray-200 flex flex-col shadow-sm">
-        <div className="p-4 border-b border-gray-200 font-bold text-gray-800 uppercase tracking-wider text-xs">
-          Podaci o grupi
-        </div>
-        <div className="p-6 flex flex-col items-center">
-          <div className="w-24 h-24 rounded bg-gray-100 flex items-center justify-center mb-4 text-[#005c8d]">
-            {group?.type === 'CLASS' ? <Users size={48} /> : <Hash size={48} />}
+      {/* RIGHT COLUMN: Chat details panel */}
+      {selectedGroup && activeRecipient && (
+        <div className="hidden xl:flex xl:w-72 bg-white border-l border-gray-200 flex-col shadow-xs shrink-0">
+          <div className="p-4 border-b border-gray-200 font-bold text-gray-700 uppercase tracking-widest text-[9px]">
+            Podaci o sugovorniku
           </div>
-          <h3 className="text-lg font-bold text-gray-800 text-center mb-1">{group?.name}</h3>
-          <p className="text-xs text-gray-400 uppercase font-semibold">{group?.type} GRUPA</p>
           
-          <div className="w-full mt-10 space-y-4">
-            <div className="text-[10px] font-bold text-gray-400 uppercase border-b border-gray-100 pb-2">Članovi grupe</div>
-            {/* Mock members */}
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded bg-gray-200 border border-white"></div>
-              <div className="text-sm border-b border-gray-50 flex-1 py-1">Svi učenici razreda</div>
+          <div className="p-6 flex flex-col items-center border-b border-gray-100">
+            <div className="w-16 h-16 bg-slate-100 border border-slate-200 rounded-full flex items-center justify-center mb-3">
+              <Users size={24} className="text-[#005c8d]" />
             </div>
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded bg-gray-200 border border-white"></div>
-              <div className="text-sm border-b border-gray-50 flex-1 py-1">Razrednik</div>
+            <h3 className="text-sm font-bold text-gray-900 text-center leading-tight mb-1">
+              {activeRecipient.name}
+            </h3>
+            <span className="bg-slate-50 text-slate-500 text-[8px] font-black uppercase tracking-widest border border-slate-200 px-2 py-0.5 rounded-full">
+              {activeRecipient.role}
+            </span>
+          </div>
+
+          <div className="p-5 space-y-4 text-xs">
+            <div className="space-y-1.5">
+              <span className="block text-[9px] font-black pointer-events-none uppercase text-slate-400 tracking-wider">Ustanova / Škola</span>
+              <span className="font-semibold text-slate-700">{activeRecipient.schoolName || 'Opća škola e-Dnevnika'}</span>
+            </div>
+
+            {activeRecipient.className && (
+              <div className="space-y-1.5">
+                <span className="block text-[9px] font-black pointer-events-none uppercase text-slate-400 tracking-wider">Razredna skupina</span>
+                <span className="font-semibold text-slate-700">{activeRecipient.className}</span>
+              </div>
+            )}
+
+            {activeRecipient.email && (
+              <div className="space-y-1.5">
+                <span className="block text-[9px] font-black pointer-events-none uppercase text-slate-400 tracking-wider">E-adresa</span>
+                <span className="font-medium text-slate-500 break-all select-all font-mono text-[10px]">{activeRecipient.email}</span>
+              </div>
+            )}
+
+            <div className="pt-4 border-t border-gray-100 flex items-center gap-2 text-[9px] text-[#005c8d] font-bold uppercase">
+              <Check size={12} strokeWidth={3} className="text-green-500" /> Sigurnosna veza aktivna
             </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* NOVI RAZGOVOR / CONTACT SELECTOR MODAL */}
+      {isNewChatOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[100] p-4">
+          <div className="bg-white border border-gray-300 w-full max-w-sm shadow-2xl flex flex-col max-h-[80vh] overflow-hidden">
+            <div className="p-4 bg-slate-50 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
+              <h3 className="font-black text-slate-800 text-xs uppercase tracking-wider">Pokretanje razgovora</h3>
+              <button 
+                onClick={() => setIsNewChatOpen(false)}
+                className="text-xs font-bold text-gray-400 hover:text-gray-600 uppercase cursor-pointer"
+              >
+                Zatvori
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto divide-y divide-gray-100">
+              {contactsLoading ? (
+                <div className="text-center py-10 text-gray-400 text-[10px] font-black uppercase tracking-widest">
+                  Učitavanje sugovornika...
+                </div>
+              ) : availableContacts.length === 0 ? (
+                <div className="p-8 text-center text-gray-400 italic text-xs">
+                  Nema dostupnih sugovornika za odabir.
+                </div>
+              ) : (
+                availableContacts.map(contact => (
+                  <button
+                    key={contact.id}
+                    onClick={() => handleStartChatWithRecipient(contact)}
+                    className="w-full text-left p-4 hover:bg-slate-50 transition-colors flex items-center gap-3"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-[#005c8d] shrink-0 border border-slate-200">
+                      <Users size={14} />
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-800 text-xs">
+                        {contact.name}
+                      </div>
+                      <div className="text-[9px] text-gray-400 uppercase font-black tracking-wider mt-0.5">
+                        {contact.role} {contact.className ? `• Razred: ${contact.className}` : ''}
+                      </div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

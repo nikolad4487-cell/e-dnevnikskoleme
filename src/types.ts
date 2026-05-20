@@ -228,10 +228,39 @@ export type Grade = {
   createdAt?: string;
 };
 
+export type FinalGrade = {
+  id: string;
+  studentId: string;
+  classId: string;
+  subjectId: string;
+  teacherId?: string;
+  schoolYearId?: string;
+  term: 'FIRST_SEMESTER' | 'FINAL';
+  value: string;
+  note?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export const specialExamTypeLabels: Record<string, string> = {
+  SUPPLEMENTARY_WORK: 'Dopunski ispit',
+  MAKEUP_EXAM: 'Popravni ispit',
+  DIFFERENTIAL_EXAM: 'Razlikovni ispit',
+  CLASS_EXAM: 'Razredni ispit',
+  SUBJECT_EXAM: 'Predmetni ispit'
+};
+
+export const specialExamTypes = Object.keys(specialExamTypeLabels);
+
 export type Exam = {
   id: string;
   classId: string;
   subjectId: string;
+  studentId?: string;      // Optional, used for individual student exams
+  teacherId?: string;      // Optional
+  schoolYearId?: string;   // Optional
+  gradeValue?: string;     // Optional
+  note?: string;           // Optional
   date: string;
   type: string;
   description?: string;

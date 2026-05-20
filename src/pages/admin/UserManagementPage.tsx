@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { formatPersonName } from '../../lib/utils';
 
 export default function UserManagementPage() {
   const { selectedSchoolId } = useSelection();
@@ -361,7 +362,7 @@ export default function UserManagementPage() {
                       <UserIcon size={20} />
                     </div>
                     <div className="font-black text-slate-900 uppercase text-xs tracking-tight">
-                      {item.name}
+                      {formatPersonName(item)}
                     </div>
                   </div>
                 </td>

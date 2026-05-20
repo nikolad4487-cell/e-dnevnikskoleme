@@ -4,7 +4,7 @@ import { Menu, LogOut, User as UserIcon, Bell, Search, Info, Settings } from 'lu
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { Role } from '../types';
-import { cn } from '../lib/utils';
+import { cn, formatPersonName } from '../lib/utils';
 import { Header } from './Header';
 
 interface NavItem {
@@ -18,6 +18,7 @@ const TEACHER_NAV: NavItem[] = [
   { label: 'Dnevnik rada', path: '/teacher/dnevnik-rada' },
   { label: 'Zapisnici', path: '/teacher/zapisnici' },
   { label: 'Izvještaji', path: '/teacher/izvjestaji' },
+  { label: 'Informativka', path: '/teacher/informativka' },
   { label: 'Administracija', path: '/admin/school-dashboard' },
   { label: 'Pretraživanje', path: '/teacher/pretrazivanje' },
 ];
@@ -28,7 +29,7 @@ const STUDENT_NAV: NavItem[] = [
   { label: 'Ispiti', path: '/student/ispiti' },
   { label: 'Izostanci', path: '/student/izostanci' },
   { label: 'Raspored', path: '/student/raspored' },
-  { label: 'Informatika', path: '/student/informatika' },
+  { label: 'Informativka', path: '/student/informativka' },
 ];
 
 const ADMIN_NAV: NavItem[] = [
@@ -97,7 +98,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             
             <div className="flex-1 overflow-y-auto py-4">
               <div className="px-4 mb-4">
-                <div className="text-[11px] font-bold leading-tight">{user?.name} {user?.surname}</div>
+                <div className="text-[11px] font-bold leading-tight">{formatPersonName(user)}</div>
                 <div className="text-[9px] text-white/60 uppercase">{formattedRoles}</div>
               </div>
 

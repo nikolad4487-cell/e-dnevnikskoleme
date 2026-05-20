@@ -6,7 +6,7 @@ import { Class, Role, SchoolYear } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, ArrowRight, Calendar, ChevronLeft, Plus } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { cn } from '../lib/utils';
+import { cn, formatPersonName } from '../lib/utils';
 import { Header } from '../components/Header';
 
 interface ClassWithDetails {
@@ -159,7 +159,7 @@ export default function ClassSelectionPage() {
             homeroomTeacherName: (cls.homeroom as any)?.name,
             deputyTeacherName: (cls.deputy as any)?.name,
             userRoleInClass: role as any,
-            programName: cls.program_type || `${cls.grade_level}. razred`
+            programName: cls.program?.name || `${cls.grade_level}. razred`
           } as any;
         });
 
@@ -196,7 +196,7 @@ export default function ClassSelectionPage() {
             school_year,
             homeroom_teacher_id,
             deputy_teacher_id,
-            program_type,
+            program:program_id(*),
             homeroom:user_profiles!classes_homeroom_teacher_id_fkey(name),
             deputy:user_profiles!classes_deputy_teacher_id_fkey(name)
           )
@@ -229,7 +229,7 @@ export default function ClassSelectionPage() {
             homeroomTeacherName: env.classes.homeroom?.name,
             deputyTeacherName: env.classes.deputy?.name,
             userRoleInClass: 'STUDENT',
-            programName: env.classes.program_type || `${env.classes.grade_level}. razred`
+            programName: env.classes.program?.name || `${env.classes.grade_level}. razred`
           } as any);
         }
       });
@@ -313,7 +313,7 @@ export default function ClassSelectionPage() {
           <div className="w-12 h-1 bg-[#005c8d] mx-auto opacity-20"></div>
           {isStaff && (
             <p className="text-[10px] text-slate-500 uppercase font-bold mt-4 tracking-widest">
-              Zaposlenik: {user?.name} {user?.surname}
+              Zaposlenik: {formatPersonName(user)}
             </p>
           )}
         </div>

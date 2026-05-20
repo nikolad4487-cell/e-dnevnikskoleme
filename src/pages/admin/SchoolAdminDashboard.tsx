@@ -13,7 +13,8 @@ import {
   Building2,
   FileText,
   BarChart3,
-  UserPlus
+  UserPlus,
+  MessageSquare
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -81,6 +82,7 @@ export default function SchoolAdminDashboard() {
     { id: 'predmeti', name: 'Globalni predmeti', icon: BookOpen, color: 'bg-amber-500', link: '/admin/predmeti' },
     { id: 'student-predmeti', name: 'Predmeti učenika', icon: FileText, color: 'bg-cyan-500', link: '/admin/student-predmeti' },
     { id: 'raspored', name: 'Raspored sati', icon: Calendar, color: 'bg-purple-500', link: '/admin/raspored' },
+    { id: 'informativka', name: 'Informativka', icon: MessageSquare, color: 'bg-emerald-500', link: '/admin/informativka' },
     { id: 'izvještaji', name: 'Izvještaji i statistika', icon: BarChart3, color: 'bg-rose-500', link: '/admin/izvjestaji' },
     { id: 'postavke', name: 'Postavke škole', icon: Settings, color: 'bg-slate-700', link: '/admin/postavke' },
   ];

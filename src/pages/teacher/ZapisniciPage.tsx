@@ -8,6 +8,7 @@ import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { Role, User } from '../../types';
 import { toast } from 'react-hot-toast';
 import { mappers, mapList } from '../../lib/mappers';
+import { formatPersonName } from '../../lib/utils';
 
 export default function ZapisniciPage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
@@ -66,7 +67,7 @@ export default function ZapisniciPage() {
         school_id: selectedSchoolId,
         class_id: effectiveClassId,
         author_id: user?.id,
-        author_name: `${user?.name} ${user?.surname}`,
+        author_name: formatPersonName(user),
         timestamp: new Date().toISOString()
       }]);
       

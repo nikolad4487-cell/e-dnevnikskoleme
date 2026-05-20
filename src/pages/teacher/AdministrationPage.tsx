@@ -7,7 +7,7 @@ import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, Cu
 import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
-import { cn, getSurname, formatSubjectDisplayName } from '../../lib/utils';
+import { cn, getSurname, formatSubjectDisplayName, formatPersonName } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 
 export default function AdministrationPage() {
@@ -250,7 +250,8 @@ export default function AdministrationPage() {
     parentName: '',
     parentPhone: '',
     parentEmail: '',
-    parentNotes: ''
+    parentNotes: '',
+    enrollSubjects: true
   });
 
   const [assignmentForm, setAssignmentForm] = useState({
@@ -1826,11 +1827,22 @@ setStudents(uniqueMapped as any);
         const classToUse = classes.find(c => c.id === classIdToUse);
         const programIdToUse = classToUse?.programId || studentForm.programId || null;
 
+        if (!classIdToUse) {
+          throw new Error("Razred nije odabran");
+        }
+        if (!classToUse) {
+          throw new Error("Razred ne postoji");
+        }
+
+        const studentEmail = studentForm.email?.toLowerCase().trim() || '';
+        const originalFullName = studentForm.name.trim();
+
         const profilePayload = {
-          email: studentForm.email?.toLowerCase() || '',
-          name: studentForm.name,
-          globalRole: Role.STUDENT,
-          schoolId: selectedSchoolId,
+          email: studentEmail || undefined,
+          name: originalFullName,
+          globalRole: 'STUDENT',
+          schoolId: classToUse.school_id || selectedSchoolId,
+          authOnly: true,
           studentData: {
             oib: studentForm.oib || Math.floor(Math.random() * 100000000000).toString(),
             dob: studentForm.dob,
@@ -1842,8 +1854,6 @@ setStudents(uniqueMapped as any);
           }
         };
 
-        console.log('CREATE STUDENT PROFILE', profilePayload);
-
         const response = await fetch('/api/admin/create-user', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1851,47 +1861,127 @@ setStudents(uniqueMapped as any);
         });
 
         const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Neuspješno kreiranje učenika');
+        if (!response.ok) throw new Error(result.error || 'Neuspješno kreiranje korisničkog računa');
 
-        // Ensure user_profiles has class_id, school_id, and school_year_id
-        await supabase.from('user_profiles').update({ 
-            class_id: classIdToUse, 
-            school_id: classToUse?.school_id || selectedSchoolId,
-            school_year_id: classToUse?.school_year_id || null
-        }).eq('id', result.profileId);
+        const createdAuthUser = { id: result.userId, email: result.email || studentEmail };
 
-        // Enrollment should be handled by the server, but we'll ensure it here too for the specified school year
-        const enrollmentPayload = {
-            student_id: result.profileId,
-            class_id: classIdToUse,
-            school_year_id: classToUse?.school_year_id || null,
-            school_year: classToUse?.schoolYear || '2024/2025',
-            program_id: programIdToUse,
-            status: 'ACTIVE'
+        console.log("CREATED AUTH USER", createdAuthUser);
+
+        // 1. user_profiles
+        const profileInsertPayload = {
+          auth_user_id: createdAuthUser.id,
+          email: createdAuthUser.email,
+          name: originalFullName,
+          role: 'STUDENT',
+          class_id: classIdToUse,
+          school_id: classToUse.school_id || selectedSchoolId,
+          school_year_id: classToUse.school_year_id || null,
+          requires_password_change: false,
+          requires_authenticator_setup: false,
+          password_type: 'student_static',
+          dob: studentForm.dob || null,
+          pob: studentForm.pob || null,
+          mobile: studentForm.mobile || null,
+          address: studentForm.address || '',
+          oib: studentForm.oib || Math.floor(Math.random() * 100000000000).toString()
         };
 
-        console.log('CREATE STUDENT ENROLLMENT', enrollmentPayload);
+        const { data: createdProfile, error: profileErr } = await supabase
+          .from('user_profiles')
+          .insert([profileInsertPayload])
+          .select()
+          .single();
 
-        const { error: enrollErr } = await supabase.from('student_class_enrollments').upsert(enrollmentPayload, {
-            onConflict: 'student_id,class_id,school_year'
-        });
+        if (profileErr) {
+          console.error("Profile creation failed:", profileErr);
+          throw new Error("Greška pri kreiranju profila učenika: " + profileErr.message);
+        }
 
-        // 4. Save parent contacts for new student
+        console.log("CREATED PROFILE", createdProfile);
+
+        // 2. user_school_roles
+        const roleInsertPayload = {
+          user_id: createdProfile.id,
+          school_id: classToUse.school_id || selectedSchoolId,
+          role: 'STUDENT'
+        };
+
+        const { data: roleResult, error: roleErr } = await supabase
+          .from('user_school_roles')
+          .insert([roleInsertPayload])
+          .select()
+          .single();
+
+        if (roleErr) {
+          console.error("School role creation failed:", roleErr);
+          throw new Error("Greška pri kreiranju uloge u školi: " + roleErr.message);
+        }
+
+        console.log("CREATED USER SCHOOL ROLE", roleResult);
+
+        // 3. student_class_enrollments
+        const enrollmentInsertPayload = {
+          student_id: createdProfile.id,
+          class_id: classIdToUse,
+          school_year_id: classToUse.school_year_id || null,
+          school_year: classToUse.schoolYear || '2024/2025',
+          program_id: programIdToUse,
+          status: 'ACTIVE'
+        };
+
+        const { data: enrollmentResult, error: enrollErr } = await supabase
+          .from('student_class_enrollments')
+          .insert([enrollmentInsertPayload])
+          .select()
+          .single();
+
+        if (enrollErr) {
+          console.error("Enrollment failed:", enrollErr);
+          throw new Error("Greška pri kreiranju upisa u razred: " + enrollErr.message);
+        }
+
+        console.log("CREATED STUDENT ENROLLMENT", enrollmentResult);
+
+        // 4. Enroll subjects if selected
+        if (studentForm.enrollSubjects) {
+          const { data: classSubjects } = await supabase
+            .from('class_subject_teachers')
+            .select('subject_id')
+            .eq('class_id', classIdToUse);
+
+          if (classSubjects && classSubjects.length > 0) {
+            const uniqueSubjectIds = Array.from(new Set(classSubjects.map(cs => cs.subject_id)));
+            const subjectEnrollments = uniqueSubjectIds.map(subId => ({
+              student_id: createdProfile.id,
+              subject_id: subId,
+              class_id: classIdToUse,
+              school_year_id: classToUse.school_year_id || null,
+              school_year: classToUse.schoolYear || '2024/2025',
+              status: 'ACTIVE'
+            }));
+
+            console.log("SAVING SUBJECT ENROLLMENTS", subjectEnrollments);
+            const { error: subjectEnrollErr } = await supabase
+              .from('student_subject_enrollments')
+              .upsert(subjectEnrollments, { onConflict: 'student_id,subject_id,class_id,school_year' });
+
+            if (subjectEnrollErr) {
+              console.error("Greška pri upisu predmeta:", subjectEnrollErr);
+            }
+          }
+        }
+
+        // Save parent contacts for new student
         await supabase
           .from('student_parent_contacts')
           .insert({
-            student_id: result.profileId,
+            student_id: createdProfile.id,
             parent_name: studentForm.parentName,
             parent_phone: studentForm.parentPhone,
             parent_email: studentForm.parentEmail,
             notes: studentForm.parentNotes
           });
 
-        if (enrollErr) {
-            console.error('Enrollment Error:', enrollErr);
-            throw new Error('Enrollment failed: ' + enrollErr.message);
-        }
-        
         toast.success(`Učenik ${studentForm.name} stvoren i upisan u razred.`);
         setStudentForm({
           name: '',
@@ -1910,7 +2000,8 @@ setStudents(uniqueMapped as any);
           parentName: '',
           parentPhone: '',
           parentEmail: '',
-          parentNotes: ''
+          parentNotes: '',
+          enrollSubjects: true
         });
         await fetchData();
         setActiveTab('CLASS_DETAIL');
@@ -2844,7 +2935,10 @@ setAllSubjects(uniqueSub2);
                         <div className="space-y-1">
                           <div className="text-[9px] font-black text-gray-400 uppercase">Šk. godina: <span className="text-gray-600">{year?.name || cls.schoolYear}</span></div>
                           <div className="text-[9px] font-black text-gray-400 uppercase">Razrednik: <span className="text-gray-600 truncate block">
-                            {allUsers.find(u => u.id === cls.homeroomTeacherId)?.name || 'Nije dodijeljen'} {allUsers.find(u => u.id === cls.homeroomTeacherId)?.surname || ''}
+                            {(() => {
+                              const ht = allUsers.find(u => u.id === cls.homeroomTeacherId);
+                              return ht ? formatPersonName(ht) : 'Nije dodijeljen';
+                            })()}
                           </span></div>
                         </div>
 
@@ -3220,7 +3314,7 @@ setAllSubjects(uniqueSub2);
                                          return (
                                            <div key={a.id} className="flex items-center justify-between group/teach">
                                               <span className="font-bold uppercase text-gray-600">
-                                                {t ? `${t.surname} ${t.name}` : <span className="text-red-400 font-black italic">NIJE DODIJELJEN</span>}
+                                                {t ? formatPersonName(t) : <span className="text-red-400 font-black italic">NIJE DODIJELJEN</span>}
                                                 {a.groupName && <span className="ml-2 text-[9px] text-[#005c8d] bg-blue-50 px-1 border border-blue-100">({a.groupName})</span>}
                                               </span>
                                               {isManager && (
@@ -3937,6 +4031,19 @@ setAllSubjects(uniqueSub2);
                       <option value="INACTIVE">Neaktivan</option>
                     </select>
                   )}
+                  {!editingStudentId && (
+                    <div className="flex items-center gap-2 md:col-start-1 lg:col-start-1 h-full py-2">
+                      <label className="flex items-center gap-2 text-[10px] font-black uppercase text-gray-500 cursor-pointer select-none">
+                        <input 
+                          type="checkbox"
+                          checked={studentForm.enrollSubjects}
+                          onChange={e => setStudentForm({...studentForm, enrollSubjects: e.target.checked})}
+                          className="w-4 h-4 cursor-pointer focus:outline-[#005c8d] accent-[#005c8d]"
+                        />
+                        Dodaj predmete svim učenicima
+                      </label>
+                    </div>
+                  )}
                   <button 
                     disabled={loading}
                     className="md:col-start-4 lg:col-start-6 bg-[#005c8d] text-white px-4 py-2 border border-[#004a70] font-black text-[10px] uppercase hover:bg-[#004a70]"
@@ -4177,7 +4284,7 @@ setAllSubjects(uniqueSub2);
                           <td className="px-4 py-3 border-r border-gray-200 font-black text-[#005c8d]">{razred?.name}</td>
                           <td className="px-4 py-3 border-r border-gray-200 font-bold uppercase tracking-tighter">{sub?.name}</td>
                           <td className="px-4 py-3 border-r border-gray-200 font-bold text-gray-600 uppercase">
-                            {tea?.surname} {tea?.name}
+                            {formatPersonName(tea)}
                             {a.groupName && <span className="ml-2 text-[9px] text-[#005c8d] font-black">[{a.groupName}]</span>}
                           </td>
                           {user?.role === Role.ADMIN && (
@@ -4957,10 +5064,10 @@ setAllSubjects(uniqueSub2);
                                 <td className="px-6 py-4 text-center">
                                   <div className="flex flex-col gap-0.5 items-center">
                                      {homeroom ? (
-                                       <div className="text-[10px] font-bold text-gray-700">{homeroom.surname} {homeroom.name}</div>
+                                       <div className="text-[10px] font-bold text-gray-700">{formatPersonName(homeroom)}</div>
                                      ) : <div className="text-[10px] text-gray-300 italic">Nije dodijeljen</div>}
                                      {deputy && (
-                                       <div className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Zamj: {deputy.surname}</div>
+                                       <div className="text-[8px] font-black text-gray-400 uppercase tracking-tighter">Zamj: {formatPersonName(deputy)}</div>
                                      )}
                                   </div>
                                 </td>
@@ -5499,7 +5606,7 @@ setAllSubjects(uniqueSub2);
                         <div className="flex items-center justify-between border-b pb-2 mb-4">
                           <h4 className="text-[10px] font-black text-[#005c8d] uppercase">Dodijeli ulogu u školi</h4>
                           <span className="text-[10px] font-bold text-gray-500">
-                            {allUsers.find(u => u.id === selectedUserForRole)?.name} {allUsers.find(u => u.id === selectedUserForRole)?.surname}
+                            {formatPersonName(allUsers.find(u => u.id === selectedUserForRole))}
                           </span>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -5632,7 +5739,7 @@ setAllSubjects(uniqueSub2);
                     <span>{resetModal.generatedAt}</span>
                   </div>
                   <div className="text-md font-black text-gray-800 uppercase tracking-tight">
-                    {resetModal.user.name} {resetModal.user.surname}
+                    {formatPersonName(resetModal.user)}
                   </div>
                   <div className="text-[11px] font-bold text-[#005c8d]">
                     {resetModal.user.username || resetModal.user.email}
@@ -5674,7 +5781,7 @@ setAllSubjects(uniqueSub2);
                             <div class="slip">
                               <div class="school">${currentSchool}</div>
                               <div class="label">Korisnik</div>
-                              <div class="value">${resetModal.user?.name} ${resetModal.user?.surname}</div>
+                              <div class="value">${formatPersonName(resetModal.user)}</div>
                               <div class="label">Korisničko ime / Email</div>
                               <div class="value">${resetModal.user?.username || resetModal.user?.email}</div>
                               <div class="label">Jednokratna lozinka</div>

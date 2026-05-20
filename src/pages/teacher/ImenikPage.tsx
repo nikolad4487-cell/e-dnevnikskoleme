@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
-import { Class, User, Role, Grade, Subject, StudentNote, SpecialExam, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary } from '../../types';
+import { Class, User, Role, Grade, Subject, StudentNote, Exam, FinalGrade, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary, specialExamTypeLabels } from '../../types';
 import { cn, formatName, getSurname, formatSubjectDisplayName } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2, Check } from 'lucide-react';
@@ -50,8 +50,8 @@ export default function ImenikPage() {
   
   const [currentGrades, setCurrentGrades] = useState<Grade[]>([]);
   const [currentNotes, setCurrentNotes] = useState<StudentNote[]>([]);
-  const [finalGrades, setFinalGrades] = useState<Grade[]>([]);
-  const [specialExams, setSpecialExams] = useState<SpecialExam[]>([]);
+  const [finalGrades, setFinalGrades] = useState<FinalGrade[]>([]);
+  const [specialExams, setSpecialExams] = useState<Exam[]>([]);
   const [studentOverallNotes, setStudentOverallNotes] = useState<StudentNotes | null>(null);
   const [classOverallNotes, setClassOverallNotes] = useState<ClassNotes | null>(null);
   const [studentYearSummary, setStudentYearSummary] = useState<StudentYearSummary | null>(null);
@@ -89,9 +89,10 @@ export default function ImenikPage() {
     customDate: new Date().toISOString().split('T')[0] 
   });
   const [newSpecialExam, setNewSpecialExam] = useState({
-    type: 'Dopunski' as 'Dopunski' | 'Razlikovni',
+    type: 'SUPPLEMENTARY_WORK',
     note: '',
-    grade: 5
+    grade: 0,
+    customDate: new Date().toISOString().split('T')[0]
   });
   const [newNote, setNewNote] = useState({
     content: '',
@@ -363,21 +364,11 @@ export default function ImenikPage() {
         if (data) setFinalGrades(mapList(data, mappers.grade));
       };
 
-      const fetchSpecials = async () => {
-        const { data } = await supabase
-          .from('special_exams')
-          .select('*')
-          .eq('student_id', activeStudent.id)
-          .eq('subject_id', activeSubject.id)
-          .eq('class_id', effectiveClassId);
-        if (data) setSpecialExams(data);
-      };
-
       fetchGradingElements();
       fetchGrades();
       fetchNotes();
       fetchFinals();
-      fetchSpecials();
+      fetchSpecialExams();
 
       /* Realtime disabled to prevent loops
       gradeChannel = supabase.channel('grades_changes')
@@ -473,6 +464,40 @@ export default function ImenikPage() {
     };
   }, [viewMode, activeStudent, effectiveClassId, isEditingOverallNotes]);
 
+  const fetchSpecialExams = async () => {
+    if (!activeStudent?.id || !activeSubject?.id || !effectiveClassId) return;
+
+    const selectedClass = classes.find(c => c.id === effectiveClassId);
+    const schoolYearId = selectedClass?.school_year_id || '';
+
+    try {
+      const { data, error } = await supabase
+        .from('exams')
+        .select('*')
+        .eq('student_id', activeStudent.id)
+        .eq('class_id', effectiveClassId)
+        .eq('subject_id', activeSubject.id)
+        .eq('school_year_id', schoolYearId)
+        .in('exam_type', [
+            'SUPPLEMENTARY_WORK',
+            'MAKEUP_EXAM',
+            'DIFFERENTIAL_EXAM',
+            'CLASS_EXAM',
+            'SUBJECT_EXAM'
+        ]);
+      
+      console.log("TEACHER INITIAL SPECIAL EXAMS LOAD");
+      console.log("TEACHER SPECIAL EXAMS FILTERS", { student_id: activeStudent.id, class_id: effectiveClassId, subject_id: activeSubject.id, school_year_id: schoolYearId });
+      console.log("TEACHER SPECIAL EXAMS RESULT", data);
+      console.log("TEACHER SPECIAL EXAMS ERROR", error);
+
+      if (error) throw error;
+      setSpecialExams(mapList(data || [], mappers.exam));
+    } catch (err) {
+      console.error("Error fetching special exams:", err);
+    }
+  };
+
   const fetchGradesAndNotes = async () => {
     if (!activeStudent || !activeSubject) return;
     setLoading(true);
@@ -495,21 +520,14 @@ export default function ImenikPage() {
       setCurrentNotes(mapList(notes, mappers.studentNote) as any);
 
       const { data: finals } = await supabase
-        .from('grades')
-        .select('*')
-        .eq('student_id', activeStudent.id)
-        .eq('subject_id', activeSubject.id)
-        .eq('class_id', effectiveClassId)
-        .eq('is_final', true);
-      setFinalGrades(mapList(finals || [], mappers.grade));
-
-      const { data: specials } = await supabase
-        .from('special_exams')
+        .from('final_grades')
         .select('*')
         .eq('student_id', activeStudent.id)
         .eq('subject_id', activeSubject.id)
         .eq('class_id', effectiveClassId);
-      setSpecialExams(mapList(specials || [], mappers.specialExam));
+      setFinalGrades(mapList(finals || [], mappers.finalGrade));
+
+      await fetchSpecialExams();
     } finally {
       setLoading(false);
     }
@@ -891,24 +909,31 @@ export default function ImenikPage() {
       toast.error('Nije moguće uređivati arhivirane podatke.');
       return;
     }
+    
+    const selectedClass = classes.find(c => c.id === effectiveClassId);
+    const schoolYearId = selectedClass?.school_year_id || '';
+    
     try {
-      const { error } = await supabase.from('special_exams').insert([{
+      const payload = {
         student_id: activeStudent.id,
         subject_id: activeSubject.id,
         class_id: effectiveClassId,
-        school_id: selectedSchoolId,
         teacher_id: user.id,
-        type: newSpecialExam.type,
+        school_year_id: schoolYearId,
+        exam_type: newSpecialExam.type,
         note: newSpecialExam.note,
-        grade: newSpecialExam.grade,
-        timestamp: new Date().toISOString()
-      }]);
+        grade_value: newSpecialExam.grade || null,
+        exam_date: newSpecialExam.customDate || new Date().toISOString().split('T')[0]
+      };
+      console.log("EXAM PAYLOAD", payload);
+      
+      const { error } = await supabase.from('exams').insert([payload]);
       if (error) throw error;
       setShowSpecialExamModal(false);
       fetchGradesAndNotes();
-    } catch (err) {
-      console.error(err);
-      toast.error('Greška pri dodavanju ispita');
+    } catch (err: any) {
+      console.error("EXAM ERROR", err);
+      toast.error(`Greška: ${err.message}`);
     }
   };
 
@@ -929,44 +954,46 @@ export default function ImenikPage() {
     try {
       setLoading(true);
       
+      const selectedClass = classes.find(c => c.id === effectiveClassId);
+      const schoolYearId = selectedClass?.school_year_id || '';
+      
       const { data: existing, error: fe } = await supabase
-        .from('grades')
+        .from('final_grades')
         .select('id')
         .eq('student_id', activeStudent.id)
         .eq('subject_id', activeSubject.id)
         .eq('class_id', effectiveClassId)
-        .eq('is_final', true)
+        .eq('term', selectedFinalPeriod === '1' ? 'FIRST_SEMESTER' : 'FINAL')
         .maybeSingle();
 
       if (fe) throw fe;
       
-      const numericGrade = typeof val === 'number' ? val : 0;
+      const gradeText = typeof val === 'number' ? val.toString() : val;
       const payload = {
         student_id: activeStudent.id,
         subject_id: activeSubject.id,
         class_id: effectiveClassId,
-        school_id: selectedSchoolId,
         teacher_id: user.id,
-        value: numericGrade,
-        note: typeof val === 'string' ? val : '',
-        period: 'FINAL', // Always save as FINAL as requested
-        grade_type: 'FINAL',
-        is_final: true,
-        date: new Date().toISOString().split('T')[0]
+        school_year_id: schoolYearId,
+        term: selectedFinalPeriod === '1' ? 'FIRST_SEMESTER' : 'FINAL',
+        value: gradeText,
+        note: '', // Could be prompted later
       };
+      
+      console.log("FINAL GRADE PAYLOAD", payload);
 
       if (existing) {
-        const { error } = await supabase.from('grades').update(payload).eq('id', existing.id);
+        const { error } = await supabase.from('final_grades').update(payload).eq('id', existing.id);
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('grades').insert([payload]);
+        const { error } = await supabase.from('final_grades').insert([payload]);
         if (error) throw error;
       }
       toast.success('Zaključna ocjena spremljena.');
       setShowFinalGradeModal(false);
       fetchGradesAndNotes();
     } catch (err: any) {
-      console.error(err);
+      console.error("FINAL GRADE ERROR", err);
       toast.error(`Greška: ${err.message}`);
     } finally {
       setLoading(false);
@@ -992,8 +1019,8 @@ export default function ImenikPage() {
     switch (deleteDialog.type) {
       case 'GRADE': tableName = 'grades'; break;
       case 'NOTE': tableName = 'student_notes'; break;
-      case 'SPECIAL_EXAM': tableName = 'special_exams'; break;
-      case 'FINAL_GRADE': tableName = 'grades'; break;
+      case 'SPECIAL_EXAM': tableName = 'exams'; break;
+      case 'FINAL_GRADE': tableName = 'final_grades'; break;
     }
 
     try {
@@ -1431,20 +1458,31 @@ export default function ImenikPage() {
                  <td className="p-2 border border-gray-300 text-[10px] font-bold text-[#005c8d] uppercase">Zaključna ocjena</td>
                  <td className="border border-gray-300 text-center" colSpan={4}>
                     {(() => {
-                      const fg = finalGrades.find(f => f.period === '1');
+                      const fg = finalGrades.find(f => f.term === 'FIRST_SEMESTER');
                       const suggested = getSuggestedGrade(Number(avg));
                       return (
                         <div className="w-full h-full p-2 flex flex-col items-center justify-center min-h-[40px]">
                           {fg ? (
-                            <div className="flex items-center gap-2 group">
-                              <span className="text-[8px] font-bold text-gray-400 uppercase">1. pol:</span>
-                              <span className="font-bold text-[#005c8d] text-base">{fg.value === 0 ? fg.note : fg.value}</span>
-                              {canEditGrades(activeSubject?.id || '') && (
+                            <div className="flex flex-col items-center gap-1">
+                              <div className="flex items-center gap-2 group">
+                                <span className="text-[8px] font-bold text-gray-400 uppercase">1. pol:</span>
+                                <span className="font-bold text-[#005c8d] text-base">{fg.value}</span>
+                                {canEditGrades(activeSubject?.id || '') && (
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteFinalGrade(fg.id); }}
+                                    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 p-1"
+                                    title="Obriši zaključnu ocjenu"
+                                  >
+                                    <Trash2 size={12}/>
+                                  </button>
+                                )}
+                              </div>
+                              {(fg.value === '1' || fg.value === 'Neocijenjen') && canEditGrades(activeSubject?.id || '') && (
                                 <button 
-                                  onClick={(e) => { e.stopPropagation(); handleDeleteFinalGrade(fg.id); }}
-                                  className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 p-1"
+                                  onClick={() => setShowSpecialExamModal(true)}
+                                  className="mt-1 text-[9px] bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded shadow-xs hover:bg-red-100 hover:text-red-700 transition font-bold uppercase"
                                 >
-                                  <Trash2 size={12}/>
+                                  Ispiti
                                 </button>
                               )}
                             </div>
@@ -1467,20 +1505,31 @@ export default function ImenikPage() {
                  </td>
                  <td className="border border-gray-300 text-center" colSpan={6}>
                     {(() => {
-                      const fg = finalGrades.find(f => f.period === 'FINAL');
+                      const fg = finalGrades.find(f => f.term === 'FINAL');
                       const suggested = getSuggestedGrade(Number(avg));
                       return (
                         <div className="w-full h-full p-2 flex flex-col items-center justify-center min-h-[40px]">
                           {fg ? (
-                            <div className="flex items-center gap-2 group">
-                              <span className="text-[8px] font-bold text-gray-400 uppercase">Zaključna:</span>
-                              <span className="font-bold text-[#005c8d] text-base">{fg.value === 0 ? fg.note : fg.value}</span>
-                              {canEditGrades(activeSubject?.id || '') && (
+                            <div className="flex flex-col items-center gap-1">
+                              <div className="flex items-center gap-2 group">
+                                <span className="text-[8px] font-bold text-gray-400 uppercase">Zaključna:</span>
+                                <span className="font-bold text-[#005c8d] text-base">{fg.value}</span>
+                                {canEditGrades(activeSubject?.id || '') && (
+                                  <button 
+                                    onClick={(e) => { e.stopPropagation(); handleDeleteFinalGrade(fg.id); }}
+                                    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 p-1"
+                                    title="Obriši zaključnu ocjenu"
+                                  >
+                                    <Trash2 size={12}/>
+                                  </button>
+                                )}
+                              </div>
+                              {(fg.value === '1' || fg.value === 'Neocijenjen') && canEditGrades(activeSubject?.id || '') && (
                                 <button 
-                                  onClick={(e) => { e.stopPropagation(); handleDeleteFinalGrade(fg.id); }}
-                                  className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 p-1"
+                                  onClick={() => setShowSpecialExamModal(true)}
+                                  className="mt-1 text-[9px] bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded shadow-xs hover:bg-red-100 hover:text-red-700 transition font-bold uppercase"
                                 >
-                                  <Trash2 size={12}/>
+                                  Ispiti
                                 </button>
                               )}
                             </div>
@@ -1525,9 +1574,9 @@ export default function ImenikPage() {
                   {specialExams.length === 0 ? (<tr><td colSpan={4} className="p-4 text-center text-gray-400 italic">Nema podataka</td></tr>) : 
                   specialExams.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(ex => (
                     <tr key={ex.id} className="group hover:bg-gray-50 border-b border-gray-200 last:border-0 text-[11px]">
-                      <td className="p-2 font-bold text-[#005c8d]">{ex.type}</td>
+                      <td className="p-2 font-bold text-[#005c8d]">{specialExamTypeLabels[ex.type] || ex.type}</td>
                       <td className="p-2 text-gray-600">{ex.note}</td>
-                      <td className="p-2 text-center border-x border-gray-200 font-bold">{ex.grade}</td>
+                      <td className="p-2 text-center border-x border-gray-200 font-bold">{ex.gradeValue}</td>
                       <td className="p-2">
                         <button 
                           onClick={() => handleDeleteSpecialExam(ex.id)} 
@@ -1749,13 +1798,38 @@ export default function ImenikPage() {
       {showSpecialExamModal && (
         <div className="fixed inset-0 bg-[#005c8d]/60 backdrop-blur-none flex items-center justify-center z-[300] p-4 text-center">
           <div className="bg-white max-w-xl w-full relative overflow-hidden border border-gray-400">
-             <div className="p-2 bg-[#005c8d] text-white flex justify-between items-center text-[11px] font-bold uppercase"><h3>Dopunski / Razlikovni ispit</h3><button onClick={()=>setShowSpecialExamModal(false)}><X size={16}/></button></div>
+             <div className="p-2 bg-[#005c8d] text-white flex justify-between items-center text-[11px] font-bold uppercase"><h3>Ispiti</h3><button onClick={()=>setShowSpecialExamModal(false)}><X size={16}/></button></div>
              <div className="p-6 space-y-4 text-left">
+                <div className="font-bold text-sm text-[#005c8d] border-b pb-2 mb-2">{subjectDisplayName}</div>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Vrsta</label><select value={newSpecialExam.type} onChange={e => setNewSpecialExam({...newSpecialExam, type: e.target.value as any})} className="w-full border p-1 text-[11px] font-bold leading-tight"><option value="Dopunski">Dopunski</option><option value="Razlikovni">Razlikovni</option></select></div>
-                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Ocjena</label><select value={newSpecialExam.grade} onChange={e => setNewSpecialExam({...newSpecialExam, grade: parseInt(e.target.value)})} className="w-full border p-1 text-[11px] font-bold leading-tight">{[1,2,3,4,5].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
+                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Vrsta</label>
+                  <select value={newSpecialExam.type} onChange={e => setNewSpecialExam({...newSpecialExam, type: e.target.value as any})} className="w-full border p-1 text-[11px] font-bold leading-tight">
+                    {(() => {
+                      const fg = finalGrades.find(f => f.term === 'FINAL' || f.term === 'FIRST_SEMESTER');
+                      // If '1', show one set, if 'Neocijenjen' show another
+                      if (fg?.value === 'Neocijenjen') {
+                        return (
+                          <>
+                            <option value="CLASS_EXAM">Razredni ispit</option>
+                            <option value="SUBJECT_EXAM">Predmetni ispit</option>
+                          </>
+                        );
+                      }
+                      // Default or Grade 1
+                      return (
+                        <>
+                          <option value="SUPPLEMENTARY_WORK">Dopunski ispit</option>
+                          <option value="MAKEUP_EXAM">Popravni ispit</option>
+                          <option value="DIFFERENTIAL_EXAM">Razlikovni ispit</option>
+                        </>
+                      );
+                    })()}
+                  </select>
+                  </div>
+                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Ocjena</label><select value={newSpecialExam.grade} onChange={e => setNewSpecialExam({...newSpecialExam, grade: parseInt(e.target.value)})} className="w-full border p-1 text-[11px] font-bold leading-tight"><option value="0">Unesi...</option>{[1,2,3,4,5].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
                 </div>
-                <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Bilješka</label><textarea value={newSpecialExam.note} onChange={e => setNewSpecialExam({...newSpecialExam, note: e.target.value})} rows={2} className="w-full border p-2 text-[11px]" placeholder="npr. 1. razlikovni ispit..." /></div>
+                <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Datum</label><input type="date" value={newSpecialExam.customDate || new Date().toISOString().split('T')[0]} onChange={e => setNewSpecialExam({...newSpecialExam, customDate: e.target.value})} className="w-full border p-1 text-[11px] font-bold leading-tight" /></div>
+                <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Bilješka / Opis</label><textarea value={newSpecialExam.note} onChange={e => setNewSpecialExam({...newSpecialExam, note: e.target.value})} rows={2} className="w-full border p-2 text-[11px]" placeholder="npr. Pismeni dio, opis rezultata..." /></div>
                 <button onClick={handleAddSpecialExam} className="w-full py-2 bg-[#005c8d] text-white font-bold uppercase text-[11px]">Spremi ispit</button>
              </div>
           </div>
@@ -1771,8 +1845,11 @@ export default function ImenikPage() {
                 <div className="grid grid-cols-5 gap-1">
                    {[1,2,3,4,5].map(v => (<button key={v} onClick={()=>handleAddFinalGrade(v)} className="h-10 border bg-blue-50 text-[#005c8d] font-bold text-lg hover:bg-[#005c8d] hover:text-white transition-all">{v}</button>))}
                 </div>
-                <div className="grid grid-cols-2 gap-1">
+                <div className="grid grid-cols-2 gap-1 mb-1">
                    {['Neocijenjen', 'Oslobođen'].map(v => (<button key={v} onClick={()=>handleAddFinalGrade(v)} className="py-1 border bg-gray-50 text-[10px] font-bold uppercase text-gray-400 hover:bg-[#005c8d] hover:text-white transition-all">{v}</button>))}
+                </div>
+                <div className="grid grid-cols-2 gap-1">
+                   {['Odrađeno', 'Neodrađeno'].map(v => (<button key={v} onClick={()=>handleAddFinalGrade(v)} className="py-1 border bg-gray-50 text-[10px] font-bold uppercase text-gray-400 hover:bg-[#005c8d] hover:text-white transition-all">{v}</button>))}
                 </div>
                 <button onClick={()=>setShowFinalGradeModal(false)} className="w-full py-2 bg-gray-200 text-gray-700 font-bold uppercase text-[11px] hover:bg-gray-300">Odustani</button>
              </div>

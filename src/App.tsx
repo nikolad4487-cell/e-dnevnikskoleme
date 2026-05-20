@@ -151,9 +151,11 @@ const OcjenePage = lazy(() => import('./pages/student/OcjenePage'));
 const BiljeskePage = lazy(() => import('./pages/student/BiljeskePage'));
 const IzostanciPage = lazy(() => import('./pages/student/IzostanciPage'));
 const RasporedPage = lazy(() => import('./pages/student/RasporedPage'));
+const StudentIspitiPage = lazy(() => import('./pages/student/StudentIspitiPage'));
 
 // Shared
 const InformativkaPage = lazy(() => import('./pages/shared/InformativkaPage'));
+const InformativkaAdminPage = lazy(() => import('./pages/admin/InformativkaAdminPage'));
 const SettingsPage = lazy(() => import('./pages/shared/SettingsPage'));
 const AuthenticatorSetupPage = lazy(() => import('./pages/auth/AuthenticatorSetupPage'));
 
@@ -239,6 +241,7 @@ export default function App() {
                       <Route path="razred-ucenici" element={<ClassStudentsPage />} />
                       <Route path="student-predmeti" element={<StudentSubjectEnrollmentPage />} />
                       <Route path="raspored" element={<ScheduleManagementPage />} />
+                      <Route path="informativka" element={<InformativkaAdminPage />} />
                       <Route path="korisnici" element={<UserManagementPage />} />
                       <Route path="predmeti" element={<SubjectManagementPage />} />
                       <Route path="*" element={<Navigate to="/admin/schools" replace />} />
@@ -261,6 +264,7 @@ export default function App() {
                     <Layout>
                       <Routes>
                         <Route path="pretrazivanje" element={<PretrazivanjePage />} />
+                        <Route path="informativka" element={<InformativkaPage />} />
                         <Route path="postavke" element={<SettingsPage />} />
                         <Route path="*" element={<Navigate to="/" replace />} />
                       </Routes>
@@ -276,9 +280,11 @@ export default function App() {
                       <Routes>
                         <Route path="ocjene" element={<OcjenePage />} />
                         <Route path="biljeske" element={<BiljeskePage />} />
+                        <Route path="ispiti" element={<StudentIspitiPage />} />
                         <Route path="izostanci" element={<IzostanciPage />} />
                         <Route path="raspored" element={<RasporedPage />} />
-                        <Route path="informatika" element={<InformativkaPage />} />
+                        <Route path="informativka" element={<InformativkaPage />} />
+                        <Route path="informatika" element={<Navigate to="/student/informativka" replace />} />
                         <Route path="postavke" element={<SettingsPage />} />
                         <Route path="*" element={<Navigate to="/student/ocjene" replace />} />
                       </Routes>

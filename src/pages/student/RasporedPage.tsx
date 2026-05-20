@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, Subject, ScheduleCell, ScheduleCellSubject, StudentSubjectEnrollment, Role } from '../../types';
-import { cn } from '../../lib/utils';
+import { cn, formatPersonName } from '../../lib/utils';
 import { Clock, Monitor, BookOpen } from 'lucide-react';
 import { mappers } from '../../lib/mappers';
 
@@ -124,7 +124,7 @@ export default function RasporedPage() {
           Tjedni raspored sati: {classData?.name}
         </h2>
         <div className="text-[10px] font-bold opacity-70 uppercase tracking-tighter">
-          Učenik: {studentData?.name} {studentData?.surname}
+          Učenik: {formatPersonName(studentData)}
         </div>
       </div>
 

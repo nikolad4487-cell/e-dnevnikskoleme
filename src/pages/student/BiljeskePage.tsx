@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, StudentNotes, ClassNotes, StudentYearSummary } from '../../types';
 import { ClipboardList, User as UserIcon } from 'lucide-react';
+import { formatPersonName } from '../../lib/utils';
 
 export default function BiljeskePage() {
   const { user } = useAuth();
@@ -42,8 +43,7 @@ export default function BiljeskePage() {
           if (sData) {
             currentStudent = { 
               id: sData.id, 
-              name: sData.name.split(' ')[0], 
-              surname: sData.name.split(' ').slice(1).join(' '),
+              name: sData.name, 
               email: sData.email
             } as User;
             setStudentData(currentStudent);
@@ -57,11 +57,11 @@ export default function BiljeskePage() {
 
             if (cData.homeroom_teacher_id) {
               const { data: tData } = await supabase.from('user_profiles').select('*').eq('id', cData.homeroom_teacher_id).maybeSingle();
-              if (tData) setHomeroomTeacher({ id: tData.id, name: tData.name.split(' ')[0], surname: tData.name.split(' ').slice(1).join(' ') } as User);
+              if (tData) setHomeroomTeacher({ id: tData.id, name: tData.name } as any);
             }
             if (cData.deputy_homeroom_teacher_id) {
               const { data: dData } = await supabase.from('user_profiles').select('*').eq('id', cData.deputy_homeroom_teacher_id).maybeSingle();
-              if (dData) setDeputyTeacher({ id: dData.id, name: dData.name.split(' ')[0], surname: dData.name.split(' ').slice(1).join(' ') } as User);
+              if (dData) setDeputyTeacher({ id: dData.id, name: dData.name } as any);
             }
 
             // Fetch Notes
@@ -128,13 +128,13 @@ export default function BiljeskePage() {
           {/* 1. Razrednik */}
           <Section 
             title="Razrednik" 
-            content={classNotes?.homeroom_info || (homeroomTeacher ? `${homeroomTeacher.name} ${homeroomTeacher.surname}` : '')}
+            content={classNotes?.homeroom_info || (homeroomTeacher ? formatPersonName(homeroomTeacher) : '')}
           />
 
           {/* 2. Zamjenik razrednika */}
           <Section 
             title="Zamjenik razrednika" 
-            content={classNotes?.deputy_info || (deputyTeacher ? `${deputyTeacher.name} ${deputyTeacher.surname}` : '')}
+            content={classNotes?.deputy_info || (deputyTeacher ? formatPersonName(deputyTeacher) : '')}
           />
 
           <div className="border-b border-gray-300 pb-2 pt-4">

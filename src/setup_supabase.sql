@@ -281,13 +281,37 @@ CREATE TABLE public.exams (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
     subject_id TEXT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
-    date DATE NOT NULL,
-    type TEXT NOT NULL,
+    student_id UUID REFERENCES public.user_profiles(id) DEFAULT NULL, -- For supplementary/makeup/differential exams
+    teacher_id UUID REFERENCES public.user_profiles(id) DEFAULT NULL,
+    school_year_id TEXT REFERENCES public.school_years(id) DEFAULT NULL,
+    exam_date DATE NOT NULL,
+    exam_type TEXT NOT NULL,
+    grade_value INTEGER DEFAULT NULL,
     description TEXT,
+    note TEXT DEFAULT NULL,
     created_by UUID REFERENCES public.user_profiles(id),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 13.b Final Grades
+CREATE TABLE public.final_grades (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    subject_id TEXT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    teacher_id UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+    school_year_id TEXT REFERENCES public.school_years(id) ON DELETE CASCADE,
+    term TEXT NOT NULL CHECK (term IN ('FIRST_SEMESTER', 'FINAL')),
+    value TEXT NOT NULL,
+    note TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(student_id, class_id, subject_id, term)
+);
+ALTER TABLE public.final_grades ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Authenticated manage final_grades" ON public.final_grades FOR ALL TO authenticated USING (true);
+
 
 -- 14. Schedule Cells
 CREATE TABLE public.schedule_cells (
@@ -471,11 +495,61 @@ CREATE TABLE IF NOT EXISTS public.student_parent_contacts (
   updated_at timestamptz DEFAULT now()
 );
 
--- Enable RLS
-ALTER TABLE public.student_parent_contacts ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Authenticated manage" ON public.student_parent_contacts FOR ALL TO authenticated USING (true);
+-- 24. Chat System Tables
 
--- 24. View for Active Classes (Used for Student Registration)
+CREATE TABLE IF NOT EXISTS public.chat_groups (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    school_id TEXT REFERENCES public.schools(id),
+    class_id TEXT REFERENCES public.classes(id),
+    subject_id TEXT REFERENCES public.subjects(id),
+    name TEXT,
+    type TEXT NOT NULL DEFAULT 'PRIVATE', -- PRIVATE, PRIVATE_GROUP, SUBJECT_CHANNEL, CUSTOM_CHANNEL
+    created_by UUID REFERENCES public.user_profiles(id),
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.chat_group_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID NOT NULL REFERENCES public.chat_groups(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+    role TEXT NOT NULL DEFAULT 'MEMBER',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(group_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    group_id UUID NOT NULL REFERENCES public.chat_groups(id) ON DELETE CASCADE,
+    sender_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+    content TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.message_attachments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id UUID NOT NULL REFERENCES public.messages(id) ON DELETE CASCADE,
+    file_url TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    file_type TEXT NOT NULL,
+    file_size INTEGER,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE public.chat_groups ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.chat_group_members ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.message_attachments ENABLE ROW LEVEL SECURITY;
+
+-- Policies
+CREATE POLICY "Authenticated manage" ON public.chat_groups FOR ALL TO authenticated USING (true);
+CREATE POLICY "Authenticated manage" ON public.chat_group_members FOR ALL TO authenticated USING (true);
+CREATE POLICY "Authenticated manage" ON public.messages FOR ALL TO authenticated USING (true);
+CREATE POLICY "Authenticated manage" ON public.message_attachments FOR ALL TO authenticated USING (true);
+
+-- Enable RLS
 CREATE OR REPLACE VIEW public.active_classes_current_year AS
 SELECT
   c.*,

@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
-import { cn, getSurname } from '../../lib/utils';
+import { cn, getSurname, formatPersonName } from '../../lib/utils';
 import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2 } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
@@ -312,7 +312,7 @@ setStudents(uniqueStudents);
             .from('exams')
             .select('*')
             .eq('class_id', effectiveClassId)
-            .order('date', { ascending: false });
+            .order('exam_date', { ascending: false });
           if (error) throw error;
 
           setCurrentClassExams(mapList(data || [], mappers.exam));
@@ -489,7 +489,7 @@ setStudents(uniqueStudents);
 
       const payload = {
           class_id: effectiveClassId,
-          school_year_id: currentClass.schoolYearId, // Ensure we use school_year_id
+          school_year_id: currentClass.school_year_id, // Ensure we use school_year_id
           school_year: currentClass.schoolYear,
           school_id: selectedSchoolId,
           name: newWeek.name,
@@ -705,7 +705,7 @@ setStudents(uniqueStudents);
         const lessonData: any = {
           class_id: effectiveClassId,
           school_id: selectedSchoolId,
-          school_year_id: currentClass?.schoolYearId,
+          school_year_id: currentClass?.school_year_id,
           work_week_id: selectedWeek?.id,
           date: selectedDate,
           hour: currentHour,
@@ -719,7 +719,7 @@ setStudents(uniqueStudents);
           materials: lessonForm.materials || '',
           teacher_id: lessonForm.teacherId || user.id,
           created_by_user_id: user.id,
-          teacher_display_name: `${user.surname} ${user.name}`,
+          teacher_display_name: formatPersonName(user),
           updated_at: new Date().toISOString()
         };
 
@@ -787,8 +787,8 @@ setStudents(uniqueStudents);
         .from('exams')
         .insert({
           subject_id: examForm.subjectId,
-          date: examForm.date,
-          type: examForm.type,
+          exam_date: examForm.date,
+          exam_type: examForm.type,
           description: examForm.description,
           class_id: effectiveClassId,
           school_id: selectedSchoolId,
@@ -1247,7 +1247,10 @@ setStudents(uniqueStudents);
               <div className="flex items-center gap-2 text-[11px] font-bold">
                 <span className="text-gray-400 uppercase text-[9px] tracking-widest">Dežurni:</span>
                 <span className="text-[#005c8d]">
-                  {Array.from(new Set(selectedWeek?.onDutyStudentIds || [])).map(sid => students.find(s => s.id === sid)?.surname).filter(Boolean).join(', ') || 'Nema dežurnih'}
+                  {Array.from(new Set(selectedWeek?.onDutyStudentIds || [])).map(sid => {
+                    const studentObj = students.find(s => s.id === sid);
+                    return studentObj ? formatPersonName(studentObj) : '';
+                  }).filter(Boolean).join(', ') || 'Nema dežurnih'}
                 </span>
               </div>
             </div>
@@ -1306,7 +1309,7 @@ setStudents(uniqueStudents);
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="flex-1">
                                         <div className="font-bold text-[#005c8d] uppercase mb-0.5">
-                                          {(sub?.name || 'Predmet').toUpperCase()} - {lesson.teacherDisplayName || (teacher ? `${teacher.surname} ${teacher.name}` : 'Nepoznat nastavnik')} {lesson.groupName ? <span className="text-gray-400 font-normal italic lowercase ml-1">({lesson.groupName})</span> : ''}
+                                          {(sub?.name || 'Predmet').toUpperCase()} - {lesson.teacherDisplayName && !lesson.teacherDisplayName.includes('undefined') ? lesson.teacherDisplayName : (teacher ? formatPersonName(teacher) : 'Nepoznat nastavnik')} {lesson.groupName ? <span className="text-gray-400 font-normal italic lowercase ml-1">({lesson.groupName})</span> : ''}
                                         </div>
                                         <div className={cn("text-gray-800 font-medium whitespace-pre-wrap", !lesson.isHeld && "line-through text-red-400")}>
                                           {lesson.isHeld ? (lesson.topic || <span className="text-gray-300 italic">Nije upisana tema...</span>) : "SAT NIJE ODRŽAN"}
@@ -1850,10 +1853,10 @@ setStudents(uniqueStudents);
                    <div className="space-y-1">
                       <label className="text-[9px] font-black text-gray-400 uppercase">Nastavnik (Automatski dodijeljen)</label>
                       <div className="w-full border border-gray-100 bg-gray-50 p-2 text-xs font-bold text-gray-400 uppercase h-10 flex items-center">
-                        {teachers.find(t => t.id === cellSubjectForm.teacherId) ? 
-                          `${teachers.find(t => t.id === cellSubjectForm.teacherId)?.surname} ${teachers.find(t => t.id === cellSubjectForm.teacherId)?.name}` : 
-                          'Odaberite predmet s nastavnikom'
-                        }
+                        {(() => {
+                          const tea = teachers.find(t => t.id === cellSubjectForm.teacherId);
+                          return tea ? formatPersonName(tea) : 'Odaberite predmet s nastavnikom';
+                        })()}
                       </div>
                    </div>
                    <div className="space-y-1">
@@ -1885,7 +1888,7 @@ setStudents(uniqueStudents);
                       <div key={s.id} className="py-2 flex items-center justify-between">
                         <div>
                           <div className="text-[11px] font-black text-[#005c8d] uppercase">{sub?.name}</div>
-                          <div className="text-[9px] text-gray-400 font-bold uppercase">{tea?.surname} {tea?.name} {s.classroom && `• ${s.classroom}`}</div>
+                          <div className="text-[9px] text-gray-400 font-bold uppercase">{formatPersonName(tea)} {s.classroom && `• ${s.classroom}`}</div>
                         </div>
                         <button 
                           onClick={() => handleRemoveScheduleSubject(s.id)}
@@ -1962,7 +1965,7 @@ function ScheduleGrid({ title, shift, periods, days, onCellClick, getCellSubject
                             return (
                               <div key={s.id} className="bg-white border border-gray-200 p-1">
                                 <div className="font-bold text-[#005c8d] uppercase leading-tight">{sub?.name}</div>
-                                <div className="text-[8px] text-gray-400 font-bold uppercase">{tea?.surname} {s.classroom && `• ${s.classroom}`}</div>
+                                <div className="text-[8px] text-gray-400 font-bold uppercase">{formatPersonName(tea)} {s.classroom && `• ${s.classroom}`}</div>
                               </div>
                             );
                          })}

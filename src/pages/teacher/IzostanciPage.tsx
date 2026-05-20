@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Absence, AbsenceStatus, User, Lesson, Subject } from '../../types';
-import { cn, getSurname } from '../../lib/utils';
+import { cn, getSurname, formatPersonName } from '../../lib/utils';
 import { UserX, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mappers, mapList } from '../../lib/mappers';
@@ -102,7 +102,7 @@ export default function TeacherIzostanciPage() {
         <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter flex items-center gap-2">
             {selectedStudent && <button onClick={() => setSelectedStudent(null)} className="mr-2"><ArrowLeft /></button>}
             <UserX size={20} className="text-[#005c8d]" />
-            {selectedStudent ? `Izostanci učenika - ${selectedStudent.name} ${selectedStudent.surname}` : "Pregled i pravdanje izostanaka"}
+            {selectedStudent ? `Izostanci učenika - ${formatPersonName(selectedStudent)}` : "Pregled i pravdanje izostanaka"}
         </h2>
         
         <div className="flex items-center gap-6">

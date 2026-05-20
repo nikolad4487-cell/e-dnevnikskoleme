@@ -115,7 +115,7 @@ export default function StudentSubjectEnrollmentPage() {
     }
     
     const activeClass = classes.find(c => c.id === selectedClassId);
-    const schoolYearId = activeClass?.school_year_id || '2024/2025';
+    const schoolYearId = activeClass?.school_year_id || '';
 
     if (currentStatus === 'ACTIVE' || currentStatus === 'EXEMPT') {
       try {
@@ -166,7 +166,7 @@ export default function StudentSubjectEnrollmentPage() {
     if (!window.confirm('Dodijeli ovaj predmet svim učenicima u razredu?')) return;
     try {
       const activeClass = classes.find(c => c.id === selectedClassId);
-      const schoolYearId = activeClass?.school_year_id || '2024/2025';
+      const schoolYearId = activeClass?.school_year_id || '';
 
       const payload = students.map(s => ({
         student_id: s.id,
@@ -195,7 +195,7 @@ export default function StudentSubjectEnrollmentPage() {
     try {
       setLoading(true);
       const activeClass = classes.find(c => c.id === selectedClassId);
-      const schoolYearId = activeClass?.school_year_id || '2024/2025';
+      const schoolYearId = activeClass?.school_year_id || '';
 
       const payload: any[] = [];
       bulkSelectedStudents.forEach(stuId => {

@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, ArrowRight, User as UserIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Header } from '../components/Header';
+import { formatPersonName } from '../lib/utils';
 
 export default function ChildSelectionPage() {
   const { user } = useAuth();
@@ -135,7 +136,7 @@ export default function ChildSelectionPage() {
                     </td>
                     <td className="px-6 py-5">
                       <div className="font-bold text-slate-800 text-sm whitespace-nowrap">
-                        {child.name} {child.surname}
+                        {formatPersonName(child)}
                       </div>
                     </td>
                     <td className="px-6 py-5 text-slate-500 text-xs">
