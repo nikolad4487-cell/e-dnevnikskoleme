@@ -17,6 +17,7 @@ DROP TABLE IF EXISTS public.grades CASCADE;
 DROP TABLE IF EXISTS public.absences CASCADE;
 DROP TABLE IF EXISTS public.lessons CASCADE;
 DROP TABLE IF EXISTS public.work_weeks CASCADE;
+DROP TABLE IF EXISTS public.class_subjects CASCADE;
 DROP TABLE IF EXISTS public.class_subject_teachers CASCADE;
 DROP TABLE IF EXISTS public.subjects CASCADE;
 DROP TABLE IF EXISTS public.classes CASCADE;
@@ -143,7 +144,23 @@ CREATE TABLE public.subjects (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 7. Class Subject Teachers (Assignments)
+-- 7. Class Subjects
+CREATE TABLE public.class_subjects (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    subject_id TEXT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    school_id TEXT REFERENCES public.schools(id) ON DELETE CASCADE,
+    subject_type TEXT NOT NULL,
+    is_foreign_language BOOLEAN DEFAULT false,
+    subject_period TEXT NOT NULL,
+    planned_hours_semester_1 INTEGER,
+    planned_hours_total INTEGER,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(class_id, subject_id)
+);
+
+-- 8. Class Subject Teachers (Assignments)
 CREATE TABLE public.class_subject_teachers (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
@@ -384,6 +401,7 @@ ALTER TABLE public.user_profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_school_roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.classes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.class_subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.class_subject_teachers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.curriculum_plans ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.student_class_enrollments ENABLE ROW LEVEL SECURITY;
@@ -409,6 +427,7 @@ CREATE POLICY "Authenticated read" ON public.user_profiles FOR SELECT TO authent
 CREATE POLICY "Authenticated read" ON public.user_school_roles FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated read" ON public.classes FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated read" ON public.subjects FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Authenticated manage" ON public.class_subjects FOR ALL TO authenticated USING (true);
 CREATE POLICY "Authenticated manage" ON public.lessons FOR ALL TO authenticated USING (true);
 CREATE POLICY "Authenticated manage" ON public.grades FOR ALL TO authenticated USING (true);
 CREATE POLICY "Authenticated manage" ON public.absences FOR ALL TO authenticated USING (true);

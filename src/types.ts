@@ -99,6 +99,18 @@ export type Subject = {
   gradingElements?: string[];
 };
 
+export type ClassSubject = {
+  id: string;
+  classId: string;
+  subjectId: string;
+  schoolId?: string;
+  subjectType: string;
+  isForeignLanguage: boolean;
+  subjectPeriod: string;
+  plannedHoursSemester1?: number;
+  plannedHoursTotal?: number;
+};
+
 export type ClassSubjectTeacher = {
   id: string;
   classId: string;

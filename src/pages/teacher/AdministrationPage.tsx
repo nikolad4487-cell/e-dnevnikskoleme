@@ -3,11 +3,11 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
-import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, Subject, StudentSubjectEnrollment, SchoolYear, RolloverLog, StudentClassEnrollment, School, Program, SchoolType, SecondarySubtype, ClassVariant, ContinuationType, PROGRAM_TYPES, CONTINUATION_TYPES, CLASS_VARIANTS, ProgramType } from '../../types';
+import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, Subject, StudentSubjectEnrollment, SchoolYear, RolloverLog, StudentClassEnrollment, School, Program, SchoolType, SecondarySubtype, ClassVariant, ContinuationType, PROGRAM_TYPES, CONTINUATION_TYPES, CLASS_VARIANTS, ProgramType, ClassSubject } from '../../types';
 import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
-import { cn, getSurname } from '../../lib/utils';
+import { cn, getSurname, formatSubjectDisplayName } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 
 export default function AdministrationPage() {
@@ -196,6 +196,7 @@ export default function AdministrationPage() {
     mappings: []
   });
   const [subjectAssignments, setSubjectAssignments] = useState<SubjectTeachingAssignment[]>([]);
+  const [classSubjects, setClassSubjects] = useState<ClassSubject[]>([]);
   const [curriculumPlans, setCurriculumPlans] = useState<CurriculumPlan[]>([]);
   const [classEnrollments, setClassEnrollments] = useState<any[]>([]); // Enrollments for the selected class subjects
   const [finalGrades, setFinalGrades] = useState<any[]>([]);
@@ -256,7 +257,13 @@ export default function AdministrationPage() {
     subjectId: '',
     classId: '',
     teacherId: '',
-    groupName: ''
+    groupName: '',
+    subjectType: 'redovni',
+    isForeignLanguage: false,
+    subjectPeriod: 'FULL_YEAR',
+    plannedHoursSemester1: '',
+    plannedHoursTotal: '',
+    addToAllStudents: true
   });
   const [curriculumForm, setCurriculumForm] = useState({
     subjectId: '',
@@ -1045,6 +1052,9 @@ export default function AdministrationPage() {
 
       const { data: curricData } = await supabase.from('curriculum_plans').select('*').eq('school_id', currentSchoolId);
       if (curricData) setCurriculumPlans(mapList(curricData, mappers.curriculumPlan));
+
+      const { data: classSubjectsData } = await supabase.from('class_subjects').select('*').eq('school_id', currentSchoolId);
+      if (classSubjectsData) setClassSubjects(mapList(classSubjectsData, mappers.classSubject));
 
       // Fetch teachers/staff for this school
       const staffUserIds = (yearRoles || []).map(r => r.user_id);
@@ -2022,8 +2032,24 @@ setAllSubjects(uniqueSub2);
         group_name: assignmentForm.groupName || null
       };
 
+      const classSubjectPayload = {
+        class_id: assignmentForm.classId,
+        subject_id: assignmentForm.subjectId,
+        school_id: selectedSchoolId,
+        subject_type: assignmentForm.subjectType,
+        is_foreign_language: assignmentForm.isForeignLanguage,
+        subject_period: assignmentForm.subjectPeriod,
+        planned_hours_semester_1: assignmentForm.plannedHoursSemester1 ? parseInt(assignmentForm.plannedHoursSemester1) : null,
+        planned_hours_total: assignmentForm.plannedHoursTotal ? parseInt(assignmentForm.plannedHoursTotal) : null
+      };
+
+      console.log("CLASS SUBJECT CREATE PAYLOAD", classSubjectPayload);
       console.log("CLASS SUBJECT TEACHER PAYLOAD", payload);
       console.log("GROUP NAME", assignmentForm.groupName);
+      console.log("ADD SUBJECT TO ALL STUDENTS", assignmentForm.addToAllStudents);
+
+      const { error: csError } = await supabase.from('class_subjects').upsert([classSubjectPayload], { onConflict: 'class_id,subject_id' });
+      if (csError) throw csError;
 
       if (editingAssignmentId) {
         const { data, error } = await supabase.from('class_subject_teachers').update(payload).eq('id', editingAssignmentId).select();
@@ -2037,13 +2063,41 @@ setAllSubjects(uniqueSub2);
         console.log("CREATE ASSIGNMENT RESULT:", { data, error });
         if (error) throw error;
         toast.success('Zaduženje kreirano');
+
+        if (assignmentForm.addToAllStudents) {
+           const classData = classes.find(c => c.id === assignmentForm.classId);
+           if (classData) {
+              const { data: students } = await supabase.from('student_class_enrollments').select('*').eq('class_id', assignmentForm.classId).eq('status', 'ACTIVE');
+              if (students && students.length > 0) {
+                 const enrollments = students.map(s => ({
+                   student_id: s.student_id,
+                   subject_id: assignmentForm.subjectId,
+                   class_id: assignmentForm.classId,
+                   school_year_id: classData.school_year_id,
+                   school_year: classData.schoolYear,
+                   status: 'ACTIVE'
+                 }));
+                 console.log("STUDENT SUBJECT ENROLLMENTS CREATED", enrollments);
+                 const { error: enrollError } = await supabase.from('student_subject_enrollments').upsert(enrollments, { onConflict: 'student_id,subject_id,class_id,school_year' });
+                 if (enrollError) console.error("ENROLL ERROR:", enrollError);
+              }
+           }
+        }
       }
-      setAssignmentForm({ subjectId: '', classId: '', teacherId: '', groupName: '' });
+      setAssignmentForm({ 
+        subjectId: '', classId: '', teacherId: '', groupName: '',
+        subjectType: 'redovni', isForeignLanguage: false, subjectPeriod: 'FULL_YEAR',
+        plannedHoursSemester1: '', plannedHoursTotal: '', addToAllStudents: true
+      });
       setEditingAssignmentId(null);
       
       // Refresh assignments
       const { data: updatedAssignments } = await supabase.from('class_subject_teachers').select('*').eq('school_id', selectedSchoolId);
       if (updatedAssignments) setSubjectAssignments(mapList(updatedAssignments, mappers.classSubjectTeacher));
+
+      const { data: classSubjectsData } = await supabase.from('class_subjects').select('*').eq('school_id', selectedSchoolId);
+      if (classSubjectsData) setClassSubjects(mapList(classSubjectsData, mappers.classSubject));
+
     } catch (err: any) {
       console.error("ASSIGNMENT ERROR:", err);
       toast.error('Greška pri spremanju zaduženja: ' + err.message);
@@ -2940,7 +2994,11 @@ setAllSubjects(uniqueSub2);
                            <button 
                              onClick={() => {
                                setEditingAssignmentId(null);
-                               setAssignmentForm({ subjectId: '', teacherId: '', classId: selectedClassId || '' });
+                               setAssignmentForm({ 
+                                 subjectId: '', teacherId: '', classId: selectedClassId || '', groupName: '',
+                                 subjectType: 'redovni', isForeignLanguage: false, subjectPeriod: 'FULL_YEAR',
+                                 plannedHoursSemester1: '', plannedHoursTotal: '', addToAllStudents: true 
+                               });
                              }}
                              className="text-[#005c8d] font-black uppercase text-[10px] flex items-center gap-1 hover:underline"
                            >
@@ -2956,7 +3014,7 @@ setAllSubjects(uniqueSub2);
                             {editingAssignmentId ? 'Uređivanje postojećeg predmeta' : 'Dodjela novog predmeta razredu'}
                           </div>
                           <form onSubmit={handleCreateAssignment} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                            <div className="space-y-1">
+                            <div className="space-y-1 md:col-span-1">
                               <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Nastavni predmet</label>
                               <select 
                                 value={assignmentForm.subjectId}
@@ -2969,6 +3027,38 @@ setAllSubjects(uniqueSub2);
                                 {allSubjects.sort((a,b) => (a.name || '').localeCompare(b.name || '')).map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                               </select>
                             </div>
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Vrsta predmeta</label>
+                              <select 
+                                value={assignmentForm.subjectType}
+                                onChange={e => setAssignmentForm({...assignmentForm, subjectType: e.target.value})}
+                                disabled={!!editingAssignmentId}
+                                className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                                required
+                              >
+                                <option value="redovni">Redovni</option>
+                                <option value="izborni">Izborni</option>
+                                <option value="fakultativni">Fakultativni</option>
+                                <option value="praksa">Praksa</option>
+                                <option value="dopunska nastava">Dopunska nastava</option>
+                                <option value="dodatna nastava">Dodatna nastava</option>
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Razdoblje</label>
+                              <select 
+                                value={assignmentForm.subjectPeriod}
+                                onChange={e => setAssignmentForm({...assignmentForm, subjectPeriod: e.target.value})}
+                                disabled={!!editingAssignmentId}
+                                className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                                required
+                              >
+                                <option value="FULL_YEAR">Cijela godina</option>
+                                <option value="FIRST_SEMESTER">1. polugodište</option>
+                                <option value="SECOND_SEMESTER">2. polugodište</option>
+                              </select>
+                            </div>
+                            
                             <div className="space-y-1">
                               <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Zaduženi nastavnik</label>
                               <select 
@@ -2985,17 +3075,64 @@ setAllSubjects(uniqueSub2);
                     }).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                               </select>
                             </div>
+
                             <div className="space-y-1">
-                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Naziv grupe (opcionalno)</label>
+                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Grupa (opcionalno)</label>
                               <input 
                                 type="text"
                                 value={assignmentForm.groupName}
                                 onChange={e => setAssignmentForm({...assignmentForm, groupName: e.target.value})}
-                                placeholder="npr. Grupa A, Izborna..."
+                                placeholder="npr. Grupa A"
                                 className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                               />
                             </div>
-                            <div className="flex gap-2">
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Pl. sati 1. pol.</label>
+                              <input 
+                                type="number"
+                                value={assignmentForm.plannedHoursSemester1}
+                                onChange={e => setAssignmentForm({...assignmentForm, plannedHoursSemester1: e.target.value})}
+                                disabled={!!editingAssignmentId}
+                                className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Pl. sati ukupno</label>
+                              <input 
+                                type="number"
+                                value={assignmentForm.plannedHoursTotal}
+                                onChange={e => setAssignmentForm({...assignmentForm, plannedHoursTotal: e.target.value})}
+                                disabled={!!editingAssignmentId}
+                                className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
+                              />
+                            </div>
+
+                            <div className="flex flex-col gap-2 md:col-span-1 justify-center">
+                              <label className="flex items-center gap-2 text-[10px] font-bold text-gray-700 cursor-pointer">
+                                <input 
+                                  type="checkbox"
+                                  checked={assignmentForm.isForeignLanguage}
+                                  onChange={e => setAssignmentForm({...assignmentForm, isForeignLanguage: e.target.checked})}
+                                  disabled={!!editingAssignmentId}
+                                  className="w-4 h-4 cursor-pointer focus:outline-[#005c8d]"
+                                />
+                                Strani jezik
+                              </label>
+                              
+                              {!editingAssignmentId && (
+                                <label className="flex items-center gap-2 text-[10px] font-bold text-gray-700 cursor-pointer">
+                                  <input 
+                                    type="checkbox"
+                                    checked={assignmentForm.addToAllStudents}
+                                    onChange={e => setAssignmentForm({...assignmentForm, addToAllStudents: e.target.checked})}
+                                    className="w-4 h-4 cursor-pointer focus:outline-[#005c8d]"
+                                  />
+                                  Dodaj svim učenicima
+                                </label>
+                              )}
+                            </div>
+
+                            <div className="flex gap-2 md:col-span-4 mt-2">
                               <button 
                                 type="submit"
                                 disabled={loading}
@@ -3007,7 +3144,11 @@ setAllSubjects(uniqueSub2);
                                 type="button"
                                 onClick={() => {
                                   setEditingAssignmentId(null);
-                                  setAssignmentForm({ subjectId: '', teacherId: '', classId: '' });
+                                  setAssignmentForm({ 
+                                    subjectId: '', classId: '', teacherId: '', groupName: '',
+                                    subjectType: 'redovni', isForeignLanguage: false, subjectPeriod: 'FULL_YEAR',
+                                    plannedHoursSemester1: '', plannedHoursTotal: '', addToAllStudents: true 
+                                  });
                                 }}
                                 className="px-4 py-2 border border-gray-300 text-gray-500 font-black text-[10px] uppercase hover:bg-gray-100"
                               >
@@ -3035,12 +3176,34 @@ setAllSubjects(uniqueSub2);
                               return uniqueSubjectIds.map(sid => {
                                 const assignmentsForThisSubject = assignmentsInClass.filter(a => a.subjectId === sid);
                                 const subject = allSubjects.find(s => s.id === sid);
+                                const classSubject = classSubjects.find(cs => cs.subjectId === sid && cs.classId === selectedClassId);
                                 const activeEnrollCount = classEnrollments.filter(e => e.subjectId === sid && e.status === 'ACTIVE').length;
                                 const isManager = isAnyAdmin || selectedClassData?.homeroom_teacher_id === user?.id;
 
                                 return (
                                   <tr key={sid} className="hover:bg-blue-50/30">
-                                    <td className="px-4 py-3 border-r border-gray-200 font-black text-[#005c8d] uppercase">{subject?.name}</td>
+                                    <td className="px-4 py-3 border-r border-gray-200">
+                                       <div className="font-black text-[#005c8d] uppercase">
+                                          {formatSubjectDisplayName(subject?.name || '', classSubject?.subjectType || 'redovni')}
+                                       </div>
+                                       {classSubject && (
+                                         <div className="text-[9px] font-bold text-gray-500 uppercase mt-1 space-y-0.5">
+                                           {classSubject.isForeignLanguage && <div className="text-purple-600">Strani jezik</div>}
+                                           <div>
+                                             {classSubject.subjectPeriod === 'FIRST_SEMESTER' 
+                                               ? '1. polugodište' 
+                                               : classSubject.subjectPeriod === 'SECOND_SEMESTER' 
+                                                 ? '2. polugodište' 
+                                                 : 'Cijela godina'}
+                                           </div>
+                                           {(classSubject.plannedHoursSemester1 || classSubject.plannedHoursTotal) && (
+                                             <div className="text-gray-400">
+                                               Sati: {classSubject.plannedHoursSemester1 ? `${classSubject.plannedHoursSemester1} (1. pol)` : ''} {classSubject.plannedHoursTotal ? `${classSubject.plannedHoursTotal} (uk)` : ''}
+                                             </div>
+                                           )}
+                                         </div>
+                                       )}
+                                    </td>
                                     <td className="px-4 py-3 border-r border-gray-200 space-y-2">
                                        {assignmentsForThisSubject.map(a => {
                                          const t = teachers.find(teach => teach.id === a.teacherId);
@@ -5061,42 +5224,50 @@ setAllSubjects(uniqueSub2);
                   <div className="text-[10px] font-black text-gray-400 uppercase mb-2 border-b pb-1">Predmeti učenika</div>
                   <div className="text-[10px] text-gray-400 italic mb-4">Upravljanje predmetima koje učenik pohađa ili je iz njih izuzet:</div>
                   <div className="divide-y divide-gray-100">
-                    {allSubjects.sort((a,b) => String(a.name || '').localeCompare(String(b.name || ''))).map(sub => {
-                      const enrollment = enrollments.find(e => e.subjectId === sub.id);
-                      const status = enrollment?.status || 'NOT_ASSIGNED';
-                      return (
-                        <div key={sub.id} className="py-2 flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            {status === 'ACTIVE' ? <CheckCircle size={14} className="text-green-500" /> : <XCircle size={14} className="text-gray-300" />}
-                            <span className={cn("text-[11px] font-bold uppercase", status === 'EXEMPT' ? 'text-red-400 line-through' : 'text-gray-700')}>{sub.name}</span>
+                    {(() => {
+                      const assignmentsInClass = subjectAssignments.filter(a => a.classId === selectedStudentData?.classId);
+                      const uniqueSubjectIds = Array.from(new Set(assignmentsInClass.map(a => a.subjectId))).filter(Boolean) as string[];
+                      const classSubs = uniqueSubjectIds.map(sid => allSubjects.find(s => s.id === sid)).filter(Boolean) as Subject[];
+                      return classSubs.sort((a,b) => String(a.name || '').localeCompare(String(b.name || ''))).map(sub => {
+                        const enrollment = enrollments.find(e => e.subjectId === sub.id);
+                        const classSubject = classSubjects.find(cs => cs.subjectId === sub.id && cs.classId === selectedStudentData?.classId);
+                        const status = enrollment?.status || 'NOT_ASSIGNED';
+                        return (
+                          <div key={sub.id} className="py-2 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              {status === 'ACTIVE' ? <CheckCircle size={14} className="text-green-500" /> : <XCircle size={14} className="text-gray-300" />}
+                              <span className={cn("text-[11px] font-bold uppercase", status === 'EXEMPT' ? 'text-red-400 line-through' : 'text-gray-700')}>
+                                 {formatSubjectDisplayName(sub.name || '', classSubject?.subjectType || 'redovni')}
+                              </span>
+                            </div>
+                            <div className="flex gap-2">
+                               {status === 'ACTIVE' ? (
+                                 <button 
+                                   onClick={() => handleToggleEnrollment(sub.id, 'ACTIVE')}
+                                   className="text-[9px] font-black text-red-500 uppercase hover:underline"
+                                 >
+                                   Izuzmi
+                                 </button>
+                               ) : status === 'EXEMPT' ? (
+                                 <button 
+                                   onClick={() => handleToggleEnrollment(sub.id, 'EXEMPT')}
+                                   className="text-[9px] font-black text-green-600 uppercase hover:underline"
+                                 >
+                                   Vrati
+                                 </button>
+                               ) : (
+                                 <button 
+                                   onClick={() => handleToggleEnrollment(sub.id, 'NOT_ASSIGNED')}
+                                   className="text-[9px] font-black text-[#005c8d] uppercase hover:underline"
+                                 >
+                                   Odaberi
+                                 </button>
+                               )}
+                            </div>
                           </div>
-                          <div className="flex gap-2">
-                             {status === 'ACTIVE' ? (
-                               <button 
-                                 onClick={() => handleToggleEnrollment(sub.id, 'ACTIVE')}
-                                 className="text-[9px] font-black text-red-500 uppercase hover:underline"
-                               >
-                                 Izuzmi
-                               </button>
-                             ) : status === 'EXEMPT' ? (
-                               <button 
-                                 onClick={() => handleToggleEnrollment(sub.id, 'EXEMPT')}
-                                 className="text-[9px] font-black text-green-600 uppercase hover:underline"
-                               >
-                                 Vrati
-                               </button>
-                             ) : (
-                               <button 
-                                 onClick={() => handleToggleEnrollment(sub.id, 'NOT_ASSIGNED')}
-                                 className="text-[9px] font-black text-[#005c8d] uppercase hover:underline"
-                               >
-                                 Dodaj
-                               </button>
-                             )}
-                          </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      });
+                    })()}
                   </div>
                 </div>
 

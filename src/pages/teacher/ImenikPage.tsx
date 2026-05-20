@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, Grade, Subject, StudentNote, SpecialExam, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary } from '../../types';
-import { cn, formatName, getSurname } from '../../lib/utils';
+import { cn, formatName, getSurname, formatSubjectDisplayName } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2, Check } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
@@ -118,6 +118,8 @@ export default function ImenikPage() {
   const [showAdminDeleteAuth, setShowAdminDeleteAuth] = useState(false);
   const [randomSelectedStudentId, setRandomSelectedStudentId] = useState<string | null>(null);
 
+  const [classSubjects, setClassSubjects] = useState<any[]>([]);
+
   useEffect(() => {
     const fetchInitial = async () => {
       if (!selectedSchoolId || !user) return;
@@ -129,6 +131,9 @@ export default function ImenikPage() {
         
         const formattedAssignments = mapList(assignmentsRaw || [], mappers.classSubjectTeacher);
         setSubjectAssignments(formattedAssignments);
+
+        const { data: csRaw } = await supabase.from('class_subjects').select('*').eq('school_id', selectedSchoolId);
+        if (csRaw) setClassSubjects(mapList(csRaw, mappers.classSubject));
 
         const { data: classesRaw, error: ce } = await supabase
           .from('classes')
@@ -1150,9 +1155,7 @@ export default function ImenikPage() {
     setRandomSelectedStudentId(selected.id);
     setActiveStudent(selected);
     
-    if (viewMode === 'STUDENTS') {
-      setViewMode('SUBJECTS');
-    }
+    // Auto-scroll to selected row can be handled by browser if we wanted to
   };
 
   const renderStudents = () => (
@@ -1692,7 +1695,15 @@ export default function ImenikPage() {
           <div className="bg-white max-w-lg w-full relative overflow-hidden border border-gray-400">
             <div className="p-2 bg-[#005c8d] text-white flex justify-between items-center text-[11px] font-bold uppercase"><h3 className="tracking-tight">Unos ocjene</h3><button onClick={() => setShowGradeModal(false)}><X size={16}/></button></div>
             <div className="p-6 space-y-4">
-              <div className="text-center"><h4 className="text-base font-bold text-gray-900 leading-tight">{activeStudent ? formatName(activeStudent) : ''}</h4><p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">{activeSubject?.name}</p></div>
+              <div className="text-center">
+                <h4 className="text-base font-bold text-gray-900 leading-tight">{activeStudent ? formatName(activeStudent) : ''}</h4>
+                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">
+                  {(() => {
+                    const cs = classSubjects.find(cs => cs.subjectId === activeSubject?.id && cs.classId === effectiveClassId);
+                    return formatSubjectDisplayName(activeSubject?.name || '', cs?.subjectType || 'redovni');
+                  })()}
+                </p>
+              </div>
               <div className="flex justify-center gap-1">
                 {[1,2,3,4,5].map(v => (<button key={v} onClick={() => setNewGrade({...newGrade, value: v})} className={cn("w-10 h-10 border font-bold text-lg", newGrade.value === v ? "bg-[#005c8d] text-white border-[#005c8d]" : "bg-white text-gray-400 border-gray-300 hover:border-[#005c8d]")}>{v}</button>))}
               </div>

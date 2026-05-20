@@ -145,6 +145,18 @@ export const mappers = {
     createdBy: raw.created_by,
   }),
   
+  classSubject: (raw: any) => ({
+    id: raw.id,
+    classId: raw.class_id,
+    subjectId: raw.subject_id,
+    schoolId: raw.school_id,
+    subjectType: raw.subject_type,
+    isForeignLanguage: raw.is_foreign_language,
+    subjectPeriod: raw.subject_period,
+    plannedHoursSemester1: raw.planned_hours_semester_1,
+    plannedHoursTotal: raw.planned_hours_total,
+  }),
+
   classSubjectTeacher: (raw: any) => ({
     id: raw.id,
     classId: raw.class_id,

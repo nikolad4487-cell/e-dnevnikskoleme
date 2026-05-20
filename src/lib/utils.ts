@@ -15,3 +15,12 @@ export function formatName(item: { name?: string | null, surname?: string | null
   if (item.name && item.name.length > 0) return item.name;
   return [item.name, item.surname].filter(s => s && s.trim().length > 0).join(' ');
 }
+
+export function formatSubjectDisplayName(subjectName: string, subjectType: string, isForeignLanguage?: boolean) {
+  if (!subjectType || subjectType.toLowerCase() === 'redovni') {
+    return subjectName;
+  }
+  let suffix = subjectType.toLowerCase();
+  
+  return `${subjectName} (${suffix})`;
+}
