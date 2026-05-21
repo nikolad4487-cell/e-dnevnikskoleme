@@ -51,3 +51,8 @@ ALTER TABLE schedule_cells
 DROP CONSTRAINT IF EXISTS schedule_cells_class_id_fkey,
 ADD CONSTRAINT schedule_cells_class_id_fkey
 FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE;
+
+-- Create attachments bucket
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('attachments', 'attachments', true)
+ON CONFLICT (id) DO NOTHING;

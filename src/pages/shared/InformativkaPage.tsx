@@ -883,6 +883,11 @@ export default function InformativkaPage() {
                   if (!file || !selectedGroup || !user) return;
                   
                   try {
+                    const { data: bucketData, error: bucketError } = await supabase.storage.getBucket('attachments');
+                    if (bucketError && bucketError.message.includes("not found")) {
+                      await supabase.storage.createBucket('attachments', { public: true });
+                    }
+
                     const fileExt = file.name.split('.').pop();
                     const fileName = `${Math.random()}.${fileExt}`;
                     const filePath = `chat_attachments/${fileName}`;
@@ -930,8 +935,9 @@ export default function InformativkaPage() {
                       timestamp: msgData.created_at
                     }]);
                     
-                  } catch (err) {
+                  } catch (err: any) {
                     console.error("UPLOAD ATTACHMENT ERROR", err);
+                    toast.error(err.message || "Greška pri prijenosu datoteke");
                   }
                 }} />
                 <input
