@@ -6,6 +6,7 @@ import { ChatGroup, Message, User, Role } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
 import { cn, formatPersonName } from '../../lib/utils';
 import { Send, Users, Info, MoreVertical, Search, UserPlus, BookOpen, MessageSquare, ArrowLeft, Check, Shield } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 
 interface RecipientDetails {
   id: string;
@@ -25,7 +26,7 @@ interface ChatGroupWithMeta extends ChatGroup {
 }
 
 export default function InformativkaPage() {
-  const { user } = useAuth();
+  const { user, userSchoolRoles } = useAuth();
   const { selectedClassId, selectedChildId } = useSelection();
   
   // Core State
@@ -36,6 +37,7 @@ export default function InformativkaPage() {
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Contacts / "New Chat" State
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
@@ -48,6 +50,70 @@ export default function InformativkaPage() {
   const isTeacher = user?.globalRole === Role.TEACHER || user?.globalRole === Role.SCHOOL_ADMIN || user?.globalRole === Role.ADMIN || user?.globalRole === Role.MAIN_ADMIN;
   const isParent = user?.globalRole === Role.PARENT;
   const isStudent = user?.globalRole === Role.STUDENT;
+
+  const handleDeleteChat = async (chat: any) => {
+    try {
+      const chatId = chat.id;
+      console.log("DELETE CHAT ID", chatId);
+
+      if (!chatId) return;
+
+      const { data: messages, error: fetchMessagesError } = await supabase
+        .from("messages")
+        .select("id")
+        .eq("group_id", chatId);
+
+      console.log("FETCH MESSAGES FOR DELETE", messages, fetchMessagesError);
+
+      const messageIds = (messages || []).map((m: any) => m.id);
+
+      if (messageIds.length > 0) {
+        const { error: attachmentsError } = await supabase
+          .from("message_attachments")
+          .delete()
+          .in("message_id", messageIds);
+
+        console.log("DELETE ATTACHMENTS ERROR", attachmentsError);
+      }
+
+      const { error: messagesError } = await supabase
+        .from("messages")
+        .delete()
+        .eq("group_id", chatId);
+
+      console.log("DELETE MESSAGES ERROR", messagesError);
+
+      const { error: membersError } = await supabase
+        .from("chat_group_members")
+        .delete()
+        .eq("group_id", chatId);
+
+      console.log("DELETE MEMBERS ERROR", membersError);
+
+      const { error: groupError } = await supabase
+        .from("chat_groups")
+        .delete()
+        .eq("id", chatId);
+
+      console.log("DELETE GROUP ERROR", groupError);
+
+      if (groupError || membersError || messagesError) {
+        toast.error("Brisanje nije uspjelo.");
+        return;
+      }
+
+      console.log("DELETE CHAT SUCCESS", chatId);
+
+      setGroups(prev => prev.filter(g => g.id !== chatId));
+      if (selectedGroup === chatId) {
+        setSelectedGroup(null);
+      }
+      setRefreshTrigger(prev => prev + 1);
+      console.log("DELETE FLOW FINISHED");
+    } catch (err) {
+      console.error("DELETE CHAT CRASH", err);
+    }
+  };
 
   // Sync Subject Channels
   useEffect(() => {
@@ -72,11 +138,12 @@ export default function InformativkaPage() {
           .maybeSingle();
 
         if (!existingChannel) {
-          console.log("CREATING SUBJECT CHANNEL", cs.subject?.name);
+          const subjectName = Array.isArray(cs.subject) ? (cs.subject[0] as any)?.name : (cs.subject as any)?.name;
+          console.log("CREATING SUBJECT CHANNEL", subjectName);
           const { data: newChannel, error } = await supabase
             .from('chat_groups')
             .insert([{
-              name: cs.subject?.name,
+              name: subjectName,
               type: 'SUBJECT_CHANNEL',
               class_id: selectedClassId,
               subject_id: cs.subject_id,
@@ -119,23 +186,96 @@ export default function InformativkaPage() {
     const fetchGroupsAndRecipients = async () => {
       setLoading(true);
       try {
-        // Fetch groups where user is a member
-        const { data: rawGroups, error: groupErr } = await supabase
+        // PERSONAL CHATS
+        const { data: personalRaw, error: personalErr } = await supabase
           .from('chat_groups')
           .select(`
             *,
             chat_group_members!inner(user_id)
           `)
-          .eq('chat_group_members.user_id', user.id);
+          .eq('chat_group_members.user_id', user.id)
+          .in('type', ['PRIVATE', 'PRIVATE_GROUP']);
+        
+        if (personalErr) throw personalErr;
+        const personalChats = personalRaw || [];
 
-        if (groupErr) throw groupErr;
+        // CHANNELS
+        let channelsRaw: any[] = [];
+        const { data: classData } = await supabase
+          .from('classes')
+          .select('homeroom_teacher_id, deputy_teacher_id')
+          .eq('id', selectedClassId)
+          .maybeSingle();
 
-        const activeGroups = rawGroups || [];
-        console.log("ALL CHAT GROUPS", activeGroups);
-        console.log(
-          "CHANNELS",
-          activeGroups.filter(g => g.type !== 'PRIVATE')
-        );
+        const roles = [
+          String(user.globalRole).toUpperCase(),
+          ...(userSchoolRoles || []).map(r => String(r.role).toUpperCase())
+        ];
+        
+        const canSeeAllClassChannels =
+          roles.includes('ADMIN') ||
+          roles.includes('SCHOOL_ADMIN') ||
+          classData?.homeroom_teacher_id === user.id ||
+          classData?.deputy_teacher_id === user.id;
+
+        console.log("CAN SEE ALL CLASS CHANNELS", canSeeAllClassChannels);
+        console.log("CHANNEL FETCH RESULT", channelsRaw);
+        console.log("CURRENT CLASS", classData);
+        console.log("CURRENT USER", user);
+
+        if (canSeeAllClassChannels) {
+           const { data: allChannels } = await supabase
+             .from('chat_groups')
+             .select('*')
+             .eq('class_id', selectedClassId)
+             .in('type', ['SUBJECT_CHANNEL', 'CUSTOM_CHANNEL', 'CLASS_CHANNEL']);
+           channelsRaw = allChannels || [];
+           console.log("CHANNEL FETCH RESULT", channelsRaw);
+        } else if (roles.includes('TEACHER') || roles.includes('NASTAVNIK')) {
+           const { data: teacherChannels } = await supabase
+             .from('chat_groups')
+             .select(`*, chat_group_members!inner(user_id)`)
+             .eq('chat_group_members.user_id', user.id)
+             .in('type', ['SUBJECT_CHANNEL', 'CUSTOM_CHANNEL', 'CLASS_CHANNEL']);
+           channelsRaw = teacherChannels || [];
+        } else if (roles.includes('STUDENT')) {
+           const { data: enrollments } = await supabase
+             .from('student_subject_enrollments')
+             .select('subject_id')
+             .eq('student_id', user.id)
+             .eq('class_id', selectedClassId);
+             
+           const studentSubjectIds = enrollments?.map((e: any) => e.subject_id).filter(Boolean) || [];
+           console.log("STUDENT SUBJECT IDS", studentSubjectIds);
+           
+           if (studentSubjectIds.length > 0) {
+             const { data: enrolledChannels } = await supabase
+               .from('chat_groups')
+               .select('*')
+               .eq('class_id', selectedClassId)
+               .in('type', ['SUBJECT_CHANNEL', 'CUSTOM_CHANNEL', 'CLASS_CHANNEL'])
+               .in('subject_id', studentSubjectIds);
+             channelsRaw = enrolledChannels || [];
+           } else {
+             const { data: allSubjectChannels } = await supabase
+               .from('chat_groups')
+               .select('*')
+               .eq('class_id', selectedClassId)
+               .in('type', ['SUBJECT_CHANNEL', 'CUSTOM_CHANNEL', 'CLASS_CHANNEL']);
+             channelsRaw = allSubjectChannels || [];
+           }
+        }
+
+        console.log("FETCHED CHANNELS", channelsRaw);
+        
+        const activeGroupsMap = new Map();
+        personalChats.forEach((g: any) => activeGroupsMap.set(g.id, g));
+        channelsRaw.forEach(g => activeGroupsMap.set(g.id, g));
+        const activeGroups = Array.from(activeGroupsMap.values()) as any[];
+        
+        console.log("PERSONAL CHATS", personalChats);
+        console.log("CHANNELS", channelsRaw);
+        console.log("VISIBLE CHANNELS", channelsRaw);
 
         if (activeGroups.length === 0) {
           setGroups([]);
@@ -164,7 +304,7 @@ export default function InformativkaPage() {
         });
 
         // Fetch recipient profiles, classes, and schools
-        let recipientMap = new Map<string, RecipientDetails>();
+        const recipientMap = new Map<string, RecipientDetails>();
 
         if (recipientIds.length > 0) {
           const { data: profiles } = await supabase
@@ -176,7 +316,7 @@ export default function InformativkaPage() {
           
           // Fetch class names for student recipients
           const classIds = [...new Set(fetchedProfiles.filter(p => p.role === 'STUDENT').map(p => p.class_id).filter(Boolean))];
-          let classesMap = new Map<string, string>();
+          const classesMap = new Map<string, string>();
           if (classIds.length > 0) {
             const { data: classesData } = await supabase
               .from('classes')
@@ -187,7 +327,7 @@ export default function InformativkaPage() {
 
           // Fetch school names
           const schoolIds = [...new Set(fetchedProfiles.map(p => p.school_id).filter(Boolean))];
-          let schoolsMap = new Map<string, string>();
+          const schoolsMap = new Map<string, string>();
           if (schoolIds.length > 0) {
             const { data: schoolsData } = await supabase
               .from('schools')
@@ -212,7 +352,7 @@ export default function InformativkaPage() {
         }
 
         // Fetch last message for each group to show previews
-        let lastMsgMap = new Map<string, { text: string; time: string }>();
+        const lastMsgMap = new Map<string, { text: string; time: string }>();
         const groupIds = activeGroups.map(g => g.id);
         
         // This query fetches the latest message for each group
@@ -241,12 +381,14 @@ export default function InformativkaPage() {
           const recipient = otherMemberId ? recipientMap.get(otherMemberId) || null : null;
           const lastMsg = lastMsgMap.get(g.id);
 
+          const isPersonal = g.type === 'PRIVATE' || g.type === 'PRIVATE_GROUP';
+
           return {
             id: g.id,
-            name: recipient ? recipient.name : g.name,
+            name: (isPersonal && recipient) ? recipient.name : g.name,
             type: g.type,
             created_by: g.created_by,
-            recipient: recipient,
+            recipient: isPersonal ? recipient : null,
             lastMessage: lastMsg?.text,
             lastMessageTime: lastMsg?.time,
           };
@@ -278,7 +420,7 @@ export default function InformativkaPage() {
     // Set up polling for new messages every 8 seconds to deliver smooth feel
     const interval = setInterval(fetchGroupsAndRecipients, 8000);
     return () => clearInterval(interval);
-  }, [user, selectedGroup]);
+  }, [user, selectedGroup, refreshTrigger]);
 
   // 2. Fetch Messages when group selection changes
   useEffect(() => {
@@ -333,7 +475,7 @@ export default function InformativkaPage() {
 
     try {
       console.log("INFORMATIVKA FETCHING CONTACTS", { role: user.globalRole, classId: selectedClassId });
-      let contacts: RecipientDetails[] = [];
+      const contacts: RecipientDetails[] = [];
 
       // Unified base profiles fetch
       const { data: allProfiles } = await supabase.from('user_profiles').select('*');
@@ -352,6 +494,7 @@ export default function InformativkaPage() {
         });
       } else {
         // Student view: classmates, subject teachers, homeroom
+        // STUDENTS: role='STUDENT' and class_id=currentClassId
         const classmates = profiles.filter(p => p.role === 'STUDENT' && p.class_id === selectedClassId && p.id !== user.id);
         
         // Fetch teachers
@@ -454,6 +597,8 @@ export default function InformativkaPage() {
       group_id: selectedGroup,
       sender_id: user.id,
       content: messageText,
+      text: messageText, // fallback
+      timestamp: new Date().toISOString()
     };
 
     setNewMessage('');
@@ -466,10 +611,11 @@ export default function InformativkaPage() {
         .select()
         .single();
       
-      console.log("SEND MESSAGE RESULT", data);
+      console.log("SEND MESSAGE RESULT", data, error);
       
       if (error) {
         console.error("SEND MESSAGE ERROR", error);
+        toast.error("Greška pri slanju poruke.");
         throw error;
       }
 
@@ -478,8 +624,8 @@ export default function InformativkaPage() {
           id: data.id,
           groupId: data.group_id,
           senderId: data.sender_id,
-          text: data.content,
-          timestamp: data.created_at,
+          text: data.content || data.text,
+          timestamp: data.timestamp
         }]);
 
         // Update the last message preview immediately in sidebar groups
@@ -487,8 +633,8 @@ export default function InformativkaPage() {
           if (g.id === selectedGroup) {
             return {
               ...g,
-              lastMessage: messageText,
-              lastMessageTime: data.created_at
+              lastMessage: data.content || data.text,
+              lastMessageTime: data.timestamp
             };
           }
           return g;
@@ -564,7 +710,7 @@ export default function InformativkaPage() {
           </div>
         </div>
 
-        {/* Conversations List */}
+            {/* Conversations List */}
         <div className="flex-1 overflow-auto divide-y divide-gray-100">
           {loading ? (
             <div className="text-center py-10 text-gray-400 text-[10px] font-bold uppercase tracking-widest leading-none">
@@ -575,16 +721,23 @@ export default function InformativkaPage() {
               Nema aktivnih razgovora. Kliknite gumb (+) gore za pokretanje novog razgovora.
             </div>
           ) : (
-            filteredGroups
-              .filter(g => activeTab === 'PERSONAL' ? (g.type === 'PRIVATE' || g.type === 'PRIVATE_GROUP') : (g.type === 'SUBJECT_CHANNEL' || g.type === 'CUSTOM_CHANNEL'))
-              .map((g) => {
+            (() => {
+              const personalChats = filteredGroups.filter(g => g.type === 'PRIVATE' || g.type === 'PRIVATE_GROUP');
+              const channels = filteredGroups.filter(g => ['SUBJECT_CHANNEL', 'CUSTOM_CHANNEL', 'CLASS_CHANNEL'].includes(g.type));
+              const displayGroups = activeTab === 'PERSONAL' ? personalChats : channels;
+              
+              console.log("ACTIVE TAB", activeTab);
+              console.log("PERSONAL CHATS", personalChats);
+              console.log("CHANNELS", channels);
+              
+              return displayGroups.map((g) => {
                 const isActive = selectedGroup === g.id;
                 return (
-                  <button
+                  <div
                     key={g.id}
                     onClick={() => setSelectedGroup(g.id)}
                     className={cn(
-                      "w-full flex items-center gap-3 p-4 transition-all text-left group border-l-4",
+                      "w-full flex items-center gap-3 p-4 transition-all text-left group border-l-4 cursor-pointer",
                       isActive 
                         ? "bg-slate-50 border-[#005c8d] shadow-2xs" 
                         : "hover:bg-slate-50/50 border-transparent"
@@ -608,9 +761,28 @@ export default function InformativkaPage() {
                         {g.lastMessage ? g.lastMessage : 'Nema poruka.'}
                       </div>
                     </div>
-                  </button>
+                    {/* Delete button for private chats */}
+                    {activeTab === 'PERSONAL' && (g.type === 'PRIVATE' || g.type === 'PRIVATE_GROUP') && (
+                      <button
+                        type="button"
+                        title="Obriši razgovor"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log("TRASH ICON CLICKED", g);
+                          handleDeleteChat(g);
+                        }}
+                        className="p-1.5 text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors rounded shrink-0 z-10"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
                 );
-              })
+              });
+            })()
           )}
         </div>
       </div>
@@ -643,45 +815,6 @@ export default function InformativkaPage() {
                   )}
                 </div>
               </div>
-              {selectedActiveGroup?.type === 'PRIVATE' && (
-                <button 
-                  onClick={async () => {
-                    if (!confirm("Jeste li sigurni da želite obrisati razgovor? Sve poruke će biti trajno obrisane.")) return;
-                    try {
-                      // 1. Delete message_attachments
-                      const { data: messagesToDelete } = await supabase
-                        .from('messages')
-                        .select('id')
-                        .eq('group_id', selectedGroup);
-                      
-                      if (messagesToDelete && messagesToDelete.length > 0) {
-                        const messageIds = messagesToDelete.map(m => m.id);
-                        await supabase
-                          .from('message_attachments')
-                          .delete()
-                          .in('message_id', messageIds);
-                      }
-                      // 2. Delete messages
-                      await supabase.from('messages').delete().eq('group_id', selectedGroup);
-                      // 3. Delete members
-                      await supabase.from('chat_group_members').delete().eq('group_id', selectedGroup);
-                      // 4. Delete group
-                      const { error: delError } = await supabase.from('chat_groups').delete().eq('id', selectedGroup);
-                      
-                      if (delError) throw delError;
-                      
-                      console.log("DELETE CHAT RESULT", "Success");
-                      setSelectedGroup(null);
-                      setGroups(prev => prev.filter(g => g.id !== selectedGroup));
-                    } catch (err) {
-                      console.error("Error deleting chat:", err);
-                    }
-                  }}
-                  className="text-[10px] text-red-500 hover:text-red-700 font-bold uppercase cursor-pointer"
-                >
-                  Obriši razgovor
-                </button>
-              )}
             </div>
 
             {/* Messages body rendering */}

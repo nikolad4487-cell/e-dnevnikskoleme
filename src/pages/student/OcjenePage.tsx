@@ -201,7 +201,7 @@ export default function OcjenePage() {
                 acc[curr.name].ids.push(curr.id);
               }
               return acc;
-            }, {} as Record<string, Subject & { ids: string[] }>)).sort((a, b) => (String(a.name || "")).localeCompare(b.name)).map(subject => {
+            }, {} as Record<string, Subject & { ids: string[] }>)).sort((a: any, b: any) => (String(a.name || "")).localeCompare(b.name)).map((subject: any) => {
               const subjectGrades = grades.filter(g => subject.ids.includes(g.subjectId) && !g.isFinal);
               const subjectAvg = subjectGrades.length > 0 
                 ? (subjectGrades.reduce((acc, curr) => acc + curr.value, 0) / subjectGrades.length).toFixed(2)

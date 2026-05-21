@@ -9,6 +9,8 @@ export default function InformativkaAdminPage() {
   const [channels, setChannels] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [currentChannel, setCurrentChannel] = useState<any>(null);
   const [newChannel, setNewChannel] = useState({ name: '', type: 'SUBJECT_CHANNEL', subject_id: '', staff_only_posting: true, allow_student_messages: false });
   const [subjects, setSubjects] = useState<any[]>([]);
 
@@ -36,6 +38,44 @@ export default function InformativkaAdminPage() {
     if (data) setSubjects(data);
   };
   
+  const openSettings = (channel: any) => {
+    setCurrentChannel(channel);
+    setNewChannel({
+        name: channel.name,
+        type: channel.type,
+        subject_id: channel.subject_id || '',
+        staff_only_posting: !!channel.staff_only_posting,
+        allow_student_messages: !!channel.allow_student_messages
+    });
+    setIsSettingsModalOpen(true);
+  };
+
+  const handleUpdateChannel = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentChannel) return;
+    
+    const payload: any = {
+      name: newChannel.name,
+      type: newChannel.type,
+      subject_id: newChannel.type === 'SUBJECT_CHANNEL' ? newChannel.subject_id || null : null,
+      staff_only_posting: newChannel.staff_only_posting,
+      allow_student_messages: newChannel.allow_student_messages,
+    };
+    
+    console.log("UPDATE CHANNEL PAYLOAD", payload);
+    
+    const { error } = await supabase.from('chat_groups').update(payload).eq('id', currentChannel.id);
+    
+    if (error) {
+        console.log("UPDATE CHANNEL ERROR", error);
+        toast.error("Greška pri ažuriranju: " + error.message);
+    } else {
+        toast.success("Kanal uspješno ažuriran");
+        setIsSettingsModalOpen(false);
+        fetchChannels();
+    }
+  };
+  
   const handleCreateAllSubjectChannels = async () => {
     if (!classId) return;
     setLoading(true);
@@ -45,7 +85,6 @@ export default function InformativkaAdminPage() {
     const userId = profile?.user?.id;
 
     try {
-        // 1. Dohvatiti sve unique subject_id za trenutni razred
         const { data: subjects, error: subjErr } = await supabase
             .from('class_subject_teachers')
             .select('subject_id, subject:subjects(name)')
@@ -92,15 +131,12 @@ export default function InformativkaAdminPage() {
                     console.log("SUBJECT CHANNEL CREATED", data);
                     createdChannels.push(data);
                     
-                    // Sync members
-                    // Teachers
                     const { data: teachers } = await supabase
                         .from('class_subject_teachers')
                         .select('teacher_id')
                         .eq('class_id', classId)
                         .eq('subject_id', subjectId);
                         
-                    // Students
                     const { data: students } = await supabase
                         .from('student_subject_enrollments')
                         .select('student_id')
@@ -121,7 +157,7 @@ export default function InformativkaAdminPage() {
         
         console.log("CHANNELS CREATED", createdChannels);
         if (createdChannels.length > 0) toast.success(`Stvoreno kanala: ${createdChannels.length}`);
-        else toast.info("Svi kanali već postoje.");
+        else toast("Svi kanali već postoje.");
         fetchChannels();
     } catch(err) {
         toast.error('Greška pri stvaranju');
@@ -151,7 +187,6 @@ export default function InformativkaAdminPage() {
     };
     
     console.log("CREATE NEW CHANNEL CLICKED");
-    console.log("CREATE CHANNEL PAYLOAD", payload);
     
     const { data, error } = await supabase.from('chat_groups').insert([payload]).select().single();
     
@@ -180,6 +215,22 @@ export default function InformativkaAdminPage() {
             <Users size={16} /> Stvori kanale za sve predmete
         </button>
       </div>
+
+      {isSettingsModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
+            <form onSubmit={handleUpdateChannel} className="bg-white p-6 rounded shadow-lg w-full max-w-md">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="font-bold">Postavke kanala</h3>
+                    <button type="button" onClick={() => setIsSettingsModalOpen(false)}><X size={20}/></button>
+                </div>
+                <input required placeholder="Naziv kanala" className="w-full border p-2 mb-2" value={newChannel.name} onChange={e => setNewChannel({...newChannel, name: e.target.value})} />
+                
+                <label className="flex items-center gap-2 mb-2 text-sm"><input type="checkbox" checked={newChannel.staff_only_posting} onChange={e => setNewChannel({...newChannel, staff_only_posting: e.target.checked})} /> Samo djelatnici objavljuju</label>
+                <label className="flex items-center gap-4 mb-4 text-sm"><input type="checkbox" checked={newChannel.allow_student_messages} onChange={e => setNewChannel({...newChannel, allow_student_messages: e.target.checked})} /> Učenici smiju pisati</label>
+                <button type="submit" className="w-full bg-[#005c8d] text-white p-2 rounded">Spremi promjene</button>
+            </form>
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
@@ -223,7 +274,7 @@ export default function InformativkaAdminPage() {
                   <td className="p-4">{channel.name}</td>
                   <td className="p-4">{channel.type}</td>
                   <td className="p-4 flex gap-2">
-                    <button className="text-gray-400 hover:text-blue-600"><Settings size={16} /></button>
+                    <button onClick={() => openSettings(channel)} className="text-gray-400 hover:text-blue-600"><Settings size={16} /></button>
                     <button className="text-gray-400 hover:text-red-600"><Trash2 size={16} /></button>
                   </td>
                 </tr>
