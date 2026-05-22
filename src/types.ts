@@ -299,6 +299,9 @@ export type StudentYearSummary = {
   status: string;
   finalizedAt?: string;
   finalizedBy?: string;
+  calculated_at?: string; // added
+  overall_average?: number; // added
+  overall_success?: string; // added
 };
 
 export type StudentSubjectEnrollment = {
@@ -383,6 +386,50 @@ export type RolloverLog = {
   studentsTransferred: number;
 };
 
+
+export type ConductRecord = {
+  id: string;
+  student_id: string;
+  class_id: string;
+  school_year_id: string;
+  term: 'FIRST_TERM' | 'SECOND_TERM' | 'FINAL';
+  conduct: 'EXEMPLARY' | 'GOOD' | 'POOR';
+  note?: string;
+  created_by: string;
+  created_at: string;
+};
+
+export type StudentProgressOpinion = {
+  id: string;
+  student_id: string;
+  school_year_id: string;
+  term: 'FIRST_TERM' | 'SECOND_TERM' | 'FINAL';
+  opinion: string;
+  created_by: string;
+  created_at: string;
+};
+
+export type StudentSupport = {
+  id: string;
+  student_id: string;
+  support_type: string;
+  specialist: string;
+  hours: number;
+  starts_at: string;
+  ends_at: string;
+  note?: string;
+  assigned_staff_id?: string;
+  created_by: string;
+  created_at: string;
+};
+
+export type AssistantStudentAssignment = {
+  id: string;
+  assistant_user_id: string;
+  student_id: string;
+  school_year_id: string;
+  created_at: string;
+};
 
 // Removed duplicate and conflicting type definitions
 

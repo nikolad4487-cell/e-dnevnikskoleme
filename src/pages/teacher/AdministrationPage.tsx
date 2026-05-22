@@ -130,7 +130,7 @@ export default function AdministrationPage() {
   const isSchoolAdminMode = location.pathname.startsWith('/admin/');
 
   // Modals / Tabs
-  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN'>(
+  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN' | 'CONDUCT' | 'PROGRESS' | 'SUPPORTS' | 'ASSIGNMENTS'>(
     isClassAdminMode ? 'CLASS_DETAIL' : (isSchoolAdminMode ? 'SCHOOL_YEARS' : 'MENU')
   );
 

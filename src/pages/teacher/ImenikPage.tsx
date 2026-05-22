@@ -796,13 +796,18 @@ export default function ImenikPage() {
 
   const handleUpdateGradeNote = async () => {
     if (!selectedGrade) return;
+    const payload = { note: gradeEditForm.note, updated_at: new Date().toISOString() };
+    console.log("UPDATE GRADE NOTE PAYLOAD", payload);
     try {
        const { error } = await supabase
          .from('grades')
-         .update({ note: gradeEditForm.note, updated_at: new Date().toISOString() })
+         .update(payload)
          .eq('id', selectedGrade.id);
        
-       if (error) throw error;
+       if (error) {
+         console.log("UPDATE GRADE NOTE ERROR", error);
+         throw error;
+       }
        toast.success('Bilješka ažurirana');
        setIsEditingGrade(false);
        fetchGradesAndNotes();
@@ -948,7 +953,7 @@ export default function ImenikPage() {
         .eq('student_id', activeStudent.id)
         .eq('subject_id', activeSubject.id)
         .eq('class_id', effectiveClassId)
-        .eq('term', selectedFinalPeriod === '1' ? 'FIRST_SEMESTER' : 'FINAL')
+        .eq('period', selectedFinalPeriod === '1' ? 'FIRST_TERM' : (selectedFinalPeriod === '2' ? 'SECOND_TERM' : 'FINAL'))
         .maybeSingle();
 
       if (fe) throw fe;
@@ -960,19 +965,24 @@ export default function ImenikPage() {
         class_id: effectiveClassId,
         teacher_id: user.id,
         school_year_id: schoolYearId,
-        term: selectedFinalPeriod === '1' ? 'FIRST_SEMESTER' : 'FINAL',
+        period: selectedFinalPeriod === '1' ? 'FIRST_TERM' : (selectedFinalPeriod === '2' ? 'SECOND_TERM' : 'FINAL'),
         value: gradeText,
-        note: '', // Could be prompted later
       };
       
       console.log("FINAL GRADE PAYLOAD", payload);
 
       if (existing) {
         const { error } = await supabase.from('final_grades').update(payload).eq('id', existing.id);
-        if (error) throw error;
+        if (error) {
+          console.log("FINAL GRADE ERROR", error);
+          throw error;
+        }
       } else {
         const { error } = await supabase.from('final_grades').insert([payload]);
-        if (error) throw error;
+        if (error) {
+          console.log("FINAL GRADE ERROR", error);
+          throw error;
+        }
       }
       toast.success('Zaključna ocjena spremljena.');
       setShowFinalGradeModal(false);
@@ -1038,13 +1048,21 @@ export default function ImenikPage() {
   const [editingNote, setEditingNote] = useState<{ id: string, content: string, type: 'GRADE' | 'GENERAL' } | null>(null);
   const handleUpdateNote = async () => {
     if (!editingNote) return;
+    const payload = { content: editingNote.content };
+    console.log("UPDATE STUDENT NOTE PAYLOAD", payload);
     try {
       if (editingNote.type === 'GRADE') {
-        await supabase.from('grades').update({ note: editingNote.content }).eq('id', editingNote.id);
+        const { error } = await supabase.from('grades').update({ note: editingNote.content }).eq('id', editingNote.id);
+        if (error) console.log("UPDATE GRADE NOTE ERROR", error);
       } else {
-        await supabase.from('student_notes').update({ content: editingNote.content }).eq('id', editingNote.id);
+        const { error } = await supabase.from('student_notes').update(payload).eq('id', editingNote.id);
+        if (error) {
+            console.log("UPDATE STUDENT NOTE ERROR", error);
+            throw error;
+        }
       }
       setEditingNote(null);
+      fetchGradesAndNotes();
     } catch (err) {
       console.error(err);
       toast.error('Greška pri ažuriranju bilješke');
