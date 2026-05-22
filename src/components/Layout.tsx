@@ -20,6 +20,7 @@ const TEACHER_NAV: NavItem[] = [
   { label: 'Izvještaji', path: '/teacher/izvjestaji' },
   { label: 'Informativka', path: '/teacher/informativka' },
   { label: 'Pedagoška dokumentacija', path: '/teacher/pedagoska-dokumentacija' },
+  { label: 'Svjedodžbe', path: '/teacher/svjedodzbe' },
   { label: 'Administracija', path: '/admin/school-dashboard' },
   { label: 'Pretraživanje', path: '/teacher/pretrazivanje' },
 ];

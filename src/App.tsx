@@ -146,6 +146,8 @@ const IzvjestajiPage = lazy(() => import('./pages/teacher/IzvjestajiPage'));
 const AdministrationPage = lazy(() => import('./pages/teacher/AdministrationPage'));
 const PretrazivanjePage = lazy(() => import('./pages/teacher/PretrazivanjePage'));
 const PedagoskaDokumentacijaPage = lazy(() => import('./pages/teacher/PedagoskaDokumentacijaPage'));
+const CertificateManagementPage = lazy(() => import('./pages/teacher/certificates/CertificateManagementPage'));
+
 
 // Student/Parent Pages
 const OcjenePage = lazy(() => import('./pages/student/OcjenePage'));
@@ -267,6 +269,7 @@ export default function App() {
                         <Route path="pretrazivanje" element={<PretrazivanjePage />} />
                         <Route path="informativka" element={<InformativkaPage />} />
                         <Route path="pedagoska-dokumentacija" element={<PedagoskaDokumentacijaPage />} />
+                        <Route path="svjedodzbe" element={<CertificateManagementPage />} />
                         <Route path="postavke" element={<SettingsPage />} />
                         <Route path="*" element={<Navigate to="/" replace />} />
                       </Routes>

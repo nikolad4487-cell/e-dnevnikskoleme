@@ -4,11 +4,12 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, Subject, StudentSubjectEnrollment, SchoolYear, RolloverLog, StudentClassEnrollment, School, Program, SchoolType, SecondarySubtype, ClassVariant, ContinuationType, PROGRAM_TYPES, CONTINUATION_TYPES, CLASS_VARIANTS, ProgramType, ClassSubject } from '../../types';
-import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info } from 'lucide-react';
+import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info, FileText } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
 import { cn, getSurname, formatSubjectDisplayName, formatPersonName } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
+import CertificateManagementPage from './certificates/CertificateManagementPage';
 
 export default function AdministrationPage() {
   const navigate = useNavigate();
@@ -130,7 +131,7 @@ export default function AdministrationPage() {
   const isSchoolAdminMode = location.pathname.startsWith('/admin/');
 
   // Modals / Tabs
-  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN' | 'CONDUCT' | 'PROGRESS' | 'SUPPORTS' | 'ASSIGNMENTS'>(
+  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN' | 'CONDUCT' | 'PROGRESS' | 'SUPPORTS' | 'ASSIGNMENTS' | 'DOCUMENTS'>(
     isClassAdminMode ? 'CLASS_DETAIL' : (isSchoolAdminMode ? 'SCHOOL_YEARS' : 'MENU')
   );
 
@@ -3009,6 +3010,12 @@ setAllSubjects(uniqueSub2);
                    >
                      <GraduationCap size={14}/> Opći prosjek
                    </button>
+                   <button 
+                     onClick={() => setActiveTab('DOCUMENTS')}
+                     className="bg-white border border-gray-300 text-gray-500 px-4 py-1.5 font-bold text-[10px] uppercase hover:bg-gray-50 flex items-center gap-2"
+                   >
+                     <FileText size={14}/> Svjedodžbe
+                   </button>
                 </div>
               </div>
 
@@ -4604,6 +4611,10 @@ setAllSubjects(uniqueSub2);
                   </div>
                 </div>
              </div>
+          )}
+
+          {activeTab === 'DOCUMENTS' && (
+             <CertificateManagementPage />
           )}
 
           {activeTab === 'SCHOOL_YEARS' && (
