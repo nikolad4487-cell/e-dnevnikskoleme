@@ -1309,11 +1309,17 @@ setStudents(uniqueStudents);
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="flex-1">
                                         <div className="font-bold text-[#005c8d] uppercase mb-0.5">
-                                          {(sub?.name || 'Predmet').toUpperCase()} - {lesson.teacherDisplayName && !lesson.teacherDisplayName.includes('undefined') ? lesson.teacherDisplayName : (teacher ? formatPersonName(teacher) : 'Nepoznat nastavnik')} {lesson.groupName ? <span className="text-gray-400 font-normal italic lowercase ml-1">({lesson.groupName})</span> : ''}
+                                          {(sub?.name || 'Predmet').toUpperCase()} - {lesson.teacherDisplayName && !lesson.teacherDisplayName.includes('undefined') ? lesson.teacherDisplayName : (teacher ? formatPersonName(teacher) : 'Nepoznat nastavnik')}
+                                          {lesson.groupName ? <span className="text-gray-400 font-normal italic lowercase ml-1">({lesson.groupName})</span> : ''}
+                                          {!lesson.isHeld && " - SAT NIJE ODRŽAN"}
                                         </div>
-                                        <div className={cn("text-gray-800 font-medium whitespace-pre-wrap", !lesson.isHeld && "line-through text-red-400")}>
-                                          {lesson.isHeld ? (lesson.topic || <span className="text-gray-300 italic">Nije upisana tema...</span>) : "SAT NIJE ODRŽAN"}
-                                        </div>
+                                        {lesson.topic ? (
+                                          <div className="text-[10px] text-gray-500 italic whitespace-pre-wrap leading-snug">
+                                            {lesson.topic}
+                                          </div>
+                                        ) : (
+                                          lesson.isHeld && <div className="text-[10px] text-gray-400 italic">Nije upisana tema...</div>
+                                        )}
                                       </div>
                                       
                                       {canEdit && (
