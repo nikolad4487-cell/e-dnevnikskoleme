@@ -4614,7 +4614,7 @@ setAllSubjects(uniqueSub2);
           )}
 
           {activeTab === 'DOCUMENTS' && (
-             <CertificateManagementPage />
+             <CertificateManagementPage currentClass={selectedClassData} currentSchoolId={selectedSchoolId || ''} />
           )}
 
           {activeTab === 'SCHOOL_YEARS' && (
