@@ -43,6 +43,11 @@ export default function UserManagementPage() {
   const [oib, setOib] = useState('');
   const [selectedRoles, setSelectedRoles] = useState<Role[]>([Role.TEACHER]);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Bulk Create State
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [bulkRole, setBulkRole] = useState<Role>(Role.STUDENT);
+  const [bulkData, setBulkData] = useState('');
 
   const toggleRole = (role: Role) => {
     setSelectedRoles(prev => 
@@ -211,6 +216,67 @@ export default function UserManagementPage() {
     }
   };
 
+  const handleBulkSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAnyAdmin) return;
+    
+    if (!bulkData.trim()) {
+      toast.error('Niste unijeli nijednog korisnika.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const usersToCreate = bulkData.split('\n')
+        .map(line => line.trim())
+        .filter(line => line.length > 0)
+        .map(line => {
+          // Format: Ime Prezime | email@eskole.me
+          // or just Ime Prezime
+          const parts = line.split('|');
+          const namePart = parts[0].trim();
+          const emailPart = parts.length > 1 ? parts[1].trim() : '';
+          
+          const nameTokens = namePart.split(' ');
+          const name = nameTokens[0];
+          const surname = nameTokens.slice(1).join(' ');
+
+          return { name, surname, email: emailPart };
+        });
+
+      if (usersToCreate.length === 0) {
+        toast.error('Format unosa nije prepoznat.');
+        setSubmitting(false);
+        return;
+      }
+
+      console.log("BULK CREATE SENDING", usersToCreate);
+
+      const response = await fetch('/api/admin/bulk-create-general', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          users: usersToCreate,
+          role: bulkRole,
+          schoolId: selectedSchoolId
+        })
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Neuspjela obrada');
+      
+      toast.success(`Uspješno kreirano ${data.results?.filter((r: any) => r.success).length || 0} korisnika.`);
+      setIsBulkModalOpen(false);
+      setBulkData('');
+      fetchUsers();
+    } catch (err: any) {
+      console.error("BULK ACTION FAILED:", err);
+      toast.error('Greška pri bulk kreiranju: ' + (err.message || 'Nepoznata greška'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleDeleteUser = async (profileId: string, profile: any, soft: boolean = true) => {
     if (!isAnyAdmin) {
       toast.error('Nemate dozvolu za brisanje korisnika.');
@@ -303,13 +369,22 @@ export default function UserManagementPage() {
         </div>
         
         {isAnyAdmin && (
-          <button 
-            onClick={handleOpenCreate}
-            className="bg-[#005c8d] text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 hover:bg-[#004a71] transition-all shadow-lg active:scale-95"
-          >
-            <UserPlus size={18} strokeWidth={3} />
-            Novi korisnik
-          </button>
+          <div className="flex gap-2">
+            <button 
+              onClick={() => setIsBulkModalOpen(true)}
+              className="bg-slate-100 text-[#005c8d] px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 hover:bg-slate-200 transition-all shadow-sm active:scale-95"
+            >
+              <UserPlus size={18} strokeWidth={3} />
+              Dodaj više
+            </button>
+            <button 
+              onClick={handleOpenCreate}
+              className="bg-[#005c8d] text-white px-6 py-3 rounded-xl font-black uppercase tracking-widest text-xs flex items-center gap-2 hover:bg-[#004a71] transition-all shadow-lg active:scale-95"
+            >
+              <UserPlus size={18} strokeWidth={3} />
+              Novi korisnik
+            </button>
+          </div>
         )}
       </div>
 
@@ -428,6 +503,81 @@ export default function UserManagementPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Bulk Modal */}
+      {isBulkModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="bg-[#005c8d] p-8 text-white relative">
+              <div className="absolute top-8 right-8 text-white/30">
+                <ShieldCheck size={48} strokeWidth={1} />
+              </div>
+              <h2 className="text-2xl font-black uppercase tracking-tighter leading-none mb-2">
+                Dodaj više korisnika
+              </h2>
+              <p className="text-blue-100 text-xs font-bold uppercase tracking-widest">Masovni unos</p>
+            </div>
+            
+            <form onSubmit={handleBulkSubmit} className="p-8 space-y-5">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Uloga za sve unesene korisnike</label>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {[Role.ADMIN, Role.TEACHER, Role.STUDENT, Role.PARENT].map((role) => (
+                    <button
+                      key={role}
+                      type="button"
+                      onClick={() => setBulkRole(role)}
+                      className={`p-3 rounded-lg border-2 text-[9px] font-black uppercase tracking-widest transition-all ${
+                        bulkRole === role 
+                        ? 'bg-blue-50 border-[#005c8d] text-[#005c8d]' 
+                        : 'bg-slate-50 border-slate-100 text-slate-400 hover:border-slate-200'
+                      }`}
+                    >
+                      {role === Role.TEACHER ? 'Nastavnik' : 
+                       role === Role.STUDENT ? 'Učenik' :
+                       role === Role.PARENT ? 'Roditelj' : 'Admin Škole'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                  Popis korisnika (jedan po redu)
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  Format: <strong>Ime Prezime | email@eskole.me</strong> ili samo <strong>Ime Prezime</strong>
+                </p>
+                <textarea 
+                  value={bulkData}
+                  onChange={e => setBulkData(e.target.value)}
+                  className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-3 font-mono text-sm text-slate-900 focus:border-[#005c8d] outline-none h-48 resize-y"
+                  placeholder="Nikola Đurić | nikola.duric@eskole.me&#10;Ana Kovač | ana.kovac@eskole.me"
+                  required
+                />
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setIsBulkModalOpen(false)}
+                  disabled={submitting}
+                  className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-xl font-black uppercase tracking-widest text-[10px]"
+                >
+                  Odustani
+                </button>
+                <button 
+                  type="submit"
+                  disabled={submitting}
+                  className={`flex-1 ${submitting ? 'bg-slate-400' : 'bg-[#005c8d]'} text-white py-4 rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2`}
+                >
+                  {submitting ? 'Obrada...' : 'Stvori korisnike'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modal */}
       {isModalOpen && (

@@ -43,6 +43,10 @@ export default function InformativkaPage() {
   const [isNewChatOpen, setIsNewChatOpen] = useState(false);
   const [availableContacts, setAvailableContacts] = useState<RecipientDetails[]>([]);
   const [contactsLoading, setContactsLoading] = useState(false);
+  
+  // Delete Modal State
+  const [chatToDelete, setChatToDelete] = useState<any>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -51,9 +55,15 @@ export default function InformativkaPage() {
   const isParent = user?.globalRole === Role.PARENT;
   const isStudent = user?.globalRole === Role.STUDENT;
 
-  const handleDeleteChat = async (chat: any) => {
+  const handleDeleteChat = (chat: any) => {
+    setChatToDelete(chat);
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDeleteChat = async () => {
+    if (!chatToDelete) return;
     try {
-      const chatId = chat.id;
+      const chatId = chatToDelete.id;
       console.log("DELETE CHAT ID", chatId);
 
       if (!chatId) return;
@@ -99,6 +109,8 @@ export default function InformativkaPage() {
 
       if (groupError || membersError || messagesError) {
         toast.error("Brisanje nije uspjelo.");
+        setIsDeleteModalOpen(false);
+        setChatToDelete(null);
         return;
       }
 
@@ -110,8 +122,12 @@ export default function InformativkaPage() {
       }
       setRefreshTrigger(prev => prev + 1);
       console.log("DELETE FLOW FINISHED");
+      setIsDeleteModalOpen(false);
+      setChatToDelete(null);
     } catch (err) {
       console.error("DELETE CHAT CRASH", err);
+      setIsDeleteModalOpen(false);
+      setChatToDelete(null);
     }
   };
 
@@ -883,33 +899,38 @@ export default function InformativkaPage() {
                   if (!file || !selectedGroup || !user) return;
                   
                   try {
-                    const { data: bucketData, error: bucketError } = await supabase.storage.getBucket('attachments');
+                    const { data: bucketData, error: bucketError } = await supabase.storage.getBucket('informativka-attachments');
                     if (bucketError && bucketError.message.includes("not found")) {
-                      await supabase.storage.createBucket('attachments', { public: true });
+                      await supabase.storage.createBucket('informativka-attachments', { public: true });
                     }
 
                     const fileExt = file.name.split('.').pop();
-                    const fileName = `${Math.random()}.${fileExt}`;
-                    const filePath = `chat_attachments/${fileName}`;
+                    const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
+                    const filePath = `informativka/${selectedGroup}/${fileName}`;
                     
                     const { error: uploadError } = await supabase.storage
-                      .from('attachments')
+                      .from('informativka-attachments')
                       .upload(filePath, file);
                       
                     if (uploadError) throw uploadError;
                     
                     const { data: { publicUrl } } = supabase.storage
-                      .from('attachments')
+                      .from('informativka-attachments')
                       .getPublicUrl(filePath);
                       
                     // Create message with attachment
+                    const messageText = `Prilog: ${file.name}`;
+                    const payload = {
+                      group_id: selectedGroup,
+                      sender_id: user.id,
+                      content: messageText,
+                      text: messageText, // fallback
+                      timestamp: new Date().toISOString()
+                    };
+
                     const { data: msgData, error: msgError } = await supabase
                       .from('messages')
-                      .insert({
-                        group_id: selectedGroup,
-                        sender_id: user.id,
-                        content: `Prilog: ${file.name}`
-                      })
+                      .insert(payload)
                       .select()
                       .single();
                       
@@ -1061,6 +1082,37 @@ export default function InformativkaPage() {
                   </button>
                 ))
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION MODAL */}
+      {isDeleteModalOpen && chatToDelete && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[100] p-4">
+          <div className="bg-white border border-gray-300 w-full max-w-sm shadow-2xl flex flex-col overflow-hidden">
+            <div className="p-4 bg-slate-50 border-b border-gray-200">
+              <h3 className="font-black text-slate-800 text-xs uppercase tracking-wider">Potvrda brisanja razgovora</h3>
+            </div>
+            <div className="p-4 text-xs text-slate-600">
+              Jeste li sigurni da želite obrisati ovaj razgovor? Sve poruke će biti trajno obrisane.
+            </div>
+            <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-slate-50">
+              <button 
+                onClick={() => {
+                  setIsDeleteModalOpen(false);
+                  setChatToDelete(null);
+                }}
+                className="px-3 py-1.5 text-xs font-bold text-gray-500 rounded hover:bg-gray-200 bg-gray-100 transition-colors uppercase cursor-pointer"
+              >
+                Odustani
+              </button>
+              <button 
+                onClick={confirmDeleteChat}
+                className="px-3 py-1.5 text-xs font-bold text-white rounded bg-red-500 hover:bg-red-600 transition-colors uppercase cursor-pointer"
+              >
+                Obriši razgovor
+              </button>
             </div>
           </div>
         </div>

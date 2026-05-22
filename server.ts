@@ -284,6 +284,102 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     }
   });
 
+  app.post("/api/admin/bulk-create-general", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { users, role, schoolId } = req.body;
+      
+      if (!users || !Array.isArray(users) || users.length === 0) {
+        return res.status(400).json({ error: "Lista korisnika je prazna." });
+      }
+
+      console.log("BULK CREATE RECEIVED", { count: users.length, role, schoolId });
+
+      const { data: existingUserList } = await supabaseAdmin.auth.admin.listUsers();
+      const existingEmails = new Set<string>();
+      existingUserList?.users?.forEach((u: any) => {
+        if (u.email) existingEmails.add(u.email);
+      });
+      // Also check user_profiles
+      const { data: existingProfiles } = await supabaseAdmin.from('user_profiles').select('email');
+      existingProfiles?.forEach((p: any) => {
+        if (p.email) existingEmails.add(p.email);
+      });
+
+      const results = [];
+      const isStaff = role === 'ADMIN' || role === 'TEACHER';
+      const userPassword = isStaff ? '1234' : 'yupu8Ev4';
+      const passwordType = isStaff ? 'staff_with_authenticator' : (role === 'STUDENT' ? 'student_static' : 'parent_static');
+
+      for (const userData of users) {
+         let email = userData.email;
+         if (!email) {
+            email = generateUniqueEmail(userData.name, userData.surname, existingEmails);
+         } else if (existingEmails.has(email.toLowerCase())) {
+            email = generateUniqueEmail(userData.name, userData.surname, existingEmails);
+         }
+         existingEmails.add(email.toLowerCase());
+
+         const fullName = userData.surname ? `${userData.name} ${userData.surname}` : userData.name;
+
+         console.log("BULK CREATE USER", userData);
+
+         const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            password: userPassword,
+            email_confirm: true,
+            user_metadata: { name: userData.name, surname: userData.surname }
+         });
+
+         if (authError || !authUser?.user) {
+            results.push({ ...userData, success: false, error: authError?.message || 'Greška pri kreiranju zabilježena auth' });
+            continue;
+         }
+
+         const userId = authUser.user.id;
+         console.log("CREATED AUTH USER", authUser.user);
+
+         const { data: profile, error: profileError } = await supabaseAdmin
+           .from('user_profiles')
+           .upsert({
+              auth_user_id: userId,
+              email,
+              name: fullName,
+              role: role,
+              is_first_login: true,
+              requires_password_change: false,
+              requires_authenticator_setup: isStaff,
+              password_type: passwordType,
+              school_id: schoolId
+           }, { onConflict: 'auth_user_id' })
+           .select()
+           .maybeSingle();
+
+         if (profileError || !profile) {
+            results.push({ ...userData, success: false, error: profileError?.message || 'Greška u profilu' });
+            continue;
+         }
+         console.log("CREATED PROFILE", profile);
+
+         if (schoolId) {
+            await supabaseAdmin.from('user_school_roles').upsert({
+               user_id: profile.id,
+               school_id: schoolId,
+               role: role,
+               status: 'ACTIVE'
+            }, { onConflict: 'user_id,school_id,role' });
+         }
+
+         results.push({ ...userData, success: true, email, password: userPassword, profile });
+      }
+
+      res.json({ success: true, results, message: "Korisnici obrađeni." });
+    } catch (err: any) {
+      console.error("[ADMIN_BULK_CREATE_GENERAL]", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Admin create user endpoint
   app.post("/api/admin/create-user", async (req, res) => {
     try {

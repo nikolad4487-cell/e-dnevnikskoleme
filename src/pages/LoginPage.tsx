@@ -54,19 +54,20 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      let email = identifier.trim().toLowerCase();
+      let normalizedEmail = identifier.trim().toLowerCase();
       
-      if (!email.includes('@')) {
-        email = `${email}@eskole.me`;
+      if (!normalizedEmail.includes('@')) {
+        normalizedEmail = `${normalizedEmail}@eskole.me`;
       }
 
-      console.log(`[LOGIN] START: ${email}`);
+      console.log("LOGIN INPUT", identifier);
+      console.log("NORMALIZED LOGIN EMAIL", normalizedEmail);
       
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email,
+          email: normalizedEmail,
           password,
           totpCode: otp,
           loginType
@@ -191,19 +192,19 @@ export default function LoginPage() {
 
             <div className="space-y-1">
               <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest">
-                E-mail adresa
+                E-mail ili korisničko ime
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                   <Mail size={16} />
                 </div>
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 text-sm outline-none focus:border-[#005c8d] focus:bg-blue-50/20 shadow-inner"
-                  placeholder={loginType === 'STAFF' ? 'ime.prezime@eskole.me' : 'ime.prezime@skole.hr'}
+                  placeholder="nikola.duric ili nikola.duric@eskole.me"
                 />
               </div>
             </div>

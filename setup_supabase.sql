@@ -54,5 +54,5 @@ FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE;
 
 -- Create attachments bucket
 INSERT INTO storage.buckets (id, name, public) 
-VALUES ('attachments', 'attachments', true)
+VALUES ('informativka-attachments', 'informativka-attachments', true)
 ON CONFLICT (id) DO NOTHING;
