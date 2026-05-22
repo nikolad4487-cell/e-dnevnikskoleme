@@ -52,6 +52,13 @@ DROP CONSTRAINT IF EXISTS schedule_cells_class_id_fkey,
 ADD CONSTRAINT schedule_cells_class_id_fkey
 FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE;
 
+-- final_grades updates
+ALTER TABLE final_grades ADD COLUMN IF NOT EXISTS term text DEFAULT 'FINAL';
+ALTER TABLE final_grades ADD COLUMN IF NOT EXISTS note text;
+ALTER TABLE final_grades ADD COLUMN IF NOT EXISTS school_year_id uuid;
+
+NOTIFY pgrst, 'reload schema';
+
 -- Create attachments bucket
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('informativka-attachments', 'informativka-attachments', true)

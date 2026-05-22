@@ -44,3 +44,11 @@ export function formatSubjectDisplayName(subjectName: string, subjectType: strin
   
   return `${subjectName} (${suffix})`;
 }
+
+export const finalGradeLabels: Record<string, string> = {
+  "1": "Nedovoljan (1)",
+  "2": "Dovoljan (2)",
+  "3": "Dobar (3)",
+  "4": "Vrlo dobar (4)",
+  "5": "Odličan (5)"
+};

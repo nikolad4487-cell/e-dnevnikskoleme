@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, Grade, Subject, StudentNote, Exam, FinalGrade, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary, specialExamTypeLabels } from '../../types';
-import { cn, formatName, getSurname, formatSubjectDisplayName } from '../../lib/utils';
+import { cn, formatName, getSurname, formatSubjectDisplayName, finalGradeLabels } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2, Check } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
@@ -300,8 +300,8 @@ export default function ImenikPage() {
   }, []);
 
   useEffect(() => {
-    let gradeChannel: any = null;
-    let noteChannel: any = null;
+    const gradeChannel: any = null;
+    const noteChannel: any = null;
 
     if (viewMode === 'GRADES' && activeStudent && activeSubject) {
       const fetchGradingElements = async () => {
@@ -390,8 +390,8 @@ export default function ImenikPage() {
   }, [viewMode, activeStudent, activeSubject, effectiveClassId]);
 
   useEffect(() => {
-    let snChannel: any = null;
-    let cnChannel: any = null;
+    const snChannel: any = null;
+    const cnChannel: any = null;
 
     if (viewMode === 'NOTES' && activeStudent && effectiveClassId) {
       const selectedClass = classes.find(c => c.id === effectiveClassId);
@@ -829,6 +829,7 @@ export default function ImenikPage() {
     }
 
     if (isClassAdmin && diffMinutes > 45 && !adminOverride) {
+      setSelectedGrade(grade);
       setShowAdminDeleteAuth(true);
       return;
     }
@@ -840,29 +841,13 @@ export default function ImenikPage() {
       }
     }
 
-    if (!confirm('Jeste li sigurni da želite obrisati ovu ocjenu?')) return;
-
-    try {
-      setLoading(true);
-      const { error } = await supabase
-        .from('grades')
-        .delete()
-        .eq('id', gradeId);
-      
-      if (error) throw error;
-      
-      toast.success('Ocjena obrisana');
-      setSelectedGrade(null);
-      setShowAdminDeleteAuth(false);
-      setDeleteConfirmationCode('');
-      fetchGradesAndNotes();
-      fetchWarningData();
-    } catch (error) {
-      console.error(error);
-      toast.error('Greška pri brisanju ocjene');
-    } finally {
-      setLoading(false);
-    }
+    setDeleteDialog({
+      isOpen: true,
+      id: gradeId,
+      type: 'GRADE',
+      loading: false,
+      message: 'Jeste li sigurni da želite obrisati ovu ocjenu?'
+    });
   };
 
   const handleDeleteNote = async (noteId: string) => {
@@ -874,7 +859,7 @@ export default function ImenikPage() {
       return;
     }
 
-    setDeleteDialog({ isOpen: true, id: noteId, type: 'NOTE', loading: false });
+    setDeleteDialog({ isOpen: true, id: noteId, type: 'NOTE', loading: false, message: 'Jeste li sigurni da želite obrisati ovu bilješku?' });
   };
 
   const handleAddNote = async () => {
@@ -1017,20 +1002,33 @@ export default function ImenikPage() {
     let tableName = '';
     
     switch (deleteDialog.type) {
-      case 'GRADE': tableName = 'grades'; break;
-      case 'NOTE': tableName = 'student_notes'; break;
+      case 'GRADE': tableName = 'grades'; console.log("DELETE GRADE CLICKED", { id: deleteDialog.id }); break;
+      case 'NOTE': tableName = 'student_notes'; console.log("DELETE NOTE CLICKED", { id: deleteDialog.id }); break;
       case 'SPECIAL_EXAM': tableName = 'exams'; break;
-      case 'FINAL_GRADE': tableName = 'final_grades'; break;
+      case 'FINAL_GRADE': tableName = 'final_grades'; console.log("DELETE FINAL GRADE CLICKED", { id: deleteDialog.id }); break;
     }
 
     try {
       const { error } = await supabase.from(tableName).delete().eq('id', deleteDialog.id);
       if (error) throw error;
+      
+      if (deleteDialog.type === 'FINAL_GRADE') console.log("FINAL GRADE DELETE SUCCESS", deleteDialog.id);
+
       toast.success('Zapis je uspješno obrisan.');
+      if (deleteDialog.type === 'GRADE') {
+        setSelectedGrade(null);
+        setShowAdminDeleteAuth(false);
+        setDeleteConfirmationCode('');
+      }
+
       await fetchGradesAndNotes();
+      await fetchStudentsData();
       await fetchWarningData();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      console.error("DELETE ERROR", err);
+      if (deleteDialog.type === 'GRADE') console.log("DELETE GRADE ERROR", err);
+      if (deleteDialog.type === 'NOTE') console.log("DELETE NOTE ERROR", err);
+      if (deleteDialog.type === 'FINAL_GRADE') console.log("DELETE FINAL GRADE ERROR", err);
       toast.error('Brisanje nije uspjelo.');
     } finally {
       setDeleteDialog({ isOpen: false, id: '', type: null, loading: false });
@@ -1168,24 +1166,72 @@ export default function ImenikPage() {
     return allowedMonths.includes(monthNumber);
   };
 
-  const handleRandomStudent = () => {
+  const handleRandomStudent = async () => {
     console.log("RANDOM BUTTON CLICKED");
     if (!students || students.length === 0) {
-      toast.error("Nema učenika za slučajni odabir.");
+      toast.error("Nema učenika za odabir.");
       return;
     }
 
-    const randomIndex = Math.floor(Math.random() * students.length);
-    const selected = students[randomIndex];
+    // Set loading state conceptually (we can just use toast.loading)
+    const toastId = toast.loading("Odabirem slučajnog učenika...");
 
-    console.log("STUDENTS FOR RANDOM:", students);
-    console.log("RANDOM INDEX:", randomIndex);
-    console.log("RANDOM STUDENT SELECTED:", selected);
+    try {
+      const randomIndex = Math.floor(Math.random() * students.length);
+      const selectedStudent = students[randomIndex];
 
-    setRandomSelectedStudentId(selected.id);
-    setActiveStudent(selected);
-    
-    // Auto-scroll to selected row can be handled by browser if we wanted to
+      console.log("RANDOM STUDENT", selectedStudent);
+
+      // Determine visible subjects for this student
+      // First check if student has any active enrollments
+      const studentEnrollments = enrollments.filter(e => e.studentId === selectedStudent.id && e.status === 'ACTIVE');
+      
+      let studentSubjectIds = studentEnrollments.map(e => e.subjectId);
+      
+      // Fallback: If no enrollments exist for this student, use all class subjects
+      if (studentSubjectIds.length === 0) {
+        studentSubjectIds = classSubjects.filter(cs => cs.classId === effectiveClassId).map(cs => cs.subjectId);
+      }
+
+      const visibleSubjects = allSubjects.filter(sub => {
+        if (!studentSubjectIds.includes(sub.id)) return false;
+        
+        if (isMainAdmin) return true;
+        const activeClass = classes.find(c => c.id === effectiveClassId);
+        const isHomeroomOrDeputy = activeClass?.homeroomTeacherId === user?.id || activeClass?.deputyTeacherId === user?.id;
+        if (isHomeroomOrDeputy) return true;
+        
+        return subjectAssignments.some(a => a.classId === effectiveClassId && a.subjectId === sub.id && a.teacherId === user?.id);
+      });
+
+      console.log("VISIBLE SUBJECTS", visibleSubjects);
+      
+      const activeClass = classes.find(c => c.id === effectiveClassId);
+      const roles = {
+        isMainAdmin,
+        isHomeroom: activeClass?.homeroomTeacherId === user?.id,
+        isDeputy: activeClass?.deputyTeacherId === user?.id,
+      };
+      console.log("CURRENT USER ROLE", roles);
+
+      const autoOpenSubject = visibleSubjects.length === 1 ? visibleSubjects[0] : null;
+      console.log("AUTO OPEN SUBJECT", autoOpenSubject);
+
+      if (autoOpenSubject) {
+        setActiveStudent(selectedStudent);
+        setActiveSubject(autoOpenSubject);
+        setViewMode('GRADES');
+      } else {
+        setActiveStudent(selectedStudent);
+        setViewMode('SUBJECTS');
+      }
+      
+      setRandomSelectedStudentId(selectedStudent.id);
+      toast.success("Učenik odabran.", { id: toastId });
+    } catch (err) {
+      console.error(err);
+      toast.error("Greška pri odabiru.", { id: toastId });
+    }
   };
 
   const renderStudents = () => (
@@ -1466,7 +1512,7 @@ export default function ImenikPage() {
                             <div className="flex flex-col items-center gap-1">
                               <div className="flex items-center gap-2 group">
                                 <span className="text-[8px] font-bold text-gray-400 uppercase">1. pol:</span>
-                                <span className="font-bold text-[#005c8d] text-base">{fg.value}</span>
+                                <span className="font-bold text-[#005c8d] text-base">{finalGradeLabels[fg.value] || fg.value}</span>
                                 {canEditGrades(activeSubject?.id || '') && (
                                   <button 
                                     onClick={(e) => { e.stopPropagation(); handleDeleteFinalGrade(fg.id); }}
@@ -1513,7 +1559,7 @@ export default function ImenikPage() {
                             <div className="flex flex-col items-center gap-1">
                               <div className="flex items-center gap-2 group">
                                 <span className="text-[8px] font-bold text-gray-400 uppercase">Zaključna:</span>
-                                <span className="font-bold text-[#005c8d] text-base">{fg.value}</span>
+                                <span className="font-bold text-[#005c8d] text-base">{finalGradeLabels[fg.value] || fg.value}</span>
                                 {canEditGrades(activeSubject?.id || '') && (
                                   <button 
                                     onClick={(e) => { e.stopPropagation(); handleDeleteFinalGrade(fg.id); }}

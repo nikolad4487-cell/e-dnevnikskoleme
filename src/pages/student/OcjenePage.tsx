@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Grade, Subject, User, ClassSubjectTeacher, specialExamTypes, specialExamTypeLabels } from '../../types';
-import { cn, formatPersonName } from '../../lib/utils';
+import { cn, formatPersonName, finalGradeLabels } from '../../lib/utils';
 import { BookOpen, GraduationCap, ChevronRight, ArrowLeft } from 'lucide-react';
 import { mappers, mapList } from '../../lib/mappers';
 
@@ -343,9 +343,9 @@ export default function OcjenePage() {
                     const isSemester1 = ['XII'].includes(m);
                     const isSemester2 = ['VI'].includes(m);
                     const fg = activeFinalGrades.find(f => f.term === (m === 'XII' ? 'FIRST_SEMESTER' : 'FINAL'));
-                    const val = fg ? fg.value : '';
+                    const val = fg ? (finalGradeLabels[fg.value] || fg.value) : '';
                     return (
-                      <td key={m} className="p-2 border-r border-slate-300 text-center text-red-600 text-lg">
+                      <td key={m} className="p-2 border-r border-slate-300 text-center text-red-600 text-[10px] md:text-sm font-bold leading-tight">
                         {(isSemester1 || isSemester2) ? val : ''}
                       </td>
                     );
