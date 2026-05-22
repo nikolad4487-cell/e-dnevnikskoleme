@@ -65,8 +65,8 @@ export default function TeacherIzostanciPage() {
       return {
         ...s,
         total: studAbs.length,
-        justified: studAbs.filter(a => a.status === AbsenceStatus.OPRAVDANO).length,
-        unjustified: studAbs.filter(a => a.status === AbsenceStatus.NEOPRAVDANO).length,
+        justified: studAbs.filter(a => a.status === AbsenceStatus.JUSTIFIED).length,
+        unjustified: studAbs.filter(a => a.status === AbsenceStatus.UNJUSTIFIED).length,
         pending: studAbs.filter(a => a.status === AbsenceStatus.PENDING).length
       };
     }).sort((a, b) => {
@@ -78,8 +78,8 @@ export default function TeacherIzostanciPage() {
 
   const stats = useMemo(() => ({
     total: absences.length,
-    justified: absences.filter(a => a.status === AbsenceStatus.OPRAVDANO).length,
-    unjustified: absences.filter(a => a.status === AbsenceStatus.NEOPRAVDANO).length,
+    justified: absences.filter(a => a.status === AbsenceStatus.JUSTIFIED).length,
+    unjustified: absences.filter(a => a.status === AbsenceStatus.UNJUSTIFIED).length,
     pending: absences.filter(a => a.status === AbsenceStatus.PENDING).length,
   }), [absences]);
   
@@ -179,9 +179,9 @@ const StudentDetailView = ({ student, absences, lessons, onJustify }: any) => {
                                 const abs = absList.find((a: any) => a.hour === h);
                                 if (!abs) return <td key={h} className="p-2 border-r text-center text-gray-300">/</td>;
                                 
-                                const color = abs.status === AbsenceStatus.OPRAVDANO ? 'bg-green-500' :
-                                              abs.status === AbsenceStatus.NEOPRAVDANO ? 'bg-red-500' :
-                                              abs.status === AbsenceStatus.OSTALO ? 'bg-yellow-400' :
+                                const color = abs.status === AbsenceStatus.JUSTIFIED ? 'bg-green-500' :
+                                              abs.status === AbsenceStatus.UNJUSTIFIED ? 'bg-red-500' :
+                                              abs.status === AbsenceStatus.OTHER ? 'bg-yellow-400' :
                                               'bg-orange-500';
                                               
                                 // Subject abbreviation
@@ -207,22 +207,23 @@ const StudentDetailView = ({ student, absences, lessons, onJustify }: any) => {
 
 const JustifyModal = ({ date, absences, onClose, onSuccess, user }: any) => {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(absences.filter((a: any) => a.status === AbsenceStatus.PENDING).map((a: any) => a.id)));
-    const [status, setStatus] = useState<AbsenceStatus | 'OSTALO' | ''>('');
+    const [status, setStatus] = useState<AbsenceStatus | ''>('');
     const [type, setType] = useState<string>('');
     const [note, setNote] = useState<string>('');
     const [saving, setSaving] = useState(false);
 
     const onJustify = async () => {
       if (!status || !type) return toast.error('Status i tip su obavezni!');
-      if ((status === AbsenceStatus.NEOPRAVDANO || type === 'OSTALO') && !note) return toast.error('Napomena je obavezna!');
+      if ((status === AbsenceStatus.UNJUSTIFIED || status === AbsenceStatus.OTHER) && !note) return toast.error('Napomena je obavezna!');
       setSaving(true);
       try {
         const payload = {
-          status: status === 'OSTALO' ? AbsenceStatus.OPRAVDANO : status,
+          status: status,
           absence_type: type,
           note: note,
-          justified_by: user.id,
-          justified_at: new Date().toISOString()
+          resolved_by: user.id,
+          resolved_at: new Date().toISOString(),
+          justified_by: user.name || user.id
         };
         const { error } = await supabase.from('absences').update(payload).in('id', Array.from(selectedIds));
         
@@ -249,9 +250,9 @@ const JustifyModal = ({ date, absences, onClose, onSuccess, user }: any) => {
              ))}
              <select onChange={e => setStatus(e.target.value as any)} className="w-full border p-2">
                 <option value="">Status...</option>
-                <option value={AbsenceStatus.OPRAVDANO}>Opravdano</option>
-                <option value={AbsenceStatus.NEOPRAVDANO}>Neopravdano</option>
-                <option value="OSTALO">Ostalo</option>
+                <option value={AbsenceStatus.JUSTIFIED}>Opravdano</option>
+                <option value={AbsenceStatus.UNJUSTIFIED}>Neopravdano</option>
+                <option value={AbsenceStatus.OTHER}>Ostalo</option>
              </select>
              <select onChange={e => setType(e.target.value)} className="w-full border p-2">
                 <option value="">Tip...</option>

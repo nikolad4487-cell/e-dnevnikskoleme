@@ -116,8 +116,8 @@ export default function IzostanciPage() {
   // Normalize status helper
   const getStatusType = (statusValue: string) => {
     const s = String(statusValue || '').toUpperCase();
-    if (s === 'OPRAVDANO') return 'OPRAVDANO';
-    if (s === 'NEOPRAVDANO') return 'NEOPRAVDANO';
+    if (s === 'OPRAVDANO' || s === 'JUSTIFIED') return 'OPRAVDANO';
+    if (s === 'NEOPRAVDANO' || s === 'UNJUSTIFIED') return 'NEOPRAVDANO';
     if (s === 'CEKA' || s === 'PENDING' || s === 'ČEKA') return 'CEKA';
     return 'OSTALO';
   };
@@ -387,7 +387,11 @@ export default function IzostanciPage() {
                             "font-black uppercase text-[9px] tracking-wide px-2 py-1 rounded border",
                             getStatusBadgeStyles(abs.status)
                           )}>
-                            {abs.status || 'NA PROVJERI'}
+                            {abs.status === 'PENDING' ? 'ČEKA ODLUKU' :
+                             abs.status === 'JUSTIFIED' ? 'OPRAVDANO' :
+                             abs.status === 'UNJUSTIFIED' ? 'NEOPRAVDANO' :
+                             abs.status === 'OTHER' ? 'OSTALO' :
+                             (abs.status || 'NA PROVJERI')}
                           </span>
                         </div>
                       </div>

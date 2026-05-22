@@ -5,11 +5,49 @@ import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 import { authenticator } from "otplib";
 import QRCode from "qrcode";
+import fs from "fs";
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Flat file JSON DB for fallback / guaranteed local persistence
+const DATA_DIR = path.join(__dirname, "data");
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function initJsonFile(filename: string) {
+  const filePath = path.join(DATA_DIR, filename);
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, JSON.stringify([], null, 2), "utf-8");
+  }
+}
+
+initJsonFile("lektire.json");
+initJsonFile("pedagoska_dokumentacija.json");
+initJsonFile("daily_notes.json");
+
+function readJsonFile(filename: string): any[] {
+  try {
+    const filePath = path.join(DATA_DIR, filename);
+    const content = fs.readFileSync(filePath, "utf-8");
+    return JSON.parse(content);
+  } catch (error) {
+    console.error(`Error reading flat JSON file ${filename}:`, error);
+    return [];
+  }
+}
+
+function writeJsonFile(filename: string, data: any[]) {
+  try {
+    const filePath = path.join(DATA_DIR, filename);
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+  } catch (error) {
+    console.error(`Error writing flat JSON file ${filename}:`, error);
+  }
+}
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || "";
@@ -43,6 +81,312 @@ async function startServer() {
     // API Routes
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+
+  // 1. Lektire APIs
+  app.get("/api/lektire", (req, res) => {
+    try {
+      const { classId, subjectId } = req.query;
+      if (!classId) return res.status(400).json({ error: "classId is required" });
+      
+      let lektireList = readJsonFile("lektire.json");
+      lektireList = lektireList.filter(l => l.class_id === classId || l.classId === classId);
+      if (subjectId) {
+        lektireList = lektireList.filter(l => l.subject_id === subjectId || l.subjectId === subjectId);
+      }
+      res.json(lektireList);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/lektire", (req, res) => {
+    try {
+      const { classId, subjectId, completedDate, title, description, createdBy } = req.body;
+      if (!classId || !subjectId || !completedDate || !title) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      
+      const lektireList = readJsonFile("lektire.json");
+      const newLektire = {
+        id: Math.random().toString(36).substring(2, 9) + '-' + Date.now(),
+        class_id: classId,
+        classId,
+        subject_id: subjectId,
+        subjectId,
+        completed_date: completedDate,
+        completedDate,
+        title,
+        description: description || "",
+        created_by: createdBy || null,
+        createdBy: createdBy || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      lektireList.push(newLektire);
+      writeJsonFile("lektire.json", lektireList);
+      
+      res.json(newLektire);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/lektire/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const { completedDate, title, description } = req.body;
+      
+      const lektireList = readJsonFile("lektire.json");
+      const idx = lektireList.findIndex(l => l.id === id);
+      if (idx === -1) return res.status(404).json({ error: "Lektira not found" });
+      
+      const item = lektireList[idx];
+      lektireList[idx] = {
+        ...item,
+        completed_date: completedDate || item.completed_date,
+        completedDate: completedDate || item.completedDate,
+        title: title || item.title,
+        description: description !== undefined ? description : item.description,
+        updated_at: new Date().toISOString()
+      };
+      
+      writeJsonFile("lektire.json", lektireList);
+      res.json(lektireList[idx]);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/lektire/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      let lektireList = readJsonFile("lektire.json");
+      lektireList = lektireList.filter(l => l.id !== id);
+      writeJsonFile("lektire.json", lektireList);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // 2. Pedagoska Dokumentacija APIs
+  app.get("/api/pedagoska-dokumentacija", (req, res) => {
+    try {
+      const { classId, studentId } = req.query;
+      let list = readJsonFile("pedagoska_dokumentacija.json");
+      if (classId) {
+        list = list.filter(p => p.class_id === classId || p.classId === classId);
+      }
+      if (studentId) {
+        list = list.filter(p => p.student_id === studentId || p.studentId === studentId);
+      }
+      res.json(list);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/pedagoska-dokumentacija", (req, res) => {
+    try {
+      const payload = req.body;
+      if (!payload.studentId || !payload.classId || !payload.schoolYear) {
+        return res.status(400).json({ error: "Missing required fields: studentId, classId, schoolYear" });
+      }
+      
+      const list = readJsonFile("pedagoska_dokumentacija.json");
+      const newDoc = {
+        id: Math.random().toString(36).substring(2, 9) + '-' + Date.now(),
+        student_id: payload.studentId,
+        studentId: payload.studentId,
+        class_id: payload.classId,
+        classId: payload.classId,
+        school_year: payload.schoolYear,
+        schoolYear: payload.schoolYear,
+        education_program: payload.educationProgram || "",
+        educationProgram: payload.educationProgram || "",
+        assistance_form: payload.assistanceForm || "",
+        assistanceForm: payload.assistanceForm || "",
+        difficulties: payload.difficulties || "",
+        visit_reason: payload.visitReason || "",
+        visitReason: payload.visitReason || "",
+        interview_date: payload.interviewDate || null,
+        interviewDate: payload.interviewDate || null,
+        interviewer_name: payload.interviewerName || "",
+        interviewerName: payload.interviewerName || "",
+        record_type: payload.recordType || "",
+        recordType: payload.recordType || "",
+        problem_description: payload.problemDescription || "",
+        problemDescription: payload.problemDescription || "",
+        measures_taken: payload.measuresTaken || "",
+        measuresTaken: payload.measuresTaken || "",
+        teacher_recommendational_notes: payload.teacherRecommendationalNotes || "",
+        teacherRecommendationalNotes: payload.teacherRecommendationalNotes || "",
+        parent_recommendational_notes: payload.parentRecommendationalNotes || "",
+        parentRecommendationalNotes: payload.parentRecommendationalNotes || "",
+        confidential_notes: payload.confidentialNotes || "",
+        confidentialNotes: payload.confidentialNotes || "",
+        attachments: payload.attachments || [],
+        status: payload.status || "OPEN",
+        created_by: payload.createdBy || null,
+        createdBy: payload.createdBy || null,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      list.push(newDoc);
+      writeJsonFile("pedagoska_dokumentacija.json", list);
+      res.json(newDoc);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/pedagoska-dokumentacija/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      
+      const list = readJsonFile("pedagoska_dokumentacija.json");
+      const idx = list.findIndex(p => p.id === id);
+      if (idx === -1) return res.status(404).json({ error: "Document not found" });
+      
+      const item = list[idx];
+      const updatedItem = {
+        ...item,
+        education_program: updates.educationProgram !== undefined ? updates.educationProgram : item.education_program,
+        educationProgram: updates.educationProgram !== undefined ? updates.educationProgram : item.educationProgram,
+        assistance_form: updates.assistanceForm !== undefined ? updates.assistanceForm : item.assistance_form,
+        assistanceForm: updates.assistanceForm !== undefined ? updates.assistanceForm : item.assistanceForm,
+        difficulties: updates.difficulties !== undefined ? updates.difficulties : item.difficulties,
+        visit_reason: updates.visitReason !== undefined ? updates.visitReason : item.visit_reason,
+        visitReason: updates.visitReason !== undefined ? updates.visitReason : item.visitReason,
+        interview_date: updates.interviewDate !== undefined ? updates.interviewDate : item.interview_date,
+        interviewDate: updates.interviewDate !== undefined ? updates.interviewDate : item.interviewDate,
+        interviewer_name: updates.interviewerName !== undefined ? updates.interviewerName : item.interviewer_name,
+        interviewerName: updates.interviewerName !== undefined ? updates.interviewerName : item.interviewerName,
+        record_type: updates.recordType !== undefined ? updates.recordType : item.record_type,
+        recordType: updates.recordType !== undefined ? updates.recordType : item.recordType,
+        problem_description: updates.problemDescription !== undefined ? updates.problemDescription : item.problem_description,
+        problemDescription: updates.problemDescription !== undefined ? updates.problemDescription : item.problemDescription,
+        measures_taken: updates.measuresTaken !== undefined ? updates.measuresTaken : item.measures_taken,
+        measuresTaken: updates.measuresTaken !== undefined ? updates.measuresTaken : item.measures_taken,
+        teacher_recommendational_notes: updates.teacherRecommendationalNotes !== undefined ? updates.teacherRecommendationalNotes : item.teacher_recommendational_notes,
+        teacherRecommendationalNotes: updates.teacherRecommendationalNotes !== undefined ? updates.teacherRecommendationalNotes : item.teacherRecommendationalNotes,
+        parent_recommendational_notes: updates.parentRecommendationalNotes !== undefined ? updates.parentRecommendationalNotes : item.parent_recommendational_notes,
+        parentRecommendationalNotes: updates.parentRecommendationalNotes !== undefined ? updates.parentRecommendationalNotes : item.parentRecommendationalNotes,
+        confidential_notes: updates.confidentialNotes !== undefined ? updates.confidentialNotes : item.confidential_notes,
+        confidentialNotes: updates.confidentialNotes !== undefined ? updates.confidentialNotes : item.confidentialNotes,
+        attachments: updates.attachments !== undefined ? updates.attachments : item.attachments,
+        status: updates.status !== undefined ? updates.status : item.status,
+        updated_at: new Date().toISOString()
+      };
+      
+      list[idx] = updatedItem;
+      writeJsonFile("pedagoska_dokumentacija.json", list);
+      res.json(updatedItem);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/pedagoska-dokumentacija/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      let list = readJsonFile("pedagoska_dokumentacija.json");
+      list = list.filter(p => p.id !== id);
+      writeJsonFile("pedagoska_dokumentacija.json", list);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // 3. Daily Notes APIs
+  app.get("/api/daily-notes", (req, res) => {
+    try {
+      const { classId, date, schoolYearId } = req.query;
+      if (!classId || !date) {
+        return res.status(400).json({ error: "classId and date are required" });
+      }
+      
+      let list = readJsonFile("daily_notes.json");
+      list = list.filter(n => (n.class_id === classId || n.classId === classId) && n.date === date);
+      
+      if (schoolYearId) {
+        list = list.filter(n => n.school_year_id === schoolYearId || n.schoolYearId === schoolYearId);
+      }
+      res.json(list);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/daily-notes", (req, res) => {
+    try {
+      const { classId, schoolYearId, date, content, createdBy, authorName } = req.body;
+      if (!classId || !date || !content) {
+        return res.status(400).json({ error: "Missing required fields: classId, date, content" });
+      }
+      
+      const list = readJsonFile("daily_notes.json");
+      const newNote = {
+        id: Math.random().toString(36).substring(2, 9) + '-' + Date.now(),
+        class_id: classId,
+        classId,
+        school_year_id: schoolYearId || null,
+        schoolYearId: schoolYearId || null,
+        date,
+        content,
+        created_by: createdBy || null,
+        createdBy: createdBy || null,
+        authorName: authorName || "Nastavnik",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      
+      list.push(newNote);
+      writeJsonFile("daily_notes.json", list);
+      res.json(newNote);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/daily-notes/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const { content } = req.body;
+      if (!content) return res.status(400).json({ error: "content is required" });
+      
+      const list = readJsonFile("daily_notes.json");
+      const idx = list.findIndex(n => n.id === id);
+      if (idx === -1) return res.status(404).json({ error: "Note not found" });
+      
+      const item = list[idx];
+      list[idx] = {
+        ...item,
+        content,
+        updated_at: new Date().toISOString()
+      };
+      
+      writeJsonFile("daily_notes.json", list);
+      res.json(list[idx]);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/daily-notes/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      let list = readJsonFile("daily_notes.json");
+      list = list.filter(n => n.id !== id);
+      writeJsonFile("daily_notes.json", list);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Ensure profile endpoint for missing profiles on login

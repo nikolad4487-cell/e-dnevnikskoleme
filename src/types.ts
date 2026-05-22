@@ -191,9 +191,9 @@ export type Lesson = {
 
 export enum AbsenceStatus {
   PENDING = 'PENDING',
-  OPRAVDANO = 'OPRAVDANO',
-  NEOPRAVDANO = 'NEOPRAVDANO',
-  OSTALO = 'OSTALO'
+  JUSTIFIED = 'JUSTIFIED',
+  UNJUSTIFIED = 'UNJUSTIFIED',
+  OTHER = 'OTHER'
 }
 
 export type Absence = {
@@ -206,6 +206,10 @@ export type Absence = {
   status: AbsenceStatus;
   note?: string;
   teacherId: string;
+  absenceType?: string;
+  justifiedBy?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
 };
 
 export type Grade = {

@@ -577,5 +577,62 @@ WHERE
   lower(c.status) IN ('active', 'aktivan')
   AND sy.is_active = true;
 
+-- Lektire, Pedagoška dokumentacija, Daily Notes Schemas
+CREATE TABLE IF NOT EXISTS public.lektire (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    subject_id TEXT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    completed_date DATE NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    created_by UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.pedagoska_dokumentacija (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    school_year TEXT NOT NULL,
+    education_program TEXT,
+    assistance_form TEXT,
+    difficulties TEXT,
+    visit_reason TEXT,
+    interview_date DATE,
+    interviewer_name TEXT,
+    record_type TEXT,
+    problem_description TEXT,
+    measures_taken TEXT,
+    teacher_recommendational_notes TEXT,
+    parent_recommendational_notes TEXT,
+    confidential_notes TEXT,
+    attachments JSONB,
+    status TEXT DEFAULT 'OPEN',
+    created_by UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.daily_notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    school_year_id TEXT REFERENCES public.school_years(id) ON DELETE SET NULL,
+    date DATE NOT NULL,
+    content TEXT NOT NULL,
+    created_by UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Enable RLS and Policies
+ALTER TABLE public.lektire ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.pedagoska_dokumentacija ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.daily_notes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated manage lektire" ON public.lektire FOR ALL TO authenticated USING (true);
+CREATE POLICY "Authenticated manage pedagoska" ON public.pedagoska_dokumentacija FOR ALL TO authenticated USING (true);
+CREATE POLICY "Authenticated manage daily_notes" ON public.daily_notes FOR ALL TO authenticated USING (true);
+
 -- RELOAD SCHEMA
 NOTIFY pgrst, 'reload schema';

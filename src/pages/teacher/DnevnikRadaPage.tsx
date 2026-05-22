@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -6,7 +6,7 @@ import { useSelection } from '../../contexts/SelectionContext';
 import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
 import { cn, getSurname, formatPersonName } from '../../lib/utils';
-import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2 } from 'lucide-react';
+import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, UserX } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
 
@@ -29,7 +29,13 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dailyLessons, setDailyLessons] = useState<Lesson[]>([]);
   const [currentWeekAbsences, setCurrentWeekAbsences] = useState<any[]>([]);
+  const [dailyAbsences, setDailyAbsences] = useState<any[]>([]);
   const [currentClassExams, setCurrentClassExams] = useState<Exam[]>([]);
+
+  // States for Absence Entry right after lesson entry (e-Dnevnik-style)
+  const [showAbsenceEntryModal, setShowAbsenceEntryModal] = useState(false);
+  const [absenceEntryLesson, setAbsenceEntryLesson] = useState<Lesson | null>(null);
+  const [absenceEntrySelectedStudents, setAbsenceEntrySelectedStudents] = useState<string[]>([]);
 
   // Modal State - Week
   const [showWeekModal, setShowWeekModal] = useState(false);
@@ -83,6 +89,57 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [scheduleSubjects, setScheduleSubjects] = useState<any[]>([]);
   const [curriculumPlans, setCurriculumPlans] = useState<any[]>([]);
   const [subjectAssignments, setSubjectAssignments] = useState<SubjectTeachingAssignment[]>([]);
+
+  const canManageWeeks = useMemo(() => {
+    if (!user || !effectiveClassId) return false;
+    if (isMainAdmin || user.role === Role.ADMIN) return true;
+    
+    const isHomeroom = selectedClass ? selectedClass.homeroomTeacherId === user.id : false;
+    const isDeputy = selectedClass ? selectedClass.deputyTeacherId === user.id : false;
+    const isTeachingThisClass = subjectAssignments.some(
+      a => a.classId === effectiveClassId && a.teacherId === user.id
+    );
+
+    return isHomeroom || isDeputy || isTeachingThisClass;
+  }, [user, isMainAdmin, selectedClass, effectiveClassId, subjectAssignments]);
+
+  const getAutoDutyStudents = (weekNum: number) => {
+    if (!students || students.length === 0) return [];
+    
+    const sorted = [...students].sort((a, b) => {
+      const surnameA = getSurname(String(a.name || ''));
+      const surnameB = getSurname(String(b.name || ''));
+      const cmp = surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+      if (cmp !== 0) return cmp;
+      return String(a.name || '').localeCompare(String(b.name || ''), 'hr', { sensitivity: 'base' });
+    });
+    
+    const total = sorted.length;
+    const startIndex = ((weekNum - 1) * 2) % total;
+    
+    const student1 = sorted[startIndex];
+    const student2 = sorted[(startIndex + 1) % total];
+    
+    const res: string[] = [];
+    if (student1) res.push(student1.id);
+    if (student2) res.push(student2.id);
+    return res;
+  };
+
+  const getHrvatskiJezikSubjectId = () => {
+    const classHrAssignments = subjectAssignments.filter(a => {
+      if (a.classId !== effectiveClassId) return false;
+      const sub = allSubjects.find(s => s.id === a.subjectId);
+      return sub && sub.name.toLowerCase().includes('hrvatski');
+    });
+    
+    if (classHrAssignments.length > 0) {
+      return classHrAssignments[0].subjectId;
+    }
+    
+    const hrSub = allSubjects.find(s => s.name.toLowerCase().includes('hrvatski'));
+    return hrSub ? hrSub.id : '';
+  };
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingCell, setEditingCell] = useState<{ dayOfWeek: string, shift: 'MORNING' | 'AFTERNOON', periodNumber: number } | null>(null);
   const [cellSubjectForm, setCellSubjectForm] = useState({
@@ -102,6 +159,187 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     type: null,
     loading: false
   });
+
+  // Daily Notes State & Actions
+  const [dailyNotes, setDailyNotes] = useState<any[]>([]);
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [noteEditContent, setNoteEditContent] = useState('');
+  const [newNoteContent, setNewNoteContent] = useState('');
+
+  const fetchDailyNotes = async () => {
+    if (!effectiveClassId || !selectedDate) return;
+    try {
+      const res = await fetch(`/api/daily-notes?classId=${effectiveClassId}&date=${selectedDate}`);
+      if (res.ok) {
+        const data = await res.json();
+        setDailyNotes(data || []);
+      }
+    } catch (e) {
+      console.error("Error loading daily notes:", e);
+    }
+  };
+
+  const handleCreateDailyNote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNoteContent.trim() || !effectiveClassId || !selectedDate) return;
+
+    try {
+      const res = await fetch('/api/daily-notes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          classId: effectiveClassId,
+          schoolYearId: selectedClass?.schoolYear || '2025/2026',
+          date: selectedDate,
+          content: newNoteContent,
+          createdBy: user?.id,
+          authorName: user?.name || 'Nastavnik'
+        })
+      });
+
+      if (res.ok) {
+        toast.success('Dnevna napomena uspješno spremljena!');
+        setNewNoteContent('');
+        fetchDailyNotes();
+      } else {
+        throw new Error();
+      }
+    } catch (e) {
+      toast.error('Problem s pohranom dnevne napomene.');
+    }
+  };
+
+  const handleUpdateDailyNote = async (id: string, content: string) => {
+    try {
+      const res = await fetch(`/api/daily-notes/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content })
+      });
+      if (res.ok) {
+        toast.success('Dnevna napomena uspješno ažurirana!');
+        setEditingNoteId(null);
+        fetchDailyNotes();
+      } else {
+        throw new Error();
+      }
+    } catch (e) {
+      toast.error('Problem s ažuriranjem napomene.');
+    }
+  };
+
+  const handleDeleteDailyNote = async (id: string) => {
+    if (!window.confirm('Sigurno želite obrisati ovu napomenu?')) return;
+    try {
+      const res = await fetch(`/api/daily-notes/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        toast.success('Dnevna napomena uspješno obrisana!');
+        fetchDailyNotes();
+      } else {
+        throw new Error();
+      }
+    } catch (e) {
+      toast.error('Problem s brisanjem napomene.');
+    }
+  };
+
+  // Lektira State & Actions
+  const [lektire, setLektire] = useState<any[]>([]);
+  const [showLektiraModal, setShowLektiraModal] = useState(false);
+  const [editingLektira, setEditingLektira] = useState<any | null>(null);
+  const [lektiraForm, setLektiraForm] = useState({
+    subjectId: '',
+    completedDate: new Date().toISOString().split('T')[0],
+    title: '',
+    description: ''
+  });
+
+  const fetchLektire = async () => {
+    if (!effectiveClassId) return;
+    try {
+      const res = await fetch(`/api/lektire?classId=${effectiveClassId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setLektire(data || []);
+      }
+    } catch (e) {
+      console.error("Error loading lektire:", e);
+    }
+  };
+
+  const handleCreateOrUpdateLektira = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetSubjectId = getHrvatskiJezikSubjectId();
+    
+    if (!targetSubjectId) {
+      toast.error('Nije pronađen predmet Hrvatski jezik za ovaj razred.');
+      return;
+    }
+
+    if (!lektiraForm.title || !lektiraForm.completedDate) {
+      toast.error('Molimo ispunite obavezna polja');
+      return;
+    }
+
+    try {
+      const isNew = !editingLektira;
+      const url = isNew ? `/api/lektire` : `/api/lektire/${editingLektira.id}`;
+      const method = isNew ? 'POST' : 'PUT';
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          classId: effectiveClassId,
+          subjectId: targetSubjectId,
+          completedDate: lektiraForm.completedDate,
+          title: lektiraForm.title,
+          description: lektiraForm.description,
+          createdBy: user?.id
+        })
+      });
+
+      if (res.ok) {
+        toast.success(isNew ? 'Lektira uspješno dodana!' : 'Lektira uspješno spremljena!');
+        setLektiraForm({
+          subjectId: '',
+          completedDate: new Date().toISOString().split('T')[0],
+          title: '',
+          description: ''
+        });
+        setEditingLektira(null);
+        setShowLektiraModal(false);
+        fetchLektire();
+      } else {
+        throw new Error();
+      }
+    } catch (err) {
+      toast.error('Greška pri spremanju lektire');
+    }
+  };
+
+  const handleDeleteLektira = async (id: string) => {
+    if (!window.confirm('Sigurno želite izbrisati ovu lektiru?')) return;
+    try {
+      const res = await fetch(`/api/lektire/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.ok) {
+        toast.success('Lektira uspješno izbrisana!');
+        fetchLektire();
+      } else {
+        throw new Error();
+      }
+    } catch (e) {
+      toast.error('Problem s brisanjem lektire.');
+    }
+  };
 
   useEffect(() => {
     const fetchInitial = async () => {
@@ -249,6 +487,21 @@ setStudents(uniqueStudents);
     fetchScheduleData();
   }, [effectiveClassId]);
 
+  const fetchAbsencesForDay = async () => {
+    if (!selectedDate || !effectiveClassId) return;
+    try {
+      const { data, error } = await supabase
+        .from('absences')
+        .select('*')
+        .eq('class_id', effectiveClassId)
+        .eq('date', selectedDate);
+      if (error) throw error;
+      setDailyAbsences(mapList(data || [], mappers.absence));
+    } catch (error) {
+      console.error("fetchAbsencesForDay error:", error);
+    }
+  };
+
   useEffect(() => {
     if (!selectedDate || !effectiveClassId) return;
     const fetchLessonsForDay = async () => {
@@ -281,6 +534,8 @@ setStudents(uniqueStudents);
       }
     };
     fetchLessonsForDay();
+    fetchAbsencesForDay();
+    fetchDailyNotes();
   }, [selectedDate, effectiveClassId]);
 
   useEffect(() => {
@@ -300,6 +555,7 @@ setStudents(uniqueStudents);
       }
     };
     fetchAssignments();
+    fetchLektire();
   }, [effectiveClassId]);
 
   useEffect(() => {
@@ -474,6 +730,25 @@ setStudents(uniqueStudents);
     return scheduleSubjects.filter(ss => ss.scheduleCellId === cell.id);
   };
 
+  const handleAddWeek = () => {
+    const nextWeekNum = weeks.length + 1;
+    const defaultName = `${nextWeekNum}. radni tjedan`;
+    const dutyIds = getAutoDutyStudents(nextWeekNum);
+
+    setEditingWeekId(null);
+    setNewWeek({ 
+      name: defaultName, 
+      startDate: '', 
+      endDate: '', 
+      teachingDays: [], 
+      onDutyStudentIds: dutyIds,
+      shift: 'Ujutro', 
+      isTeachingWeek: true,
+      dailyTeachingStatus: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: false, 0: false }
+    });
+    setShowWeekModal(true);
+  };
+
   const handleEditWeek = (w: WorkWeek) => {
     setEditingWeekId(w.id);
     
@@ -493,7 +768,7 @@ setStudents(uniqueStudents);
       name: w.name,
       startDate: w.startDate,
       endDate: w.endDate || '',
-      shift: (w.shift === 'MORNING' ? 'Ujutro' : (w.shift === 'AFTERNOON' ? 'Popodne' : 'Cjelodnevna')),
+      shift: ((w.shift as any) === 'MORNING' ? 'Ujutro' : ((w.shift as any) === 'AFTERNOON' ? 'Popodne' : w.shift)),
       isTeachingWeek: w.isTeachingWeek !== undefined ? w.isTeachingWeek : true,
       teachingDays: w.teachingDays || [],
       onDutyStudentIds: w.onDutyStudentIds || [],
@@ -564,6 +839,15 @@ setStudents(uniqueStudents);
         }
         toast.success('Radni tjedan ažuriran.');
       } else {
+        const existingWeek = weeks.find(w => w.startDate === newWeek.startDate);
+        if (existingWeek) {
+          toast.success('Prikazan je postojeći radni tjedan za ovaj datum.');
+          setSelectedWeek(existingWeek);
+          setView('WEEK_DETAIL');
+          setShowWeekModal(false);
+          return;
+        }
+
         let onDuty = newWeek.onDutyStudentIds || [];
         if (onDuty.length === 0) {
           const studentCount = students.length || 1;
@@ -838,28 +1122,77 @@ setStudents(uniqueStudents);
         }
 
         if (finalId) {
-          // Sync absences: first find existing to avoid unnecessary delete-insert if possible
-          // But with current design, just deleting for this lesson hour is fine.
-          await supabase.from('absences').delete().eq('lesson_id', finalId);
-          
-          if (selectedAbsentees.length > 0) {
-            const absencesPayload = selectedAbsentees.map(sid => ({
-              student_id: sid,
-              lesson_id: finalId,
-              class_id: effectiveClassId,
-              date: selectedDate,
-              hour: currentHour,
-              status: 'PENDING',
-              teacher_id: user.id
-            }));
-            console.log("SYNC ABSENCES FOR LESSON", finalId);
-            console.log("ABSENCE PAYLOAD", absencesPayload);
-            const { error: absError } = await supabase.from('absences').insert(absencesPayload);
-            if (absError) {
-              console.log("ABSENCE ERROR", absError);
-              toast.error("Greška pri unosu izostanka: " + absError.message);
+          // Smart sync of absences to preserve existing statuses (OPRAVDANO/NEOPRAVDANO) and update lesson properties
+          try {
+            const { data: existingAbs, error: fetchErr } = await supabase
+              .from('absences')
+              .select('*')
+              .eq('lesson_id', finalId);
+            
+            if (!fetchErr && existingAbs) {
+              const existingStudentIds = existingAbs.map(a => a.student_id);
+              const idsToDelete = existingStudentIds.filter(id => !selectedAbsentees.includes(id));
+              if (idsToDelete.length > 0) {
+                await supabase
+                  .from('absences')
+                  .delete()
+                  .eq('lesson_id', finalId)
+                  .in('student_id', idsToDelete);
+              }
+              const idsToInsert = selectedAbsentees.filter(id => !existingStudentIds.includes(id));
+              if (idsToInsert.length > 0) {
+                const insertPayload = idsToInsert.map(sid => ({
+                  student_id: sid,
+                  lesson_id: finalId,
+                  class_id: effectiveClassId,
+                  date: selectedDate,
+                  hour: currentHour,
+                  status: 'PENDING',
+                  teacher_id: user.id
+                }));
+                await supabase.from('absences').insert(insertPayload);
+              }
+              // For all existing or newly inserted absences for this lesson, sync updated lesson-related fields (date, hour, class_id)
+              await supabase
+                .from('absences')
+                .update({
+                  date: selectedDate,
+                  hour: currentHour,
+                  class_id: effectiveClassId
+                })
+                .eq('lesson_id', finalId);
+            } else {
+              // Fallback to simpler replaces if fetch error
+              await supabase.from('absences').delete().eq('lesson_id', finalId);
+              if (selectedAbsentees.length > 0) {
+                const absencesPayload = selectedAbsentees.map(sid => ({
+                  student_id: sid,
+                  lesson_id: finalId,
+                  class_id: effectiveClassId,
+                  date: selectedDate,
+                  hour: currentHour,
+                  status: 'PENDING',
+                  teacher_id: user.id
+                }));
+                await supabase.from('absences').insert(absencesPayload);
+              }
             }
+          } catch (syncErr) {
+            console.error("Absences sync error:", syncErr);
           }
+        }
+      }
+
+      await fetchAbsencesForDay();
+      if (view === 'ABSENCES' && selectedWeek) {
+        const { data: absData, error: absErr } = await supabase
+          .from('absences')
+          .select('*')
+          .eq('class_id', effectiveClassId)
+          .gte('date', selectedWeek.startDate)
+          .lte('date', selectedWeek.endDate);
+        if (!absErr) {
+          setCurrentWeekAbsences(mapList(absData || [], mappers.absence));
         }
       }
 
@@ -869,6 +1202,99 @@ setStudents(uniqueStudents);
     } catch (err) {
       console.error(err);
       toast.error('Greška pri spremanju sata');
+    }
+  };
+
+  const handleSaveAbsenceEntry = async () => {
+    if (!absenceEntryLesson || !user) return;
+    const lesson = absenceEntryLesson;
+    const selectedStudents = absenceEntrySelectedStudents;
+    
+    console.log("OPEN ABSENCE ENTRY FOR LESSON", lesson);
+    console.log("SELECTED ABSENT STUDENTS", selectedStudents);
+
+    try {
+      // 1. Fetch current absences for this lesson
+      const { data: existingAbs, error: fetchErr } = await supabase
+        .from('absences')
+        .select('*')
+        .eq('lesson_id', lesson.id);
+      
+      if (fetchErr) throw fetchErr;
+      
+      const existingStudentIds = (existingAbs || []).map(a => a.student_id);
+
+      // 2. Identify student IDs to delete (were absent before, but are active/present now - i.e., unchecked)
+      const idsToDelete = existingStudentIds.filter(id => !selectedStudents.includes(id));
+      if (idsToDelete.length > 0) {
+        const { error: delErr } = await supabase
+          .from('absences')
+          .delete()
+          .eq('lesson_id', lesson.id)
+          .in('student_id', idsToDelete);
+        if (delErr) throw delErr;
+      }
+
+      // 3. Identify newly selected student IDs to insert (were unchecked before, but are checked now)
+      const idsToInsert = selectedStudents.filter(id => !existingStudentIds.includes(id));
+      let insertData = null;
+      let insertError = null;
+      let insertPayload: any[] = [];
+      
+      if (idsToInsert.length > 0) {
+        insertPayload = idsToInsert.map(sid => ({
+          student_id: sid,
+          lesson_id: lesson.id,
+          class_id: effectiveClassId,
+          date: lesson.date,
+          hour: lesson.hour,
+          status: "PENDING",
+          note: null,
+          teacher_id: user.id
+        }));
+
+        console.log("ABSENCE INSERT PAYLOAD", insertPayload);
+
+        const { data, error } = await supabase
+          .from('absences')
+          .insert(insertPayload)
+          .select();
+
+        insertData = data;
+        insertError = error;
+
+        console.log("ABSENCE INSERT ERROR", error);
+        console.log("ABSENCE INSERT SUCCESS", data);
+
+        if (error) throw error;
+      } else {
+        // Just logs as requested in debug section 9
+        console.log("ABSENCE INSERT PAYLOAD", insertPayload);
+        console.log("ABSENCE INSERT ERROR", insertError);
+        console.log("ABSENCE INSERT SUCCESS", insertData);
+      }
+
+      toast.success("Izostanci su uspješno uneseni.");
+      
+      // 4. Refetch daily and weekly absences
+      await fetchAbsencesForDay();
+      if (view === 'ABSENCES' && selectedWeek) {
+        const { data: absData, error: absErr } = await supabase
+          .from('absences')
+          .select('*')
+          .eq('class_id', effectiveClassId)
+          .gte('date', selectedWeek.startDate)
+          .lte('date', selectedWeek.endDate);
+        if (!absErr) {
+          setCurrentWeekAbsences(mapList(absData || [], mappers.absence));
+        }
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Greška pri spremanju izostanaka: " + err.message);
+    } finally {
+      setShowAbsenceEntryModal(false);
+      setAbsenceEntryLesson(null);
     }
   };
 
@@ -917,9 +1343,21 @@ setStudents(uniqueStudents);
         </div>
         
         <div className="flex items-center gap-2">
-          {view === 'WEEKS' && (
+          {selectedWeek && (
+            <div className="hidden md:flex items-center gap-2 text-[10px] font-bold bg-white/10 px-2.5 py-1 rounded border border-white/10 mr-2">
+              <span className="text-blue-200 uppercase text-[9px] tracking-widest">Dežurni:</span>
+              <span className="text-white">
+                {Array.from(new Set(selectedWeek.onDutyStudentIds || [])).map(sid => {
+                  const studentObj = students.find(s => s.id === sid);
+                  return studentObj ? formatPersonName(studentObj) : '';
+                }).filter(Boolean).join(', ') || 'Nema dežurnih'}
+              </span>
+            </div>
+          )}
+
+          {view === 'WEEKS' && canManageWeeks && (
             <button 
-              onClick={() => setShowWeekModal(true)}
+              onClick={handleAddWeek}
               className="bg-white text-[#005c8d] px-3 py-1 border border-white font-bold text-[10px] uppercase hover:bg-blue-50 transition-colors"
             >
               + Dodaj tjedan
@@ -974,6 +1412,15 @@ setStudents(uniqueStudents);
         >
           <Calendar size={12} /> Raspored
         </button>
+        <button 
+          onClick={() => setView('LEKTIRA')}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2 transition-all border-b-2 font-bold text-[11px] uppercase whitespace-nowrap", 
+            view === 'LEKTIRA' ? "border-[#005c8d] text-[#005c8d] bg-white" : "border-transparent text-gray-500 hover:bg-gray-100"
+          )}
+        >
+          <Book size={12} /> Lektira
+        </button>
       </div>
 
       {/* Main Content */}
@@ -1014,7 +1461,7 @@ setStudents(uniqueStudents);
                          {Array.from(new Set(w.onDutyStudentIds || [])).map(sid => students.find(s => s.id === sid)?.name).filter(Boolean).join(', ') || 'Nema dežurnih'}
                       </td>
                        <td className="px-4 py-2 text-center text-right flex justify-end">
-                          {(isMainAdmin || user?.role === Role.ADMIN) && (
+                          {canManageWeeks && (
                             <div className="flex items-center gap-1 justify-end">
                               <button 
                                 onClick={(e) => {
@@ -1141,9 +1588,9 @@ setStudents(uniqueStudents);
                                        key={abs.id} 
                                        className={cn(
                                          "w-5 h-5 flex items-center justify-center text-[9px] font-bold text-white rounded-sm",
-                                         abs.status === 'OPRAVDANO' ? 'bg-green-500' :
-                                         abs.status === 'NEOPRAVDANO' ? 'bg-red-500' :
-                                         abs.status === 'OSTALO' ? 'bg-yellow-400' :
+                                         abs.status === 'JUSTIFIED' ? 'bg-green-500' :
+                                         abs.status === 'UNJUSTIFIED' ? 'bg-red-500' :
+                                         abs.status === 'OTHER' ? 'bg-yellow-400' :
                                          'bg-orange-500' // PENDING
                                        )}
                                      >
@@ -1318,6 +1765,170 @@ setStudents(uniqueStudents);
             </div>
           </div>
         )}
+        {/* LEKTIRA VIEW */}
+        {view === 'LEKTIRA' && selectedClass && (
+          <div className="max-w-6xl mx-auto space-y-4">
+            <div className="flex justify-between items-center bg-white p-3 border border-gray-300 shadow-sm">
+              <span className="text-xs font-bold text-gray-500 uppercase">
+                Evidencija lektira ({lektire.length})
+              </span>
+              <button
+                onClick={() => {
+                  setEditingLektira(null);
+                  setLektiraForm({
+                    subjectId: getHrvatskiJezikSubjectId(),
+                    completedDate: new Date().toISOString().split('T')[0],
+                    title: '',
+                    description: ''
+                  });
+                  setShowLektiraModal(true);
+                }}
+                className="bg-[#005c8d] text-white px-4 py-2 hover:bg-[#004a71] text-[10px] font-black uppercase tracking-wider shadow cursor-pointer active:scale-95 transition-all"
+              >
+                + Dodaj lektiru
+              </button>
+            </div>
+
+            <div className="bg-white border border-gray-300 shadow-sm overflow-hidden">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-300 text-gray-500 text-[10px] uppercase font-bold tracking-wider">
+                    <th className="p-3 w-48 border-r border-gray-200">Predmet</th>
+                    <th className="p-3 w-36 border-r border-gray-200">Datum obrade</th>
+                    <th className="p-3 w-72 border-r border-gray-200">Naslov djela / članka</th>
+                    <th className="p-3 border-r border-gray-200">Način obrade / detalji</th>
+                    <th className="p-3 w-20 text-center">Akcije</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 font-medium">
+                  {lektire.map((lek) => {
+                    const subject = allSubjects.find(s => s.id === lek.subjectId || s.id === lek.subject_id);
+                    return (
+                      <tr key={lek.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-3 border-r border-gray-200 font-bold uppercase text-[#005c8d]">
+                          {subject?.name || 'Hrvatski jezik'}
+                        </td>
+                        <td className="p-3 border-r border-gray-200">
+                          {new Date(lek.completedDate || lek.completed_date).toLocaleDateString('hr-HR')}
+                        </td>
+                        <td className="p-3 border-r border-gray-200 font-semibold text-slate-800">
+                          {lek.title}
+                        </td>
+                        <td className="p-3 border-r border-gray-200 text-slate-600 whitespace-pre-wrap">
+                          {lek.description || '--'}
+                        </td>
+                        <td className="p-3 text-center flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => {
+                              setEditingLektira(lek);
+                              setLektiraForm({
+                                subjectId: lek.subjectId || lek.subject_id || '',
+                                completedDate: lek.completedDate || lek.completed_date || '',
+                                title: lek.title,
+                                description: lek.description || ''
+                              });
+                              setShowLektiraModal(true);
+                            }}
+                            className="text-[#005c8d] hover:text-[#004a71]"
+                            title="Uredi"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteLektira(lek.id)}
+                            className="text-slate-400 hover:text-red-500"
+                            title="Obriši"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {lektire.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-12 text-center text-gray-400 italic">
+                        Nema unesenih lektira za ovaj razred.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* LEKTIRA MODAL */}
+        {showLektiraModal && (
+          <div className="fixed inset-0 bg-black/45 z-55 flex items-center justify-center p-4 backdrop-blur-sm">
+            <div className="bg-white border border-gray-300 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200">
+              <div className="bg-[#005c8d] p-3 text-white flex items-center justify-between shrink-0">
+                <h3 className="text-xs font-extrabold uppercase tracking-widest">
+                  {editingLektira ? 'UREDI LEKTIRU/DJELO' : 'DODAJ NOVU LEKTIRU'}
+                </h3>
+                <button 
+                  onClick={() => setShowLektiraModal(false)} 
+                  className="text-white hover:text-red-200"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleCreateOrUpdateLektira} className="p-6 space-y-4 text-xs">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Naslov djela / članka *</label>
+                  <input
+                    type="text"
+                    required
+                    value={lektiraForm.title}
+                    onChange={(e) => setLektiraForm({...lektiraForm, title: e.target.value})}
+                    className="w-full border border-gray-300 p-2.5 rounded font-semibold text-slate-800"
+                    placeholder="Npr. Hamlet, Patnje mladog Werthera..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Datum obrade *</label>
+                  <input
+                    type="date"
+                    required
+                    value={lektiraForm.completedDate}
+                    onChange={(e) => setLektiraForm({...lektiraForm, completedDate: e.target.value})}
+                    className="w-full border border-gray-300 p-2.5 rounded font-bold text-slate-800"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Kako je obrađeno / Detalji</label>
+                  <textarea
+                    rows={3}
+                    value={lektiraForm.description}
+                    onChange={(e) => setLektiraForm({...lektiraForm, description: e.target.value})}
+                    className="w-full border border-gray-300 p-2.5 rounded font-medium text-slate-800"
+                    placeholder="Npr. Interpretacija likova, okrugli stol, rasprava..."
+                  />
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setShowLektiraModal(false)}
+                    className="px-4 py-2 border border-gray-300 rounded text-[10px] font-bold uppercase tracking-wider text-slate-500 hover:bg-gray-100 cursor-pointer"
+                  >
+                    Odustani
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-[#005c8d] text-white hover:bg-[#004a71] text-[10px] font-bold uppercase tracking-wider rounded transition-all cursor-pointer shadow-md"
+                  >
+                    Spremi
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* DAY DETAIL VIEW - REDESIGNED TABLE */}
         {view === 'DAY_DETAIL' && effectiveClassId && selectedDate && selectedWeek && (
           <div className="max-w-6xl mx-auto space-y-3">
@@ -1408,11 +2019,12 @@ setStudents(uniqueStudents);
                                 const sub = allSubjects.find(s => s.id === lesson.subjectId);
                                 const teacher = teachers.find(t => t.id === lesson.teacherId);
                                 const canEdit = isMainAdmin || lesson.teacherId === user?.id;
+                                const lessonAbsences = dailyAbsences.filter(a => a.lessonId === lesson.id);
                                 
                                 return (
                                   <div key={lesson.id} className={cn("text-[11px] leading-tight flex flex-col gap-1", idx > 0 && "pt-2 border-t border-gray-100")}>
                                     <div className="flex items-start justify-between gap-2">
-                                      <div className="flex-1">
+                                      <div className="flex-1 animate-fadeIn">
                                         <div className="font-bold text-[#005c8d] uppercase mb-0.5">
                                           {(sub?.name || 'Predmet').toUpperCase()} - {lesson.teacherDisplayName && !lesson.teacherDisplayName.includes('undefined') ? lesson.teacherDisplayName : (teacher ? formatPersonName(teacher) : 'Nepoznat nastavnik')}
                                           {lesson.groupName && ['GROUP_A', 'GROUP_B'].includes(lesson.groupName.toUpperCase()) ? <span className="text-gray-400 font-normal italic ml-1">({lesson.groupName === 'GROUP_A' ? 'Grupa A' : 'Grupa B'})</span> : (
@@ -1426,10 +2038,70 @@ setStudents(uniqueStudents);
                                             {lesson.topic}
                                           </div>
                                         ) : null}
+
+                                        {/* Gumb "Unesi izostanak" i prikaz izostanaka za dan/sat */}
+                                        <div className="mt-2 p-2 bg-red-50/40 border border-red-100/55 rounded flex flex-col gap-1.5">
+                                          <div className="flex items-center justify-between gap-4">
+                                            <span className="text-[9px] font-black uppercase text-red-700 tracking-wider flex items-center gap-1">
+                                              <Clock size={10} /> Izostanci za sat:
+                                            </span>
+                                            {canEdit && (
+                                              <button
+                                                onClick={(e) => {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                  setAbsenceEntryLesson(lesson);
+                                                  setAbsenceEntrySelectedStudents(lessonAbsences.map(a => a.studentId));
+                                                  setShowAbsenceEntryModal(true);
+                                                  console.log("OPEN ABSENCE ENTRY FOR LESSON", lesson);
+                                                }}
+                                                className="text-[9px] font-black uppercase text-red-600 hover:text-red-800 transition-colors flex items-center gap-1 bg-white border border-red-200 px-1.5 py-0.5 rounded shadow-sm hover:shadow active:scale-95 cursor-pointer"
+                                              >
+                                                <UserX size={10} /> Unesi izostanak
+                                              </button>
+                                            )}
+                                          </div>
+                                          {lessonAbsences.length > 0 ? (
+                                            <div className="flex flex-wrap gap-1 mt-0.5">
+                                              {lessonAbsences.map(a => {
+                                                const studentObj = students.find(s => s.id === a.studentId);
+                                                const displayStatus = a.status === 'PENDING' ? 'Čeka odluku' : (a.status === 'JUSTIFIED' ? 'Opravdano' : 'Neopravdano');
+                                                const badgeColor = a.status === 'JUSTIFIED' ? 'bg-green-100 text-green-700 border-green-200' : (a.status === 'UNJUSTIFIED' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-amber-100 text-amber-700 border-amber-200');
+                                                return (
+                                                  <span key={a.id} className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold border gap-1", badgeColor)}>
+                                                    <span>{studentObj ? studentObj.name : 'Nepoznat učenik'}</span>
+                                                    <span className="opacity-75 font-normal">({displayStatus})</span>
+                                                  </span>
+                                                );
+                                              })}
+                                            </div>
+                                          ) : (
+                                            <div className="text-[9px] text-gray-400 italic">Nema prijavljenih izostanaka za ovaj sat.</div>
+                                          )}
+                                        </div>
                                       </div>
                                       
                                       {canEdit && (
                                         <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                                          <button 
+                                            onClick={(e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              setAbsenceEntryLesson(lesson);
+                                              setAbsenceEntrySelectedStudents(lessonAbsences.map(a => a.studentId));
+                                              setShowAbsenceEntryModal(true);
+                                              console.log("OPEN ABSENCE ENTRY FOR LESSON", lesson);
+                                            }}
+                                            className={cn(
+                                              "p-1 px-2 border transition-all rounded-sm flex items-center gap-1 cursor-pointer",
+                                              lessonAbsences.length > 0 
+                                                ? "text-red-600 bg-red-50 border-red-200 hover:bg-red-100" 
+                                                : "text-gray-400 border-transparent hover:text-red-700 hover:bg-red-50 hover:border-red-100"
+                                            )}
+                                            title={`Unesi izostanke${lessonAbsences.length > 0 ? ` (Prijavljeno: ${lessonAbsences.length})` : ''}`}
+                                          >
+                                            <UserX size={12} />
+                                          </button>
                                           <button 
                                             onClick={() => openLessonModal(hour, lesson)}
                                             className="p-1 px-2 text-gray-400 hover:text-[#005c8d] hover:bg-white border border-transparent hover:border-gray-200 transition-all rounded-sm"
@@ -1507,6 +2179,104 @@ setStudents(uniqueStudents);
                   <div className="w-2 h-2 rounded bg-[#005c8d]/20"></div>
                   <span>Kliknite na redak ili ikonu za promjenu podataka</span>
                </div>
+            </div>
+
+            {/* DNEVNE NAPOMENE PANEL */}
+            <div className="bg-white border border-gray-300 p-5 mt-4">
+              <div className="flex items-center gap-2 border-b border-gray-200 pb-3 mb-4">
+                <Edit2 size={16} className="text-[#005c8d]" />
+                <h3 className="text-xs font-black uppercase tracking-wider text-slate-800">DNEVNE NAPOMENE (Dnevnik rada)</h3>
+              </div>
+
+              {/* Add daily note form */}
+              <form onSubmit={handleCreateDailyNote} className="flex gap-3 mb-5 shrink-0">
+                <input 
+                  type="text"
+                  placeholder="Dodaj novu dnevnu napomenu..."
+                  value={newNoteContent}
+                  onChange={(e) => setNewNoteContent(e.target.value)}
+                  className="flex-1 border border-gray-300 px-3 py-2 text-xs rounded shadow-sm focus:outline-none focus:ring-1 focus:ring-[#005c8d]"
+                />
+                <button 
+                  type="submit"
+                  className="bg-[#005c8d] text-white px-5 py-2 hover:bg-[#004a71] text-[10px] font-black uppercase tracking-wider shadow active:scale-95 transition-all cursor-pointer"
+                >
+                  Dodaj
+                </button>
+              </form>
+
+              {/* Daily notes list */}
+              {dailyNotes.length === 0 ? (
+                <p className="text-xs text-slate-400 italic font-medium py-3 text-center border border-dashed border-gray-200 rounded">Nema upisanih dnevnih napomena za ovaj dan.</p>
+              ) : (
+                <div className="space-y-3">
+                  {dailyNotes.map((note) => {
+                    const isAuthor = note.created_by === user?.id || note.createdBy === user?.id;
+                    const canEdit = isAuthor || isMainAdmin || selectedClass?.homeroomTeacherId === user?.id || selectedClass?.deputyTeacherId === user?.id;
+                    const isEditing = editingNoteId === note.id;
+
+                    return (
+                      <div key={note.id} className="bg-slate-50 border border-gray-200 p-3.5 rounded-md flex flex-col justify-between gap-2.5 hover:border-sky-200 transition-all">
+                        {isEditing ? (
+                          <div className="flex items-center gap-2 w-full">
+                            <input 
+                              type="text"
+                              value={noteEditContent}
+                              onChange={(e) => setNoteEditContent(e.target.value)}
+                              className="flex-1 border border-gray-300 px-3 py-1.5 text-xs bg-white focus:ring-1 focus:ring-[#005c8d]"
+                            />
+                            <button
+                              onClick={() => handleUpdateDailyNote(note.id, noteEditContent)}
+                              className="bg-emerald-600 text-white px-3 py-1.5 hover:bg-emerald-700 text-[10px] font-bold uppercase transition-all rounded"
+                            >
+                              Spremi
+                            </button>
+                            <button
+                              onClick={() => setEditingNoteId(null)}
+                              className="bg-slate-500 text-white px-3 py-1.5 hover:bg-slate-600 text-[10px] font-bold uppercase transition-all rounded"
+                            >
+                              Odustani
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <p className="text-xs text-slate-800 font-semibold leading-relaxed whitespace-pre-wrap">{note.content}</p>
+                              <div className="flex items-center gap-2 mt-2 text-[9px] text-slate-400 font-extrabold uppercase tracking-wide">
+                                <span className="text-[#005c8d]">{note.authorName || 'Nastavnik'}</span>
+                                <span>•</span>
+                                <span>{new Date(note.created_at || note.createdAt).toLocaleTimeString('hr-HR', {hour: '2-digit', minute:'2-digit'})}</span>
+                              </div>
+                            </div>
+
+                            {canEdit && (
+                              <div className="flex items-center gap-1.5 opacity-60 hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={() => {
+                                    setEditingNoteId(note.id);
+                                    setNoteEditContent(note.content);
+                                  }}
+                                  className="p-1 border border-transparent hover:border-gray-200 hover:bg-white text-slate-500 hover:text-sky-600 rounded transition-all"
+                                  title="Uredi"
+                                >
+                                  <Edit2 size={11} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteDailyNote(note.id)}
+                                  className="p-1 border border-transparent hover:border-gray-200 hover:bg-white text-slate-500 hover:text-red-500 rounded transition-all"
+                                  title="Obriši"
+                                >
+                                  <Trash2 size={11} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1735,6 +2505,107 @@ setStudents(uniqueStudents);
           </div>
         </div>
       )}
+
+      {/* ABSENCE ENTRY MODAL (e-Dnevnik style) */}
+      {showAbsenceEntryModal && absenceEntryLesson && (
+        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-300 w-full max-w-lg flex flex-col max-h-[85vh] shadow-[10px_10px_0px_rgba(0,0,0,0.05)] animate-fadeIn">
+            <div className="bg-red-700 p-2 text-white flex items-center justify-between shrink-0">
+              <h3 className="text-[11px] font-bold uppercase tracking-tight flex items-center gap-1.5">
+                <UserX size={14} />
+                <span>Odsutni učenici - {selectedDate ? new Date(selectedDate).toLocaleDateString('hr-HR') : ''}.</span>
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowAbsenceEntryModal(false);
+                  setAbsenceEntryLesson(null);
+                }} 
+                className="hover:text-red-200 cursor-pointer text-white border-none bg-transparent"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="p-4 bg-red-50/50 border-b border-gray-200 shrink-0 text-[11px]">
+              <div className="font-bold text-gray-700 uppercase">
+                Predmet: <span className="text-red-800">{absenceEntryLesson.hour}. sat / {allSubjects.find(s => s.id === absenceEntryLesson.subjectId)?.name || 'Nepoznato'}</span>
+              </div>
+              <p className="text-[10px] text-gray-500 mt-1 italic leading-tight">
+                Označite učenike koji nisu prisutni na ovom nastavnom satu.
+              </p>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              <div className="border border-gray-300 divide-y divide-gray-100 bg-white">
+                {students
+                  .slice()
+                  .sort((a, b) => {
+                    const surnameA = getSurname(String(a.name || ''));
+                    const surnameB = getSurname(String(b.name || ''));
+                    return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+                  })
+                  .map((student, idx) => {
+                    const isSelected = absenceEntrySelectedStudents.includes(student.id);
+                    return (
+                      <div 
+                        key={student.id} 
+                        onClick={() => {
+                          if (isSelected) {
+                            setAbsenceEntrySelectedStudents(prev => prev.filter(id => id !== student.id));
+                          } else {
+                            setAbsenceEntrySelectedStudents(prev => [...prev, student.id]);
+                          }
+                        }}
+                        className={cn(
+                          "flex items-center justify-between p-2.5 hover:bg-red-50/30 transition-colors cursor-pointer text-[11px]",
+                          isSelected ? "bg-red-50/40" : ""
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className="text-gray-400 font-bold w-4 text-right">{idx + 1}.</span>
+                          <span className={cn("font-bold text-gray-800", isSelected && "text-red-800")}>
+                            {student.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center">
+                          <input 
+                            type="checkbox"
+                            checked={isSelected}
+                            readOnly
+                            className="w-4 h-4 text-red-600 focus:ring-red-500 border-gray-300 rounded cursor-pointer pointer-events-none"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+
+            <div className="bg-gray-50 p-3 border-t border-gray-300 flex justify-end items-center gap-3 shrink-0">
+              <div className="text-[10px] text-gray-500 font-bold uppercase mr-auto flex items-center gap-1">
+                <span>Odabrano odsutnih:</span>
+                <span className="text-red-700 font-black">{absenceEntrySelectedStudents.length}</span>
+              </div>
+              <button 
+                onClick={() => {
+                  setShowAbsenceEntryModal(false);
+                  setAbsenceEntryLesson(null);
+                }}
+                className="px-4 py-1.5 border border-gray-300 text-gray-600 font-bold text-[10px] uppercase hover:bg-white cursor-pointer"
+              >
+                Odustani
+              </button>
+              <button 
+                onClick={handleSaveAbsenceEntry}
+                className="px-6 py-1.5 bg-red-700 text-white border border-red-800 font-bold text-[10px] uppercase hover:bg-red-800 shadow-sm active:scale-95 cursor-pointer"
+              >
+                Unesi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* EXAM MODAL */}
       {showExamModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 text-[11px]">

@@ -124,6 +124,10 @@ export const mappers = {
     status: raw.status,
     note: raw.note,
     teacherId: raw.teacher_id,
+    absenceType: raw.absence_type,
+    justifiedBy: raw.justified_by,
+    resolvedBy: raw.resolved_by,
+    resolvedAt: raw.resolved_at,
   }),
 
   note: (raw: any) => ({

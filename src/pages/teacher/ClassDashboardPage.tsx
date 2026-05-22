@@ -16,6 +16,7 @@ const IzvjestajiPage = lazy(() => import('./IzvjestajiPage'));
 const InformativkaAdminPage = lazy(() => import('../admin/InformativkaAdminPage'));
 const AdministrationPage = lazy(() => import('./AdministrationPage'));
 const ImenikPage = lazy(() => import('./ImenikPage'));
+const PedagoskaDokumentacijaPage = lazy(() => import('./PedagoskaDokumentacijaPage'));
 
 export default function ClassDashboardPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -124,6 +125,7 @@ export default function ClassDashboardPage() {
     { id: 'dnevnik-rada', label: 'Dnevnik rada', path: 'dnevnik-rada' },
     { id: 'biljeske', label: 'Bilješke', path: 'biljeske' },
     { id: 'izostanci', label: 'Izostanci', path: 'izostanci' },
+    { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: 'pedagoska-dokumentacija' },
     { id: 'raspored', label: 'Raspored sati', path: 'raspored' },
     { id: 'zapisnici', label: 'Zapisnici', path: 'zapisnici' },
     { id: 'izvjestaji', label: 'Izvještaji', path: 'izvjestaji' },
@@ -232,6 +234,7 @@ export default function ClassDashboardPage() {
             <Route path="dnevnik-rada" element={<DnevnikRadaPage />} />
             <Route path="biljeske" element={<BiljeskePage />} />
             <Route path="izostanci" element={<TeacherIzostanciPage />} />
+            <Route path="pedagoska-dokumentacija" element={<PedagoskaDokumentacijaPage />} />
             <Route path="raspored" element={<DnevnikRadaPage initialView="SCHEDULE" />} />
             <Route path="zapisnici" element={<ZapisniciPage />} />
             <Route path="izvjestaji" element={<IzvjestajiPage />} />
