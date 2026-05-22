@@ -89,7 +89,7 @@ export function Header({ navItems = [], onMenuToggle, showNav = true }: HeaderPr
         </div>
 
         {showNav && navItems.length > 0 && (
-          <div className="hidden lg:flex items-center h-full">
+          <div className="hidden">
             {navItems.map((item) => (
               <Link
                 key={item.path}

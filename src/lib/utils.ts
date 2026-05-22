@@ -52,3 +52,50 @@ export const finalGradeLabels: Record<string, string> = {
   "4": "Vrlo dobar (4)",
   "5": "Odličan (5)"
 };
+
+export const getRoleLabel = (role: string) => {
+  const labels: Record<string, string> = {
+    'TEACHER': 'Nastavnik',
+    'STUDENT': 'Učenik',
+    'ADMIN': 'Administrator',
+    'SCHOOL_ADMIN': 'Administrator škole',
+    'HOMEROOM': 'Razrednik',
+    'MAIN_ADMIN': 'Glavni administrator'
+  };
+  return labels[role] || role;
+};
+
+export const getStatusLabel = (status: string) => {
+  const labels: Record<string, string> = {
+    'HELD': 'Održan',
+    'NOT_HELD': 'Nije održan',
+    'JUSTIFIED': 'Opravdano',
+    'UNJUSTIFIED': 'Neopravdano',
+    'PENDING': 'Čeka odluku',
+    'OTHER': 'Ostalo'
+  };
+  return labels[status] || status;
+};
+
+export const getChannelTypeLabel = (type: string) => {
+  const labels: Record<string, string> = {
+    'SUBJECT_CHANNEL': 'Predmetni kanal',
+    'PRIVATE': 'Privatni razgovor',
+    'CUSTOM_CHANNEL': 'Posebni kanal',
+    'CLASS_CHANNEL': 'Razredni kanal'
+  };
+  return labels[type] || type;
+};
+
+export const getGroupLabel = (group: string) => {
+  const labels: Record<string, string> = {
+    'GROUP_A': 'Grupa A',
+    'GROUP_B': 'Grupa B',
+    'FULL_CLASS': 'Cijeli razred'
+  };
+  return labels[group] || group;
+};
+
+export const getAbsenceStatusLabel = (status: string) => {
+  return getStatusLabel(status);
+};

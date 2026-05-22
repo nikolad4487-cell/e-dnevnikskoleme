@@ -46,6 +46,8 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     endDate: '',
     shift: 'Ujutro' as 'Ujutro' | 'Popodne' | 'Cjelodnevna',
     isTeachingWeek: true,
+    non_teaching_reason: '',
+    non_teaching_reason_note: '',
     teachingDays: [] as string[],
     onDutyStudentIds: [] as string[],
     // Track which days are teaching days (Pon-Sub)
@@ -744,6 +746,8 @@ setStudents(uniqueStudents);
       onDutyStudentIds: dutyIds,
       shift: 'Ujutro', 
       isTeachingWeek: true,
+      non_teaching_reason: '',
+      non_teaching_reason_note: '',
       dailyTeachingStatus: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: false, 0: false }
     });
     setShowWeekModal(true);
@@ -770,6 +774,8 @@ setStudents(uniqueStudents);
       endDate: w.endDate || '',
       shift: ((w.shift as any) === 'MORNING' ? 'Ujutro' : ((w.shift as any) === 'AFTERNOON' ? 'Popodne' : w.shift)),
       isTeachingWeek: w.isTeachingWeek !== undefined ? w.isTeachingWeek : true,
+      non_teaching_reason: w.non_teaching_reason || '',
+      non_teaching_reason_note: w.non_teaching_reason_note || '',
       teachingDays: w.teachingDays || [],
       onDutyStudentIds: w.onDutyStudentIds || [],
       dailyTeachingStatus
@@ -789,6 +795,11 @@ setStudents(uniqueStudents);
     }
 
     try {
+      if (!newWeek.isTeachingWeek && !newWeek.non_teaching_reason) {
+        toast.error('Molimo odaberite razlog za nenastavni tjedan.');
+        return;
+      }
+      
       const days: string[] = [];
       let current = new Date(newWeek.startDate);
       const end = new Date(newWeek.endDate);
@@ -809,6 +820,8 @@ setStudents(uniqueStudents);
           end_date: newWeek.endDate,
           shift: finalShift,
           is_teaching_week: newWeek.isTeachingWeek,
+          non_teaching_reason: newWeek.isTeachingWeek ? null : newWeek.non_teaching_reason,
+          non_teaching_reason_note: newWeek.isTeachingWeek ? null : newWeek.non_teaching_reason_note,
           teaching_days: days,
           on_duty_student_ids: newWeek.onDutyStudentIds,
           updated_at: new Date().toISOString()
@@ -869,7 +882,9 @@ setStudents(uniqueStudents);
             on_duty_student_ids: onDuty,
             teaching_days: days,
             shift: finalShift,
-            is_teaching_week: newWeek.isTeachingWeek
+            is_teaching_week: newWeek.isTeachingWeek,
+            non_teaching_reason: newWeek.isTeachingWeek ? null : newWeek.non_teaching_reason,
+            non_teaching_reason_note: newWeek.isTeachingWeek ? null : newWeek.non_teaching_reason_note
         };
         
         console.log("WORK WEEK INSERT PAYLOAD:", payload);
