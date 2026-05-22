@@ -33,6 +33,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
 
   // Modal State - Week
   const [showWeekModal, setShowWeekModal] = useState(false);
+  const [editingWeekId, setEditingWeekId] = useState<string | null>(null);
   const [newWeek, setNewWeek] = useState({
     name: '',
     startDate: '',
@@ -40,6 +41,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     shift: 'Ujutro' as 'Ujutro' | 'Popodne' | 'Cjelodnevna',
     isTeachingWeek: true,
     teachingDays: [] as string[],
+    onDutyStudentIds: [] as string[],
     // Track which days are teaching days (Pon-Sub)
     dailyTeachingStatus: {
       0: false, // Ned
@@ -258,7 +260,21 @@ setStudents(uniqueStudents);
           .eq('date', selectedDate);
         if (error) throw error;
 
-        setDailyLessons(mapList(data || [], mappers.lesson));
+        const transformed = (data || []).map(l => {
+          let normalizedGroup = l.group_name;
+          const rawGroup = (l.group_name || '').toLowerCase().trim();
+          if (rawGroup === 'grupa a' || rawGroup === 'grupaa' || rawGroup === 'group_a') normalizedGroup = 'GROUP_A';
+          else if (rawGroup === 'grupa b' || rawGroup === 'grupab' || rawGroup === 'group_b') normalizedGroup = 'GROUP_B';
+          else if (rawGroup === 'cijeli razred' || rawGroup === 'full_class') normalizedGroup = 'FULL_CLASS';
+
+          if (normalizedGroup !== l.group_name) {
+            supabase.from('lessons').update({ group_name: normalizedGroup }).eq('id', l.id).then();
+            l.group_name = normalizedGroup;
+          }
+          return l;
+        });
+
+        setDailyLessons(mapList(transformed, mappers.lesson));
       } catch (error) {
         console.error(error);
         toast.error('Greška pri učitavanju sati za dan');
@@ -458,7 +474,36 @@ setStudents(uniqueStudents);
     return scheduleSubjects.filter(ss => ss.scheduleCellId === cell.id);
   };
 
-  const handleCreateWeek = async () => {
+  const handleEditWeek = (w: WorkWeek) => {
+    setEditingWeekId(w.id);
+    
+    console.log("EDIT WORK WEEK CLICKED", w);
+    
+    // Set daily status based on teaching days
+    const dailyTeachingStatus: Record<number, boolean> = {
+      0: false, 1: false, 2: false, 3: false, 4: false, 5: false, 6: false
+    };
+    
+    (w.teachingDays || []).forEach(dateStr => {
+      const d = new Date(dateStr);
+      dailyTeachingStatus[d.getDay()] = true;
+    });
+
+    setNewWeek({
+      name: w.name,
+      startDate: w.startDate,
+      endDate: w.endDate || '',
+      shift: (w.shift === 'MORNING' ? 'Ujutro' : (w.shift === 'AFTERNOON' ? 'Popodne' : 'Cjelodnevna')),
+      isTeachingWeek: w.isTeachingWeek !== undefined ? w.isTeachingWeek : true,
+      teachingDays: w.teachingDays || [],
+      onDutyStudentIds: w.onDutyStudentIds || [],
+      dailyTeachingStatus
+    });
+    
+    setShowWeekModal(true);
+  };
+
+  const handleSaveWeek = async () => {
     if (!effectiveClassId) return;
     
     // Ensure we are using current class context correctly
@@ -469,13 +514,6 @@ setStudents(uniqueStudents);
     }
 
     try {
-      const studentCount = students.length || 1;
-      const startIdx = (weeks.length * 2) % studentCount;
-      const onDuty = Array.from(new Set([
-        students[startIdx]?.id || '',
-        students[(startIdx + 1) % studentCount]?.id || ''
-      ])).filter(id => id !== '');
-
       const days: string[] = [];
       let current = new Date(newWeek.startDate);
       const end = new Date(newWeek.endDate);
@@ -486,50 +524,104 @@ setStudents(uniqueStudents);
         }
         current.setDate(current.getDate() + 1);
       }
+      
+      let finalShift = newWeek.shift === 'Ujutro' ? 'MORNING' : (newWeek.shift === 'Popodne' ? 'AFTERNOON' : 'ALL_DAY');
 
-      const payload = {
-          class_id: effectiveClassId,
-          school_year_id: currentClass.school_year_id, // Ensure we use school_year_id
-          school_year: currentClass.schoolYear,
-          school_id: selectedSchoolId,
+      if (editingWeekId) {
+        const payload = {
           name: newWeek.name,
           start_date: newWeek.startDate,
           end_date: newWeek.endDate,
-          on_duty_student_ids: onDuty,
+          shift: finalShift,
+          is_teaching_week: newWeek.isTeachingWeek,
           teaching_days: days,
-          shift: newWeek.shift,
-          is_teaching_week: newWeek.isTeachingWeek
-      };
-      
-      console.log("WORK WEEK INSERT PAYLOAD:", payload);
-
-      const { data, error } = await supabase
-        .from('work_weeks')
-        .insert(payload)
-        .select()
-        .single();
+          on_duty_student_ids: newWeek.onDutyStudentIds,
+          updated_at: new Date().toISOString()
+        };
         
-      console.log("WORK WEEK INSERT ERROR:", error);
+        console.log("UPDATE WORK WEEK PAYLOAD", payload);
 
-      if (error) {
-        toast.error('Greška pri kreiranju radnog tjedna: ' + error.message);
-        throw error;
+        const { data, error } = await supabase
+          .from('work_weeks')
+          .update(payload)
+          .eq('id', editingWeekId)
+          .select()
+          .single();
+          
+        console.log("UPDATE WORK WEEK ERROR", error);
+        console.log("UPDATE WORK WEEK SUCCESS", data);
+
+        if (error) {
+          toast.error('Greška pri ažuriranju radnog tjedna: ' + error.message);
+          throw error;
+        }
+
+        const mappedData = mappers.week(data);
+        setWeeks(weeks.map(w => w.id === editingWeekId ? mappedData : w));
+        if (selectedWeek?.id === editingWeekId) {
+          setSelectedWeek(mappedData);
+          // If viewing days, we might want to refresh dailyLessons, but typically it shouldn't matter much.
+        }
+        toast.success('Radni tjedan ažuriran.');
+      } else {
+        let onDuty = newWeek.onDutyStudentIds || [];
+        if (onDuty.length === 0) {
+          const studentCount = students.length || 1;
+          const startIdx = (weeks.length * 2) % studentCount;
+          onDuty = Array.from(new Set([
+            students[startIdx]?.id || '',
+            students[(startIdx + 1) % studentCount]?.id || ''
+          ])).filter(id => id !== '');
+        }
+
+        const payload = {
+            class_id: effectiveClassId,
+            school_year_id: currentClass.school_year_id, // Ensure we use school_year_id
+            school_year: currentClass.schoolYear,
+            school_id: selectedSchoolId,
+            name: newWeek.name,
+            start_date: newWeek.startDate,
+            end_date: newWeek.endDate,
+            on_duty_student_ids: onDuty,
+            teaching_days: days,
+            shift: finalShift,
+            is_teaching_week: newWeek.isTeachingWeek
+        };
+        
+        console.log("WORK WEEK INSERT PAYLOAD:", payload);
+
+        const { data, error } = await supabase
+          .from('work_weeks')
+          .insert(payload)
+          .select()
+          .single();
+          
+        console.log("WORK WEEK INSERT ERROR:", error);
+
+        if (error) {
+          toast.error('Greška pri kreiranju radnog tjedna: ' + error.message);
+          throw error;
+        }
+
+        setWeeks([...weeks, mappers.week(data)]);
+        toast.success('Radni tjedan dodan.');
       }
 
-      setWeeks([...weeks, mappers.week(data)]);
       setShowWeekModal(false);
+      setEditingWeekId(null);
       setNewWeek({ 
         name: '', 
         startDate: '', 
         endDate: '', 
         teachingDays: [], 
+        onDutyStudentIds: [],
         shift: 'Ujutro', 
         isTeachingWeek: true,
         dailyTeachingStatus: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: false, 0: false }
       });
     } catch (err: any) {
       console.error(err);
-      toast.error('Greška pri kreiranju radnog tjedna: ' + err.message);
+      toast.error('Greška pri spremanju radnog tjedna: ' + err.message);
     }
   };
 
@@ -556,7 +648,7 @@ setStudents(uniqueStudents);
           id: lesson.id,
           isHeld: lesson.isHeld,
           subjectId: lesson.subjectId,
-          groupName: lesson.groupName || '',
+          groupName: lesson.groupName || 'FULL_CLASS',
           isBlock: lesson.isBlock,
           blockCount: lesson.blockCount || 1,
           topic: lesson.topic,
@@ -569,7 +661,7 @@ setStudents(uniqueStudents);
         setLessonForm({
           isHeld: true,
           subjectId: defaultValues?.subjectId || '',
-          groupName: '',
+          groupName: 'FULL_CLASS',
           isBlock: false,
           blockCount: 1,
           topic: '',
@@ -711,7 +803,7 @@ setStudents(uniqueStudents);
           hour: currentHour,
           is_held: lessonForm.isHeld,
           subject_id: lessonForm.subjectId,
-          group_name: lessonForm.groupName || '',
+          group_name: lessonForm.groupName === 'FULL_CLASS' ? 'FULL_CLASS' : (lessonForm.groupName || 'FULL_CLASS'),
           is_block: lessonForm.isBlock || false,
           block_count: lessonForm.blockCount || 1,
           topic: lessonForm.topic || '',
@@ -921,17 +1013,30 @@ setStudents(uniqueStudents);
                       <td className="px-4 py-2 border-r border-gray-200 text-[11px] text-gray-500">
                          {Array.from(new Set(w.onDutyStudentIds || [])).map(sid => students.find(s => s.id === sid)?.name).filter(Boolean).join(', ') || 'Nema dežurnih'}
                       </td>
-                       <td className="px-4 py-2 text-center">
+                       <td className="px-4 py-2 text-center text-right flex justify-end">
                           {(isMainAdmin || user?.role === Role.ADMIN) && (
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setDeleteDialog({ isOpen: true, id: w.id, type: 'WEEK', loading: false });
-                              }}
-                              className="p-1 px-2 text-gray-300 hover:text-red-500 hover:bg-white border border-transparent hover:border-gray-200 transition-all rounded-sm"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            <div className="flex items-center gap-1 justify-end">
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditWeek(w);
+                                }}
+                                className="p-1 px-2 text-gray-300 hover:text-[#005c8d] hover:bg-white border border-transparent hover:border-gray-200 transition-all rounded-sm"
+                                title="Uredi"
+                              >
+                                <Edit2 size={14} />
+                              </button>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteDialog({ isOpen: true, id: w.id, type: 'WEEK', loading: false });
+                                }}
+                                className="p-1 px-2 text-gray-300 hover:text-red-500 hover:bg-white border border-transparent hover:border-gray-200 transition-all rounded-sm"
+                                title="Obriši"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
                           )}
                        </td>
                      </tr>
@@ -1310,16 +1415,17 @@ setStudents(uniqueStudents);
                                       <div className="flex-1">
                                         <div className="font-bold text-[#005c8d] uppercase mb-0.5">
                                           {(sub?.name || 'Predmet').toUpperCase()} - {lesson.teacherDisplayName && !lesson.teacherDisplayName.includes('undefined') ? lesson.teacherDisplayName : (teacher ? formatPersonName(teacher) : 'Nepoznat nastavnik')}
-                                          {lesson.groupName ? <span className="text-gray-400 font-normal italic lowercase ml-1">({lesson.groupName})</span> : ''}
+                                          {lesson.groupName && ['GROUP_A', 'GROUP_B'].includes(lesson.groupName.toUpperCase()) ? <span className="text-gray-400 font-normal italic ml-1">({lesson.groupName === 'GROUP_A' ? 'Grupa A' : 'Grupa B'})</span> : (
+                                            (lesson.groupName === 'grupa a' || lesson.groupName === 'Grupa A') ? <span className="text-gray-400 font-normal italic ml-1">(Grupa A)</span> :
+                                            (lesson.groupName === 'grupa b' || lesson.groupName === 'Grupa B') ? <span className="text-gray-400 font-normal italic ml-1">(Grupa B)</span> : ''
+                                          )}
                                           {!lesson.isHeld && " - SAT NIJE ODRŽAN"}
                                         </div>
                                         {lesson.topic ? (
                                           <div className="text-[10px] text-gray-500 italic whitespace-pre-wrap leading-snug">
                                             {lesson.topic}
                                           </div>
-                                        ) : (
-                                          lesson.isHeld && <div className="text-[10px] text-gray-400 italic">Nije upisana tema...</div>
-                                        )}
+                                        ) : null}
                                       </div>
                                       
                                       {canEdit && (
@@ -1346,6 +1452,15 @@ setStudents(uniqueStudents);
                               })
                             ) : null}
                             
+                            {isOccupied && (
+                              <button 
+                                onClick={() => openLessonModal(hour)}
+                                className="text-[10px] font-bold text-[#005c8d] uppercase mt-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                + Dodaj grupu
+                              </button>
+                            )}
+
                             {!isOccupied && (
                               <button 
                                 onClick={() => openLessonModal(hour)}
@@ -1476,14 +1591,16 @@ setStudents(uniqueStudents);
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
-                          <label className="text-[9px] font-black text-gray-400 uppercase block tracking-widest">Grupa (opcionalno)</label>
-                          <input 
-                            type="text" 
-                            className="w-full border border-gray-300 p-2 focus:border-[#005c8d] outline-none font-bold placeholder:font-normal placeholder:text-gray-300"
-                            value={lessonForm.groupName}
+                          <label className="text-[9px] font-black text-gray-400 uppercase block tracking-widest">Grupa</label>
+                          <select 
+                            className="w-full border border-gray-300 p-2 focus:border-[#005c8d] outline-none font-bold"
+                            value={lessonForm.groupName || 'FULL_CLASS'}
                             onChange={e => setLessonForm({...lessonForm, groupName: e.target.value})}
-                            placeholder="Npr. Grupa A"
-                          />
+                          >
+                            <option value="FULL_CLASS">Cijeli razred</option>
+                            <option value="GROUP_A">Grupa A</option>
+                            <option value="GROUP_B">Grupa B</option>
+                          </select>
                         </div>
                         <div className="space-y-1">
                           <label className="text-[9px] font-black text-gray-400 uppercase block tracking-widest">Blok sat</label>
@@ -1693,8 +1810,8 @@ setStudents(uniqueStudents);
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100">
             <div className="bg-[#005c8d] p-6 text-white flex items-center justify-between">
-              <h3 className="text-xl font-black uppercase tracking-tight">Novi radni tjedan</h3>
-              <button onClick={() => setShowWeekModal(false)} className="hover:rotate-90 transition-transform"><X /></button>
+              <h3 className="text-xl font-black uppercase tracking-tight">{editingWeekId ? 'Uredi radni tjedan' : 'Novi radni tjedan'}</h3>
+              <button onClick={() => { setShowWeekModal(false); setEditingWeekId(null); }} className="hover:rotate-90 transition-transform"><X /></button>
             </div>
             <div className="p-8 space-y-6">
                <div className="space-y-2">
@@ -1761,6 +1878,36 @@ setStudents(uniqueStudents);
                  </div>
                </div>
 
+               <div className="space-y-2">
+                 <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block">Dežurni učenici</label>
+                 <div className="flex gap-4">
+                   <select
+                     className="w-full border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none font-bold"
+                     value={newWeek.onDutyStudentIds[0] || ''}
+                     onChange={e => {
+                       const next = [...newWeek.onDutyStudentIds];
+                       next[0] = e.target.value;
+                       setNewWeek({...newWeek, onDutyStudentIds: next.filter(Boolean)});
+                     }}
+                   >
+                     <option value="">- Odaberi 1. redara -</option>
+                     {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                   </select>
+                   <select
+                     className="w-full border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none font-bold"
+                     value={newWeek.onDutyStudentIds[1] || ''}
+                     onChange={e => {
+                       const next = [...newWeek.onDutyStudentIds];
+                       next[1] = e.target.value;
+                       setNewWeek({...newWeek, onDutyStudentIds: next.filter(Boolean)});
+                     }}
+                   >
+                     <option value="">- Odaberi 2. redara -</option>
+                     {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                   </select>
+                 </div>
+               </div>
+
                <div className="space-y-4">
                   <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block">Radni dani (Pon - Sub)</label>
                   <div className="grid grid-cols-6 gap-2">
@@ -1802,14 +1949,14 @@ setStudents(uniqueStudents);
 
                <div className="flex gap-4 pt-4">
                   <button 
-                    onClick={handleCreateWeek}
+                    onClick={handleSaveWeek}
                     disabled={!newWeek.name || !newWeek.startDate || !newWeek.endDate}
                     className="flex-1 bg-[#005c8d] text-white font-black py-4 rounded-lg uppercase tracking-widest hover:bg-[#004a70] shadow-lg transition-all active:scale-95 disabled:opacity-50"
                   >
-                    Kreiraj tjedan
+                    {editingWeekId ? 'Spremi promjene' : 'Kreiraj tjedan'}
                   </button>
                   <button 
-                    onClick={() => setShowWeekModal(false)}
+                    onClick={() => { setShowWeekModal(false); setEditingWeekId(null); }}
                     className="px-8 py-4 bg-gray-100 text-gray-600 font-black rounded-lg uppercase tracking-widest hover:bg-gray-200"
                   >
                     Odustani
