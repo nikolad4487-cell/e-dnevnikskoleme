@@ -651,14 +651,19 @@ export default function ImenikPage() {
       const selectedClass = classes.find(c => c.id === effectiveClassId);
       const schoolYearId = selectedClass?.school_year_id || null;
 
-      const { data: finals, error: finalError } = await supabase
+      const finalsQuery = supabase
         .from('final_grades')
         .select('*')
         .eq('student_id', activeStudent.id)
         .eq('subject_id', activeSubject.id)
         .eq('class_id', effectiveClassId)
-        .eq('school_year_id', schoolYearId)
         .in('period', ['FIRST_TERM', 'SECOND_TERM']);
+
+      if (schoolYearId) {
+        finalsQuery.eq('school_year_id', schoolYearId);
+      }
+
+      const { data: finals, error: finalError } = await finalsQuery;
       
       console.log("TEACHER FINAL GRADES FETCH FILTERS", {
         studentId: activeStudent.id,
@@ -1091,13 +1096,15 @@ export default function ImenikPage() {
       const selectedClass = classes.find(c => c.id === effectiveClassId);
       const schoolYearId = selectedClass?.school_year_id || '';
       
+      const period = selectedFinalPeriod === '1' ? 'FIRST_TERM' : 'SECOND_TERM';
+
       const { data: existing, error: fe } = await supabase
         .from('final_grades')
         .select('id')
         .eq('student_id', activeStudent.id)
         .eq('subject_id', activeSubject.id)
         .eq('class_id', effectiveClassId)
-        .eq('period', selectedFinalPeriod === '1' ? 'FIRST_TERM' : (selectedFinalPeriod === '2' ? 'SECOND_TERM' : 'FINAL'))
+        .eq('period', period)
         .maybeSingle();
 
       if (fe) throw fe;
@@ -1109,7 +1116,7 @@ export default function ImenikPage() {
         class_id: effectiveClassId,
         teacher_id: user.id,
         school_year_id: schoolYearId,
-        period: selectedFinalPeriod === '1' ? 'FIRST_TERM' : (selectedFinalPeriod === '2' ? 'SECOND_TERM' : 'FINAL'),
+        period: period,
         value: gradeText,
       };
       
@@ -1666,7 +1673,8 @@ export default function ImenikPage() {
                  <td className="p-2 border border-gray-300 text-[10px] font-bold text-[#005c8d] uppercase">Zaključna ocjena</td>
                  <td className="border border-gray-300 text-center" colSpan={4}>
                     {(() => {
-                      const fg = finalGrades.find(f => f.term === 'FIRST_SEMESTER');
+                      const fg = finalGrades.find(f => f.period === 'FIRST_TERM' || f.term === 'FIRST_SEMESTER');
+                      console.log("TEACHER FINAL GRADE VALUE", fg?.value);
                       const suggested = getSuggestedGrade(Number(avg));
                       return (
                         <div className="w-full h-full p-2 flex flex-col items-center justify-center min-h-[40px]">
@@ -1729,7 +1737,8 @@ export default function ImenikPage() {
                  </td>
                  <td className="border border-gray-300 text-center" colSpan={6}>
                     {(() => {
-                      const fg = finalGrades.find(f => f.term === 'FINAL');
+                      const fg = finalGrades.find(f => f.period === 'SECOND_TERM');
+                      console.log("TEACHER FINAL GRADE VALUE", fg?.value);
                       const suggested = getSuggestedGrade(Number(avg));
                       return (
                         <div className="w-full h-full p-2 flex flex-col items-center justify-center min-h-[40px]">
@@ -2035,7 +2044,7 @@ export default function ImenikPage() {
                   <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Vrsta</label>
                   <select value={newSpecialExam.type} onChange={e => setNewSpecialExam({...newSpecialExam, type: e.target.value as any})} className="w-full border p-1 text-[11px] font-bold leading-tight">
                     {(() => {
-                      const fg = finalGrades.find(f => f.term === 'FINAL' || f.term === 'FIRST_SEMESTER');
+                      const fg = finalGrades.find(f => f.period === 'FIRST_TERM' || f.period === 'SECOND_TERM');
                       // If '1', show one set, if 'Neocijenjen' show another
                       if (fg?.value === 'Neocijenjen') {
                         return (
