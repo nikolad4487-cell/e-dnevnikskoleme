@@ -146,7 +146,7 @@ export const mappers = {
     studentId: raw.student_id,
     teacherId: raw.teacher_id,
     schoolYearId: raw.school_year_id,
-    gradeValue: raw.grade_value ? raw.grade_value.toString() : undefined,
+    value: raw.value ? raw.value.toString() : undefined,
     note: raw.note,
     date: raw.exam_date || raw.date, // fallback for backwards compat if needed momentarily
     type: raw.exam_type || raw.type,

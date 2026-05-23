@@ -20,7 +20,7 @@ export const SpecialExamReGradeModal = ({ isOpen, onClose, student, subject, exa
             teacher_id: finalGrade.teacher_id,
             school_year_id: finalGrade.school_year_id,
             period: finalGrade.period, // FIRST_TERM or SECOND_TERM
-            grade_value: selectedGrade.toString(),
+            value: selectedGrade.toString(),
             updated_at: new Date().toISOString()
         };
         console.log("FINAL GRADE UPSERT", payload);

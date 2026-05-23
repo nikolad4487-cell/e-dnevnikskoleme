@@ -9,9 +9,10 @@ import { mappers, mapList } from '../../lib/mappers';
 
 export default function OcjenePage() {
   const { user, isParent } = useAuth();
-  const { selectedClassId, selectedChildId } = useSelection();
+  const { selectedClassId, selectedChildId, selectedSchoolId } = useSelection();
   const [grades, setGrades] = useState<Grade[]>([]);
   const [finalGrades, setFinalGrades] = useState<any[]>([]);
+  const [gradingElements, setGradingElements] = useState<any[]>([]);
   const [specialExams, setSpecialExams] = useState<any[]>([]);
   const [currentClass, setCurrentClass] = useState<any | null>(null);
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -20,6 +21,29 @@ export default function OcjenePage() {
   const [loading, setLoading] = useState(true);
   const [targetStudent, setTargetStudent] = useState<User | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!targetStudent?.id || !selectedClassId || !selectedSubject || !selectedSchoolId) return;
+    
+    const fetchGradingElements = async () => {
+      const { data } = await supabase
+        .from('grading_elements')
+        .select('*')
+        .eq('school_id', selectedSchoolId)
+        .eq('class_id', selectedClassId)
+        .eq('subject_id', selectedSubject)
+        .order('display_order', { ascending: true });
+      
+      const elements = data ? mapList(data, mappers.gradingElement) : [];
+      setGradingElements(elements);
+      
+      console.log("STUDENT ASSESSMENT ELEMENTS", elements);
+      console.log("SUBJECT ID", selectedSubject);
+      console.log("CLASS ID", selectedClassId);
+    };
+
+    fetchGradingElements();
+  }, [targetStudent?.id, selectedClassId, selectedSubject, selectedSchoolId]);
 
   const fetchSpecialExams = async () => {
     if (!targetStudent?.id || !selectedClassId || !selectedSubject || !currentClass?.school_year_id) return;
@@ -180,12 +204,6 @@ export default function OcjenePage() {
     fetchLektire();
   }, [selectedClassId, selectedSubject]);
 
-  const CATEGORIES = [
-    'Usvojenost nastavnih sadržaja',
-    'Primjena nastavnih sadržaja',
-    'Samostalan rad i aktivnost'
-  ];
-
   const MONTHS_ORDER = ['IX', 'X', 'XI', 'XII', 'I', 'II', 'III', 'IV', 'V', 'VI'];
   const MONTH_MAP = { 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII', 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI' };
 
@@ -290,7 +308,7 @@ export default function OcjenePage() {
     : '0.00';
 
   const gridGrades: Record<string, Record<string, number[]>> = {};
-  CATEGORIES.forEach(cat => gridGrades[cat] = {});
+  gradingElements.forEach(ge => gridGrades[ge.name] = {});
   activeGrades.forEach(g => {
     const month = new Date(g.date).getMonth() + 1;
     const monthLabel = MONTH_MAP[month as keyof typeof MONTH_MAP];
@@ -304,24 +322,42 @@ export default function OcjenePage() {
   return (
     <div className="flex flex-col h-full bg-white overflow-auto font-sans">
       <div className="p-4 md:p-8 max-w-6xl mx-auto w-full space-y-8">
-        {/* Back navigation */}
-        <div>
-          <button 
-            onClick={() => setSelectedSubject(null)}
-            className="flex items-center gap-1 text-slate-400 hover:text-[#005c8d] transition-colors uppercase font-black text-[9px] tracking-widest mb-6 group"
-          >
-            <ArrowLeft size={12} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" />
-            Povratak na odabir predmeta
-          </button>
-          
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b-2 border-slate-100 pb-6">
-            <div>
-              <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">{activeSubject.name}</h1>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="px-2 py-0.5 bg-blue-50 text-[#005c8d] text-[9px] font-black uppercase rounded tracking-widest border border-blue-100">
-                  Aritmetička sredina: {average}
-                </span>
-              </div>
+        {/* Back navigation & Subject Selector */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b-2 border-slate-100 pb-6">
+          <div>
+            <button 
+              onClick={() => setSelectedSubject(null)}
+              className="flex items-center gap-1 text-slate-400 hover:text-[#005c8d] transition-colors uppercase font-black text-[9px] tracking-widest mb-2 group"
+            >
+              <ArrowLeft size={12} strokeWidth={3} className="group-hover:-translate-x-1 transition-transform" />
+              Povratak na odabir predmeta
+            </button>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">{activeSubject.name}</h1>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="px-2 py-0.5 bg-blue-50 text-[#005c8d] text-[9px] font-black uppercase rounded tracking-widest border border-blue-100">
+                Aritmetička sredina: {average}
+              </span>
+            </div>
+          </div>
+
+          {/* Subject Dropdown */}
+          <div className="relative group">
+            <button className="flex items-center gap-2 px-4 py-2 bg-[#005c8d] text-white text-[10px] font-black uppercase tracking-widest rounded transition-all hover:bg-[#004a73]">
+              Odaberite predmet <ChevronRight size={14} className="rotate-90" />
+            </button>
+            <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 shadow-xl rounded-lg overflow-hidden hidden group-hover:block z-50">
+              {subjects.sort((a,b) => (String(a.name || "")).localeCompare(b.name)).map(subject => (
+                <button
+                  key={subject.id}
+                  onClick={() => setSelectedSubject(subject.id)}
+                  className={cn(
+                    "w-full text-left px-4 py-3 text-xs font-bold uppercase tracking-wider border-b border-slate-50 last:border-0 hover:bg-slate-50 transition-colors",
+                    selectedSubject === subject.id ? "text-[#005c8d] bg-blue-50" : "text-slate-700"
+                  )}
+                >
+                  {subject.name}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -339,20 +375,24 @@ export default function OcjenePage() {
                 </tr>
               </thead>
               <tbody>
-                {CATEGORIES.map((cat) => (
-                  <tr key={cat} className="border-b border-slate-300">
-                    <td className="p-4 border-r border-slate-300 font-bold text-slate-700 bg-slate-50/30 text-xs">{cat}</td>
+                {gradingElements.length > 0 ? gradingElements.map((ge) => (
+                  <tr key={ge.id} className="border-b border-slate-300">
+                    <td className="p-4 border-r border-slate-300 font-bold text-slate-700 bg-slate-50/30 text-xs">{ge.name}</td>
                     {MONTHS_ORDER.map(m => (
                       <td key={m} className="p-1 border-r border-slate-300 text-center align-middle bg-white group hover:bg-slate-50 transition-colors">
                         <div className="flex flex-wrap justify-center gap-1.5 min-h-[30px]">
-                          {gridGrades[cat]?.[m]?.map((v, i) => (
+                          {gridGrades[ge.name]?.[m]?.map((v, i) => (
                             <span key={i} className="text-sm font-black text-[#005c8d]">{v}</span>
                           ))}
                         </div>
                       </td>
                     ))}
                   </tr>
-                ))}
+                )) : (
+                  <tr>
+                    <td colSpan={13} className="p-4 text-center text-slate-400 text-xs font-bold uppercase">Nema definiranih elemenata ocjenjivanja.</td>
+                  </tr>
+                )}
                 <tr className="border-b border-slate-300 bg-slate-50 font-black">
                   <td className="p-4 border-r border-slate-300 uppercase text-[10px] tracking-widest text-slate-400">ZAKLJUČENO</td>
                   <td className="p-4 border-r border-slate-300 text-center text-red-600 text-xs font-bold" colSpan={5}>

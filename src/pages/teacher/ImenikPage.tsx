@@ -651,13 +651,24 @@ export default function ImenikPage() {
       const selectedClass = classes.find(c => c.id === effectiveClassId);
       const schoolYearId = selectedClass?.school_year_id || null;
 
-      const { data: finals } = await supabase
+      const { data: finals, error: finalError } = await supabase
         .from('final_grades')
         .select('*')
         .eq('student_id', activeStudent.id)
         .eq('subject_id', activeSubject.id)
         .eq('class_id', effectiveClassId)
-        .eq('school_year_id', schoolYearId);        
+        .eq('school_year_id', schoolYearId)
+        .in('period', ['FIRST_TERM', 'SECOND_TERM']);
+      
+      console.log("TEACHER FINAL GRADES FETCH FILTERS", {
+        studentId: activeStudent.id,
+        subjectId: activeSubject.id,
+        classId: effectiveClassId,
+        schoolYearId: schoolYearId
+      });
+      console.log("TEACHER FINAL GRADES FETCH RESULT", finals);
+      console.log("TEACHER FINAL GRADES FETCH ERROR", finalError);
+
       setFinalGrades(mapList(finals || [], mappers.finalGrade));
 
       await fetchSpecialExams();
@@ -1045,7 +1056,7 @@ export default function ImenikPage() {
         school_year_id: schoolYearId,
         exam_type: newSpecialExam.type,
         note: newSpecialExam.note,
-        grade_value: newSpecialExam.grade || null,
+        value: newSpecialExam.grade || null,
         exam_date: newSpecialExam.customDate || new Date().toISOString().split('T')[0]
       };
       console.log("EXAM PAYLOAD", payload);
