@@ -353,20 +353,20 @@ export default function OcjenePage() {
                     ))}
                   </tr>
                 ))}
-                {/* Final row */}
-                <tr className="bg-slate-50/50 font-black">
-                  <td className="p-4 border-r border-slate-300 uppercase text-[10px] tracking-widest text-slate-400">ZAKLJUČENA OCJENA</td>
-                  {MONTHS_ORDER.map(m => {
-                    const isSemester1 = ['XII'].includes(m);
-                    const isSemester2 = ['VI'].includes(m);
-                    const fg = activeFinalGrades.find(f => f.term === (m === 'XII' ? 'FIRST_SEMESTER' : 'FINAL'));
-                    const val = fg ? (finalGradeLabels[fg.value] || fg.value) : '';
-                    return (
-                      <td key={m} className="p-2 border-r border-slate-300 text-center text-red-600 text-[10px] md:text-sm font-bold leading-tight">
-                        {(isSemester1 || isSemester2) ? val : ''}
-                      </td>
-                    );
-                  })}
+                <tr className="border-b border-slate-300 bg-slate-50 font-black">
+                  <td className="p-4 border-r border-slate-300 uppercase text-[10px] tracking-widest text-slate-400">ZAKLJUČENO</td>
+                  <td className="p-4 border-r border-slate-300 text-center text-red-600 text-xs font-bold" colSpan={5}>
+                    {(() => {
+                      const fg = activeFinalGrades.find(f => f.period === 'FIRST_TERM' || f.term === 'FIRST_SEMESTER');
+                      return fg ? (finalGradeLabels[fg.value] || fg.value) : '';
+                    })()}
+                  </td>
+                  <td className="p-4 border-r border-slate-300 text-center text-red-600 text-xs font-bold" colSpan={5}>
+                    {(() => {
+                      const fg = activeFinalGrades.find(f => f.period === 'SECOND_TERM' || f.term === 'FINAL');
+                      return fg ? (finalGradeLabels[fg.value] || fg.value) : '';
+                    })()}
+                  </td>
                 </tr>
               </tbody>
             </table>

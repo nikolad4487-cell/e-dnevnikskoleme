@@ -162,6 +162,7 @@ export const mappers = {
     teacherId: raw.teacher_id,
     schoolYearId: raw.school_year_id,
     term: raw.term,
+    period: raw.period,
     value: raw.value,
     note: raw.note,
     createdAt: raw.created_at,

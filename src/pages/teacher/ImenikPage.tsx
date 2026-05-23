@@ -8,9 +8,11 @@ import { cn, formatName, getSurname, formatSubjectDisplayName, finalGradeLabels 
 import { mappers, mapList } from '../../lib/mappers';
 import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2, Check } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
+import { SpecialExamReGradeModal } from '../../components/SpecialExamReGradeModal';
 import { toast } from 'react-hot-toast';
 
 type ViewMode = 'STUDENTS' | 'SUBJECTS' | 'GRADES' | 'NOTES';
+
 
 
 function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effectiveClassId, selectedSchoolId, user, classes, onRefresh }: any) {
@@ -20,11 +22,7 @@ function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effect
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (isOpen) {
-        console.log("GROUP FINAL GRADES SUBJECT", activeSubject);
-        console.log("GROUP FINAL GRADES STUDENTS", students);
-        fetchData();
-    }
+    if (isOpen) fetchData();
   }, [isOpen, period]);
 
   const fetchData = async () => {
@@ -72,9 +70,7 @@ function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effect
     }));
 
     if (upserts.length > 0) {
-        console.log("FINAL GRADE UPSERT PAYLOAD", upserts);
         const { error } = await supabase.from('final_grades').upsert(upserts);
-        console.log("FINAL GRADE UPSERT ERROR", error);
         if (error) {
             toast.error("Greška pri spremanju.");
             setSaving(false);
@@ -200,6 +196,13 @@ export default function ImenikPage() {
   const [showGroupNoteModal, setShowGroupNoteModal] = useState(false);
   const [showFinalGradeModal, setShowFinalGradeModal] = useState(false);
   const [showSpecialExamModal, setShowSpecialExamModal] = useState(false);
+  const [showSpecialExamReGradeModal, setShowSpecialExamReGradeModal] = useState(false);
+  const [selectedSpecialExamForReGrade, setSelectedSpecialExamForReGrade] = useState<{
+    student: any,
+    subject: any,
+    exams: any[],
+    finalGrade: any,
+  } | null>(null);
   const [showGroupFinalGradeModal, setShowGroupFinalGradeModal] = useState(false);
   const [showGradingElementsModal, setShowGradingElementsModal] = useState(false);
   
@@ -590,7 +593,11 @@ export default function ImenikPage() {
     if (!activeStudent?.id || !activeSubject?.id || !effectiveClassId) return;
 
     const selectedClass = classes.find(c => c.id === effectiveClassId);
-    const schoolYearId = selectedClass?.school_year_id || '';
+    
+    if (!selectedClass) return;
+    
+    const schoolYearId = selectedClass.school_year_id;
+    if (!schoolYearId) return;
 
     try {
       const { data, error } = await supabase
@@ -641,12 +648,16 @@ export default function ImenikPage() {
         .order('created_at', { ascending: false });
       setCurrentNotes(mapList(notes, mappers.studentNote) as any);
 
+      const selectedClass = classes.find(c => c.id === effectiveClassId);
+      const schoolYearId = selectedClass?.school_year_id || null;
+
       const { data: finals } = await supabase
         .from('final_grades')
         .select('*')
         .eq('student_id', activeStudent.id)
         .eq('subject_id', activeSubject.id)
-        .eq('class_id', effectiveClassId);
+        .eq('class_id', effectiveClassId)
+        .eq('school_year_id', schoolYearId);        
       setFinalGrades(mapList(finals || [], mappers.finalGrade));
 
       await fetchSpecialExams();
@@ -1671,6 +1682,22 @@ export default function ImenikPage() {
                                   Ispiti
                                 </button>
                               )}
+                              {fg.value === '1' && specialExams.filter(e => e.studentId === activeStudent?.id && e.subjectId === activeSubject?.id).length > 0 && canEditGrades(activeSubject?.id || '') && (
+                                <button 
+                                  onClick={() => {
+                                      setSelectedSpecialExamForReGrade({
+                                          student: activeStudent,
+                                          subject: activeSubject,
+                                          exams: specialExams.filter(e => e.studentId === activeStudent?.id && e.subjectId === activeSubject?.id),
+                                          finalGrade: fg
+                                      });
+                                      setShowSpecialExamReGradeModal(true);
+                                  }}
+                                  className="mt-1 text-[9px] bg-green-50 text-green-600 border border-green-200 px-2 py-0.5 rounded shadow-xs hover:bg-green-100 hover:text-green-700 transition font-bold uppercase"
+                                >
+                                  ZAKLJUČI OCJENU
+                                </button>
+                              )}
                             </div>
                           ) : (
                             <div className="flex flex-col items-center gap-1">
@@ -2191,6 +2218,16 @@ export default function ImenikPage() {
           }}
         />
       )}
+
+      <SpecialExamReGradeModal
+        isOpen={showSpecialExamReGradeModal}
+        onClose={() => setShowSpecialExamReGradeModal(false)}
+        student={selectedSpecialExamForReGrade?.student}
+        subject={selectedSpecialExamForReGrade?.subject}
+        exams={selectedSpecialExamForReGrade?.exams}
+        finalGrade={selectedSpecialExamForReGrade?.finalGrade}
+        onRefresh={fetchGradesAndNotes}
+      />
 
 
       {selectedGrade && (
