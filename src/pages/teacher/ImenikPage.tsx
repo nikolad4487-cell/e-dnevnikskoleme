@@ -12,6 +12,127 @@ import { toast } from 'react-hot-toast';
 
 type ViewMode = 'STUDENTS' | 'SUBJECTS' | 'GRADES' | 'NOTES';
 
+
+function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effectiveClassId, selectedSchoolId, user, classes, onRefresh }: any) {
+  const [period, setPeriod] = useState<'FIRST_TERM' | 'SECOND_TERM'>('FIRST_TERM');
+  const [studentData, setStudentData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+        console.log("GROUP FINAL GRADES SUBJECT", activeSubject);
+        console.log("GROUP FINAL GRADES STUDENTS", students);
+        fetchData();
+    }
+  }, [isOpen, period]);
+
+  const fetchData = async () => {
+    setLoading(true);
+    const { data: grades } = await supabase
+        .from('grades')
+        .select('*')
+        .eq('subject_id', activeSubject?.id)
+        .eq('class_id', effectiveClassId)
+        .eq('is_final', false);
+    
+    const { data: finals } = await supabase
+        .from('final_grades')
+        .select('*')
+        .eq('subject_id', activeSubject?.id)
+        .eq('class_id', effectiveClassId)
+        .eq('period', period);
+
+    const mapped = students.map((s: any) => {
+        const studentGrades = (grades || []).filter((g: any) => g.student_id === s.id);
+        const sum = studentGrades.reduce((a: number, c: any) => a + c.value, 0);
+        const avg = studentGrades.length ? (sum / studentGrades.length).toFixed(2) : '-';
+        const existing = (finals || []).find((f: any) => f.student_id === s.id);
+        return { ...s, avg, existing, newGrade: existing ? existing.value : '' };
+    });
+    setStudentData(mapped);
+    setLoading(false);
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const selectedClass = classes.find((c: any) => c.id === effectiveClassId);
+    const schoolYearId = selectedClass?.school_year_id || '';
+    const teacherId = user?.id;
+
+    const upserts = studentData.filter((s:any) => s.newGrade !== (s.existing?.value || '')).map((s:any) => ({
+        student_id: s.id,
+        subject_id: activeSubject.id,
+        class_id: effectiveClassId,
+        teacher_id: teacherId,
+        school_year_id: schoolYearId,
+        period: period,
+        value: s.newGrade,
+        updated_at: new Date().toISOString()
+    }));
+
+    if (upserts.length > 0) {
+        console.log("FINAL GRADE UPSERT PAYLOAD", upserts);
+        const { error } = await supabase.from('final_grades').upsert(upserts);
+        console.log("FINAL GRADE UPSERT ERROR", error);
+        if (error) {
+            toast.error("Greška pri spremanju.");
+            setSaving(false);
+            return;
+        }
+        toast.success("Spremljeno.");
+        onRefresh();
+    }
+    setSaving(false);
+    onClose();
+  };
+
+  if(!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-[#005c8d]/60 z-[300] p-4 pt-10 overflow-auto">
+        <div className="bg-white w-full max-w-4xl mx-auto border border-gray-400">
+            <div className="p-3 bg-[#005c8d] text-white flex justify-between uppercase font-bold text-[11px] items-center">
+                <h3>Grupno zaključivanje: {activeSubject?.name}</h3>
+                <button onClick={onClose}><X size={16}/></button>
+            </div>
+            <div className="p-4 bg-gray-50 flex gap-4 text-[11px] font-bold">
+                <label className="flex items-center gap-2"><input type="radio" checked={period === 'FIRST_TERM'} onChange={() => setPeriod('FIRST_TERM')} /> 1. polugodište</label>
+                <label className="flex items-center gap-2"><input type="radio" checked={period === 'SECOND_TERM'} onChange={() => setPeriod('SECOND_TERM')} /> 2. polugodište</label>
+            </div>
+            {loading ? <div className="p-10 text-center">Učitavanje...</div> : 
+            <table className="w-full text-[11px] border-collapse">
+                <thead className="text-gray-400 uppercase font-bold text-left border-b">
+                    <tr><th className="p-2">Učenik</th><th className="p-2">Prosjek</th><th className="p-2">Zaključak</th></tr>
+                </thead>
+                <tbody className="divide-y">
+                    {studentData.map((s:any) => (
+                        <tr key={s.id} className="hover:bg-gray-50">
+                            <td className="p-2 font-bold">{s.name}</td>
+                            <td className="p-2">{s.avg}</td>
+                            <td className="p-2">
+                                <select value={s.newGrade} onChange={e => setStudentData(studentData.map((st:any) => st.id === s.id ? {...st, newGrade: e.target.value} : st))} className="border p-0.5 w-full">
+                                    <option value="">--</option>
+                                    {[1,2,3,4,5].map(v => <option key={v} value={v}>{v}</option>)}
+                                    <option value="Neocijenjen">Neocijenjen</option>
+                                    <option value="Oslobođen">Oslobođen</option>
+                                    <option value="Odrađeno">Odrađeno</option>
+                                    <option value="Neodrađeno">Neodrađeno</option>
+                                </select>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>}
+            <div className="p-4 border-t flex justify-center gap-2">
+                <button onClick={onClose} className="p-2 px-6 border text-[10px] font-bold uppercase">Odustani</button>
+                <button onClick={handleSave} disabled={saving} className="p-2 px-6 bg-[#005c8d] text-white text-[10px] font-bold uppercase">{saving ? 'Spremanje...' : 'Spremi'}</button>
+            </div>
+        </div>
+    </div>
+  );
+}
+
 export default function ImenikPage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { user, isMainAdmin } = useAuth();
@@ -79,6 +200,7 @@ export default function ImenikPage() {
   const [showGroupNoteModal, setShowGroupNoteModal] = useState(false);
   const [showFinalGradeModal, setShowFinalGradeModal] = useState(false);
   const [showSpecialExamModal, setShowSpecialExamModal] = useState(false);
+  const [showGroupFinalGradeModal, setShowGroupFinalGradeModal] = useState(false);
   const [showGradingElementsModal, setShowGradingElementsModal] = useState(false);
   
   const [newGrade, setNewGrade] = useState({ 
@@ -1779,6 +1901,12 @@ export default function ImenikPage() {
                 >
                   Grupni unos bilješki
                 </button>
+                <button 
+                  onClick={() => setShowGroupFinalGradeModal(true)}
+                  className="w-full flex items-center gap-3 p-2 text-[10px] font-bold uppercase text-[#005c8d] bg-white border border-[#005c8d] hover:bg-[#005c8d] hover:text-white transition-all"
+                >
+                  Grupno zaključivanje ocjena
+                </button>
              </div>
            )}
 
@@ -2027,6 +2155,18 @@ export default function ImenikPage() {
         message={deleteDialog.message}
       />
 
+      <GroupFinalGradeModal
+        isOpen={showGroupFinalGradeModal}
+        onClose={() => setShowGroupFinalGradeModal(false)}
+        students={students}
+        activeSubject={activeSubject}
+        effectiveClassId={effectiveClassId}
+        selectedSchoolId={selectedSchoolId}
+        user={user}
+        classes={classes}
+        onRefresh={fetchGradesAndNotes}
+      />
+
       {showGradingElementsModal && activeSubject && (
         <GradingElementsModal 
           isOpen={showGradingElementsModal} 
@@ -2051,6 +2191,7 @@ export default function ImenikPage() {
           }}
         />
       )}
+
 
       {selectedGrade && (
         <GradeDetailsModal 
