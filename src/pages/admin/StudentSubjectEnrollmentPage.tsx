@@ -80,7 +80,8 @@ export default function StudentSubjectEnrollmentPage() {
         .eq('class_id', selectedClassId);
       
       const mappedSubjects = (classSubjects || []).map(cs => cs.subject).filter(Boolean) as any[] as Subject[];
-      setSubjects(mappedSubjects);
+      const uniqueSubjects = Array.from(new Map(mappedSubjects.map((s: any) => [s.id, s])).values());
+      setSubjects(uniqueSubjects);
 
       const { data: enrolls } = await supabase
         .from('student_class_enrollments')

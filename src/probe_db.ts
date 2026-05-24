@@ -10,18 +10,17 @@ console.log("Key length:", key ? key.length : 0);
 const supabase = createClient(url, key);
 
 async function run() {
-  console.log("Querying class_subjects structure...");
-  try {
-    const { data, error } = await supabase.from('class_subjects').select('*').limit(1);
-    if (error) throw error;
-    console.log("Row example:", data);
-    if (data && data.length > 0) {
-      console.log("Columns:", Object.keys(data[0]));
-    } else {
-      console.log("Table is empty, querying columns using postgres schema...");
+  console.log("Searching for ID: 5b011d43-38c9-437b-aa69-5d7bcee28acc");
+  const tables = ['user_profiles', 'subjects', 'classes', 'class_subject_teachers', 'class_subjects', 'student_subject_enrollments'];
+  for (const table of tables) {
+    try {
+      const { data, error } = await supabase.from(table).select('*').eq('id', '5b011d43-38c9-437b-aa69-5d7bcee28acc');
+      if (data && data.length > 0) {
+        console.log(`Found in table ${table}:`, data);
+      }
+    } catch (err: any) {
+      console.log(`Error reading ${table}:`, err.message);
     }
-  } catch (err: any) {
-    console.log("Error querying class_subjects:", err.message);
   }
 }
 

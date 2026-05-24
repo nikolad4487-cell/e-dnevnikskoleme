@@ -85,7 +85,7 @@ export default function AdministrationPage() {
     isOpen: boolean;
     id?: string;
     item?: any;
-    type: 'CLASS' | 'SUBJECT' | 'STUDENT' | 'GRADING_ELEMENT' | 'STAFF' | 'PLANNING' | 'PROGRAM' | 'SCHOOL_YEAR' | null;
+    type: 'CLASS' | 'SUBJECT' | 'STUDENT' | 'GRADING_ELEMENT' | 'STAFF' | 'PLANNING' | 'PROGRAM' | 'SCHOOL_YEAR' | 'CLASS_SUBJECT' | null;
     loading: boolean;
     extraData?: any;
     message?: string;
@@ -1131,7 +1131,7 @@ export default function AdministrationPage() {
         console.log('DEBUG: FINAL FETCHED CLASS:', fetchedClass ? mappers.class(fetchedClass).name : 'NOT FOUND');
       }
 
-      const { data: subAll } = await supabase.from('subjects').select('*').eq('school_id', currentSchoolId);
+      const { data: subAll } = await supabase.from('subjects').select('*').eq('school_id', currentSchoolId).eq('is_active', true);
       if (subAll) {
 const mappedSub = mapList(subAll, mappers.subject);
 const uniqueSub = Array.from(new Map(mappedSub.map(s => [s.id, s])).values());
@@ -2358,24 +2358,13 @@ setAllSubjects(uniqueSub2);
         toast.success('Školska godina je obrisana.');
       } else if (deleteDialog.type === 'SUBJECT') {
         const subjectId = deleteDialog.id;
-        if (isMainAdmin) {
-          if (confirm('Obavijest: Brisanje predmeta uklonit će sva zaduženja, planove i upise povezane s ovim predmetom. Nastaviti?')) {
-             await Promise.all([
-               supabase.from('class_subject_teachers').delete().eq('subject_id', subjectId),
-               supabase.from('curriculum_plans').delete().eq('subject_id', subjectId),
-               supabase.from('student_subject_enrollments').delete().eq('subject_id', subjectId),
-               supabase.from('grading_elements').delete().eq('subject_id', subjectId),
-               supabase.from('grades').delete().eq('subject_id', subjectId),
-               supabase.from('exams').delete().eq('subject_id', subjectId),
-             ]);
-             const { error } = await supabase.from('subjects').delete().eq('id', subjectId);
-             if (error) throw error;
-             toast.success('Predmet je obrisan.');
-          }
-        } else {
-          const { error } = await supabase.from('subjects').delete().eq('id', subjectId);
-          if (error) throw error;
-          toast.success('Predmet je obrisan.');
+        try {
+           const { error } = await supabase.from('subjects').update({ is_active: false }).eq('id', subjectId);
+           if (error) throw error;
+           toast.success('Predmet je deaktiviran.');
+        } catch (err: any) {
+           console.error("Soft delete error:", err);
+           toast.error('Deaktivacija nije uspjela.');
         }
       } else if (deleteDialog.type === 'STUDENT') {
         const student = deleteDialog.item;
@@ -2425,6 +2414,11 @@ setAllSubjects(uniqueSub2);
             setDeleteDialog({ isOpen: false, id: null, type: null, loading: false });
         }
 
+      } else if (deleteDialog.type === 'CLASS_SUBJECT') {
+        const { error } = await supabase.from('class_subjects').delete().eq('id', deleteDialog.id);
+        if (error) throw error;
+        toast.success('Predmet uklonjen iz razreda.');
+        await fetchData();
       } else if (deleteDialog.type === 'STAFF') {
         await supabase.from('class_subject_teachers').delete().eq('id', deleteDialog.id);
         toast.success('Zaduženje je obrisano.');
@@ -3315,8 +3309,22 @@ setAllSubjects(uniqueSub2);
                                 return (
                                   <tr key={sid} className="hover:bg-blue-50/30">
                                     <td className="px-4 py-3 border-r border-gray-200">
-                                       <div className="font-black text-[#005c8d] uppercase">
+                                       <div className="font-black text-[#005c8d] uppercase flex items-center justify-between">
                                           {formatSubjectDisplayName(subject?.name || '', classSubject?.subjectType || 'redovni')}
+                                          {classSubject && isManager && (
+                                            <button 
+                                              onClick={() => setDeleteDialog({
+                                                isOpen: true,
+                                                type: 'CLASS_SUBJECT',
+                                                id: classSubject.id,
+                                                loading: false,
+                                                message: `Želite li ukloniti predmet iz ovog razreda?`
+                                              })}
+                                              className="text-red-400 hover:text-red-600 ml-2"
+                                            >
+                                              <Trash2 size={12}/>
+                                            </button>
+                                          )}
                                        </div>
                                        {classSubject && (
                                          <div className="text-[9px] font-bold text-gray-500 uppercase mt-1 space-y-0.5">

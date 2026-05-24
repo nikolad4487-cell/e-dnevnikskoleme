@@ -1497,6 +1497,38 @@ export default function ImenikPage() {
     </div>
   );
 
+  const sortedStudents = [...students].sort((a, b) => {
+    const surnameA = getSurname(String(a.name || ''));
+    const surnameB = getSurname(String(b.name || ''));
+    return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+  });
+  const studentIndex = sortedStudents.findIndex(s => s.id === activeStudent?.id);
+
+  const renderNavButtons = () => (
+    <div className="flex items-center gap-1">
+      <button 
+        disabled={studentIndex <= 0}
+        onClick={() => navigateStudent('PREV')}
+        className="px-3 py-1 bg-white border border-gray-300 text-[10px] font-black uppercase text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        ← Prethodni
+      </button>
+      <button 
+        onClick={handleRandomStudent}
+        className="px-3 py-1 bg-white border border-gray-300 text-[10px] font-black uppercase text-gray-700 hover:bg-gray-100"
+      >
+        Slučajni odabir
+      </button>
+      <button 
+        disabled={studentIndex >= sortedStudents.length - 1}
+        onClick={() => navigateStudent('NEXT')}
+        className="px-3 py-1 bg-white border border-gray-300 text-[10px] font-black uppercase text-gray-700 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        Sljedeći →
+      </button>
+    </div>
+  );
+
   const renderSubjectSelector = () => (
     <div className="p-4 space-y-4">
       <div className="border-b border-gray-200 pb-2 flex items-end justify-between">
@@ -1504,6 +1536,7 @@ export default function ImenikPage() {
           <h1 className="text-xl font-bold text-gray-900 leading-none">{activeStudent ? formatName(activeStudent) : ''}</h1>
           <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Učenička kartica - Popis predmeta</p>
         </div>
+        {renderNavButtons()}
       </div>
 
       <div className="bg-white border border-gray-300">
@@ -1607,15 +1640,7 @@ export default function ImenikPage() {
                 <p className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-tight">Učenička kartica · {subjectDisplayName}</p>
               </div>
             </div>
-            <div className="flex items-center gap-1">
-               {studentIndex > 0 && (
-                 <button onClick={() => navigateStudent('PREV')} className="px-3 py-1 bg-gray-100 border border-gray-300 text-[10px] font-bold hover:bg-gray-200 uppercase">Prethodni</button>
-               )}
-               {studentIndex < students.length - 1 && (
-                 <button onClick={() => navigateStudent('NEXT')} className="px-3 py-1 bg-[#005c8d] text-white border border-[#004a70] text-[10px] font-bold hover:bg-[#004a70] uppercase">Sljedeći</button>
-               )}
-               <button onClick={handleRandomStudent} className="px-3 py-1 bg-gray-800 text-white border border-black text-[10px] font-bold hover:bg-black ml-2 uppercase">Slučajni</button>
-            </div>
+            {renderNavButtons()}
         </div>
 
         {/* Table */}
