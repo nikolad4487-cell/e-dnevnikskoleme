@@ -168,6 +168,8 @@ export type WorkWeek = {
   isTeachingWeek: boolean;
   onDutyStudentIds: string[];
   teachingDays: string[];
+  non_teaching_reason?: string;
+  non_teaching_reason_note?: string;
 };
 
 export type Lesson = {

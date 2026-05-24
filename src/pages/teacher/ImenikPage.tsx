@@ -648,39 +648,50 @@ export default function ImenikPage() {
         .order('created_at', { ascending: false });
       setCurrentNotes(mapList(notes, mappers.studentNote) as any);
 
-      const selectedClass = classes.find(c => c.id === effectiveClassId);
-      const schoolYearId = selectedClass?.school_year_id || null;
-
-      const finalsQuery = supabase
-        .from('final_grades')
-        .select('*')
-        .eq('student_id', activeStudent.id)
-        .eq('subject_id', activeSubject.id)
-        .eq('class_id', effectiveClassId)
-        .in('period', ['FIRST_TERM', 'SECOND_TERM']);
-
-      if (schoolYearId) {
-        finalsQuery.eq('school_year_id', schoolYearId);
-      }
-
-      const { data: finals, error: finalError } = await finalsQuery;
-      
-      console.log("TEACHER FINAL GRADES FETCH FILTERS", {
-        studentId: activeStudent.id,
-        subjectId: activeSubject.id,
-        classId: effectiveClassId,
-        schoolYearId: schoolYearId
-      });
-      console.log("TEACHER FINAL GRADES FETCH RESULT", finals);
-      console.log("TEACHER FINAL GRADES FETCH ERROR", finalError);
-
-      setFinalGrades(mapList(finals || [], mappers.finalGrade));
-
+      await fetchFinalGrades();
       await fetchSpecialExams();
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchFinalGrades = async () => {
+    if (!activeStudent || !activeSubject || !effectiveClassId) return;
+    
+    const selectedClass = classes.find(c => c.id === effectiveClassId);
+    const schoolYearId = selectedClass?.school_year_id || null;
+    
+    console.log("TEACHER FETCH FINAL GRADES START", {
+      studentId: activeStudent.id,
+      subjectId: activeSubject.id,
+      classId: effectiveClassId,
+      schoolYearId: schoolYearId
+    });
+
+    const query = supabase
+      .from("final_grades")
+      .select("*")
+      .eq("student_id", activeStudent.id)
+      .eq("subject_id", activeSubject.id)
+      .eq("class_id", effectiveClassId)
+      .in("period", ["FIRST_TERM", "SECOND_TERM"]);
+      
+    if (schoolYearId) {
+      query.eq("school_year_id", schoolYearId);
+    }
+
+    const { data, error } = await query;
+    console.log("TEACHER FETCH FINAL GRADES RESULT", data);
+    console.log("TEACHER FETCH FINAL GRADES ERROR", error);
+    
+    setFinalGrades(data || []);
+  };
+
+  useEffect(() => {
+    if (activeStudent?.id && activeSubject?.id && effectiveClassId) {
+      fetchFinalGrades();
+    }
+  }, [activeStudent?.id, activeSubject?.id, effectiveClassId, classes]);
 
   const canEditGrades = (subjectId: string) => {
     if (isArchived) return false;
@@ -1673,9 +1684,8 @@ export default function ImenikPage() {
                  <td className="p-2 border border-gray-300 text-[10px] font-bold text-[#005c8d] uppercase">Zaključna ocjena</td>
                  <td className="border border-gray-300 text-center" colSpan={4}>
                     {(() => {
-                      const fg = finalGrades.find(f => f.period === 'FIRST_TERM' || f.term === 'FIRST_SEMESTER');
+                      const fg = finalGrades.find(f => f.period === 'FIRST_TERM');
                       console.log("TEACHER FINAL GRADE VALUE", fg?.value);
-                      const suggested = getSuggestedGrade(Number(avg));
                       return (
                         <div className="w-full h-full p-2 flex flex-col items-center justify-center min-h-[40px]">
                           {fg ? (
@@ -1693,30 +1703,6 @@ export default function ImenikPage() {
                                   </button>
                                 )}
                               </div>
-                              {(fg.value === '1' || fg.value === 'Neocijenjen') && canEditGrades(activeSubject?.id || '') && (
-                                <button 
-                                  onClick={() => setShowSpecialExamModal(true)}
-                                  className="mt-1 text-[9px] bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded shadow-xs hover:bg-red-100 hover:text-red-700 transition font-bold uppercase"
-                                >
-                                  Ispiti
-                                </button>
-                              )}
-                              {fg.value === '1' && specialExams.filter(e => e.studentId === activeStudent?.id && e.subjectId === activeSubject?.id).length > 0 && canEditGrades(activeSubject?.id || '') && (
-                                <button 
-                                  onClick={() => {
-                                      setSelectedSpecialExamForReGrade({
-                                          student: activeStudent,
-                                          subject: activeSubject,
-                                          exams: specialExams.filter(e => e.studentId === activeStudent?.id && e.subjectId === activeSubject?.id),
-                                          finalGrade: fg
-                                      });
-                                      setShowSpecialExamReGradeModal(true);
-                                  }}
-                                  className="mt-1 text-[9px] bg-green-50 text-green-600 border border-green-200 px-2 py-0.5 rounded shadow-xs hover:bg-green-100 hover:text-green-700 transition font-bold uppercase"
-                                >
-                                  ZAKLJUČI OCJENU
-                                </button>
-                              )}
                             </div>
                           ) : (
                             <div className="flex flex-col items-center gap-1">
@@ -1739,13 +1725,12 @@ export default function ImenikPage() {
                     {(() => {
                       const fg = finalGrades.find(f => f.period === 'SECOND_TERM');
                       console.log("TEACHER FINAL GRADE VALUE", fg?.value);
-                      const suggested = getSuggestedGrade(Number(avg));
                       return (
                         <div className="w-full h-full p-2 flex flex-col items-center justify-center min-h-[40px]">
                           {fg ? (
                             <div className="flex flex-col items-center gap-1">
                               <div className="flex items-center gap-2 group">
-                                <span className="text-[8px] font-bold text-gray-400 uppercase">Zaključna:</span>
+                                <span className="text-[8px] font-bold text-gray-400 uppercase">2. pol:</span>
                                 <span className="font-bold text-[#005c8d] text-base">{finalGradeLabels[fg.value] || fg.value}</span>
                                 {canEditGrades(activeSubject?.id || '') && (
                                   <button 
@@ -1757,21 +1742,13 @@ export default function ImenikPage() {
                                   </button>
                                 )}
                               </div>
-                              {(fg.value === '1' || fg.value === 'Neocijenjen') && canEditGrades(activeSubject?.id || '') && (
-                                <button 
-                                  onClick={() => setShowSpecialExamModal(true)}
-                                  className="mt-1 text-[9px] bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded shadow-xs hover:bg-red-100 hover:text-red-700 transition font-bold uppercase"
-                                >
-                                  Ispiti
-                                </button>
-                              )}
                             </div>
                           ) : (
                             <div className="flex flex-col items-center gap-1">
                               <span className="text-[8px] font-bold text-gray-300 uppercase">Zaključna ocjena nije unesena</span>
                               {canEditGrades(activeSubject?.id || '') && (
                                 <button 
-                                  onClick={() => { setSelectedFinalPeriod('FINAL'); setShowFinalGradeModal(true); }}
+                                  onClick={() => { setSelectedFinalPeriod('2'); setShowFinalGradeModal(true); }}
                                   className="text-[8px] font-bold text-[#005c8d] uppercase hover:underline"
                                 >
                                   Unesi ocjenu
@@ -1788,10 +1765,10 @@ export default function ImenikPage() {
           </table>
         </div>
 
-        <div className="flex justify-between items-center bg-[#f8f9fa] p-2 border border-gray-300 text-[10px] font-bold">
-           <span className="text-gray-500 uppercase">Ukupan broj ocjena: <span className="text-gray-900">{currentGrades.length}</span></span>
+        <div className="flex justify-end items-center bg-[#f8f9fa] p-2 border border-gray-300 text-[10px] font-bold">
            <span className="text-gray-500 uppercase tracking-tight">Aritmetička sredina: <span className="text-[#005c8d] text-sm leading-none ml-1">{avg}</span></span>
         </div>
+        <div className="text-[10px] text-gray-400 p-1">Teacher final grades loaded: {finalGrades.length}</div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
            {/* Special exams */}

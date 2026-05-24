@@ -1766,30 +1766,25 @@ setStudents(uniqueMapped as any);
         console.log('UPDATE STUDENT ID:', editingStudentId);
         console.log('UPDATE PAYLOAD:', updatePayload);
 
-        const { data: updatedProfile, error: profileError } = await supabase
-          .from('user_profiles')
-          .update(updatePayload)
-          .eq('id', editingStudentId)
-          .select()
-          .maybeSingle();
-        
-        // Define aliases to match requested logs format precisely
-        const student = { id: editingStudentId };
         const payload = updatePayload;
-        const data = updatedProfile;
-        const error = profileError;
-        console.log("EDIT STUDENT ID", student.id);
-        console.log("EDIT STUDENT PAYLOAD", payload);
+        const editStudentId = editingStudentId;
+
+        const { data, error } = await supabase
+          .from("user_profiles")
+          .update(payload)
+          .eq("id", editStudentId)
+          .select()
+          .single();
+
         console.log("EDIT STUDENT RESULT", data);
         console.log("EDIT STUDENT ERROR", error);
 
-        if (profileError) throw profileError;
-
-        if (!updatedProfile) {
-          toast.error('Nijedan zapis nije ažuriran.');
-          setLoading(false);
+        if (error) {
+          toast.error("Greška pri spremanju učenika: " + error.message);
           return;
         }
+
+        toast.success("Učenik je uspješno ažuriran.");
 
         // 2. Update/Upsert enrollment - for program and class history
         const { error: enrollmentError } = await supabase
@@ -1820,7 +1815,7 @@ setStudents(uniqueMapped as any);
             onConflict: 'student_id'
           });
 
-        toast.success('Učenik uspješno ažuriran');
+        await fetchData();
         setEditingStudentId(null);
       } else {
         // CREATE NEW STUDENT

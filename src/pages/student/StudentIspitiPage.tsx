@@ -12,7 +12,7 @@ interface ExamWithDetails {
   date: string;
   type: string;
   description?: string;
-  gradeValue?: string;
+  value?: string;
   note?: string;
   subject: Subject | null;
   teachers: User[];
@@ -124,7 +124,7 @@ export default function StudentIspitiPage() {
             date: exam.date,
             type: exam.type,
             description: exam.description,
-            gradeValue: exam.gradeValue,
+            value: exam.value,
             note: exam.note,
             subject: examSubject,
             teachers: matchedTeachers,
@@ -203,10 +203,10 @@ export default function StudentIspitiPage() {
             </div>
           </div>
 
-          {exam.gradeValue && (
+          {exam.value && (
             <div className="flex items-start gap-2 pt-1 border-t border-gray-100">
               <span className="text-gray-400">Ocjena: </span>
-              <span className="font-bold text-[#005c8d] text-sm">{exam.gradeValue}</span>
+              <span className="font-bold text-[#005c8d] text-sm">{exam.value}</span>
             </div>
           )}
 
