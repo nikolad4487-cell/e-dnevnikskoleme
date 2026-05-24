@@ -56,12 +56,12 @@ export default function BiljeskePage() {
             setClassData(cData as Class);
 
             if (cData.homeroom_teacher_id) {
-              const { data: tData } = await supabase.from('user_profiles').select('*').eq('id', cData.homeroom_teacher_id).maybeSingle();
-              if (tData) setHomeroomTeacher({ id: tData.id, name: tData.name } as any);
+              const { data: tData } = await supabase.from('user_profiles').select('id, name, email').eq('id', cData.homeroom_teacher_id).maybeSingle();
+              if (tData) setHomeroomTeacher(tData as any);
             }
             if (cData.deputy_homeroom_teacher_id) {
-              const { data: dData } = await supabase.from('user_profiles').select('*').eq('id', cData.deputy_homeroom_teacher_id).maybeSingle();
-              if (dData) setDeputyTeacher({ id: dData.id, name: dData.name } as any);
+              const { data: dData } = await supabase.from('user_profiles').select('id, name, email').eq('id', cData.deputy_homeroom_teacher_id).maybeSingle();
+              if (dData) setDeputyTeacher(dData as any);
             }
 
             // Fetch Notes
@@ -73,7 +73,7 @@ export default function BiljeskePage() {
             }
 
             // Fetch Class Notes
-            const { data: cnData } = await supabase.from('class_notes').select('*').eq('class_id', selectedClassId).maybeSingle();
+            const { data: cnData } = await supabase.from('class_overall_notes').select('*').eq('class_id', selectedClassId).maybeSingle();
             if (cnData) {
               setClassNotes(cnData as ClassNotes);
             } else {
@@ -126,16 +126,32 @@ export default function BiljeskePage() {
           </div>
 
           {/* 1. Razrednik */}
-          <Section 
-            title="Razrednik" 
-            content={classNotes?.homeroom_info || (homeroomTeacher ? formatPersonName(homeroomTeacher) : '')}
-          />
+          {homeroomTeacher && (
+              <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm space-y-2">
+                <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Razrednik</h3>
+                 <div className="flex items-center gap-2 text-[13px]">
+                  <span className="font-bold text-[14px] text-gray-900">{homeroomTeacher.name}</span>
+                  <span className="text-gray-500 text-[12px]">{homeroomTeacher.email}</span>
+                </div>
+                {classNotes?.homeroom_info && (
+                    <div className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap mt-2 pt-2 border-t border-gray-100">{classNotes.homeroom_info}</div>
+                )}
+              </div>
+          )}
 
           {/* 2. Zamjenik razrednika */}
-          <Section 
-            title="Zamjenik razrednika" 
-            content={classNotes?.deputy_info || (deputyTeacher ? formatPersonName(deputyTeacher) : '')}
-          />
+          {deputyTeacher && (
+              <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm space-y-2">
+                <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Zamjenik razrednika</h3>
+                <div className="flex items-center gap-2 text-[13px]">
+                  <span className="font-bold text-[14px] text-gray-900">{deputyTeacher.name}</span>
+                  <span className="text-gray-500 text-[12px]">{deputyTeacher.email}</span>
+                </div>
+                {classNotes?.deputy_info && (
+                  <div className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap mt-2 pt-2 border-t border-gray-100">{classNotes.deputy_info}</div>
+                )}
+              </div>
+          )}
 
           <div className="border-b border-gray-300 pb-2 pt-4">
             <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Osobne bilješke</h4>

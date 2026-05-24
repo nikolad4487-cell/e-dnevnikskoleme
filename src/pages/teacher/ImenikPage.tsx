@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -145,6 +145,7 @@ export default function ImenikPage() {
   }
 
   const [classes, setClasses] = useState<Class[]>([]);
+  const is4K = useMemo(() => classes.find((c: any) => c.id === effectiveClassId)?.name === '4.K', [classes, effectiveClassId]);
   const [students, setStudents] = useState<User[]>([]);
   const [studentEnrollments, setStudentEnrollments] = useState<any[]>([]);
   const [programs, setPrograms] = useState<any[]>([]);
@@ -543,7 +544,7 @@ export default function ImenikPage() {
 
       const fetchCN = async () => {
         const { data } = await supabase
-          .from('class_notes')
+        .from('class_overall_notes')
           .select('*')
           .eq('class_id', effectiveClassId)
           .eq('school_year', schoolYear)
@@ -754,9 +755,9 @@ export default function ImenikPage() {
       };
 
       if (classOverallNotes?.id) {
-        await supabase.from('class_notes').update(payload).eq('id', classOverallNotes.id);
+        await supabase.from('class_overall_notes').update(payload).eq('id', classOverallNotes.id);
       } else {
-        await supabase.from('class_notes').insert([payload]);
+        await supabase.from('class_overall_notes').insert([payload]);
       }
 
       toast.success('Opće bilješke razreda spremljene');
@@ -1333,6 +1334,7 @@ export default function ImenikPage() {
   };
 
   const canEnterGrade = (monthNumber: number) => {
+    if (is4K) return false;
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     
@@ -1600,7 +1602,7 @@ export default function ImenikPage() {
   );
 
   const renderGrades = () => {
-    const avg = (currentGrades.reduce((a, b) => a + b.value, 0) / (currentGrades.length || 1)).toFixed(2);
+    const avg = is4K ? null : (currentGrades.reduce((a, b) => a + b.value, 0) / (currentGrades.length || 1)).toFixed(2);
     
     const getSuggestedGrade = (avgValue: number) => {
       if (avgValue >= 4.5) return 5;
@@ -1708,7 +1710,7 @@ export default function ImenikPage() {
                     })}
                  </tr>
                ))}
-               <tr className="bg-gray-50">
+               <tr className={cn("bg-gray-50", is4K && "hidden")}>
                  <td className="p-2 border border-gray-300 text-[10px] font-bold text-[#005c8d] uppercase">Zaključna ocjena</td>
                  <td className="border border-gray-300 text-center" colSpan={4}>
                     {(() => {
@@ -1794,7 +1796,7 @@ export default function ImenikPage() {
         </div>
 
         <div className="flex justify-end items-center bg-[#f8f9fa] p-2 border border-gray-300 text-[10px] font-bold">
-           <span className="text-gray-500 uppercase tracking-tight">Aritmetička sredina: <span className="text-[#005c8d] text-sm leading-none ml-1">{avg}</span></span>
+           {!is4K && <span className="text-gray-500 uppercase tracking-tight">Aritmetička sredina: <span className="text-[#005c8d] text-sm leading-none ml-1">{avg}</span></span>}
         </div>
         <div className="text-[10px] text-gray-400 p-1">Teacher final grades loaded: {finalGrades.length}</div>
 

@@ -91,7 +91,7 @@ setStudents(uniqueStudents);
 
       // 5. Fetch Class Level Notes
       const { data: cnData } = await supabase
-        .from('class_notes')
+        .from('class_overall_notes')
         .select('*')
         .eq('class_id', effectiveClassId)
         .maybeSingle();
@@ -122,14 +122,14 @@ setStudents(uniqueStudents);
       if (editTarget.type === 'HOMEROOM' || editTarget.type === 'DEPUTY') {
         // Handle ClassNotes
         if (classNotes?.id) {
-          const { error } = await supabase.from('class_notes').update({
+          const { error } = await supabase.from('class_overall_notes').update({
             [editTarget.field]: val
           }).eq('id', classNotes.id);
           if (error) throw error;
         } else {
-          const { error } = await supabase.from('class_notes').insert({
+          const { error } = await supabase.from('class_overall_notes').insert({
             class_id: effectiveClassId,
-            schoolyear: activeClass?.schoolYear || '2024/2025',
+            school_year: activeClass?.schoolYear || '2024/2025',
             [editTarget.field]: val
           });
           if (error) throw error;
