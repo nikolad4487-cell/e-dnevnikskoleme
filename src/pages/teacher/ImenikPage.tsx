@@ -1550,8 +1550,11 @@ export default function ImenikPage() {
           <tbody className="divide-y divide-gray-200">
             {allSubjects
               .filter(sub => {
-                const isActive = enrollments.some(e => e.studentId === activeStudent?.id && e.subjectId === sub.id && e.status === 'ACTIVE');
-                if (!isActive) return false;
+                const isEnrollActive = enrollments.some(e => e.studentId === activeStudent?.id && e.subjectId === sub.id && e.status === 'ACTIVE');
+                if (!isEnrollActive) return false;
+                
+                const isClassSubject = classSubjects.some(cs => cs.subjectId === sub.id && cs.classId === effectiveClassId);
+                if (!isClassSubject) return false;
                 
                 if (isMainAdmin) return true;
                 const activeClass = classes.find(c => c.id === effectiveClassId);

@@ -2415,8 +2415,20 @@ setAllSubjects(uniqueSub2);
         }
 
       } else if (deleteDialog.type === 'CLASS_SUBJECT') {
-        const { error } = await supabase.from('class_subjects').delete().eq('id', deleteDialog.id);
-        if (error) throw error;
+        const { classId, subjectId } = deleteDialog.item;
+        
+        // 1. Delete student_subject_enrollments
+        const { error: e1 } = await supabase.from('student_subject_enrollments').delete().eq('class_id', classId).eq('subject_id', subjectId);
+        if (e1) throw e1;
+        
+        // 2. Delete class_subject_teachers
+        const { error: e2 } = await supabase.from('class_subject_teachers').delete().eq('class_id', classId).eq('subject_id', subjectId);
+        if (e2) throw e2;
+        
+        // 3. Delete from class_subjects
+        const { error: e3 } = await supabase.from('class_subjects').delete().eq('class_id', classId).eq('subject_id', subjectId);
+        if (e3) throw e3;
+        
         toast.success('Predmet uklonjen iz razreda.');
         await fetchData();
       } else if (deleteDialog.type === 'STAFF') {
@@ -2793,7 +2805,7 @@ setAllSubjects(uniqueSub2);
             
             return (
               <button 
-                key={`${opt.tab}-${opt.label}`}
+                key={`${opt.tab}-${opt.label}-${opt.mode}`}
                 onClick={() => {
                   if (opt.tab === 'STUDENT_SUBJECTS_ENROLL') {
                     navigate('/admin/student-predmeti');
@@ -3311,12 +3323,13 @@ setAllSubjects(uniqueSub2);
                                     <td className="px-4 py-3 border-r border-gray-200">
                                        <div className="font-black text-[#005c8d] uppercase flex items-center justify-between">
                                           {formatSubjectDisplayName(subject?.name || '', classSubject?.subjectType || 'redovni')}
-                                          {classSubject && isManager && (
+                                          {classSubject && (
                                             <button 
                                               onClick={() => setDeleteDialog({
                                                 isOpen: true,
                                                 type: 'CLASS_SUBJECT',
                                                 id: classSubject.id,
+                                                item: { classId: classSubject.classId, subjectId: classSubject.subjectId },
                                                 loading: false,
                                                 message: `Želite li ukloniti predmet iz ovog razreda?`
                                               })}
