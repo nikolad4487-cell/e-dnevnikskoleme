@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { 
   Plus, 
   Trash2, 
+  Pencil,
   ChevronLeft, 
   BookOpen, 
   GraduationCap, 
@@ -15,6 +16,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
+import { formatSubjectDisplayName } from '../../lib/utils';
 
 export default function ClassSubjectsPage() {
   const { selectedSchoolId } = useSelection();
@@ -47,6 +49,28 @@ export default function ClassSubjectsPage() {
   });
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // Edit State
+  const [editModal, setEditModal] = useState<{
+    isOpen: boolean;
+    assignmentId: string;
+    subjectId: string;
+    subjectName: string;
+    subjectType: string;
+    subjectPeriod: string;
+    teacherId: string;
+    groupName: string;
+  }>({
+    isOpen: false,
+    assignmentId: '',
+    subjectId: '',
+    subjectName: '',
+    subjectType: 'redovni',
+    subjectPeriod: 'FULL_YEAR',
+    teacherId: '',
+    groupName: '',
+  });
+  const [editLoading, setEditLoading] = useState(false);
+
   useEffect(() => {
     if (!selectedSchoolId || !classId) {
       navigate('/admin/razredi');
@@ -73,12 +97,35 @@ export default function ClassSubjectsPage() {
         .from('class_subject_teachers')
         .select(`
           id,
+          class_id,
+          subject_id,
+          teacher_id,
+          school_id,
+          group_name,
           subject:subjects (*),
           teacher:user_profiles (*)
         `)
         .eq('class_id', classId);
       if (assignError) throw assignError;
-      setAssignments(assignData || []);
+
+      // Fetch Class Subjects metadata
+      const { data: csData, error: csError } = await supabase
+        .from('class_subjects')
+        .select('*')
+        .eq('class_id', classId);
+      if (csError) throw csError;
+
+      const mergedAssignments = (assignData || []).map(item => {
+        const cs = (csData || []).find((c: any) => c.subject_id === item.subject_id);
+        return {
+          ...item,
+          class_subject: cs || {
+            subject_type: 'redovni',
+            subject_period: 'FULL_YEAR'
+          }
+        };
+      });
+      setAssignments(mergedAssignments);
 
       // Fetch All Global Subjects
       const { data: subData, error: subError } = await supabase.from('subjects').select('*').order('name');
@@ -95,7 +142,10 @@ export default function ClassSubjectsPage() {
         .in('role', [Role.TEACHER, Role.HOMEROOM, Role.SCHOOL_ADMIN]);
       if (teachError) throw teachError;
       
-      const uniqueTeachers = Array.from(new Set((teachData || []).map(t => t.user))).filter(Boolean);
+      const rawUserList = (teachData || []).map(t => t.user).filter(Boolean);
+      const uniqueTeachers = rawUserList.filter((item: any, index: number, self: any[]) => 
+        self.findIndex((t: any) => t.id === item.id) === index
+      );
       setTeachers(uniqueTeachers as any[]);
 
     } catch (err: any) {
@@ -120,6 +170,17 @@ export default function ClassSubjectsPage() {
     console.log("ASSIGN SUBJECT TO CLASS CLICKED", { classId, selectedSubjectId, selectedTeacherId });
 
     try {
+      // 1. Ensure class_subjects entry exists
+      const { error: csError } = await supabase.from('class_subjects').upsert([{
+        class_id: classId,
+        subject_id: selectedSubjectId,
+        school_id: selectedSchoolId,
+        subject_type: 'redovni',
+        subject_period: 'FULL_YEAR'
+      }], { onConflict: 'class_id,subject_id' });
+      if (csError) throw csError;
+
+      // 2. Insert class_subject_teachers
       const { data, error } = await supabase.from('class_subject_teachers').insert([{
         class_id: classId,
         subject_id: selectedSubjectId,
@@ -144,6 +205,76 @@ export default function ClassSubjectsPage() {
     }
   };
 
+  const handleEditAssignmentClick = (item: any) => {
+    if (!isAnyAdmin) {
+      toast.error('Nemate dozvolu za uređivanje predmeta.');
+      return;
+    }
+    const sId = item.subject?.id || '';
+    console.log("EDIT CLASS SUBJECT", { classId, subjectId: sId });
+    setEditModal({
+      isOpen: true,
+      assignmentId: item.id,
+      subjectId: sId,
+      subjectName: item.subject?.name || '',
+      subjectType: item.class_subject?.subject_type || 'redovni',
+      subjectPeriod: item.class_subject?.subject_period || 'FULL_YEAR',
+      teacherId: item.teacher?.id || '',
+      groupName: item.group_name || '',
+    });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const { assignmentId, subjectId, subjectType, subjectPeriod, teacherId, groupName } = editModal;
+    if (!classId || !subjectId || !assignmentId) return;
+
+    console.log("EDIT CLASS SUBJECT", { classId, subjectId });
+
+    try {
+      setEditLoading(true);
+
+      // A. Update class_subjects metadata
+      const { error: csError } = await supabase
+        .from('class_subjects')
+        .upsert([{
+          class_id: classId,
+          subject_id: subjectId,
+          school_id: selectedSchoolId,
+          subject_type: subjectType,
+          subject_period: subjectPeriod
+        }], { onConflict: 'class_id,subject_id' });
+
+      if (csError) {
+        console.log("EDIT CLASS SUBJECT ERROR", csError);
+        throw csError;
+      }
+
+      // B. Update class_subject_teachers assignment
+      const { error: astError } = await supabase
+        .from('class_subject_teachers')
+        .update({
+          teacher_id: teacherId,
+          group_name: groupName || null
+        })
+        .eq('id', assignmentId);
+
+      if (astError) {
+        console.log("EDIT CLASS SUBJECT ERROR", astError);
+        throw astError;
+      }
+
+      toast.success('Predmet zaduženja uspješno uređen');
+      setEditModal(prev => ({ ...prev, isOpen: false }));
+      fetchData();
+    } catch (err: any) {
+      console.log("EDIT CLASS SUBJECT ERROR", err);
+      toast.error('Greška pri spremanju: ' + (err.message || 'Nepoznata greška'));
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const handleRemoveAssignmentClick = (subjectId: string, subjectName: string) => {
     if (!isAnyAdmin) {
       toast.error('Nemate dozvolu za uklanjanje predmeta.');
@@ -160,7 +291,7 @@ export default function ClassSubjectsPage() {
     const { subjectId } = deleteModal;
     if (!classId || !subjectId) return;
 
-    console.log("REMOVE SUBJECT FROM CLASS", { classId, subjectId });
+    console.log("REMOVE CLASS SUBJECT", { classId, subjectId });
 
     try {
       setDeleteLoading(true);
@@ -173,7 +304,7 @@ export default function ClassSubjectsPage() {
         .eq('subject_id', subjectId);
 
       if (assocError) {
-        console.log("REMOVE SUBJECT ERROR", assocError);
+        console.log("REMOVE CLASS SUBJECT ERROR", assocError);
         throw assocError;
       }
 
@@ -185,7 +316,7 @@ export default function ClassSubjectsPage() {
         .eq('subject_id', subjectId);
 
       if (enrollError) {
-        console.log("REMOVE SUBJECT ERROR", enrollError);
+        console.log("REMOVE CLASS SUBJECT ERROR", enrollError);
         throw enrollError;
       }
 
@@ -201,12 +332,23 @@ export default function ClassSubjectsPage() {
         console.warn("Error deleting subject chat group:", chatError);
       }
 
-      console.log("REMOVE SUBJECT SUCCESS");
-      toast.success('Predmet i svi povezani upisi su uklonjeni iz razreda');
+      // 4. obrisati iz class_subjects za taj class_id + subject_id
+      const { error: csDelError } = await supabase
+        .from('class_subjects')
+        .delete()
+        .eq('class_id', classId)
+        .eq('subject_id', subjectId);
+
+      if (csDelError) {
+        console.log("REMOVE CLASS SUBJECT ERROR", csDelError);
+        throw csDelError;
+      }
+
+      toast.success('Predmet uklonjen iz razreda');
       setDeleteModal({ isOpen: false, subjectId: '', subjectName: '' });
       fetchData();
     } catch (err: any) {
-      console.log("REMOVE SUBJECT ERROR", err);
+      console.log("REMOVE CLASS SUBJECT ERROR", err);
       toast.error('Greška pri uklanjanju: ' + (err.message || 'Nepoznata greška'));
     } finally {
       setDeleteLoading(false);
@@ -296,7 +438,7 @@ export default function ClassSubjectsPage() {
                 <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black uppercase text-slate-400 tracking-widest">
                   <th className="p-4">Predmet</th>
                   <th className="p-4">Nastavnik</th>
-                  <th className="p-4 text-right">Akcije</th>
+                  <th className="p-4 text-right">Radnje</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
@@ -308,8 +450,27 @@ export default function ClassSubjectsPage() {
                           <BookOpen size={18} />
                         </div>
                         <div>
-                          <p className="font-black text-slate-900 uppercase text-xs tracking-tight">{item.subject?.name}</p>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase">{item.subject?.code}</p>
+                          <p className="font-black text-slate-900 uppercase text-xs tracking-tight">
+                            {formatSubjectDisplayName(item.subject?.name || '', item.class_subject?.subject_type || 'redovni')}
+                          </p>
+                          <div className="flex flex-wrap gap-1.5 mt-1.5">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">{item.subject?.code}</span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-blue-50 text-blue-700 tracking-tighter">
+                              {item.class_subject?.subject_type || 'redovni'}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-slate-100 text-slate-600 tracking-tighter">
+                              {item.class_subject?.subject_period === 'FIRST_SEMESTER' 
+                                ? '1. polugodište' 
+                                : item.class_subject?.subject_period === 'SECOND_SEMESTER' 
+                                  ? '2. polugodište' 
+                                  : 'Cijela godina'}
+                            </span>
+                            {item.group_name && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-amber-50 text-amber-700 tracking-tighter">
+                                Grupa: {item.group_name}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -321,16 +482,26 @@ export default function ClassSubjectsPage() {
                         <span className="font-bold text-slate-700 text-sm">{item.teacher?.name}</span>
                       </div>
                     </td>
-                    <td className="p-4 text-right flex justify-end">
+                    <td className="p-4 text-right">
                       {isAnyAdmin && (
-                        <button 
-                          onClick={() => handleRemoveAssignmentClick(item.subject?.id, item.subject?.name || '')}
-                          className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 border border-transparent hover:border-red-250 font-bold uppercase tracking-tight flex items-center gap-1.5 transition-colors cursor-pointer"
-                          title="Ukloni predmet"
-                        >
-                          <Trash2 size={14} />
-                          <span>Ukloni predmet</span>
-                        </button>
+                        <div className="flex justify-end items-center gap-2">
+                          <button 
+                            onClick={() => handleEditAssignmentClick(item)}
+                            className="px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 border border-transparent hover:border-slate-200 font-bold uppercase tracking-tight flex items-center gap-1.5 transition-colors cursor-pointer rounded-lg"
+                            title="Uredi predmet"
+                          >
+                            <Pencil size={14} />
+                            <span>Uredi</span>
+                          </button>
+                          <button 
+                            onClick={() => handleRemoveAssignmentClick(item.subject?.id, item.subject?.name || '')}
+                            className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 font-bold uppercase tracking-tight flex items-center gap-1.5 transition-colors cursor-pointer rounded-lg"
+                            title="Ukloni predmet u razredu"
+                          >
+                            <Trash2 size={14} />
+                            <span>Ukloni</span>
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -356,6 +527,114 @@ export default function ClassSubjectsPage() {
         message="Jeste li sigurni da želite ukloniti predmet iz ovog razreda?"
         loading={deleteLoading}
       />
+
+      {editModal.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white border border-slate-200 rounded-3xl w-full max-w-lg shadow-xl overflow-hidden animate-in zoom-in-95 duration-200 flex flex-col">
+            <div className="bg-[#005c8d] text-white px-6 py-4 flex items-center justify-between">
+              <h3 className="text-sm font-black uppercase tracking-widest">Uredi predmet u razredu</h3>
+              <button 
+                onClick={() => setEditModal(prev => ({ ...prev, isOpen: false }))}
+                className="text-white/80 hover:text-white text-xs font-bold uppercase"
+              >
+                Zatvori
+              </button>
+            </div>
+            
+            <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Predmet</label>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold text-slate-500 uppercase text-xs">
+                  {editModal.subjectName}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Pregled prikaza naziva u razredu</label>
+                <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-3.5 font-black text-[#005c8d] text-sm uppercase">
+                  {formatSubjectDisplayName(editModal.subjectName, editModal.subjectType)}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Status (Vrsta)</label>
+                  <select
+                    value={editModal.subjectType}
+                    onChange={e => setEditModal({ ...editModal, subjectType: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold text-slate-900 focus:border-[#005c8d] outline-none text-xs"
+                    required
+                  >
+                    <option value="redovni">Redovni</option>
+                    <option value="izborni">Izborni</option>
+                    <option value="fakultativni">Fakultativni</option>
+                    <option value="praksa">Praksa</option>
+                    <option value="dopunska nastava">Dopunska nastava</option>
+                    <option value="dodatna nastava">Dodatna nastava</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Trajanje</label>
+                  <select
+                    value={editModal.subjectPeriod}
+                    onChange={e => setEditModal({ ...editModal, subjectPeriod: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold text-slate-900 focus:border-[#005c8d] outline-none text-xs"
+                    required
+                  >
+                    <option value="FULL_YEAR">Cijela godina</option>
+                    <option value="FIRST_SEMESTER">1. polugodište</option>
+                    <option value="SECOND_SEMESTER">2. polugodište</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Zaduženi nastavnik</label>
+                <select
+                  value={editModal.teacherId}
+                  onChange={e => setEditModal({ ...editModal, teacherId: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold text-slate-900 focus:border-[#005c8d] outline-none text-xs"
+                  required
+                >
+                  <option value="">Odaberi nastavnika...</option>
+                  {teachers.map(t => (
+                    <option key={t.id} value={t.id}>{(t as any).name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Grupa (neobavezno)</label>
+                <input
+                  type="text"
+                  value={editModal.groupName}
+                  onChange={e => setEditModal({ ...editModal, groupName: e.target.value })}
+                  placeholder="Npr. Grupa A"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold text-slate-900 focus:border-[#005c8d] outline-none text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditModal(prev => ({ ...prev, isOpen: false }))}
+                  className="px-4 py-3 border border-slate-200 hover:bg-slate-50 rounded-xl text-slate-700 font-bold uppercase text-[9px] tracking-widest transition-colors"
+                >
+                  Odustani
+                </button>
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="px-6 py-3 bg-[#005c8d] hover:bg-[#004a71] text-white rounded-xl font-bold uppercase text-[9px] tracking-widest transition-all min-w-[100px]"
+                >
+                  {editLoading ? 'Spremanje...' : 'Spremi'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

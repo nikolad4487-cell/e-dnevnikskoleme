@@ -10,25 +10,18 @@ console.log("Key length:", key ? key.length : 0);
 const supabase = createClient(url, key);
 
 async function run() {
-  console.log("Querying check...");
+  console.log("Querying class_subjects structure...");
   try {
-    const res = await fetch(`${url}/rest/v1/`, {
-      headers: {
-        'apikey': key,
-        'Authorization': `Bearer ${key}`
-      }
-    });
-    if (res.ok) {
-      const swagger = await res.json();
-      console.log("Exposed endpoints/services in PostgREST:");
-      const paths = Object.keys(swagger.paths || {});
-      const rpcPaths = paths.filter(p => p.startsWith("/rpc/"));
-      console.log("Available RPC pathways:", rpcPaths);
+    const { data, error } = await supabase.from('class_subjects').select('*').limit(1);
+    if (error) throw error;
+    console.log("Row example:", data);
+    if (data && data.length > 0) {
+      console.log("Columns:", Object.keys(data[0]));
     } else {
-      console.log("Failed to fetch OpenAPI spec:", res.status, res.statusText);
+      console.log("Table is empty, querying columns using postgres schema...");
     }
   } catch (err: any) {
-    console.log("Error querying OpenAPI:", err.message);
+    console.log("Error querying class_subjects:", err.message);
   }
 }
 

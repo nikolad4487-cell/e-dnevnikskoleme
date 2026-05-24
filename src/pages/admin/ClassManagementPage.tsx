@@ -98,7 +98,10 @@ export default function ClassManagementPage() {
         .in('role', [Role.TEACHER, Role.HOMEROOM, Role.SCHOOL_ADMIN]);
 
       if (teacherError) throw teacherError;
-      const uniqueTeachers = Array.from(new Set((teacherData || []).map(t => t.user))).filter(Boolean);
+      const rawUserList = (teacherData || []).map(t => t.user).filter(Boolean);
+      const uniqueTeachers = rawUserList.filter((item: any, index: number, self: any[]) => 
+        self.findIndex((t: any) => t.id === item.id) === index
+      );
       setTeachers(uniqueTeachers as any[]);
 
       // Fetch Programs
