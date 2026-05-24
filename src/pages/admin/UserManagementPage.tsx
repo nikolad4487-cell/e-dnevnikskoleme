@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { formatPersonName } from '../../lib/utils';
+import { formatPersonName, matchesSearch } from '../../lib/utils';
 
 export default function UserManagementPage() {
   const { selectedSchoolId } = useSelection();
@@ -333,13 +333,13 @@ export default function UserManagementPage() {
   };
 
   const filteredUsers = users.filter(profile => {
-    const matchesSearch = 
-      profile?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || 
-      profile?.email?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearchTerm = 
+      matchesSearch(profile?.name, searchTerm) || 
+      matchesSearch(profile?.email, searchTerm);
     
     const matchesRole = roleFilter === 'ALL' || (profile.roles && profile.roles.includes(roleFilter));
     
-    return matchesSearch && matchesRole;
+    return matchesSearchTerm && matchesRole;
   }).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
 
   const getRoleBadge = (role: string) => {

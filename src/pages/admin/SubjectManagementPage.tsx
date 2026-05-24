@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { matchesSearch } from '../../lib/utils';
 import { Subject, Role } from '../../types';
 import { useSelection } from '../../contexts/SelectionContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -140,8 +141,8 @@ export default function SubjectManagementPage() {
   };
 
   const filteredSubjects = subjects.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    s.code?.toLowerCase().includes(searchTerm.toLowerCase())
+    matchesSearch(s.name, searchTerm) || 
+    matchesSearch(s.code, searchTerm)
   );
 
   return (

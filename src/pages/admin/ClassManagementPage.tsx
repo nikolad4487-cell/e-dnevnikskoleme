@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { matchesSearch } from '../../lib/utils';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
@@ -287,7 +288,7 @@ export default function ClassManagementPage() {
   };
 
   const filteredClasses = classes.filter(c => 
-    c.name.toLowerCase().includes(searchTerm.toLowerCase())
+    matchesSearch(c.name, searchTerm)
   );
 
   const getAllowedProgramTypes = (variantVal: string) => {

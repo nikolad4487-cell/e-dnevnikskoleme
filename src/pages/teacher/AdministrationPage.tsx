@@ -1769,20 +1769,43 @@ setStudents(uniqueMapped as any);
         const payload = updatePayload;
         const editStudentId = editingStudentId;
 
+        console.log("EDIT STUDENT ID TYPE", typeof editStudentId, editStudentId);
+        console.log("PAYLOAD", payload);
+
+        // 1. Prije updatea provjeri postoji li učenik
+        const { data: existing, error: existingError } = await supabase
+          .from("user_profiles")
+          .select("id, auth_user_id, name, email, role")
+          .or(`id.eq.${editStudentId},auth_user_id.eq.${editStudentId}`);
+
+        console.log("EXISTING STUDENT BEFORE UPDATE", existing, existingError);
+
+        let targetId = editStudentId;
+        if (existing && existing.length > 0) {
+          targetId = existing[0].id;
+        }
+
+        // 3. Update
         const { data, error } = await supabase
           .from("user_profiles")
           .update(payload)
-          .eq("id", editStudentId)
-          .select()
-          .single();
+          .eq("id", targetId)
+          .select("id, name, email, role, class_id, school_id, school_year_id");
 
-        console.log("EDIT STUDENT RESULT", data);
-        console.log("EDIT STUDENT ERROR", error);
+        console.log("EDIT STUDENT UPDATE DATA", data);
+        console.log("EDIT STUDENT UPDATE ERROR", error);
 
         if (error) {
           toast.error("Greška pri spremanju učenika: " + error.message);
           return;
         }
+
+        if (!data || data.length === 0) {
+          toast.error("Učenik nije pronađen ili nema dozvolu za uređivanje.");
+          return;
+        }
+
+        const updatedStudent = data[0];
 
         toast.success("Učenik je uspješno ažuriran.");
 

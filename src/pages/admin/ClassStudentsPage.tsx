@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Class, User, Role } from '../../types';
-import { getSurname } from '../../lib/utils';
+import { getSurname, matchesSearch } from '../../lib/utils';
 import { 
   Plus, 
   Trash2, 
@@ -210,8 +210,8 @@ export default function ClassStudentsPage() {
   };
 
   const filteredAvailable = availableStudents.filter(s => 
-    (s.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (s.email || '').toLowerCase().includes(searchTerm.toLowerCase())
+    matchesSearch(s.name, searchTerm) ||
+    matchesSearch(s.email, searchTerm)
   );
 
   if (loading) return <div className="p-10 font-black uppercase text-slate-300 animate-pulse text-center">Učitavanje...</div>;

@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { User, StudentNote, Class, ClassNotes, StudentNotes } from '../../types';
-import { cn, formatName, getSurname } from '../../lib/utils';
+import { cn, formatName, getSurname, matchesSearch } from '../../lib/utils';
 import { MessageSquare, Plus, Search, Calendar, User as UserIcon, Edit2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mappers, mapList } from '../../lib/mappers';
@@ -165,13 +165,12 @@ setStudents(uniqueStudents);
 
   const filteredNotes = notes.filter(note => {
     const student = students.find(s => s.id === note.studentId);
-    const studentName = student ? (student.name || '').toLowerCase() : '';
-    const content = note.content.toLowerCase();
-    const category = (note.category || '').toLowerCase();
-    const matchesSearch = studentName.includes(searchTerm.toLowerCase()) || 
-                         content.includes(searchTerm.toLowerCase()) || 
-                         category.includes(searchTerm.toLowerCase());
-    return matchesSearch;
+    const studentName = student ? (student.name || '') : '';
+    const content = note.content;
+    const category = (note.category || '');
+    return matchesSearch(studentName, searchTerm) || 
+           matchesSearch(content, searchTerm) || 
+           matchesSearch(category, searchTerm);
   });
 
   if (loading) {

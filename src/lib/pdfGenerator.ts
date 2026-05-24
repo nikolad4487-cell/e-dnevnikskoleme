@@ -43,31 +43,27 @@ export const generateClassCertificatePDF = async (student: any, data: Certificat
     
     doc.text(data.schoolName, 105, 30, { align: 'center' });
     doc.setFontSize(12);
-    
-    // Using simple replacement for testing if basic characters pass
-    const replaceChars = (text: string) => text.replace(/č/g, 'c').replace(/ć/g, 'c').replace(/ž/g, 'z').replace(/š/g, 's').replace(/đ/g, 'd')
-                                              .replace(/Č/g, 'C').replace(/Ć/g, 'C').replace(/Ž/g, 'Z').replace(/Š/g, 'S').replace(/Đ/g, 'D');
 
-    doc.text(`Učenik: ${replaceChars(data.studentName)}`, 20, 50);
+    doc.text(`Učenik: ${data.studentName}`, 20, 50);
     doc.text(`OIB: ${data.studentOib}`, 20, 55);
 
-    const tableData = data.grades.map(g => [replaceChars(g.subjectName), g.gradeValue]);
+    const tableData = data.grades.map(g => [g.subjectName, g.gradeValue]);
     autoTable(doc, {
         startY: 70,
-        head: [['Predmet', 'Zakljucna ocjena']], // Changed Zaključna
+        head: [['Predmet', 'Zaključna ocjena']],
         body: tableData,
     });
 
     const finalY = (doc as any).lastAutoTable.finalY + 20;
-    doc.text(`Opci uspjeh: ${replaceChars(data.overallSuccess)} (${data.overallAverage})`, 20, finalY); // Changed Opći
-    doc.text(`Vladanje: ${replaceChars(data.conduct)}`, 20, finalY + 10);
+    doc.text(`Opći uspjeh: ${data.overallSuccess} (${data.overallAverage})`, 20, finalY);
+    doc.text(`Vladanje: ${data.conduct}`, 20, finalY + 10);
     
     // Signatures
     if (data.stampUrl) doc.addImage(data.stampUrl, 'PNG', 70, finalY + 40, 70, 70);
     if (data.teacherSigUrl) doc.addImage(data.teacherSigUrl, 'PNG', 20, finalY + 40, 40, 20);
     doc.text(`Razrednik:`, 20, finalY + 65);
     if (data.principalSigUrl) doc.addImage(data.principalSigUrl, 'PNG', 150, finalY + 40, 40, 20);
-    doc.text(`Ravnatelj: ${replaceChars(data.principalName)}`, 150, finalY + 65);
+    doc.text(`Ravnatelj: ${data.principalName}`, 150, finalY + 65);
     
     return doc;
 };

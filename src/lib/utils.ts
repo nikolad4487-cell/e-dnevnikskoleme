@@ -11,6 +11,20 @@ export const getSurname = (fullName?: string) => {
   return parts[parts.length - 1] || '';
 };
 
+export function removeDiacritics(str: string): string {
+  return (str || '')
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/č/g, 'c').replace(/ć/g, 'c').replace(/ž/g, 'z').replace(/š/g, 's').replace(/đ/g, 'd')
+    .replace(/Č/g, 'C').replace(/Ć/g, 'C').replace(/Ž/g, 'Z').replace(/Š/g, 'S').replace(/Đ/g, 'D');
+}
+
+export function matchesSearch(text: string, searchTerm: string): boolean {
+  if (!searchTerm) return true;
+  if (!text) return false;
+  return removeDiacritics(text.toLowerCase()).includes(removeDiacritics(searchTerm.toLowerCase()));
+}
+
 export function formatPersonName(person: any): string {
   if (!person) return '';
 

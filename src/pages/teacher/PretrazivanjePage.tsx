@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Search, User, Mail, Hash, BookOpen } from 'lucide-react';
-import { cn, getSurname } from '../../lib/utils';
+import { cn, getSurname, matchesSearch } from '../../lib/utils';
 import { Role } from '../../types';
 
 export default function PretrazivanjePage() {
@@ -31,7 +31,7 @@ export default function PretrazivanjePage() {
       
       const filteredStudents = (rolesData || [])
         .map(r => r.student)
-        .filter(p => !searchTerm || p.name?.toLowerCase().includes(searchTerm.toLowerCase()) || p.oib?.includes(searchTerm));
+        .filter(p => !searchTerm || matchesSearch(p.name, searchTerm) || p.oib?.includes(searchTerm));
 
       const mappedStudents = filteredStudents.map(p => ({
         ...p,
