@@ -67,7 +67,7 @@ export default function PretrazivanjePage() {
       </div>
 
       <div className="p-6 overflow-auto">
-        <div className="max-w-4xl mx-auto space-y-8">
+        <div className="w-full space-y-8">
           <div className="bg-[#f8fafc] border border-gray-300 p-4 shadow-sm">
             <div className="flex border-b border-gray-300 mb-4 px-1">
               <button 

@@ -10,6 +10,7 @@ import { toast } from 'react-hot-toast';
 import { cn, getSurname, formatSubjectDisplayName, formatPersonName } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import CertificateManagementPage from './certificates/CertificateManagementPage';
+import InformativkaAdminPage from '../admin/InformativkaAdminPage';
 
 export default function AdministrationPage() {
   const navigate = useNavigate();
@@ -131,7 +132,7 @@ export default function AdministrationPage() {
   const isSchoolAdminMode = location.pathname.startsWith('/admin/');
 
   // Modals / Tabs
-  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN' | 'CONDUCT' | 'PROGRESS' | 'SUPPORTS' | 'ASSIGNMENTS' | 'DOCUMENTS'>(
+  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN' | 'CONDUCT' | 'PROGRESS' | 'SUPPORTS' | 'ASSIGNMENTS' | 'DOCUMENTS' | 'INFORMATIVKA_ADMIN'>(
     isClassAdminMode ? 'CLASS_DETAIL' : (isSchoolAdminMode ? 'SCHOOL_YEARS' : 'MENU')
   );
 
@@ -2777,6 +2778,7 @@ setAllSubjects(uniqueSub2);
             { label: 'Globalni predmeti', tab: 'SUBJECTS', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Smjerovi / programi', tab: 'PROGRAMS', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Prijenos (Rollover)', tab: 'ROLLOVER', mode: 'SCHOOL', hide: false, disabled: false },
+            { label: 'Informativka', tab: 'INFORMATIVKA_ADMIN', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Postavke škole', tab: 'SCHOOLS', mode: 'SCHOOL', hide: false, disabled: false },
             
             // CLASS MODULES
@@ -2785,6 +2787,7 @@ setAllSubjects(uniqueSub2);
             { label: 'Učenici u razredu', tab: 'STUDENTS', filterToClass: true, mode: 'CLASS', hide: false, disabled: false },
             { label: 'Predmeti učenika', tab: 'STUDENT_SUBJECTS_ENROLL', mode: 'CLASS', hide: false, disabled: false },
             { label: 'Satnica i raspored', tab: 'PLANNING', mode: 'CLASS', hide: false, disabled: false },
+            { label: 'Informativka', tab: 'INFORMATIVKA_ADMIN', mode: 'CLASS', hide: false, disabled: false },
             { label: 'Opći prosjek', tab: 'OPCI_PROSJEK', mode: 'CLASS', hide: false, disabled: false },
           ].map((opt: any, i) => {
             // Filter by mode
@@ -2828,7 +2831,7 @@ setAllSubjects(uniqueSub2);
           )}
 
           {activeTab === 'MENU' && (
-            <div className="max-w-4xl space-y-6">
+            <div className="w-full space-y-6">
               <h1 className="text-xl font-bold text-gray-800 pb-2 border-b-2 border-gray-100">Administracija</h1>
               
               {effectiveClassId && (
@@ -3003,7 +3006,7 @@ setAllSubjects(uniqueSub2);
           )}
 
           {activeTab === 'CLASS_DETAIL' && (
-            <div className="max-w-6xl space-y-6">
+            <div className="w-full space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <button onClick={() => setActiveTab('CLASSES')} className="text-gray-400 hover:text-gray-600 transition-colors"><ChevronLeft size={20}/></button>
@@ -3524,7 +3527,7 @@ setAllSubjects(uniqueSub2);
           )}
 
           {activeTab === 'OPCI_PROSJEK' && (
-            <div className="max-w-6xl space-y-6">
+            <div className="w-full space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <button onClick={() => setActiveTab('CLASS_DETAIL')} className="text-gray-400 hover:text-gray-600 transition-colors"><ChevronLeft size={20}/></button>
@@ -3664,7 +3667,7 @@ setAllSubjects(uniqueSub2);
           )}
 
           {activeTab === 'STUDENT_DETAIL' && (
-            <div className="max-w-6xl space-y-6 animate-in fade-in duration-500">
+            <div className="w-full space-y-6 animate-in fade-in duration-500">
                <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                   <button 
@@ -3868,7 +3871,7 @@ setAllSubjects(uniqueSub2);
           )}
 
           {activeTab === 'STUDENTS' && (
-            <div className="max-w-5xl space-y-6">
+            <div className="w-full space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2">
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Registracija učenika i pregled</h3>
               </div>
@@ -4141,7 +4144,7 @@ setAllSubjects(uniqueSub2);
           )}
 
           {activeTab === 'SUBJECTS' && (
-            <div className="max-w-4xl space-y-6">
+            <div className="w-full space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2">
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter tracking-widest">Globalni nastavni predmeti</h3>
               </div>
@@ -4195,7 +4198,7 @@ setAllSubjects(uniqueSub2);
             </div>
           )}
           {activeTab === 'STAFF' && (
-            <div className="max-w-5xl space-y-6">
+            <div className="w-full space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Predmetna nastava (Zaduženja)</h3>
                 {isAnyAdmin && (
@@ -4351,7 +4354,7 @@ setAllSubjects(uniqueSub2);
           )}
 
           {activeTab === 'PLANNING' && (
-            <div className="max-w-5xl space-y-6">
+            <div className="w-full space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Nastavni planovi (Kurikulum)</h3>
                 {user?.role === Role.ADMIN && (
@@ -4637,7 +4640,7 @@ setAllSubjects(uniqueSub2);
 
           {activeTab === 'SCHOOL_YEARS' && (
             <React.Fragment>
-              <div className="max-w-6xl space-y-6">
+              <div className="w-full space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Upravljanje školskim godinama</h3>
                 <div className="flex gap-2">
@@ -4924,7 +4927,7 @@ setAllSubjects(uniqueSub2);
         )}
 
           {activeTab === 'ROLLOVER' && (
-            <div className="max-w-5xl space-y-8 animate-in fade-in duration-500">
+            <div className="w-full space-y-8 animate-in fade-in duration-500">
               <div className="border-b-2 border-[#005c8d] pb-3 flex items-center justify-between bg-white sticky top-0 z-20">
                 <div className="flex flex-col">
                   <h3 className="text-xl font-black text-[#005c8d] uppercase tracking-tighter">Školski Rollover (Prijenos godine)</h3>
@@ -5133,8 +5136,14 @@ setAllSubjects(uniqueSub2);
             </div>
           )}
 
+          {activeTab === 'INFORMATIVKA_ADMIN' && (
+            <div className="space-y-6">
+              <InformativkaAdminPage classId={effectiveClassId} />
+            </div>
+          )}
+
           {activeTab === 'SCHOOLS' && (
-            <div className="max-w-4xl space-y-6">
+            <div className="w-full space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Upravljanje školama</h3>
               </div>
@@ -5219,7 +5228,7 @@ setAllSubjects(uniqueSub2);
           )}
 
           {activeTab === 'PROGRAMS' && (
-            <div className="max-w-4xl space-y-6">
+            <div className="w-full space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Upravljanje programima</h3>
               </div>
@@ -5344,7 +5353,7 @@ setAllSubjects(uniqueSub2);
           )}
 
           {activeTab === 'STUDENT_DETAIL' && selectedStudentData && (
-            <div className="max-w-5xl space-y-6">
+            <div className="w-full space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center gap-4">
                 <button onClick={() => setActiveTab('STUDENTS')} className="text-gray-400 hover:text-gray-600 transition-colors"><ChevronLeft size={20}/></button>
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Kartica učenika: {selectedStudentData.name}</h3>
@@ -5447,7 +5456,7 @@ setAllSubjects(uniqueSub2);
           )}
 
           {activeTab === 'USERS' && canManageUsers && (
-            <div className="max-w-6xl space-y-6">
+            <div className="w-full space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Upravljanje korisnicima i ulogama</h3>
               </div>

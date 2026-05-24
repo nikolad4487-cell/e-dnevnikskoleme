@@ -163,7 +163,7 @@ export default function ZapisniciPage() {
           </form>
         )}
 
-        <div className="max-w-5xl mx-auto border border-gray-300 bg-white">
+        <div className="w-full border border-gray-300 bg-white">
           <div className="bg-gray-100 border-b border-gray-300 px-4 py-2 flex items-center justify-between">
              <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Kronološki popis zapisnika ({zapisnici.length})</div>
              <div className="text-[9px] text-gray-400 font-bold uppercase tracking-tighter">Prikazuju se svi službeni zapisi</div>

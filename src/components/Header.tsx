@@ -45,7 +45,7 @@ export function Header({ navItems = [], onMenuToggle, showNav = true }: HeaderPr
 
   return (
     <header className="bg-[#005c8d] text-white z-50 shadow-md flex-shrink-0">
-      <div className="max-w-[1400px] mx-auto px-4 h-10 flex items-center justify-between">
+      <div className="w-full px-4 h-10 flex items-center justify-between">
         <div className="flex items-center gap-4">
           {showNav && (
             <button 

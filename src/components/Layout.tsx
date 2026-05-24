@@ -144,8 +144,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </aside>
         )}
 
-        <main className="flex-1 flex flex-col max-w-[1400px] w-full mx-auto p-3 lg:p-4 mb-16 lg:mb-0">
-          <div className="bg-white border border-gray-300 flex-1 flex flex-col min-h-0">
+        <main className="flex-1 flex flex-col w-full mb-16 lg:mb-0">
+          <div className="bg-white border-b border-r border-[#005c8d]/20 flex-1 flex flex-col min-h-0">
             {children}
           </div>
         </main>

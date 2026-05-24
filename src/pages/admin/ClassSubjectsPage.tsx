@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 
 export default function ClassSubjectsPage() {
   const { selectedSchoolId } = useSelection();
@@ -33,6 +34,18 @@ export default function ClassSubjectsPage() {
   // Assign State
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [selectedTeacherId, setSelectedTeacherId] = useState('');
+
+  // Delete State
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    subjectId: string;
+    subjectName: string;
+  }>({
+    isOpen: false,
+    subjectId: '',
+    subjectName: '',
+  });
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     if (!selectedSchoolId || !classId) {
@@ -131,32 +144,79 @@ export default function ClassSubjectsPage() {
     }
   };
 
-  const handleRemoveAssignment = async (id: string) => {
+  const handleRemoveAssignmentClick = (subjectId: string, subjectName: string) => {
     if (!isAnyAdmin) {
       toast.error('Nemate dozvolu za uklanjanje predmeta.');
       return;
     }
+    setDeleteModal({
+      isOpen: true,
+      subjectId,
+      subjectName
+    });
+  };
 
-    console.log("REMOVE ASSIGNMENT CLICKED", { id });
+  const handleConfirmDelete = async () => {
+    const { subjectId } = deleteModal;
+    if (!classId || !subjectId) return;
 
-    if (!window.confirm('Želite li ukloniti ovaj predmet iz razreda?')) return;
+    console.log("REMOVE SUBJECT FROM CLASS", { classId, subjectId });
+
     try {
-      const { data, error } = await supabase.from('class_subject_teachers').delete().eq('id', id).select();
-      console.log("REMOVE ASSIGNMENT RESULT:", { data, error });
-      
-      if (error) throw error;
-      toast.success('Predmet uklonjen');
+      setDeleteLoading(true);
+
+      // 1. obrisati veze iz class_subject_teachers za taj class_id + subject_id
+      const { error: assocError } = await supabase
+        .from('class_subject_teachers')
+        .delete()
+        .eq('class_id', classId)
+        .eq('subject_id', subjectId);
+
+      if (assocError) {
+        console.log("REMOVE SUBJECT ERROR", assocError);
+        throw assocError;
+      }
+
+      // 2. obrisati upise učenika iz student_subject_enrollments za taj class_id + subject_id
+      const { error: enrollError } = await supabase
+        .from('student_subject_enrollments')
+        .delete()
+        .eq('class_id', classId)
+        .eq('subject_id', subjectId);
+
+      if (enrollError) {
+        console.log("REMOVE SUBJECT ERROR", enrollError);
+        throw enrollError;
+      }
+
+      // 3. po potrebi obrisati/odspojiti chat kanal predmeta iz chat_groups gdje type = SUBJECT_CHANNEL
+      const { error: chatError } = await supabase
+        .from('chat_groups')
+        .delete()
+        .eq('class_id', classId)
+        .eq('subject_id', subjectId)
+        .eq('type', 'SUBJECT_CHANNEL');
+
+      if (chatError) {
+        console.warn("Error deleting subject chat group:", chatError);
+      }
+
+      console.log("REMOVE SUBJECT SUCCESS");
+      toast.success('Predmet i svi povezani upisi su uklonjeni iz razreda');
+      setDeleteModal({ isOpen: false, subjectId: '', subjectName: '' });
       fetchData();
     } catch (err: any) {
-      console.error("REMOVE ASSIGNMENT FAILED:", err);
+      console.log("REMOVE SUBJECT ERROR", err);
       toast.error('Greška pri uklanjanju: ' + (err.message || 'Nepoznata greška'));
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
   if (loading) return <div className="p-10 font-black uppercase text-slate-300 animate-pulse text-center">Učitavanje...</div>;
 
   return (
-    <div className="p-6 font-sans max-w-7xl mx-auto">
+    <div className="p-6 font-sans w-full">
       <div className="flex justify-between items-end mb-8 border-b-2 border-slate-100 pb-6">
         <div>
           <button 
@@ -261,13 +321,15 @@ export default function ClassSubjectsPage() {
                         <span className="font-bold text-slate-700 text-sm">{item.teacher?.name}</span>
                       </div>
                     </td>
-                    <td className="p-4 text-right">
+                    <td className="p-4 text-right flex justify-end">
                       {isAnyAdmin && (
                         <button 
-                          onClick={() => handleRemoveAssignment(item.id)}
-                          className="p-2 text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                          onClick={() => handleRemoveAssignmentClick(item.subject?.id, item.subject?.name || '')}
+                          className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 border border-transparent hover:border-red-250 font-bold uppercase tracking-tight flex items-center gap-1.5 transition-colors cursor-pointer"
+                          title="Ukloni predmet"
                         >
-                          <Trash2 size={18} />
+                          <Trash2 size={14} />
+                          <span>Ukloni predmet</span>
                         </button>
                       )}
                     </td>
@@ -285,6 +347,15 @@ export default function ClassSubjectsPage() {
           </div>
         </div>
       </div>
+
+      <DeleteConfirmDialog
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, subjectId: '', subjectName: '' })}
+        onConfirm={handleConfirmDelete}
+        title="Ukloni predmet"
+        message="Jeste li sigurni da želite ukloniti predmet iz ovog razreda?"
+        loading={deleteLoading}
+      />
     </div>
   );
 }

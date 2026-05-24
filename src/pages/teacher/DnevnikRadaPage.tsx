@@ -1443,7 +1443,7 @@ setStudents(uniqueStudents);
         
         {/* WEEKS LIST */}
         {view === 'WEEKS' && (
-          <div className="max-w-6xl mx-auto">
+          <div className="w-full">
             <div className="bg-white border border-gray-300 shadow-sm">
                <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-[#005c8d] text-[11px] uppercase tracking-tight">Popis radnih tjedana</div>
                <table className="w-full text-left border-collapse text-[12px] ed-table-dense">
@@ -1516,7 +1516,7 @@ setStudents(uniqueStudents);
 
         {/* WEEK DETAIL - List of Days */}
         {view === 'WEEK_DETAIL' && selectedWeek && (
-          <div className="max-w-4xl mx-auto">
+          <div className="w-full">
             <div className="bg-white border border-gray-300 shadow-sm">
                <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-[#005c8d] text-[11px] uppercase tracking-tight flex items-center justify-between">
                   <span>{selectedWeek.name} - Radni dani</span>
@@ -1557,7 +1557,7 @@ setStudents(uniqueStudents);
 
         {/* ABSENCES WEEKLY VIEW */}
         {view === 'ABSENCES' && selectedClass && (
-          <div className="max-w-6xl mx-auto">
+          <div className="w-full">
              <div className="bg-white border border-gray-300 shadow-sm overflow-hidden overflow-x-auto">
                 <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-[#005c8d] text-[11px] uppercase tracking-tight flex items-center justify-between">
                     <span>Tjedni pregled izostanaka: {selectedWeek?.name}</span>
@@ -1630,7 +1630,7 @@ setStudents(uniqueStudents);
 
         {/* EXAMS VIEW */}
         {view === 'EXAMS' && selectedClass && (
-          <div className="max-w-4xl mx-auto">
+          <div className="w-full">
              <div className="bg-white border border-gray-300 shadow-sm overflow-hidden">
                 <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-[#005c8d] text-[11px] uppercase tracking-tight flex items-center justify-between">
                    <span>Plan pisanih provjera</span>
@@ -1690,7 +1690,7 @@ setStudents(uniqueStudents);
         )}
         {/* SCHEDULE VIEW */}
         {view === 'SCHEDULE' && selectedClass && (
-          <div className="max-w-6xl mx-auto space-y-8 pb-20">
+          <div className="w-full space-y-8 pb-20">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-xl font-bold text-[#005c8d] uppercase tracking-tight">Tjedni raspored sati</h3>
               <div className="bg-yellow-50 border border-yellow-200 px-3 py-1 flex items-center gap-2">
@@ -1782,7 +1782,7 @@ setStudents(uniqueStudents);
         )}
         {/* LEKTIRA VIEW */}
         {view === 'LEKTIRA' && selectedClass && (
-          <div className="max-w-6xl mx-auto space-y-4">
+          <div className="w-full space-y-4">
             <div className="flex justify-between items-center bg-white p-3 border border-gray-300 shadow-sm">
               <span className="text-xs font-bold text-gray-500 uppercase">
                 Evidencija lektira ({lektire.length})
@@ -1946,7 +1946,7 @@ setStudents(uniqueStudents);
 
         {/* DAY DETAIL VIEW - REDESIGNED TABLE */}
         {view === 'DAY_DETAIL' && effectiveClassId && selectedDate && selectedWeek && (
-          <div className="max-w-6xl mx-auto space-y-3">
+          <div className="w-full space-y-3">
             {/* Navigacija i dežurni */}
             <div className="flex items-center justify-between border border-gray-300 bg-white p-2">
               <div className="flex items-center gap-4">

@@ -217,7 +217,7 @@ export default function ClassStudentsPage() {
   if (loading) return <div className="p-10 font-black uppercase text-slate-300 animate-pulse text-center">Učitavanje...</div>;
 
   return (
-    <div className="p-6 font-sans max-w-7xl mx-auto">
+    <div className="p-6 font-sans w-full">
       <div className="flex justify-between items-end mb-8 border-b-2 border-slate-100 pb-6">
         <div>
           <button 

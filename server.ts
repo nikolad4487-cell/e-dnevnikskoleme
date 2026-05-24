@@ -27,6 +27,8 @@ function initJsonFile(filename: string) {
 
 initJsonFile("lektire.json");
 initJsonFile("pedagoska_dokumentacija.json");
+initJsonFile("student_pedagogical_profiles.json");
+initJsonFile("student_pedagogical_year_notes.json");
 initJsonFile("daily_notes.json");
 
 function readJsonFile(filename: string): any[] {
@@ -170,7 +172,195 @@ async function startServer() {
     }
   });
 
-  // 2. Pedagoska Dokumentacija APIs
+  // 2. Pedagoska Dokumentacija RESTructured APIs
+  app.get("/api/student-pedagogical-profile", async (req, res) => {
+    try {
+      const { studentId } = req.query;
+      if (!studentId) {
+        return res.status(400).json({ error: "studentId is required" });
+      }
+
+      if (supabaseAdmin) {
+        const { data, error } = await supabaseAdmin
+          .from("student_pedagogical_profiles")
+          .select("*")
+          .eq("student_id", studentId)
+          .maybeSingle();
+        if (!error && data) {
+          return res.json(data);
+        }
+      }
+
+      // JSON Fallback
+      let list = readJsonFile("student_pedagogical_profiles.json");
+      let profile = list.find(p => p.student_id === studentId || p.studentId === studentId);
+      if (!profile) {
+        profile = {
+          student_id: studentId,
+          education_program: "",
+          visit_reason: "",
+          disabilities: "",
+          accommodations: "",
+          support_types: "",
+          practical_training: "",
+          documentation: "",
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+      }
+      res.json(profile);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/student-pedagogical-profile", async (req, res) => {
+    try {
+      const payload = req.body;
+      const { studentId } = payload;
+      if (!studentId) {
+        return res.status(400).json({ error: "studentId is required" });
+      }
+
+      const dbPayload = {
+        student_id: studentId,
+        education_program: payload.education_program || payload.educationProgram || "",
+        visit_reason: payload.visit_reason || payload.visitReason || "",
+        disabilities: payload.disabilities || "",
+        accommodations: payload.accommodations || "",
+        support_types: payload.support_types || payload.supportTypes || "",
+        practical_training: payload.practical_training || payload.practicalTraining || "",
+        documentation: payload.documentation || "",
+        updated_at: new Date().toISOString()
+      };
+
+      if (supabaseAdmin) {
+        const { data, error } = await supabaseAdmin
+          .from("student_pedagogical_profiles")
+          .upsert(dbPayload, { onConflict: "student_id" })
+          .select("*")
+          .maybeSingle();
+        if (!error && data) {
+          return res.json(data);
+        } else {
+          console.warn("Supabase upsert failed, using JSON fallback", error);
+        }
+      }
+
+      // JSON Fallback
+      let list = readJsonFile("student_pedagogical_profiles.json");
+      const idx = list.findIndex(p => p.student_id === studentId);
+      const newProfile = {
+        id: idx >= 0 ? list[idx].id : Math.random().toString(36).substring(2, 9) + '-' + Date.now(),
+        ...dbPayload,
+        created_at: idx >= 0 ? list[idx].created_at : new Date().toISOString()
+      };
+
+      if (idx >= 0) {
+        list[idx] = newProfile;
+      } else {
+        list.push(newProfile);
+      }
+      writeJsonFile("student_pedagogical_profiles.json", list);
+      res.json(newProfile);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/student-pedagogical-year-notes", async (req, res) => {
+    try {
+      const { studentId, classId, schoolYearId } = req.query;
+      if (!studentId || !classId || !schoolYearId) {
+        return res.status(400).json({ error: "studentId, classId and schoolYearId are required" });
+      }
+
+      if (supabaseAdmin) {
+        const { data, error } = await supabaseAdmin
+          .from("student_pedagogical_year_notes")
+          .select("*")
+          .eq("student_id", studentId)
+          .eq("class_id", classId)
+          .eq("school_year_id", schoolYearId)
+          .maybeSingle();
+        if (!error && data) {
+          return res.json(data);
+        }
+      }
+
+      // JSON Fallback
+      let list = readJsonFile("student_pedagogical_year_notes.json");
+      let note = list.find(p => p.student_id === studentId && p.class_id === classId && p.school_year_id === schoolYearId);
+      if (!note) {
+        note = {
+          student_id: studentId,
+          class_id: classId,
+          school_year_id: schoolYearId,
+          recommendations: "",
+          counselor_notes: "",
+          yearly_observations: [],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+      }
+      res.json(note);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/student-pedagogical-year-notes", async (req, res) => {
+    try {
+      const payload = req.body;
+      const { studentId, classId, schoolYearId } = payload;
+      if (!studentId || !classId || !schoolYearId) {
+        return res.status(400).json({ error: "studentId, classId and schoolYearId are required" });
+      }
+
+      const dbPayload = {
+        student_id: studentId,
+        class_id: classId,
+        school_year_id: schoolYearId,
+        recommendations: payload.recommendations || "",
+        counselor_notes: payload.counselor_notes || "",
+        yearly_observations: Array.isArray(payload.yearly_observations) ? payload.yearly_observations : [],
+        updated_at: new Date().toISOString()
+      };
+
+      if (supabaseAdmin) {
+        const { data, error } = await supabaseAdmin
+          .from("student_pedagogical_year_notes")
+          .upsert(dbPayload, { onConflict: "student_id,school_year_id,class_id" })
+          .select("*")
+          .maybeSingle();
+        if (!error && data) {
+          return res.json(data);
+        } else {
+          console.warn("Supabase upsert notes failed, using JSON fallback", error);
+        }
+      }
+
+      // JSON Fallback
+      let list = readJsonFile("student_pedagogical_year_notes.json");
+      const idx = list.findIndex(p => p.student_id === studentId && p.class_id === classId && p.school_year_id === schoolYearId);
+      const newNote = {
+        id: idx >= 0 ? list[idx].id : Math.random().toString(36).substring(2, 9) + '-' + Date.now(),
+        ...dbPayload,
+        created_at: idx >= 0 ? list[idx].created_at : new Date().toISOString()
+      };
+
+      if (idx >= 0) {
+        list[idx] = newNote;
+      } else {
+        list.push(newNote);
+      }
+      writeJsonFile("student_pedagogical_year_notes.json", list);
+      res.json(newNote);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/pedagoska-dokumentacija", (req, res) => {
     try {
       const { classId, studentId } = req.query;

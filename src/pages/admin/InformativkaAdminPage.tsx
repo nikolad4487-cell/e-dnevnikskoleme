@@ -1,11 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useParams } from 'react-router-dom';
-import { MessageSquare, Plus, Trash2, Settings, Users, X } from 'lucide-react';
+import { MessageSquare, Plus, Trash2, Settings, Users, X, Info } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { useSelection } from '../../contexts/SelectionContext';
 
-export default function InformativkaAdminPage() {
-  const { classId } = useParams<{ classId: string }>();
+interface InformativkaAdminPageProps {
+  classId?: string;
+}
+
+export default function InformativkaAdminPage({ classId: propClassId }: InformativkaAdminPageProps = {}) {
+  const { classId: routeClassId } = useParams<{ classId: string }>();
+  const { selectedSchoolId } = useSelection();
+  
+  const [classesList, setClassesList] = useState<any[]>([]);
+  const [localClassId, setLocalClassId] = useState<string>('');
+  
+  // The actual class ID we operate on
+  const classId = propClassId || routeClassId || localClassId;
+  
   const [channels, setChannels] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -14,14 +27,38 @@ export default function InformativkaAdminPage() {
   const [newChannel, setNewChannel] = useState({ name: '', type: 'SUBJECT_CHANNEL', subject_id: '', staff_only_posting: true, allow_student_messages: false });
   const [subjects, setSubjects] = useState<any[]>([]);
 
+  // Fetch classes if no classId from props/route is available
+  useEffect(() => {
+    if (!propClassId && !routeClassId && selectedSchoolId) {
+      const fetchClasses = async () => {
+        const { data, error } = await supabase
+          .from('classes')
+          .select('id, name')
+          .eq('school_id', selectedSchoolId)
+          .eq('status', 'ACTIVE');
+        if (data) {
+          setClassesList(data);
+          if (data.length > 0) {
+            setLocalClassId(data[0].id);
+          }
+        }
+      };
+      fetchClasses();
+    }
+  }, [propClassId, routeClassId, selectedSchoolId]);
+
   useEffect(() => {
     if (classId) {
       fetchChannels();
       fetchSubjects();
+    } else {
+      setChannels([]);
+      setLoading(false);
     }
   }, [classId]);
 
   const fetchChannels = async () => {
+    if (!classId) return;
     setLoading(true);
     const { data, error } = await supabase
       .from('chat_groups')
@@ -106,11 +143,11 @@ export default function InformativkaAdminPage() {
             const subjectName = (s as any).subject?.name;
             
             const { data: existing } = await supabase
-                .from('chat_groups')
-                .select('id')
-                .eq('class_id', classId)
-                .eq('subject_id', subjectId)
-                .maybeSingle();
+                 .from('chat_groups')
+                 .select('id')
+                 .eq('class_id', classId)
+                 .eq('subject_id', subjectId)
+                 .maybeSingle();
 
             if (!existing) {
                 const payload = {
@@ -132,16 +169,16 @@ export default function InformativkaAdminPage() {
                     createdChannels.push(data);
                     
                     const { data: teachers } = await supabase
-                        .from('class_subject_teachers')
-                        .select('teacher_id')
-                        .eq('class_id', classId)
-                        .eq('subject_id', subjectId);
-                        
+                         .from('class_subject_teachers')
+                         .select('teacher_id')
+                         .eq('class_id', classId)
+                         .eq('subject_id', subjectId);
+                         
                     const { data: students } = await supabase
-                        .from('student_subject_enrollments')
-                        .select('student_id')
-                        .eq('class_id', classId)
-                        .eq('subject_id', subjectId);
+                         .from('student_subject_enrollments')
+                         .select('student_id')
+                         .eq('class_id', classId)
+                         .eq('subject_id', subjectId);
 
                     const members = [
                         ...(teachers || []).map((t: any) => ({ group_id: data.id, user_id: t.teacher_id, role: 'OWNER' })),
@@ -201,88 +238,154 @@ export default function InformativkaAdminPage() {
     }
   };
 
+  const handleDeleteChannel = async (channelId: string) => {
+    if (!window.confirm("Jeste li sigurni da želite obrisati ovaj kanal? Svi razgovori i poruke u njemu bit će trajno obrisani.")) return;
+    setLoading(true);
+    try {
+      const { data: msgs } = await supabase.from('messages').select('id').eq('group_id', channelId);
+      const msgIds = (msgs || []).map(m => m.id);
+      if (msgIds.length > 0) {
+        await supabase.from('message_attachments').delete().in('message_id', msgIds);
+        await supabase.from('messages').delete().eq('group_id', channelId);
+      }
+      await supabase.from('chat_group_members').delete().eq('group_id', channelId);
+      const { error } = await supabase.from('chat_groups').delete().eq('id', channelId);
+      
+      if (error) {
+        toast.error("Greška pri brisanju kanala: " + error.message);
+      } else {
+        toast.success("Kanal uspješno obrisan");
+        fetchChannels();
+      }
+    } catch (err) {
+      toast.error("Greška pri brisanju.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="p-6">
       <h2 className="text-xl font-bold mb-6">Administracija Informativke</h2>
-      <div className="flex gap-2 mb-6">
-        <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-[#005c8d] text-white px-4 py-2 rounded">
-            <Plus size={16} /> Kreiraj novi kanal
-        </button>
-        <button 
-            onClick={handleCreateAllSubjectChannels}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded"
-        >
-            <Users size={16} /> Stvori kanale za sve predmete
-        </button>
-      </div>
 
-      {isSettingsModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
-            <form onSubmit={handleUpdateChannel} className="bg-white p-6 rounded shadow-lg w-full max-w-md">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold">Postavke kanala</h3>
-                    <button type="button" onClick={() => setIsSettingsModalOpen(false)}><X size={20}/></button>
-                </div>
-                <input required placeholder="Naziv kanala" className="w-full border p-2 mb-2" value={newChannel.name} onChange={e => setNewChannel({...newChannel, name: e.target.value})} />
-                
-                <label className="flex items-center gap-2 mb-2 text-sm"><input type="checkbox" checked={newChannel.staff_only_posting} onChange={e => setNewChannel({...newChannel, staff_only_posting: e.target.checked})} /> Samo djelatnici objavljuju</label>
-                <label className="flex items-center gap-4 mb-4 text-sm"><input type="checkbox" checked={newChannel.allow_student_messages} onChange={e => setNewChannel({...newChannel, allow_student_messages: e.target.checked})} /> Učenici smiju pisati</label>
-                <button type="submit" className="w-full bg-[#005c8d] text-white p-2 rounded">Spremi promjene</button>
-            </form>
+      {!propClassId && !routeClassId && classesList.length > 0 && (
+        <div className="mb-6 p-4 bg-gray-50 border rounded flex items-center gap-4">
+          <label className="font-bold text-sm text-gray-700">Odaberite razredni odjel:</label>
+          <select 
+            value={localClassId} 
+            onChange={e => setLocalClassId(e.target.value)}
+            className="border p-2 rounded text-sm bg-white font-semibold min-w-[200px]"
+          >
+            {classesList.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
         </div>
       )}
 
-      {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4">
-            <form onSubmit={handleCreateChannel} className="bg-white p-6 rounded shadow-lg w-full max-w-md">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="font-bold">Novi kanal</h3>
-                    <button type="button" onClick={() => setIsModalOpen(false)}><X size={20}/></button>
-                </div>
-                <input required placeholder="Naziv kanala" className="w-full border p-2 mb-2" value={newChannel.name} onChange={e => setNewChannel({...newChannel, name: e.target.value})} />
-                <select className="w-full border p-2 mb-2" value={newChannel.type} onChange={e => setNewChannel({...newChannel, type: e.target.value})}>
-                    <option value="SUBJECT_CHANNEL">Predmetni kanal</option>
-                    <option value="CUSTOM_CHANNEL">Custom kanal</option>
-                    <option value="CLASS_CHANNEL">Razredni kanal</option>
-                </select>
-                {newChannel.type === 'SUBJECT_CHANNEL' && (
-                    <select className="w-full border p-2 mb-2" value={newChannel.subject_id} onChange={e => setNewChannel({...newChannel, subject_id: e.target.value})}>
-                        <option value="">Odaberi predmet</option>
-                        {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+      {classId ? (
+        <>
+          <div className="flex gap-2 mb-6">
+            <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-[#005c8d] hover:bg-[#004a70] text-white px-4 py-2 rounded text-sm font-bold uppercase transition-colors">
+                <Plus size={16} /> Kreiraj novi kanal
+            </button>
+            <button 
+                onClick={handleCreateAllSubjectChannels}
+                className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded text-sm font-bold uppercase transition-colors"
+            >
+                <Users size={16} /> Stvori kanale za sve predmete
+            </button>
+          </div>
+
+          {isSettingsModalOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                <form onSubmit={handleUpdateChannel} className="bg-white p-6 rounded shadow-lg w-full max-w-md">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold">Postavke kanala</h3>
+                        <button type="button" onClick={() => setIsSettingsModalOpen(false)}><X size={20}/></button>
+                    </div>
+                    <input required placeholder="Naziv kanala" className="w-full border p-2 mb-2" value={newChannel.name} onChange={e => setNewChannel({...newChannel, name: e.target.value})} />
+                    
+                    <label className="flex items-center gap-2 mb-2 text-sm"><input type="checkbox" checked={newChannel.staff_only_posting} onChange={e => setNewChannel({...newChannel, staff_only_posting: e.target.checked})} /> Samo djelatnici objavljuju</label>
+                    <label className="flex items-center gap-4 mb-4 text-sm"><input type="checkbox" checked={newChannel.allow_student_messages} onChange={e => setNewChannel({...newChannel, allow_student_messages: e.target.checked})} /> Učenici smiju pisati</label>
+                    <button type="submit" className="w-full bg-[#005c8d] text-white p-2 rounded">Spremi promjene</button>
+                </form>
+            </div>
+          )}
+
+          {isModalOpen && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                <form onSubmit={handleCreateChannel} className="bg-white p-6 rounded shadow-lg w-full max-w-md">
+                    <div className="flex justify-between items-center mb-4">
+                        <h3 className="font-bold">Novi kanal</h3>
+                        <button type="button" onClick={() => setIsModalOpen(false)}><X size={20}/></button>
+                    </div>
+                    <input required placeholder="Naziv kanala" className="w-full border p-2 mb-2" value={newChannel.name} onChange={e => setNewChannel({...newChannel, name: e.target.value})} />
+                    <select className="w-full border p-2 mb-2" value={newChannel.type} onChange={e => setNewChannel({...newChannel, type: e.target.value})}>
+                        <option value="SUBJECT_CHANNEL">Predmetni kanal</option>
+                        <option value="CUSTOM_CHANNEL">Custom kanal</option>
+                        <option value="CLASS_CHANNEL">Razredni kanal</option>
                     </select>
-                )}
-                <label className="flex items-center gap-2 mb-2 text-sm"><input type="checkbox" checked={newChannel.staff_only_posting} onChange={e => setNewChannel({...newChannel, staff_only_posting: e.target.checked})} /> Samo djelatnici objavljuju</label>
-                <label className="flex items-center gap-2 mb-4 text-sm"><input type="checkbox" checked={newChannel.allow_student_messages} onChange={e => setNewChannel({...newChannel, allow_student_messages: e.target.checked})} /> Učenici smiju pisati</label>
-                <button type="submit" className="w-full bg-[#005c8d] text-white p-2 rounded">Spremi</button>
-            </form>
+                    {newChannel.type === 'SUBJECT_CHANNEL' && (
+                        <select className="w-full border p-2 mb-2" value={newChannel.subject_id} onChange={e => setNewChannel({...newChannel, subject_id: e.target.value})}>
+                            <option value="">Odaberi predmet</option>
+                            {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                    )}
+                    <label className="flex items-center gap-2 mb-2 text-sm"><input type="checkbox" checked={newChannel.staff_only_posting} onChange={e => setNewChannel({...newChannel, staff_only_posting: e.target.checked})} /> Samo djelatnici objavljuju</label>
+                    <label className="flex items-center gap-2 mb-4 text-sm"><input type="checkbox" checked={newChannel.allow_student_messages} onChange={e => setNewChannel({...newChannel, allow_student_messages: e.target.checked})} /> Učenici smiju pisati</label>
+                    <button type="submit" className="w-full bg-[#005c8d] text-white p-2 rounded">Spremi</button>
+                </form>
+            </div>
+          )}
+
+          <div className="bg-white border rounded shadow-sm">
+            {loading ? <p className="p-4">Učitavanje...</p> : (
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b bg-gray-50 text-left text-xs uppercase font-bold text-gray-500">
+                    <th className="p-4">Naziv</th>
+                    <th className="p-4">Tip</th>
+                    <th className="p-4">Postavke objave</th>
+                    <th className="p-4">Radnje</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {channels.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="p-8 text-center text-gray-400 font-semibold text-sm">
+                        Nema stvorenih komunikacijskih kanala za ovaj razred.
+                      </td>
+                    </tr>
+                  ) : (
+                    channels.map(channel => (
+                      <tr key={channel.id} className="border-b hover:bg-slate-50">
+                        <td className="p-4 font-bold text-slate-800">{channel.name}</td>
+                        <td className="p-4 text-xs font-semibold uppercase text-slate-500">{channel.type}</td>
+                        <td className="p-4 text-xs text-slate-600">
+                          {channel.staff_only_posting ? "Samo djelatnici objavljuju" : "Svi smiju objavljivati"}{" "}
+                          {channel.allow_student_messages && "• Učenici smiju pisati"}
+                        </td>
+                        <td className="p-4 flex gap-3">
+                          <button onClick={() => openSettings(channel)} className="text-gray-400 hover:text-blue-600 cursor-pointer" title="Postavke"><Settings size={16} /></button>
+                          <button onClick={() => handleDeleteChannel(channel.id)} className="text-gray-400 hover:text-red-600 cursor-pointer" title="Obriši kanal"><Trash2 size={16} /></button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="p-8 bg-amber-50 rounded border border-amber-200 flex items-center gap-3">
+          <Info size={20} className="text-amber-500" />
+          <p className="text-sm font-semibold text-amber-800">
+            Nema odabranog razreda. Odaberite školu ili upišite razredni odjel.
+          </p>
         </div>
       )}
-
-      <div className="bg-white border rounded shadow-sm">
-        {loading ? <p className="p-4">Učitavanje...</p> : (
-          <table className="w-full">
-            <thead>
-              <tr className="border-b bg-gray-50 text-left text-xs uppercase font-bold text-gray-500">
-                <th className="p-4">Naziv</th>
-                <th className="p-4">Tip</th>
-                <th className="p-4">Radnje</th>
-              </tr>
-            </thead>
-            <tbody>
-              {channels.map(channel => (
-                <tr key={channel.id} className="border-b">
-                  <td className="p-4">{channel.name}</td>
-                  <td className="p-4">{channel.type}</td>
-                  <td className="p-4 flex gap-2">
-                    <button onClick={() => openSettings(channel)} className="text-gray-400 hover:text-blue-600"><Settings size={16} /></button>
-                    <button className="text-gray-400 hover:text-red-600"><Trash2 size={16} /></button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
     </div>
   );
 }

@@ -209,7 +209,7 @@ setStudents(uniqueStudents);
 
       <div className="flex-1 overflow-auto p-6 bg-gray-50 space-y-8">
         {/* Class Level Notes Section */}
-        <section className="max-w-4xl mx-auto space-y-4">
+        <section className="w-full space-y-4">
           <div className="flex items-center gap-2 border-b-2 border-gray-200 pb-1">
              <Calendar size={14} className="text-gray-400"/>
              <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Službene bilješke razreda</h3>
@@ -233,7 +233,7 @@ setStudents(uniqueStudents);
         </section>
 
         {/* Individual Student Overall Notes Section */}
-        <section className="max-w-4xl mx-auto space-y-4">
+        <section className="w-full space-y-4">
           <div className="flex items-center gap-2 border-b-2 border-gray-200 pb-1">
              <UserIcon size={14} className="text-gray-400"/>
              <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Aktivnosti i pedagoške mjere</h3>
@@ -277,7 +277,7 @@ setStudents(uniqueStudents);
         </section>
 
         {/* Standard Journal Notes Section */}
-        <section className="max-w-4xl mx-auto space-y-4">
+        <section className="w-full space-y-4">
           <div className="flex items-center gap-2 border-b-2 border-gray-200 pb-1">
              <MessageSquare size={14} className="text-gray-400"/>
              <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Dnevnički zapisi (Bilješke po predmetima)</h3>

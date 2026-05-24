@@ -813,7 +813,7 @@ export default function ImenikPage() {
     const isFinalized = !!studentYearSummary?.finalizedAt;
 
     return (
-      <div className="max-w-4xl mx-auto space-y-4">
+      <div className="w-full space-y-4">
         <div className="flex items-center justify-between border-b border-gray-200 pb-2 mb-4">
           <div className="flex items-center gap-3">
               <div>
@@ -1593,7 +1593,7 @@ export default function ImenikPage() {
     });
 
     return (
-      <div className="p-4 h-full flex flex-col space-y-4 max-w-[1400px] mx-auto pb-20">
+      <div className="p-4 h-full flex flex-col space-y-4 w-full pb-20">
         {/* Navigation / Header */}
         <div className="flex items-center justify-between border-b border-[#005c8d] pb-2">
             <div className="flex items-center gap-4">

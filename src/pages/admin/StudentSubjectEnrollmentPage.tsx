@@ -234,7 +234,7 @@ export default function StudentSubjectEnrollmentPage() {
   });
 
   return (
-    <div className="p-6 font-sans max-w-7xl mx-auto">
+    <div className="p-6 font-sans w-full">
       <div className="flex justify-between items-end mb-8 border-b-2 border-slate-100 pb-6">
         <div>
           <button 

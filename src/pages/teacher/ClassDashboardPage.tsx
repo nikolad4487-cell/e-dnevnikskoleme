@@ -13,7 +13,7 @@ const BiljeskePage = lazy(() => import('./BiljeskePage'));
 const DnevnikRadaPage = lazy(() => import('./DnevnikRadaPage'));
 const ZapisniciPage = lazy(() => import('./ZapisniciPage'));
 const IzvjestajiPage = lazy(() => import('./IzvjestajiPage'));
-const InformativkaAdminPage = lazy(() => import('../admin/InformativkaAdminPage'));
+const InformativkaPage = lazy(() => import('../shared/InformativkaPage'));
 const AdministrationPage = lazy(() => import('./AdministrationPage'));
 const ImenikPage = lazy(() => import('./ImenikPage'));
 const PedagoskaDokumentacijaPage = lazy(() => import('./PedagoskaDokumentacijaPage'));
@@ -238,7 +238,7 @@ export default function ClassDashboardPage() {
             <Route path="raspored" element={<DnevnikRadaPage initialView="SCHEDULE" />} />
             <Route path="zapisnici" element={<ZapisniciPage />} />
             <Route path="izvjestaji" element={<IzvjestajiPage />} />
-            <Route path="informativka" element={<InformativkaAdminPage />} />
+            <Route path="informativka" element={<InformativkaPage />} />
             <Route path="admin" element={<AdministrationPage />} />
           </Routes>
         </Suspense>
