@@ -20,11 +20,53 @@ export const SpecialExamReGradeModal = ({ isOpen, onClose, student, subject, exa
             teacher_id: finalGrade.teacher_id,
             school_year_id: finalGrade.school_year_id,
             period: finalGrade.period, // FIRST_TERM or SECOND_TERM
+            term: finalGrade.period, // term should be the same as period
             value: selectedGrade.toString(),
             updated_at: new Date().toISOString()
         };
-        console.log("FINAL GRADE UPSERT", payload);
-        const { error } = await supabase.from('final_grades').upsert(payload, { onConflict: 'student_id, subject_id, class_id, school_year_id, period' });
+        
+        console.log("UPSERT FINAL GRADE PAYLOAD", payload);
+        console.log("UPSERT FINAL GRADE ON CONFLICT", "student_id,subject_id,class_id,school_year_id,period");
+
+        let error: any = null;
+        try {
+            const { error: upsertKeyError } = await supabase
+              .from('final_grades')
+              .upsert(payload, {
+                onConflict: 'student_id,subject_id,class_id,school_year_id,period'
+              });
+
+            if (upsertKeyError && upsertKeyError.code === '42P10') {
+              console.warn("DB UNIQUE CONSTRAINT MISSING. Running fallback select-then-write...");
+              const { data: existing, error: fe } = await supabase
+                .from('final_grades')
+                .select('id')
+                .eq('student_id', student.id)
+                .eq('subject_id', subject.id)
+                .eq('class_id', finalGrade.class_id)
+                .eq('period', finalGrade.period)
+                .maybeSingle();
+
+              if (fe) {
+                error = fe;
+              } else if (existing) {
+                const { error: updError } = await supabase
+                  .from('final_grades')
+                  .update(payload)
+                  .eq('id', existing.id);
+                error = updError;
+              } else {
+                const { error: insError } = await supabase
+                  .from('final_grades')
+                  .insert([payload]);
+                error = insError;
+              }
+            } else {
+              error = upsertKeyError;
+            }
+        } catch (err: any) {
+            error = err;
+        }
         
         console.log("FINAL GRADE ERROR", error);
         if (error) {

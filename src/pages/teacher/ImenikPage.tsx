@@ -65,17 +65,55 @@ function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effect
         teacher_id: teacherId,
         school_year_id: schoolYearId,
         period: period,
+        term: period, // term should be the same as period
         value: s.newGrade,
         updated_at: new Date().toISOString()
     }));
 
     if (upserts.length > 0) {
-        const { error } = await supabase.from('final_grades').upsert(upserts);
-        if (error) {
+        console.log("UPSERT FINAL GRADE PAYLOAD Chunks", upserts);
+        console.log("UPSERT FINAL GRADE ON CONFLICT", "student_id,subject_id,class_id,school_year_id,period");
+
+        try {
+            const { error } = await supabase
+              .from('final_grades')
+              .upsert(upserts, {
+                onConflict: "student_id,subject_id,class_id,school_year_id,period"
+              });
+
+            if (error && error.code === '42P10') {
+               console.warn("DB UNIQUE CONSTRAINT MISSING. Running fallback bulk select-then-write...");
+               for (const row of upserts) {
+                   const { data: existing, error: fe } = await supabase
+                     .from('final_grades')
+                     .select('id')
+                     .eq('student_id', row.student_id)
+                     .eq('subject_id', row.subject_id)
+                     .eq('class_id', row.class_id)
+                     .eq('period', row.period)
+                     .maybeSingle();
+
+                   if (existing) {
+                       await supabase
+                         .from('final_grades')
+                         .update(row)
+                         .eq('id', existing.id);
+                   } else {
+                       await supabase
+                         .from('final_grades')
+                         .insert([row]);
+                   }
+               }
+            } else if (error) {
+               throw error;
+            }
+        } catch (saveError: any) {
+            console.error("Group final grades upsert error:", saveError);
             toast.error("Greška pri spremanju.");
             setSaving(false);
             return;
         }
+
         toast.success("Spremljeno.");
         onRefresh();
     }
@@ -683,6 +721,7 @@ export default function ImenikPage() {
 
     const { data, error } = await query;
     console.log("TEACHER FETCH FINAL GRADES RESULT", data);
+    console.log("FETCH FINAL GRADES RESULT", data);
     console.log("TEACHER FETCH FINAL GRADES ERROR", error);
     
     setFinalGrades(data || []);
@@ -1110,17 +1149,6 @@ export default function ImenikPage() {
       
       const period = selectedFinalPeriod === '1' ? 'FIRST_TERM' : 'SECOND_TERM';
 
-      const { data: existing, error: fe } = await supabase
-        .from('final_grades')
-        .select('id')
-        .eq('student_id', activeStudent.id)
-        .eq('subject_id', activeSubject.id)
-        .eq('class_id', effectiveClassId)
-        .eq('period', period)
-        .maybeSingle();
-
-      if (fe) throw fe;
-      
       const gradeText = typeof val === 'number' ? val.toString() : val;
       const payload = {
         student_id: activeStudent.id,
@@ -1129,26 +1157,55 @@ export default function ImenikPage() {
         teacher_id: user.id,
         school_year_id: schoolYearId,
         period: period,
+        term: period, // term should be the same as period
         value: gradeText,
       };
       
-      console.log("FINAL GRADE PAYLOAD", payload);
+      console.log("UPSERT FINAL GRADE PAYLOAD", payload);
+      console.log("UPSERT FINAL GRADE ON CONFLICT", "student_id,subject_id,class_id,school_year_id,period");
 
-      if (existing) {
-        const { error } = await supabase.from('final_grades').update(payload).eq('id', existing.id);
-        if (error) {
-          console.log("FINAL GRADE ERROR", error);
-          throw error;
+      try {
+        const { error: upsertErr } = await supabase
+          .from('final_grades')
+          .upsert(payload, {
+            onConflict: "student_id,subject_id,class_id,school_year_id,period"
+          });
+
+        if (upsertErr && upsertErr.code === '42P10') {
+          console.warn("DB UNIQUE CONSTRAINT MISSING. Running fallback select-then-write...");
+          const { data: existing, error: fe } = await supabase
+            .from('final_grades')
+            .select('id')
+            .eq('student_id', activeStudent.id)
+            .eq('subject_id', activeSubject.id)
+            .eq('class_id', effectiveClassId)
+            .eq('period', period)
+            .maybeSingle();
+
+          if (fe) throw fe;
+
+          if (existing) {
+            const { error: updErr } = await supabase
+              .from('final_grades')
+              .update(payload)
+              .eq('id', existing.id);
+            if (updErr) throw updErr;
+          } else {
+            const { error: insErr } = await supabase
+              .from('final_grades')
+              .insert([payload]);
+            if (insErr) throw insErr;
+          }
+        } else if (upsertErr) {
+          throw upsertErr;
         }
-      } else {
-        const { error } = await supabase.from('final_grades').insert([payload]);
-        if (error) {
-          console.log("FINAL GRADE ERROR", error);
-          throw error;
-        }
+      } catch (innerErr) {
+        throw innerErr;
       }
+
       toast.success('Zaključna ocjena spremljena.');
       setShowFinalGradeModal(false);
+      await fetchFinalGrades();
       fetchGradesAndNotes();
     } catch (err: any) {
       console.error("FINAL GRADE ERROR", err);
@@ -1649,25 +1706,27 @@ export default function ImenikPage() {
         </div>
 
         {/* Table */}
-        <div className="bg-white border border-gray-300 overflow-x-auto overflow-y-hidden">
-          <table className="w-full border-collapse table-fixed min-w-[1000px]">
+        <div className="bg-white border border-slate-300 overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[800px]">
             <thead>
-              <tr className="bg-gray-100">
-                <th className="p-2 border border-gray-300 text-[10px] font-bold uppercase text-gray-500 w-48 text-left flex items-center justify-between">
-                  Element ocjenjivanja
-                  {canEditGrades(activeSubject?.id || '') && (
-                    <button onClick={() => setShowGradingElementsModal(true)} className="text-[8px] text-[#005c8d] hover:underline">UREDI</button>
-                  )}
+              <tr className="bg-slate-50 border-b border-slate-300 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <th className="p-3 border-r border-slate-300 w-1/4">
+                  <div className="flex items-center justify-between">
+                    <span>Elementi vrednovanja</span>
+                    {canEditGrades(activeSubject?.id || '') && (
+                      <button onClick={() => setShowGradingElementsModal(true)} className="text-[8px] text-[#005c8d] hover:underline">UREDI</button>
+                    )}
+                  </div>
                 </th>
                 {MONTHS_ORDER.map(m => (
-                  <th key={m} className="p-2 border border-gray-300 text-[10px] font-bold uppercase text-gray-400 text-center w-12">{m}</th>
+                  <th key={m} className="p-2 border-r border-slate-300 text-center w-12 font-bold">{m}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-               {gradingElementNames.map(cat => (
-                 <tr key={cat}>
-                    <td className="p-2 border border-gray-300 text-[11px] font-bold text-gray-700 bg-white align-top">{cat}</td>
+               {gradingElementNames.length > 0 ? gradingElementNames.map(cat => (
+                 <tr key={cat} className="border-b border-slate-300">
+                    <td className="p-3 border-r border-slate-300 font-bold text-slate-700 bg-slate-50/10 text-xs align-middle">{cat}</td>
                     {MONTHS_ORDER.map(m => {
                       const MONTH_TO_NUMBER_MAP: Record<string, number> = { 'IX': 9, 'X': 10, 'XI': 11, 'XII': 12, 'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6 };
                       const monthNumber = MONTH_TO_NUMBER_MAP[m];
@@ -1675,11 +1734,11 @@ export default function ImenikPage() {
                         <td 
                           key={m} 
                           className={cn(
-                            "p-1 border border-gray-300 bg-white hover:bg-blue-50 transition-colors align-top text-center",
+                            "p-1 border-r border-slate-300 align-middle text-center bg-white hover:bg-slate-50 transition-colors",
                             !isArchived && "cursor-pointer"
                           )}
                         >
-                          <div className="flex flex-wrap items-center justify-center gap-1 min-h-[20px]" onClick={(e) => {
+                          <div className="flex flex-wrap items-center justify-center gap-1 min-h-[30px]" onClick={(e) => {
                             if (isArchived) return;
                             if (e.target === e.currentTarget) {
                               if (!canEnterGrade(monthNumber)) {
@@ -1699,7 +1758,7 @@ export default function ImenikPage() {
                                   setIsEditingGrade(false);
                                   setGradeEditForm({ note: g.note || '' });
                                 }}
-                                className={cn("inline-flex w-5 h-5 items-center justify-center text-[10px] font-bold border", g.value === 1 ? "bg-red-50 border-red-200 text-red-600" : "bg-blue-50 border-blue-200 text-[#005c8d]")}
+                                className={cn("inline-flex w-5 h-5 items-center justify-center text-[10px] font-bold border rounded-sm", g.value === 1 ? "bg-red-50 border-red-200 text-red-600" : "bg-blue-50 border-blue-200 text-[#005c8d]")}
                               >
                                 {g.value}
                               </button>
@@ -1709,40 +1768,40 @@ export default function ImenikPage() {
                       );
                     })}
                  </tr>
-               ))}
-               <tr className={cn("bg-gray-50", is4K && "hidden")}>
-                 <td className="p-2 border border-gray-300 text-[10px] font-bold text-[#005c8d] uppercase">Zaključna ocjena</td>
-                 <td className="border border-gray-300 text-center" colSpan={4}>
+               )) : (
+                 <tr>
+                   <td colSpan={11} className="p-4 text-center text-slate-400 text-xs font-bold uppercase">Nema definiranih elemenata ocjenjivanja.</td>
+                 </tr>
+               )}
+               <tr className={cn("border-b border-slate-300 bg-slate-50 font-black", is4K && "hidden")}>
+                 <td className="p-3 border-r border-slate-300 uppercase text-[10px] tracking-widest text-slate-400 align-middle">ZAKLJUČENO</td>
+                 <td className="border-r border-slate-300 text-center text-red-600 text-xs font-bold p-2 align-middle" colSpan={4}>
                     {(() => {
                       const fg = finalGrades.find(f => f.period === 'FIRST_TERM');
-                      console.log("TEACHER FINAL GRADE VALUE", fg?.value);
                       return (
-                        <div className="w-full h-full p-2 flex flex-col items-center justify-center min-h-[40px]">
+                        <div className="w-full flex items-center justify-center min-h-[32px]">
                           {fg ? (
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="flex items-center gap-2 group">
-                                <span className="text-[8px] font-bold text-gray-400 uppercase">1. pol:</span>
-                                <span className="font-bold text-[#005c8d] text-base">{finalGradeLabels[fg.value] || fg.value}</span>
-                                {canEditGrades(activeSubject?.id || '') && (
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteFinalGrade(fg.id); }}
-                                    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 p-1"
-                                    title="Obriši zaključnu ocjenu"
-                                  >
-                                    <Trash2 size={12}/>
-                                  </button>
-                                )}
-                              </div>
+                            <div className="flex items-center gap-2 group">
+                              <span className="text-[9px] font-bold text-gray-400 uppercase">1. pol:</span>
+                              <span className="font-bold text-[#005c8d] text-sm">{finalGradeLabels[fg.value] || fg.value}</span>
+                              {canEditGrades(activeSubject?.id || '') && (
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteFinalGrade(fg.id); }}
+                                  className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 p-1"
+                                  title="Obriši zaključnu ocjenu"
+                                >
+                                  <Trash2 size={12}/>
+                                </button>
+                              )}
                             </div>
                           ) : (
                             <div className="flex flex-col items-center gap-1">
-                              <span className="text-[8px] font-bold text-gray-300 uppercase">Zaključna ocjena nije unesena (1. pol)</span>
                               {canEditGrades(activeSubject?.id || '') && (
                                 <button 
                                   onClick={() => { setSelectedFinalPeriod('1'); setShowFinalGradeModal(true); }}
-                                  className="text-[8px] font-bold text-[#005c8d] uppercase hover:underline"
+                                  className="text-[9px] font-bold text-[#005c8d] uppercase hover:underline"
                                 >
-                                  Unesi ocjenu
+                                  Unesi ocjenu (1. pol)
                                 </button>
                               )}
                             </div>
@@ -1751,37 +1810,33 @@ export default function ImenikPage() {
                       );
                     })()}
                  </td>
-                 <td className="border border-gray-300 text-center" colSpan={6}>
+                 <td className="text-center text-red-600 text-xs font-bold p-2 align-middle" colSpan={6}>
                     {(() => {
                       const fg = finalGrades.find(f => f.period === 'SECOND_TERM');
-                      console.log("TEACHER FINAL GRADE VALUE", fg?.value);
                       return (
-                        <div className="w-full h-full p-2 flex flex-col items-center justify-center min-h-[40px]">
+                        <div className="w-full flex items-center justify-center min-h-[32px]">
                           {fg ? (
-                            <div className="flex flex-col items-center gap-1">
-                              <div className="flex items-center gap-2 group">
-                                <span className="text-[8px] font-bold text-gray-400 uppercase">2. pol:</span>
-                                <span className="font-bold text-[#005c8d] text-base">{finalGradeLabels[fg.value] || fg.value}</span>
-                                {canEditGrades(activeSubject?.id || '') && (
-                                  <button 
-                                    onClick={(e) => { e.stopPropagation(); handleDeleteFinalGrade(fg.id); }}
-                                    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 p-1"
-                                    title="Obriši zaključnu ocjenu"
-                                  >
-                                    <Trash2 size={12}/>
-                                  </button>
-                                )}
-                              </div>
+                            <div className="flex items-center gap-2 group">
+                              <span className="text-[9px] font-bold text-gray-400 uppercase">2. pol:</span>
+                              <span className="font-bold text-[#005c8d] text-sm">{finalGradeLabels[fg.value] || fg.value}</span>
+                              {canEditGrades(activeSubject?.id || '') && (
+                                <button 
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteFinalGrade(fg.id); }}
+                                  className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 p-1"
+                                  title="Obriši zaključnu ocjenu"
+                                >
+                                  <Trash2 size={12}/>
+                                </button>
+                              )}
                             </div>
                           ) : (
                             <div className="flex flex-col items-center gap-1">
-                              <span className="text-[8px] font-bold text-gray-300 uppercase">Zaključna ocjena nije unesena</span>
                               {canEditGrades(activeSubject?.id || '') && (
                                 <button 
                                   onClick={() => { setSelectedFinalPeriod('2'); setShowFinalGradeModal(true); }}
-                                  className="text-[8px] font-bold text-[#005c8d] uppercase hover:underline"
+                                  className="text-[9px] font-bold text-[#005c8d] uppercase hover:underline"
                                 >
-                                  Unesi ocjenu
+                                  Unesi ocjenu (2. pol)
                                 </button>
                               )}
                             </div>
@@ -1795,101 +1850,153 @@ export default function ImenikPage() {
           </table>
         </div>
 
-        <div className="flex justify-end items-center bg-[#f8f9fa] p-2 border border-gray-300 text-[10px] font-bold">
+        <div className="flex justify-between items-center bg-[#f8f9fa] p-2 border border-gray-300 text-[10px] font-bold">
+           <span className="text-gray-400 uppercase tracking-tight">Vrijeme: {new Date().toLocaleTimeString('hr-HR', { hour: '2-digit', minute: '2-digit' })}</span>
            {!is4K && <span className="text-gray-500 uppercase tracking-tight">Aritmetička sredina: <span className="text-[#005c8d] text-sm leading-none ml-1">{avg}</span></span>}
         </div>
-        <div className="text-[10px] text-gray-400 p-1">Teacher final grades loaded: {finalGrades.length}</div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-           {/* Special exams */}
-           <div className="space-y-1">
-              <div className="flex items-center justify-between border-b border-gray-200 pb-1">
-                 <h2 className="text-[11px] font-bold uppercase text-gray-500">Dopunski i razlikovni ispiti</h2>
-                 <button onClick={() => setShowSpecialExamModal(true)} className="text-[9px] font-bold text-[#005c8d] uppercase hover:underline">+ Dodaj</button>
-              </div>
-              <div className="bg-white border border-gray-300">
-                <table className="w-full text-left text-[11px] border-collapse">
-                  <thead><tr className="bg-gray-50 font-bold text-gray-400 uppercase border-b border-gray-300"><th className="p-2">Vrsta</th><th className="p-2">Bilješka</th><th className="p-2 text-center w-12 border-x border-gray-300">Ocjena</th><th className="p-2 w-8"></th></tr></thead>
-                  <tbody>
-                  {specialExams.length === 0 ? (<tr><td colSpan={4} className="p-4 text-center text-gray-400 italic">Nema podataka</td></tr>) : 
-                  specialExams.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(ex => (
-                    <tr key={ex.id} className="group hover:bg-gray-50 border-b border-gray-200 last:border-0 text-[11px]">
-                      <td className="p-2 font-bold text-[#005c8d]">{specialExamTypeLabels[ex.type] || ex.type}</td>
-                      <td className="p-2 text-gray-600">{ex.note}</td>
-                      <td className="p-2 text-center border-x border-gray-200 font-bold">{ex.gradeValue}</td>
-                      <td className="p-2">
-                        <button 
-                          onClick={() => handleDeleteSpecialExam(ex.id)} 
-                          className="text-gray-300 hover:text-red-500 p-1"
-                        >
-                          <Trash2 size={12}/>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  </tbody>
-                </table>
-              </div>
+        {/* 2. BILJEŠKE I POJEDINAČNE OCJENE */}
+        <div className="space-y-4 pt-2">
+           <div className="flex items-center justify-between border-b-2 border-slate-100 pb-2">
+              <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest">BILJEŠKE I POJEDINAČNE OCJENE</h2>
+              <button onClick={() => setShowNoteModal(true)} className="text-[10px] font-bold text-[#005c8d] uppercase hover:underline">+ Bilješka</button>
            </div>
+           
+           <div className="bg-white border border-slate-300 overflow-hidden shadow-sm">
+             <table className="w-full text-left border-collapse">
+               <thead>
+                 <tr className="bg-slate-50 border-b border-slate-300 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                   <th className="p-3 border-r border-slate-300 text-center w-28">Datum</th>
+                   <th className="p-3 border-r border-slate-300 text-center w-20">Ocjena</th>
+                   <th className="p-3 border-r border-slate-300">Element</th>
+                   <th className="p-3 border-r border-slate-300">Bilješka</th>
+                   <th className="p-3 text-center w-12">Akcije</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-200">
+                 {(() => {
+                   const combinedHistory = [
+                     ...currentGrades.map(g => ({
+                       id: g.id,
+                       type: 'GRADE',
+                       date: g.date,
+                       value: g.value,
+                       category: g.category,
+                       note: g.note,
+                       raw: g
+                     })),
+                     ...currentNotes.map(n => ({
+                       id: n.id,
+                       type: 'NOTE',
+                       date: n.date,
+                       value: '—',
+                       category: 'Bilješka',
+                       note: n.content,
+                       raw: n
+                     }))
+                   ].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
-           {/* History Table */}
-           <div className="space-y-1">
-              <div className="flex items-center justify-between border-b border-gray-200 pb-1">
-                 <h2 className="text-[11px] font-bold uppercase text-gray-500">Povijest unosa</h2>
-                 <button onClick={() => setShowNoteModal(true)} className="text-[9px] font-bold text-[#005c8d] uppercase hover:underline">+ Bilješka</button>
-              </div>
-              <div className="bg-white border border-gray-300 flex flex-col h-64">
-                 <div className="overflow-auto scrollbar-thin">
-                    <table className="w-full text-left text-[10px] border-collapse">
-                      <thead className="sticky top-0 bg-gray-50 font-bold text-gray-400 uppercase border-b border-gray-300">
-                        <tr>
-                          <th className="p-2 border-r border-gray-300">Sadržaj / Napomena</th>
-                          <th className="p-2 text-center w-10 border-r border-gray-300">Ocj.</th>
-                          <th className="p-2 w-20">Datum</th>
-                          <th className="p-2 w-6"></th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {currentGrades.sort((a,b) => (b.date || '').localeCompare(a.date || '')).map(g => (
-                          <tr key={g.id} className="group hover:bg-gray-50">
-                            <td className="p-2 border-r border-gray-100">
-                              <div className="font-bold text-gray-800">{g.category}</div>
-                              <div className="text-[10px] text-gray-400 italic mt-0.5 line-clamp-1">{g.note || 'Nema bilješke'}</div>
-                            </td>
-                            <td className="p-2 text-center font-bold text-[#005c8d] border-r border-gray-100 bg-blue-50/30">{g.value}</td>
-                            <td className="p-2 text-gray-400 font-bold uppercase">{new Date(g.date).toLocaleDateString('hr-HR')}</td>
-                            <td className="p-2">
-                              <button 
-                                onClick={() => handleDeleteGrade(g.id)} 
-                                className="text-gray-300 hover:text-red-500 p-1"
-                              >
-                                <Trash2 size={12}/>
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                        {currentNotes.sort((a,b) => (b.date || '').localeCompare(a.date || '')).map(n => (
-                          <tr key={n.id} className="group hover:bg-gray-50">
-                            <td className="p-2 border-r border-gray-100 bg-yellow-50/10">
-                              <div className="text-[8px] font-bold text-gray-300 uppercase mb-0.5">Bilješka</div>
-                              <div className="text-gray-600 italic line-clamp-1">{n.content}</div>
-                            </td>
-                            <td className="p-2 text-center text-gray-300 border-r border-gray-100">—</td>
-                            <td className="p-2 text-gray-400 font-bold uppercase">{new Date(n.date).toLocaleDateString('hr-HR')}</td>
-                            <td className="p-2">
-                              <button 
-                                onClick={() => handleDeleteNote(n.id)} 
-                                className="text-gray-300 hover:text-red-500 p-1"
-                              >
-                                <Trash2 size={12}/>
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                 </div>
-              </div>
+                   if (combinedHistory.length === 0) {
+                     return (
+                       <tr>
+                         <td colSpan={5} className="p-8 text-center text-slate-400 italic font-bold">Nema unesenih podataka</td>
+                       </tr>
+                     );
+                   }
+
+                   return combinedHistory.map(item => (
+                     <tr key={item.id} className="hover:bg-slate-50 text-[11px] text-slate-700 font-medium">
+                       <td className="p-3 text-center border-r border-slate-300 text-slate-500 font-bold w-28">
+                         {new Date(item.date).toLocaleDateString('hr-HR')}.
+                       </td>
+                       <td className="p-3 text-center border-r border-slate-300 font-black text-[#005c8d] w-20 text-xs">
+                         {item.value}
+                       </td>
+                       <td className="p-3 border-r border-slate-300 font-bold text-slate-700 max-w-[150px] truncate">
+                         {item.category}
+                       </td>
+                       <td className="p-3 border-r border-slate-300 text-slate-600 leading-relaxed italic whitespace-pre-wrap">
+                         {item.note || '—'}
+                       </td>
+                       <td className="p-3 text-center w-12">
+                         {item.type === 'GRADE' ? (
+                           <button 
+                             onClick={() => handleDeleteGrade(item.id)} 
+                             className="text-slate-300 hover:text-red-500 p-1"
+                             title="Obriši ocjenu"
+                           >
+                             <Trash2 size={12}/>
+                           </button>
+                         ) : (
+                           <button 
+                             onClick={() => handleDeleteNote(item.id)} 
+                             className="text-slate-300 hover:text-red-500 p-1"
+                             title="Obriši bilješku"
+                           >
+                             <Trash2 size={12}/>
+                           </button>
+                         )}
+                       </td>
+                     </tr>
+                   ));
+                 })()}
+               </tbody>
+             </table>
+           </div>
+        </div>
+
+        {/* 3. DOPUNSKI / RAZLIKOVNI / POPRAVNI ISPITI */}
+        <div className="space-y-4 pt-2">
+           <div className="flex items-center justify-between border-b-2 border-slate-100 pb-2">
+              <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest">DOPUNSKI / RAZLIKOVNI / POPRAVNI ISPITI</h2>
+              <button onClick={() => setShowSpecialExamModal(true)} className="text-[10px] font-bold text-[#005c8d] uppercase hover:underline">+ Dodaj ispit</button>
+           </div>
+           
+           <div className="bg-white border border-slate-300 overflow-hidden shadow-sm">
+             <table className="w-full text-left text-[11px] border-collapse">
+               <thead>
+                 <tr className="bg-slate-50 border-b border-slate-300 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                   <th className="p-3 border-r border-slate-300 w-1/4">Vrsta</th>
+                   <th className="p-3 border-r border-slate-300">Bilješka</th>
+                   <th className="p-3 text-center w-20 border-r border-slate-300">Ocjena</th>
+                   <th className="p-3 text-center w-28 border-r border-slate-300">Datum</th>
+                   <th className="p-3 text-center w-12">Akcije</th>
+                 </tr>
+               </thead>
+               <tbody className="divide-y divide-slate-200">
+                 {specialExams.length === 0 ? (
+                   <tr>
+                     <td colSpan={5} className="p-8 text-center text-slate-400 italic font-bold">Nema unesenih ispita</td>
+                   </tr>
+                 ) : (
+                   specialExams.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(ex => (
+                     <tr key={ex.id} className="hover:bg-slate-50 text-[11px] text-slate-700 font-medium">
+                       <td className="p-3 border-r border-slate-300 font-bold text-[#005c8d]">
+                         {specialExamTypeLabels[ex.type] || ex.type}
+                       </td>
+                       <td className="p-3 border-r border-slate-300 text-slate-600">
+                         {ex.note || '—'}
+                       </td>
+                       <td className="p-3 text-center border-r border-slate-300 font-black text-[#005c8d] text-xs">
+                         {ex.gradeValue || '—'}
+                       </td>
+                       <td className="p-3 text-center border-r border-slate-300 font-bold text-slate-500">
+                         {ex.date ? new Date(ex.date).toLocaleDateString('hr-HR') + '.' : '—'}
+                       </td>
+                       <td className="p-3 text-center w-12">
+                         <button 
+                           onClick={() => handleDeleteSpecialExam(ex.id)} 
+                           className="text-slate-300 hover:text-red-500 p-1"
+                           title="Obriši ispit"
+                         >
+                           <Trash2 size={12}/>
+                         </button>
+                       </td>
+                     </tr>
+                   ))
+                 )}
+               </tbody>
+             </table>
            </div>
         </div>
       </div>

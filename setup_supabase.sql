@@ -57,6 +57,26 @@ ALTER TABLE final_grades ADD COLUMN IF NOT EXISTS term text DEFAULT 'FINAL';
 ALTER TABLE final_grades ADD COLUMN IF NOT EXISTS note text;
 ALTER TABLE final_grades ADD COLUMN IF NOT EXISTS school_year_id uuid;
 
+-- Clean up final_grades duplicates
+DELETE FROM final_grades WHERE id IN (
+  SELECT id FROM (
+    SELECT id, ROW_NUMBER() OVER (
+      PARTITION BY student_id, subject_id, class_id, school_year_id, period
+      ORDER BY updated_at DESC, created_at DESC
+    ) as row_num
+    FROM final_grades
+  ) t WHERE t.row_num > 1
+);
+
+-- Drop previous conflicting unique constraints if they exist
+ALTER TABLE final_grades DROP CONSTRAINT IF EXISTS final_grades_unique_student_subject_class_year_period;
+ALTER TABLE final_grades DROP CONSTRAINT IF EXISTS final_grades_student_id_class_id_subject_id_term_key;
+
+-- Add unique constraint matching student_id + subject_id + class_id + school_year_id + period
+ALTER TABLE final_grades
+ADD CONSTRAINT final_grades_unique_student_subject_class_year_period
+UNIQUE (student_id, subject_id, class_id, school_year_id, period);
+
 NOTIFY pgrst, 'reload schema';
 
 -- Create attachments bucket

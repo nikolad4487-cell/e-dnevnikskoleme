@@ -1219,13 +1219,19 @@ setStudents(uniqueMapped as any);
         .eq('class_id', classToFetch);
       if (notesData) setOverallNotes(mapList(notesData, mappers.studentOverallNotes));
 
-      const { data: gradesData } = await supabase
-        .from('grades')
+      const yearId = selectedClassData?.school_year_id || selectedYearId;
+      let fQuery = supabase
+        .from('final_grades')
         .select('*')
         .eq('class_id', classToFetch)
-        .eq('is_final', true);
-      // Removed period check as requested
-      if (gradesData) setFinalGrades(mapList(gradesData, mappers.grade));
+        .eq('period', 'SECOND_TERM');
+      
+      if (yearId) {
+        fQuery = fQuery.eq('school_year_id', yearId);
+      }
+
+      const { data: gradesData } = await fQuery;
+      if (gradesData) setFinalGrades(mapList(gradesData, mappers.finalGrade));
 
     } catch (error) {
       console.error(error);
@@ -1467,11 +1473,18 @@ setStudents(uniqueMapped as any);
         .eq('class_id', classId);
       
       // 2. Fetch all final grades for this class once
-      const { data: finalGradesData } = await supabase
-        .from('grades')
-        .select('student_id, subject_id, value, period, is_final')
+      const yearIdForQuery = selectedClassData?.school_year_id || selectedYearId;
+      let fQuery = supabase
+        .from('final_grades')
+        .select('student_id, subject_id, value, period, school_year_id')
         .eq('class_id', classId)
-        .eq('is_final', true);
+        .eq('period', 'SECOND_TERM');
+
+      if (yearIdForQuery) {
+        fQuery = fQuery.eq('school_year_id', yearIdForQuery);
+      }
+
+      const { data: finalGradesData } = await fQuery;
       
       // 3. Fetch overall notes for vladanje
       const { data: overallNotesData } = await supabase
@@ -1481,6 +1494,12 @@ setStudents(uniqueMapped as any);
 
       for (const student of classStudents) {
         const studentEnrollments = (enrollData || []).filter(e => e.student_id === student.id && e.status === 'ACTIVE');
+        const studentTotalCount = (enrollData || []).filter(e => e.student_id === student.id).length;
+
+        const requiredSubjectIds = studentTotalCount > 0
+          ? studentEnrollments.map(e => e.subject_id)
+          : Array.from(new Set(subjectAssignments.filter(a => a.classId === classId).map(a => a.subjectId)));
+
         const studentGrades = (finalGradesData || []).filter(g => g.student_id === student.id);
         const studentNotes = (overallNotesData || []).find(n => n.student_id === student.id);
         
@@ -1494,10 +1513,10 @@ setStudents(uniqueMapped as any);
         const missingSubjects: string[] = [];
         const gradesValues: number[] = [];
 
-        for (const enroll of studentEnrollments) {
-          const fg = studentGrades.find(g => g.subject_id === enroll.subject_id);
+        for (const subId of requiredSubjectIds) {
+          const fg = studentGrades.find(g => g.subject_id === subId);
           if (!fg || !fg.value) {
-            const subject = allSubjects.find(s => s.id === enroll.subject_id);
+            const subject = allSubjects.find(s => s.id === subId);
             missingSubjects.push(subject?.name || 'Nepoznat predmet');
           } else {
             gradesValues.push(Number(fg.value));
@@ -3612,15 +3631,29 @@ setAllSubjects(uniqueSub2);
                       )}
                       {students.filter(s => s.classId === effectiveClassId).sort((a,b) => (a.name || '').localeCompare(b.name || '')).map((student, idx) => {
                          const studentClassEnrollments = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
+                         const studentTotalEnrollCount = classEnrollments.filter(e => e.studentId === student.id).length;
+                         
+                         const requiredSubjects = studentTotalEnrollCount > 0 
+                           ? studentClassEnrollments.map(e => e.subjectId)
+                           : Array.from(new Set(subjectAssignments.filter(a => a.classId === effectiveClassId).map(a => a.subjectId)));
                          
                          const studentFinalGrades = finalGrades.filter(fg => fg.studentId === student.id);
                          
-                         const missingSubjects = studentClassEnrollments
-                            .filter(e => !studentFinalGrades.some(fg => fg.subjectId === e.subjectId))
-                            .map(e => allSubjects.find(s => s.id === e.subjectId)?.name)
+                         const missingSubjects = requiredSubjects
+                            .filter(subId => !studentFinalGrades.some(fg => fg.subjectId === subId))
+                            .map(subId => allSubjects.find(s => s.id === subId)?.name)
                             .filter(Boolean);
 
                          const missingGrades = missingSubjects.length > 0;
+
+                         console.log("OVERALL REQUIRED SUBJECTS", requiredSubjects);
+                         console.log("OVERALL FINAL GRADES", finalGrades);
+                         console.log("MISSING FINAL GRADES", missingSubjects);
+                         console.log("OVERALL FILTERS", {
+                           classId: effectiveClassId,
+                           schoolYearId: selectedClassData?.school_year_id || selectedYearId || '',
+                           period: "SECOND_TERM"
+                         });
 
                          const summary = summaries.find(s => s.studentId === student.id && (s.classId === selectedClassId || s.classId === effectiveClassId));
                          const isFinalized = !!summary?.finalizedAt;

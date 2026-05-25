@@ -302,12 +302,13 @@ CREATE TABLE public.final_grades (
     subject_id TEXT NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
     teacher_id UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
     school_year_id TEXT REFERENCES public.school_years(id) ON DELETE CASCADE,
-    term TEXT NOT NULL CHECK (term IN ('FIRST_SEMESTER', 'FINAL')),
+    term TEXT NOT NULL CHECK (term IN ('FIRST_SEMESTER', 'FINAL', 'FIRST_TERM', 'SECOND_TERM')),
+    period TEXT,
     value TEXT NOT NULL,
     note TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(student_id, class_id, subject_id, term)
+    UNIQUE(student_id, subject_id, class_id, school_year_id, period)
 );
 ALTER TABLE public.final_grades ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Authenticated manage final_grades" ON public.final_grades FOR ALL TO authenticated USING (true);

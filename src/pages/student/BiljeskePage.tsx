@@ -59,8 +59,8 @@ export default function BiljeskePage() {
               const { data: tData } = await supabase.from('user_profiles').select('id, name, email').eq('id', cData.homeroom_teacher_id).maybeSingle();
               if (tData) setHomeroomTeacher(tData as any);
             }
-            if (cData.deputy_homeroom_teacher_id) {
-              const { data: dData } = await supabase.from('user_profiles').select('id, name, email').eq('id', cData.deputy_homeroom_teacher_id).maybeSingle();
+            if (cData.deputy_teacher_id) {
+              const { data: dData } = await supabase.from('user_profiles').select('id, name, email').eq('id', cData.deputy_teacher_id).maybeSingle();
               if (dData) setDeputyTeacher(dData as any);
             }
 
