@@ -30,6 +30,8 @@ export const mappers = {
     pob: raw.pob,
     mobile: raw.mobile,
     programId: raw.program_id,
+    classId: raw.class_id,
+    class_id: raw.class_id,
   }),
 
   userSchoolRole: (raw: any) => ({

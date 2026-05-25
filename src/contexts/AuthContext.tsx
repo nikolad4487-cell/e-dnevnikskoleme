@@ -197,7 +197,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log(`[AUTH] Fetching profile for ${authUserId}...`);
       const { data: profileRaw, error: profileError } = await supabase
         .from('user_profiles')
-        .select('id, auth_user_id, email, name, address, requires_authenticator_setup, requires_password_change')
+        .select('*')
         .eq('auth_user_id', authUserId)
         .maybeSingle();
 

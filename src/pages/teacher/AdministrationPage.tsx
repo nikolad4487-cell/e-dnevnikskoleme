@@ -1468,8 +1468,161 @@ setStudents(uniqueMapped as any);
     }
   };
 
-  const handleCalculateAndLockOverallSuccess = async (classIdArg?: any) => {
-    console.log("OVERALL BUTTON CLICKED");
+  const handleCalculateAndLockStudentOverall = async (student: any) => {
+    console.log("LOCK SINGLE STUDENT OVERALL", student);
+    if (!student || !selectedClassData) {
+      toast.error("Podaci nisu ispravno učitani.");
+      return;
+    }
+    const classId = effectiveClassId || selectedClassId;
+    if (!classId) {
+      toast.error("Nije odabran razred.");
+      return;
+    }
+
+    const studentName = student.name || student.full_name || "Nepoznati učenik";
+    setLoading(true);
+
+    try {
+      const schoolYearId = selectedClassData.school_year_id || selectedYearId || '';
+
+      // 1. Fetch final grades for this student
+      const { data: finalGradesData, error: finalGradesError } = await supabase
+        .from('final_grades')
+        .select('student_id, subject_id, value, period, school_year_id')
+        .eq('student_id', student.id)
+        .eq('class_id', classId)
+        .eq('period', 'SECOND_TERM');
+
+      if (finalGradesError) {
+        console.error("Error fetching final grades:", finalGradesError);
+        toast.error("Greška pri dohvaćanju zaključnih ocjena.");
+        setLoading(false);
+        return;
+      }
+
+      // 2. Potrebni predmeti
+      const studentClassEnrollments = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
+      const studentTotalEnrollCount = classEnrollments.filter(e => e.studentId === student.id).length;
+      
+      const requiredSubjects = studentTotalEnrollCount > 0 
+        ? studentClassEnrollments.map(e => e.subjectId)
+        : Array.from(new Set(subjectAssignments.filter(a => a.classId === classId).map(a => a.subjectId)));
+
+      // 3. Check missing subjects
+      const missingSubjects = requiredSubjects
+         .filter(subId => !finalGradesData.some(fg => fg.subject_id === subId))
+         .map(subId => allSubjects.find(s => s.id === subId)?.name)
+         .filter(Boolean);
+
+      console.log("MISSING SUBJECTS FOR STUDENT", missingSubjects);
+
+      if (missingSubjects.length > 0) {
+        toast.error(`Za učenika ${studentName} nije zaključeno sve (${missingSubjects.join(', ')}).`);
+        setLoading(false);
+        return;
+      }
+
+      // 4. Calculate behavior (default and DB summary behavior)
+      const summary = summaries.find(s => s.studentId === student.id && (s.classId === selectedClassId || s.classId === classId));
+      
+      // Calculate autoBehavior as fallback
+      const studentNotes = overallNotes.find(n => n.studentId === student.id);
+      let autoBehavior = 'Uzorno';
+      if (studentNotes?.disciplinaryActions) {
+        const da = studentNotes.disciplinaryActions.toLowerCase();
+        if (da.includes('ukor')) autoBehavior = 'Loše';
+        else if (da.includes('opomena')) autoBehavior = 'Dobro';
+      }
+
+      const behavior = summary?.behavior || autoBehavior;
+      const behaviorLower = behavior.toLowerCase();
+      if (behaviorLower !== 'uzorno' && behaviorLower !== 'dobro' && behaviorLower !== 'loše') {
+        toast.error(`Za učenika ${studentName} nije uneseno ispravno vladanje.`);
+        setLoading(false);
+        return;
+      }
+
+      // 5. Formula: value = 1-5 (SECOND_TERM)
+      const gradesValues = finalGradesData
+        .filter(fg => requiredSubjects.includes(fg.subject_id) && fg.value !== undefined && fg.value !== null && Number(fg.value) >= 1 && Number(fg.value) <= 5)
+        .map(fg => Number(fg.value));
+
+      if (gradesValues.length === 0 && requiredSubjects.length > 0) {
+        toast.error(`Učenik ${studentName} nema unesenih zaključnih ocjena u rasponu 1-5.`);
+        setLoading(false);
+        return;
+      }
+
+      const hasFail = gradesValues.some(v => v === 1);
+      const overall_average = gradesValues.length > 0 ? gradesValues.reduce((a, b) => a + b, 0) / gradesValues.length : 5.0;
+      const overall_success = hasFail ? 1 : getFinalAverageGrade(overall_average);
+
+      const payload = {
+        student_id: student.id,
+        class_id: classId,
+        school_year_id: schoolYearId,
+        school_year: selectedClassData.schoolYear || '2024/2025',
+        
+        overall_average: Number(overall_average.toFixed(2)),
+        overall_success: overall_success,
+        conduct: behavior,
+        status: 'LOCKED',
+        calculated_at: new Date().toISOString(),
+        
+        average: Number(overall_average.toFixed(2)),
+        behavior,
+        final_result: overall_success,
+        finalized_at: new Date().toISOString(),
+        finalized_by: user?.id,
+        updated_at: new Date().toISOString()
+      };
+
+      console.log("OVERALL UPSERT PAYLOAD", payload);
+
+      let { error } = await supabase.from('student_year_summaries').upsert(payload, {
+        onConflict: 'student_id,class_id,school_year_id'
+      });
+
+      if (error && error.code === 'PGRST204') {
+        const fallbackPayload = {
+          student_id: student.id,
+          class_id: classId,
+          school_year: selectedClassData.schoolYear || '2024/2025',
+          average: Number(overall_average.toFixed(2)),
+          behavior: behavior,
+          final_result: overall_success,
+          status: 'LOCKED',
+          finalized_at: new Date().toISOString(),
+          finalized_by: user?.id,
+          updated_at: new Date().toISOString()
+        };
+
+        const { error: fallbackError } = await supabase.from('student_year_summaries').upsert(fallbackPayload, {
+          onConflict: 'student_id,class_id,school_year'
+        });
+
+        error = fallbackError;
+      }
+
+      if (error) {
+        toast.error(`Greška pri spremanju za učenika ${studentName}: ${error.message}`);
+        setLoading(false);
+        return;
+      }
+
+      toast.success(`Uspješno izračunato i zaključano za učenika ${studentName}.`);
+      fetchData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Došlo je do greške pri zaključivanju.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCalculateAndLockClassOverall = async (classIdArg?: any) => {
+    console.log("LOCK CLASS OVERALL");
 
     const classId = (typeof classIdArg === 'string' && classIdArg) ? classIdArg : (effectiveClassId || selectedClassId);
     if (!classId || !selectedClassData) {
@@ -1478,11 +1631,12 @@ setStudents(uniqueMapped as any);
     }
 
     const classStudents = students.filter(s => s.classId === classId);
-    const students_log = classStudents;
-    console.log("OVERALL STUDENTS", students_log);
+    console.log("OVERALL STUDENTS", classStudents);
 
     setLoading(true);
     let successCount = 0;
+    const skippedStudents: { name: string, missing: string[] }[] = [];
+    const missingBehaviorStudents: string[] = [];
 
     try {
       const schoolYearId = selectedClassData.school_year_id || selectedYearId || '';
@@ -1501,6 +1655,8 @@ setStudents(uniqueMapped as any);
       }
 
       for (const student of classStudents) {
+        const studentName = student.name || student.full_name || "Nepoznati učenik";
+
         const studentClassEnrollments = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
         const studentTotalEnrollCount = classEnrollments.filter(e => e.studentId === student.id).length;
         
@@ -1508,48 +1664,46 @@ setStudents(uniqueMapped as any);
           ? studentClassEnrollments.map(e => e.subjectId)
           : Array.from(new Set(subjectAssignments.filter(a => a.classId === classId).map(a => a.subjectId)));
 
-        console.log("OVERALL REQUIRED SUBJECTS", requiredSubjects);
-
         const studentFinalGrades = (finalGradesData || []).filter(fg => fg.student_id === student.id);
-        const finalGrades = studentFinalGrades;
-        console.log("OVERALL FINAL GRADES", finalGrades);
 
         const missingSubjects = requiredSubjects
            .filter(subId => !studentFinalGrades.some(fg => fg.subject_id === subId))
            .map(subId => allSubjects.find(s => s.id === subId)?.name)
-           .filter(Boolean);
-
-        console.log("OVERALL MISSING SUBJECTS", missingSubjects);
+           .filter(Boolean) as string[];
 
         if (missingSubjects.length > 0) {
-          toast.error(`Za učenika ${student.name} ${student.surname} nije zaključeno sve (${missingSubjects.join(', ')}).`);
-          setLoading(false);
-          return;
+          skippedStudents.push({ name: studentName, missing: missingSubjects });
+          continue;
         }
 
         const summary = summaries.find(s => s.studentId === student.id && (s.classId === selectedClassId || s.classId === classId));
-        const behavior = summary?.behavior;
-        if (!behavior) {
-          toast.error("Za učenika nije uneseno vladanje.");
-          console.log("OVERALL UPSERT ERROR", "Za učenika nije uneseno vladanje.");
-          setLoading(false);
-          return;
+        
+        const studentNotes = overallNotes.find(n => n.studentId === student.id);
+        let autoBehavior = 'Uzorno';
+        if (studentNotes?.disciplinaryActions) {
+          const da = studentNotes.disciplinaryActions.toLowerCase();
+          if (da.includes('ukor')) autoBehavior = 'Loše';
+          else if (da.includes('opomena')) autoBehavior = 'Dobro';
         }
 
-        const behaviorLower = behavior.toLowerCase();
+        const behavior = summary?.behavior || autoBehavior;
+        const behaviorLower = behavior ? behavior.toLowerCase() : '';
         if (behaviorLower !== 'uzorno' && behaviorLower !== 'dobro' && behaviorLower !== 'loše') {
-          toast.error("Za učenika nije uneseno vladanje.");
-          console.log("OVERALL UPSERT ERROR", "Za učenika nije uneseno vladanje.");
-          setLoading(false);
-          return;
+          missingBehaviorStudents.push(studentName);
+          continue;
         }
 
         const gradesValues = studentFinalGrades
-          .filter(fg => requiredSubjects.includes(fg.subject_id) && fg.value)
+          .filter(fg => requiredSubjects.includes(fg.subject_id) && fg.value !== undefined && fg.value !== null && Number(fg.value) >= 1 && Number(fg.value) <= 5)
           .map(fg => Number(fg.value));
 
+        if (gradesValues.length === 0 && requiredSubjects.length > 0) {
+          skippedStudents.push({ name: studentName, missing: ["Nema unesenih zaključnih ocjena u rasponu 1-5"] });
+          continue;
+        }
+
         const hasFail = gradesValues.some(v => v === 1);
-        const overall_average = gradesValues.reduce((a, b) => a + b, 0) / gradesValues.length;
+        const overall_average = gradesValues.length > 0 ? gradesValues.reduce((a, b) => a + b, 0) / gradesValues.length : 5.0;
         const overall_success = hasFail ? 1 : getFinalAverageGrade(overall_average);
 
         const payload = {
@@ -1578,10 +1732,7 @@ setStudents(uniqueMapped as any);
           onConflict: 'student_id,class_id,school_year_id'
         });
 
-        console.log("OVERALL UPSERT ERROR", error);
-
         if (error && error.code === 'PGRST204') {
-          console.log("Retrying with fallback compatible schema payload...");
           const fallbackPayload = {
             student_id: student.id,
             class_id: classId,
@@ -1600,19 +1751,30 @@ setStudents(uniqueMapped as any);
           });
 
           error = fallbackError;
-          console.log("OVERALL FALLBACK UPSERT ERROR", error);
         }
 
         if (error) {
-          toast.error(`Greška pri spremanju za učenika ${student.name}: ${error.message}`);
-          setLoading(false);
-          return;
+          console.error(`Error saving for student ${studentName}:`, error);
+          skippedStudents.push({ name: studentName, missing: [`Greška pri spremanju: ${error.message}`] });
+          continue;
         }
 
         successCount++;
       }
 
-      toast.success(`Uspješno izračunat i zaključan opći uspjeh za ${successCount} učenika.`);
+      if (successCount > 0) {
+        toast.success(`Uspješno izračunat i zaključan opći uspjeh za ${successCount} učenika.`);
+      }
+
+      if (skippedStudents.length > 0) {
+        const listText = skippedStudents.map(s => `${s.name} (${s.missing.join(', ')})`).join('; ');
+        toast(`Preskočeni učenici (nedovršene ocjene): ${listText}`, { icon: '⚠️', duration: 8000 });
+      }
+
+      if (missingBehaviorStudents.length > 0) {
+        toast(`Nije uneseno vladanje za: ${missingBehaviorStudents.join(', ')}`, { icon: '⚠️', duration: 8000 });
+      }
+
       fetchData();
     } catch (err: any) {
       console.error(err);
@@ -1620,6 +1782,10 @@ setStudents(uniqueMapped as any);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCalculateAndLockOverallSuccess = async (classIdArg?: any) => {
+    await handleCalculateAndLockClassOverall(classIdArg);
   };
   const getProgramRule = (grade: number | string, section: string) => {
     if (['1', '2', '3'].includes(String(grade)) && section === 'A') return { name: 'Kuhar/Kuharica', type: 'VOCATIONAL_3Y' };
@@ -3624,11 +3790,11 @@ setAllSubjects(uniqueSub2);
                 </div>
                 {(isMainAdmin || isSchoolAdmin || selectedClassData?.homeroom_teacher_id === user?.id) && (
                   <button 
-                    onClick={() => handleCalculateAndLockOverallSuccess(effectiveClassId)}
+                    onClick={() => handleCalculateAndLockClassOverall(effectiveClassId)}
                     disabled={loading}
                     className="bg-[#005c8d] text-white px-4 py-2 text-[10px] font-black uppercase hover:bg-[#004a70] transition-colors shadow-sm disabled:opacity-50"
                   >
-                    Izračunaj i zaključi opći uspjeh i vladanje
+                    Zaključi opći uspjeh za cijeli razred
                   </button>
                 )}
               </div>
@@ -3640,11 +3806,11 @@ setAllSubjects(uniqueSub2);
                       <span className="text-[9px] text-blue-600 font-medium italic">Izračun prosjeka i automatsko određivanje vladanja</span>
                     </div>
                     <button 
-                      onClick={() => handleCalculateAndLockOverallSuccess(effectiveClassId)}
+                      onClick={() => handleCalculateAndLockClassOverall(effectiveClassId)}
                       disabled={loading}
                       className="bg-[#005c8d] text-white px-6 py-2 border border-[#004a70] font-black text-[10px] uppercase hover:bg-[#004a70] shadow-sm disabled:opacity-50 flex items-center gap-2"
                     >
-                      <CheckCircle size={14} /> Izračunaj i zaključi opći uspjeh i vladanje
+                      <CheckCircle size={14} /> Zaključi opći uspjeh za cijeli razred
                     </button>
                   </div>
                   <div className="flex gap-2">
@@ -3667,13 +3833,14 @@ setAllSubjects(uniqueSub2);
                          <th className="px-4 py-3 border-r border-gray-200 text-center w-24">Prosjek</th>
                          <th className="px-4 py-3 border-r border-gray-200 text-center w-28">Opći uspjeh</th>
                          <th className="px-4 py-3 border-r border-gray-200 text-center w-32">Vladanje</th>
-                         <th className="px-4 py-3 text-center w-28">Status</th>
+                         <th className="px-4 py-3 border-r border-gray-200 text-center w-28">Status</th>
+                         <th className="px-4 py-3 text-center w-36">Akcija</th>
                       </tr>
                    </thead>
                    <tbody className="divide-y divide-gray-200">
                       {students.filter(s => s.classId === effectiveClassId).length === 0 && (
                         <tr>
-                           <td colSpan={6} className="px-4 py-8 text-center text-gray-400 font-bold uppercase text-[10px]">
+                           <td colSpan={7} className="px-4 py-8 text-center text-gray-400 font-bold uppercase text-[10px]">
                               Nema dodijeljenih učenika ovom razredu.
                            </td>
                         </tr>
@@ -3761,7 +3928,7 @@ setAllSubjects(uniqueSub2);
                                     <option value="Loše">Loše</option>
                                  </select>
                               </td>
-                              <td className="px-4 py-3 text-center">
+                              <td className="px-4 py-3 border-r border-gray-200 text-center">
                                  {isFinalized ? (
                                     <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-black uppercase tracking-tighter text-[9px] border border-green-200">Zaključeno</span>
                                  ) : missingGrades ? (
@@ -3769,6 +3936,15 @@ setAllSubjects(uniqueSub2);
                                  ) : (
                                     <span className="px-2 py-0.5 bg-blue-100 text-[#005c8d] rounded-full font-black uppercase tracking-tighter text-[9px] border border-blue-200">Spremno</span>
                                  )}
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                 <button
+                                   onClick={() => handleCalculateAndLockStudentOverall(student)}
+                                   disabled={loading}
+                                   className="bg-[#005c8d] hover:bg-[#004a70] text-white px-2.5 py-1 text-[9px] font-black uppercase transition-colors shadow-m disabled:opacity-50"
+                                 >
+                                    Zaključi opći uspjeh
+                                 </button>
                               </td>
                            </tr>
                          );

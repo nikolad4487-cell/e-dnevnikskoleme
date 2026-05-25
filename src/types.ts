@@ -38,6 +38,8 @@ export type User = {
   pob?: string;
   mobile?: string;
   programId?: string;
+  classId?: string;
+  class_id?: string;
   status?: 'ACTIVE' | 'INACTIVE';
 };
 
