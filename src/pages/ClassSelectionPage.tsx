@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { Class, Role, SchoolYear } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, ArrowRight, Calendar, ChevronLeft, Plus } from 'lucide-react';
+import { Loader2, ArrowRight, Calendar, ChevronLeft, Plus, Award, FileText, UserX, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn, formatPersonName } from '../lib/utils';
 import { Header } from '../components/Header';
@@ -32,6 +32,7 @@ export default function ClassSelectionPage() {
   const [classes, setClasses] = useState<ClassWithDetails[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [selectedYearId, setSelectedYearId] = useState<string>('');
+  const [summaries, setSummaries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -208,6 +209,18 @@ export default function ClassSelectionPage() {
         throw error;
       }
 
+      // Fetch year summaries for the active student
+      const { data: summariesData, error: summariesError } = await supabase
+        .from('student_year_summaries')
+        .select('*')
+        .eq('student_id', studentId);
+      
+      if (summariesError) {
+        console.error("SUMMARIES QUERY ERROR:", summariesError);
+      } else {
+        setSummaries(summariesData || []);
+      }
+
       // Group by class_id to get only unique classes student is enrolled in
       const classesData: ClassWithDetails[] = [];
       const seenClasses = new Set<string>();
@@ -275,6 +288,32 @@ export default function ClassSelectionPage() {
     }
   };
 
+  const handleSelectMenu = (cls: ClassWithDetails, path: string) => {
+    setSelectedClassId(cls.id);
+    setSelectedSchoolId(cls.schoolId);
+    setIsArchived(cls.status !== 'ACTIVE' || selectedYear?.status === 'ARCHIVED');
+    navigate(`/student/${path}`);
+  };
+
+  const getShortenedYear = (yearName: string) => {
+    if (!yearName) return '';
+    const parts = yearName.split('/');
+    if (parts.length === 2) {
+      const p1 = parts[0].trim().slice(-2);
+      const p2 = parts[1].trim().slice(-2);
+      return `${p1}/${p2}`;
+    }
+    return yearName;
+  };
+
+  const menuItems = [
+    { label: 'Ocjene', path: 'ocjene', icon: Award, color: 'text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100/70' },
+    { label: 'Bilješke', path: 'biljeske', icon: FileText, color: 'text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100/70' },
+    { label: 'Ispiti', path: 'ispiti', icon: Calendar, color: 'text-purple-600 bg-purple-50 border-purple-200 hover:bg-purple-100/70' },
+    { label: 'Izostanci', path: 'izostanci', icon: UserX, color: 'text-rose-600 bg-rose-50 border-rose-200 hover:bg-rose-100/70' },
+    { label: 'Raspored', path: 'raspored', icon: Clock, color: 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100/70' },
+  ];
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-white">
@@ -340,104 +379,208 @@ export default function ClassSelectionPage() {
           </div>
         </div>
 
-        <div className="bg-white border border-[#dee2e6] rounded-sm shadow-sm overflow-hidden">
-          <div className="bg-[#f1f3f5] px-6 py-4 border-b border-[#dee2e6] flex justify-between items-center">
-            <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#005c8d]">Odaberite razrednu knjigu</h2>
-            {isSchoolAdmin && (
-              <button 
-                onClick={handleCreateClass}
-                className="text-[9px] font-black uppercase bg-[#005c8d] text-white px-3 py-1 hover:bg-[#004a70] transition-colors flex items-center gap-1"
-              >
-                <Plus size={12} />
-                Novi razred
-              </button>
-            )}
-          </div>
-
-          {filteredClasses.length === 0 ? (
-            <div className="px-6 py-16 text-center">
+        {!isStaff ? (
+          /* Student Card Grid Layout */
+          filteredClasses.length === 0 ? (
+            <div className="bg-white border border-[#dee2e6] rounded-sm shadow-sm overflow-hidden px-6 py-16 text-center">
               <div className="w-16 h-16 bg-slate-50 text-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Calendar size={32} />
               </div>
-              <p className="text-slate-400 italic mb-6">Nema pronađenih razreda za odabranu školsku godinu.</p>
+              <p className="text-slate-400 italic">Nema pronađenih razreda za odabranu školsku godinu.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 mt-2">
+              {filteredClasses
+                .sort((a, b) => (String(a.name || "")).localeCompare(b.name))
+                .map((cls) => {
+                  const summary = summaries.find(s => 
+                    s.class_id === cls.id && 
+                    (s.school_year_id === selectedYearId || (!s.school_year_id && s.school_year === cls.yearName))
+                  );
+                  const isFinalized = summary && summary.status === 'LOCKED';
+                  const overall_average = isFinalized ? (summary.overall_average ?? summary.average) : null;
+
+                  console.log("CLASS SELECT OVERALL SUMMARY", summary);
+                  console.log("OVERALL AVERAGE", overall_average);
+
+                  const formattedAverage = typeof overall_average === 'number' 
+                    ? overall_average.toLocaleString('hr-HR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
+                    : null;
+
+                  return (
+                    <div key={cls.id} className="bg-white rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all p-6 flex flex-col justify-between">
+                      {/* Upper Header Section */}
+                      <div 
+                        className="cursor-pointer group select-none"
+                        onClick={() => handleSelect(cls)}
+                      >
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <div className="text-2xl font-black text-[#005c8d] uppercase tracking-tight group-hover:text-[#004a70] transition-colors">
+                              {cls.name}
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mt-1">
+                              Šk. god. {getShortenedYear(cls.yearName)}
+                            </div>
+                          </div>
+                          <div className="text-right max-w-[60%]">
+                            <div className="text-slate-600 font-extrabold uppercase text-[10px] bg-slate-50 border border-slate-200/60 rounded px-2.5 py-1 whitespace-nowrap overflow-hidden text-ellipsis shadow-xs">
+                              {cls.programName || 'Gimnazija'}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Navigation Menu/Tiles */}
+                      <div className="grid grid-cols-5 gap-1.5 my-5">
+                        {menuItems.map(item => {
+                          const ItemIcon = item.icon;
+                          return (
+                            <button
+                              key={item.label}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectMenu(cls, item.path);
+                              }}
+                              className={cn(
+                                "flex flex-col items-center justify-center p-2 rounded border border-slate-100 transition-all text-center cursor-pointer",
+                                item.color
+                              )}
+                              title={item.label}
+                            >
+                              <ItemIcon size={18} className="mb-1 shrink-0" />
+                              <span className="text-[9px] font-black uppercase tracking-tight leading-none block whitespace-nowrap">
+                                {item.label}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* Footer Section - General Success */}
+                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] font-black uppercase tracking-wide">
+                        {isFinalized && typeof overall_average === 'number' ? (
+                          <>
+                            <span className="text-slate-500">Opći uspjeh</span>
+                            <span className="text-[#10b981] font-black text-sm bg-emerald-50 border border-emerald-200 px-3 py-1 rounded">
+                              {formattedAverage}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-slate-400">Opći uspjeh</span>
+                            <span className="text-slate-400 font-black text-sm bg-slate-50 border border-slate-200 px-3 py-1 rounded">
+                              —
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )
+        ) : (
+          /* Staff Standard Row Style */
+          <div className="bg-white border border-[#dee2e6] rounded-sm shadow-sm overflow-hidden">
+            <div className="bg-[#f1f3f5] px-6 py-4 border-b border-[#dee2e6] flex justify-between items-center">
+              <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#005c8d]">Odaberite razrednu knjigu</h2>
               {isSchoolAdmin && (
                 <button 
                   onClick={handleCreateClass}
-                  className="inline-flex items-center gap-2 bg-[#005c8d] text-white px-8 py-3 rounded-sm font-black uppercase text-[10px] tracking-widest hover:bg-[#004a70] transition-all shadow-md active:scale-95"
+                  className="text-[9px] font-black uppercase bg-[#005c8d] text-white px-3 py-1 hover:bg-[#004a70] transition-colors flex items-center gap-1"
                 >
-                  <Plus size={16} />
-                  Dodaj razred u ovu školsku godinu
+                  <Plus size={12} />
+                  Novi razred
                 </button>
               )}
             </div>
-          ) : (
-            <div className="divide-y divide-[#dee2e6]">
-              {filteredClasses
-                .sort((a, b) => (String(a.name || "")).localeCompare(b.name))
-                .map((cls) => (
-                  <div 
-                    key={cls.id} 
-                    className="flex flex-col md:flex-row md:items-center p-6 hover:bg-[#f8f9fa] transition-colors group cursor-pointer text-sm"
-                    onClick={() => handleSelect(cls)}
+
+            {filteredClasses.length === 0 ? (
+              <div className="px-6 py-16 text-center">
+                <div className="w-16 h-16 bg-slate-50 text-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Calendar size={32} />
+                </div>
+                <p className="text-slate-400 italic mb-6">Nema pronađenih razreda za odabranu školsku godinu.</p>
+                {isSchoolAdmin && (
+                  <button 
+                    onClick={handleCreateClass}
+                    className="inline-flex items-center gap-2 bg-[#005c8d] text-white px-8 py-3 rounded-sm font-black uppercase text-[10px] tracking-widest hover:bg-[#004a70] transition-all shadow-md active:scale-95"
                   >
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                      {/* Name & Role */}
-                      <div className="flex items-center gap-3">
-                        <span className="text-xl font-black text-slate-800 tracking-tight min-w-[3rem]">{cls.name}</span>
-                        <div className="flex flex-col gap-1">
-                          {cls.userRoleInClass && (
-                            <span className={cn(
-                              "text-[9px] font-black uppercase px-2 py-0.5 rounded-sm border inline-block w-fit",
-                              cls.userRoleInClass === 'HOMEROOM' ? "text-green-600 bg-green-50 border-green-200" :
-                              cls.userRoleInClass === 'DEPUTY' ? "text-orange-600 bg-orange-50 border-orange-200" :
-                              cls.userRoleInClass === 'ADMIN' ? "text-blue-600 bg-blue-50 border-blue-200" :
-                              "text-slate-500 bg-slate-50 border-slate-200"
-                            )}>
-                              {cls.userRoleInClass === 'HOMEROOM' ? 'Razrednik' : 
-                               cls.userRoleInClass === 'DEPUTY' ? 'Zamjenik' : 
-                               cls.userRoleInClass === 'ADMIN' ? 'Admin' : 
-                               cls.userRoleInClass === 'STUDENT' ? 'Učenik' : 'Nastavnik'}
-                            </span>
-                          )}
-                          {selectedYear?.status === 'ARCHIVED' && (
-                            <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-sm bg-amber-100 text-amber-700 border border-amber-200 inline-block w-fit">Arhiva</span>
-                          )}
+                    <Plus size={16} />
+                    Dodaj razred u ovu školsku godinu
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y divide-[#dee2e6]">
+                {filteredClasses
+                  .sort((a, b) => (String(a.name || "")).localeCompare(b.name))
+                  .map((cls) => (
+                    <div 
+                      key={cls.id} 
+                      className="flex flex-col md:flex-row md:items-center p-6 hover:bg-[#f8f9fa] transition-colors group cursor-pointer text-sm"
+                      onClick={() => handleSelect(cls)}
+                    >
+                      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                        {/* Name & Role */}
+                        <div className="flex items-center gap-3">
+                          <span className="text-xl font-black text-slate-800 tracking-tight min-w-[3rem]">{cls.name}</span>
+                          <div className="flex flex-col gap-1">
+                            {cls.userRoleInClass && (
+                              <span className={cn(
+                                "text-[9px] font-black uppercase px-2 py-0.5 rounded-sm border inline-block w-fit",
+                                cls.userRoleInClass === 'HOMEROOM' ? "text-green-600 bg-green-50 border-green-200" :
+                                cls.userRoleInClass === 'DEPUTY' ? "text-orange-600 bg-orange-50 border-orange-200" :
+                                cls.userRoleInClass === 'ADMIN' ? "text-blue-600 bg-blue-50 border-blue-200" :
+                                "text-slate-500 bg-slate-50 border-slate-200"
+                              )}>
+                                {cls.userRoleInClass === 'HOMEROOM' ? 'Razrednik' : 
+                                 cls.userRoleInClass === 'DEPUTY' ? 'Zamjenik' : 
+                                 cls.userRoleInClass === 'ADMIN' ? 'Admin' : 
+                                 cls.userRoleInClass === 'STUDENT' ? 'Učenik' : 'Nastavnik'}
+                              </span>
+                            )}
+                            {selectedYear?.status === 'ARCHIVED' && (
+                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-sm bg-amber-100 text-amber-700 border border-amber-200 inline-block w-fit">Arhiva</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Homeroom / Deputy Teacher */}
+                        <div className="flex flex-col gap-0.5 text-slate-600 font-bold uppercase text-[11px] tracking-tight border-l-0 md:border-l border-slate-200 md:pl-6 h-full justify-center">
+                          <span className="text-slate-300 font-black block md:hidden">NASTAVNICI:</span>
+                          <div className="truncate">
+                            {(() => {
+                              const teachers = [];
+                              if (cls.homeroomTeacherName) teachers.push(cls.homeroomTeacherName);
+                              if (cls.deputyTeacherName) teachers.push(cls.deputyTeacherName);
+                              return teachers.length > 0 ? teachers.join(', ') : 'NIJE DODIJELJEN';
+                            })()}
+                          </div>
+                        </div>
+
+                        {/* Description / Program */}
+                        <div className="text-slate-500 font-medium border-l-0 md:border-l border-slate-200 md:pl-6 h-full flex items-center">
+                          <span className="text-slate-300 font-black block md:hidden mr-2">TIP:</span>
+                          {cls.programName || `${cls.gradeLevel}. razred srednje škole`}
                         </div>
                       </div>
-
-                      {/* Homeroom / Deputy Teacher */}
-                      <div className="flex flex-col gap-0.5 text-slate-600 font-bold uppercase text-[11px] tracking-tight border-l-0 md:border-l border-slate-200 md:pl-6 h-full justify-center">
-                        <span className="text-slate-300 font-black block md:hidden">NASTAVNICI:</span>
-                        <div className="truncate">
-                          {(() => {
-                            const teachers = [];
-                            if (cls.homeroomTeacherName) teachers.push(cls.homeroomTeacherName);
-                            if (cls.deputyTeacherName) teachers.push(cls.deputyTeacherName);
-                            return teachers.length > 0 ? teachers.join(', ') : 'NIJE DODIJELJEN';
-                          })()}
-                        </div>
-                      </div>
-
-                      {/* Description / Program */}
-                      <div className="text-slate-500 font-medium border-l-0 md:border-l border-slate-200 md:pl-6 h-full flex items-center">
-                         <span className="text-slate-300 font-black block md:hidden mr-2">TIP:</span>
-                        {cls.programName || `${cls.gradeLevel}. razred srednje škole`}
+                      
+                      <div className="mt-6 md:mt-0 md:ml-6">
+                        <button
+                          className="inline-flex items-center justify-center gap-2 py-2.5 px-8 rounded-sm text-xs font-black uppercase tracking-widest transition-all bg-[#005c8d] text-white hover:bg-[#004a70] shadow-sm active:scale-95 w-full md:w-auto"
+                        >
+                          Pristupi
+                          <ArrowRight size={16} />
+                        </button>
                       </div>
                     </div>
-                    
-                    <div className="mt-6 md:mt-0 md:ml-6">
-                      <button
-                        className="inline-flex items-center justify-center gap-2 py-2.5 px-8 rounded-sm text-xs font-black uppercase tracking-widest transition-all bg-[#005c8d] text-white hover:bg-[#004a70] shadow-sm active:scale-95 w-full md:w-auto"
-                      >
-                        Pristupi
-                        <ArrowRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          )}
-        </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -4,10 +4,12 @@ import { useAuth } from './AuthContext';
 
 interface SelectionContextType {
   selectedSchoolId: string | null;
+  selectedYearId: string | null;
   selectedClassId: string | null;
   selectedChildId: string | null;
   isArchived: boolean;
   setSelectedSchoolId: (id: string | null) => void;
+  setSelectedYearId: (id: string | null) => void;
   setSelectedClassId: (id: string | null) => void;
   setSelectedChildId: (id: string | null) => void;
   setIsArchived: (val: boolean) => void;
@@ -19,6 +21,7 @@ const SelectionContext = createContext<SelectionContextType | undefined>(undefin
 export function SelectionProvider({ children }: { children: React.ReactNode }) {
   const { user, userSchoolRoles, loading: authLoading } = useAuth();
   const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(() => localStorage.getItem('selectedSchoolId'));
+  const [selectedYearId, setSelectedYearId] = useState<string | null>(() => localStorage.getItem('selectedYearId'));
   const [selectedClassId, setSelectedClassId] = useState<string | null>(() => localStorage.getItem('selectedClassId'));
   const [selectedChildId, setSelectedChildId] = useState<string | null>(() => localStorage.getItem('selectedChildId'));
   const [isArchived, setIsArchived] = useState<boolean>(() => localStorage.getItem('isArchived') === 'true');
@@ -41,6 +44,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
         if (error || !school) {
           console.warn('[SELECTION] Invalid school ID found, clearing:', selectedSchoolId);
           setSelectedSchoolId(null);
+          setSelectedYearId(null);
           setSelectedClassId(null);
         }
       }
@@ -83,6 +87,11 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
   }, [selectedSchoolId]);
 
   useEffect(() => {
+    if (selectedYearId) localStorage.setItem('selectedYearId', selectedYearId);
+    else localStorage.removeItem('selectedYearId');
+  }, [selectedYearId]);
+
+  useEffect(() => {
     if (selectedClassId) localStorage.setItem('selectedClassId', selectedClassId);
     else localStorage.removeItem('selectedClassId');
   }, [selectedClassId]);
@@ -98,6 +107,7 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
 
   const clearSelection = () => {
     setSelectedSchoolId(null);
+    setSelectedYearId(null);
     setSelectedClassId(null);
     setSelectedChildId(null);
     setIsArchived(false);
@@ -105,15 +115,17 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
 
   const value = React.useMemo(() => ({
     selectedSchoolId,
+    selectedYearId,
     selectedClassId,
     selectedChildId,
     isArchived,
     setSelectedSchoolId,
+    setSelectedYearId,
     setSelectedClassId,
     setSelectedChildId,
     setIsArchived,
     clearSelection
-  }), [selectedSchoolId, selectedClassId, selectedChildId, isArchived]);
+  }), [selectedSchoolId, selectedYearId, selectedClassId, selectedChildId, isArchived]);
 
   return (
     <SelectionContext.Provider value={value}>

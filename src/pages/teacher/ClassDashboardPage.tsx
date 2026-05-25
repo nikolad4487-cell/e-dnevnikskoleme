@@ -1,10 +1,10 @@
-import React, { useState, useEffect, Suspense, lazy } from 'react';
+import React, { useState, useEffect, Suspense, lazy, useRef } from 'react';
 import { useParams, useNavigate, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, Role } from '../../types';
-import { Loader2, ShieldAlert } from 'lucide-react';
+import { Loader2, ShieldAlert, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Settings, Search, Menu, Clock, Bookmark, HelpCircle, ChevronDown, Calendar } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { mappers } from '../../lib/mappers';
 
@@ -17,6 +17,7 @@ const InformativkaPage = lazy(() => import('../shared/InformativkaPage'));
 const AdministrationPage = lazy(() => import('./AdministrationPage'));
 const ImenikPage = lazy(() => import('./ImenikPage'));
 const PedagoskaDokumentacijaPage = lazy(() => import('./PedagoskaDokumentacijaPage'));
+const PretrazivanjePage = lazy(() => import('./PretrazivanjePage'));
 
 export default function ClassDashboardPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -120,29 +121,57 @@ export default function ClassDashboardPage() {
     setSelectedSchoolId(cls.schoolId);
   };
 
+  const [isBurgerOpen, setIsBurgerOpen] = useState(false);
+  const burgerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (burgerRef.current && !burgerRef.current.contains(event.target as Node)) {
+        setIsBurgerOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const tabs = [
-    { id: 'imenik', label: 'Imenik', path: 'imenik' },
-    { id: 'dnevnik-rada', label: 'Dnevnik rada', path: 'dnevnik-rada' },
-    { id: 'biljeske', label: 'Bilješke', path: 'biljeske' },
-    { id: 'izostanci', label: 'Izostanci', path: 'izostanci' },
-    { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: 'pedagoska-dokumentacija' },
-    { id: 'raspored', label: 'Raspored sati', path: 'raspored' },
-    { id: 'zapisnici', label: 'Zapisnici', path: 'zapisnici' },
-    { id: 'izvjestaji', label: 'Izvještaji', path: 'izvjestaji' },
-    { id: 'informativka', label: 'Informativka', path: 'informativka' },
-    { id: 'administracija', label: 'Administracija', path: 'admin' },
+    { id: 'imenik', label: 'Imenik', path: 'imenik', icon: BookOpen },
+    { id: 'pregled-rada', label: 'Pregled rada', path: 'pregled-rada', icon: List },
+    { id: 'dnevnik-rada', label: 'Dnevnik rada', path: 'dnevnik-rada', icon: ClipboardList },
+    { id: 'zapisnici', label: 'Zapisnici', path: 'zapisnici', icon: FileText },
+    { id: 'izvjestaji', label: 'Izvještaji', path: 'izvjestaji', icon: FileSpreadsheet },
+    { id: 'admin', label: 'Administracija', path: 'admin', icon: Settings },
+    { id: 'pretrazivanje', label: 'Pretraživanje', path: 'pretrazivanje', icon: Search },
   ];
 
-  const currentTab = location.pathname.split('/').pop() || 'imenik';
+  const burgerItems = [
+    { label: 'Bilješke', path: 'biljeske', icon: Bookmark },
+    { label: 'Izostanci', path: 'izostanci', icon: Clock },
+    { label: 'Pedagoška dokumentacija', path: 'pedagoska-dokumentacija', icon: FileText },
+    { label: 'Raspored sati', path: 'raspored', icon: Calendar },
+    { label: 'Informativka', path: 'informativka', icon: HelpCircle },
+  ];
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50">
-        <Loader2 className="w-10 h-10 animate-spin text-[#005c8d] mb-4" />
-        <p className="text-slate-500 font-bold uppercase text-[10px] tracking-widest">Učitavanje razreda...</p>
-      </div>
-    );
-  }
+  const currentTab = location.pathname.split('/')[3] || 'imenik';
+  const isActive = (tabPath: string) => currentTab === tabPath || (tabPath === 'dnevnik-rada' && currentTab === 'pregled-rada'); // Simplified for now
+
+  // New Sidebar Config
+  const sidebarLinks: Record<string, { label: string, path: string }[]> = {
+    'imenik': [
+      { label: 'Imenik učenika', path: 'imenik' },
+      { label: 'Pregled predmeta', path: 'pregled-predmeta' }, // Need to ensure this path exists or map accurately
+      { label: 'Bilješke', path: 'biljeske' }
+    ],
+    'admin': [
+      { label: 'Postavke razreda', path: 'admin' },
+      { label: 'Predmeti u razredu', path: 'predmeti' },
+      { label: 'Učenici u razredu', path: 'ucenici' },
+      { label: 'Opći prosjek', path: 'prosjek' },
+      { label: 'Svjedodžbe', path: 'svjedodzbe' }
+    ]
+  };
+
+  const activeSidebarLinks = sidebarLinks[currentTab] || [];
 
   if (accessDenied) {
     return (
@@ -168,28 +197,7 @@ export default function ClassDashboardPage() {
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-white">
-      {/* Header Info Bar */}
-      <div className="bg-[#005c8d] text-white px-6 py-2 flex items-center justify-between shadow-md z-20 shrink-0">
-        <div className="flex items-center gap-4">
-          <h2 className="text-xl font-black uppercase tracking-tighter">{currentClass?.name}</h2>
-          <div className="h-4 w-px bg-white/20"></div>
-          <div className="flex flex-col">
-            <p className="text-[10px] font-bold uppercase tracking-widest opacity-80 leading-none">
-              Školska godina: {currentClass?.schoolYear || 'Nije definirano'}
-            </p>
-            {!currentClass?.schoolYear && (
-              <span className="text-[8px] font-black text-amber-300 uppercase animate-pulse mt-1">
-                Upozorenje: Školska godina nije postavljena
-              </span>
-            )}
-          </div>
-        </div>
-        <div className="text-[10px] font-bold uppercase tracking-widest bg-white/10 px-3 py-1">
-          {currentClass?.gradeLevel}. RAZRED • {currentClass?.section} ODJEL
-        </div>
-      </div>
-
+    <div className="flex flex-col h-full bg-white">
       {isArchived && (
         <div className="bg-amber-100 border-b border-amber-200 px-6 py-2 flex items-center gap-3 shrink-0">
           <div className="w-5 h-5 bg-amber-500 text-white rounded-full flex items-center justify-center shrink-0">
@@ -202,46 +210,53 @@ export default function ClassDashboardPage() {
         </div>
       )}
 
-      {/* Tabs Navigation */}
-      <div className="bg-[#f8f9fa] border-b border-[#dee2e6] px-6 flex items-center overflow-x-auto no-scrollbar shrink-0">
-         {tabs.map(tab => (
-           <button
-             key={tab.id}
-             onClick={() => navigate(`/class/${classId}/${tab.path}`)}
-             className={cn(
-               "px-6 py-4 text-[10px] font-black uppercase tracking-widest transition-all border-b-4 whitespace-nowrap",
-               currentTab === tab.id || location.pathname.includes(tab.path)
-                ? "bg-white text-[#005c8d] border-[#005c8d]" 
-                : "text-gray-400 border-transparent hover:text-gray-600 hover:bg-gray-100/50"
-             )}
-           >
-             {tab.label}
-           </button>
-         ))}
-      </div>
-
       {/* Content Area */}
-      <div className="flex-1 overflow-auto bg-white">
-        <Suspense fallback={
-          <div className="p-20 flex flex-col items-center justify-center opacity-50">
-            <Loader2 className="w-8 h-8 animate-spin text-gray-300 mb-4" />
-            <span className="text-[10px] font-bold uppercase text-gray-400">Priprema tablice...</span>
+      <div className="flex-1 flex overflow-hidden bg-white w-full">
+        {/* Sidebar */}
+        {activeSidebarLinks.length > 0 && (
+          <div className="w-64 border-r border-slate-200 bg-slate-50 p-4 flex flex-col gap-2 shrink-0">
+             {activeSidebarLinks.map(link => (
+               <button
+                 key={link.path}
+                 onClick={() => navigate(`/class/${classId}/${link.path}`)}
+                 className={cn(
+                   "w-full text-left px-4 py-2 text-[11px] font-bold uppercase tracking-wider rounded transition-colors",
+                   currentTab === link.path 
+                     ? "bg-[#005c8d] text-white" 
+                     : "text-slate-600 hover:bg-slate-200"
+                 )}
+               >
+                 {link.label}
+               </button>
+             ))}
           </div>
-        }>
-          <Routes>
-            <Route index element={<Navigate to="imenik" replace />} />
-            <Route path="imenik" element={<ImenikPage />} />
-            <Route path="dnevnik-rada" element={<DnevnikRadaPage />} />
-            <Route path="biljeske" element={<BiljeskePage />} />
-            <Route path="izostanci" element={<TeacherIzostanciPage />} />
-            <Route path="pedagoska-dokumentacija" element={<PedagoskaDokumentacijaPage />} />
-            <Route path="raspored" element={<DnevnikRadaPage initialView="SCHEDULE" />} />
-            <Route path="zapisnici" element={<ZapisniciPage />} />
-            <Route path="izvjestaji" element={<IzvjestajiPage />} />
-            <Route path="informativka" element={<InformativkaPage />} />
-            <Route path="admin" element={<AdministrationPage />} />
-          </Routes>
-        </Suspense>
+        )}
+        
+        {/* Main Content */}
+        <div className="flex-1 overflow-auto p-6">
+          <Suspense fallback={
+            <div className="p-20 flex flex-col items-center justify-center opacity-50">
+              <Loader2 className="w-8 h-8 animate-spin text-gray-300 mb-4" />
+              <span className="text-[10px] font-bold uppercase text-gray-400">Priprema tablice...</span>
+            </div>
+          }>
+            <Routes>
+              <Route index element={<Navigate to="imenik" replace />} />
+              <Route path="imenik" element={<ImenikPage />} />
+              <Route path="pregled-rada" element={<DnevnikRadaPage initialView="WEEKS" />} />
+              <Route path="dnevnik-rada" element={<DnevnikRadaPage initialView="WEEK_DETAIL" />} />
+              <Route path="biljeske" element={<BiljeskePage />} />
+              <Route path="izostanci" element={<TeacherIzostanciPage />} />
+              <Route path="pedagoska-dokumentacija" element={<PedagoskaDokumentacijaPage />} />
+              <Route path="raspored" element={<DnevnikRadaPage initialView="SCHEDULE" />} />
+              <Route path="zapisnici" element={<ZapisniciPage />} />
+              <Route path="izvjestaji" element={<IzvjestajiPage />} />
+              <Route path="informativka" element={<InformativkaPage />} />
+              <Route path="admin" element={<AdministrationPage />} />
+              <Route path="pretrazivanje" element={<PretrazivanjePage />} />
+            </Routes>
+          </Suspense>
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, LogOut, User as UserIcon, Bell, Search, Info, Settings } from 'lucide-react';
+import { Menu, LogOut, Search, Settings, BookOpen, List, ClipboardList, FileText, FileSpreadsheet } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { Role } from '../types';
@@ -8,22 +8,13 @@ import { cn, formatPersonName } from '../lib/utils';
 import { Header } from './Header';
 
 interface NavItem {
+  id?: string;
   label: string;
   path: string;
   icon?: React.ReactNode;
 }
 
-const TEACHER_NAV: NavItem[] = [
-  { label: 'Imenik', path: '/teacher/imenik' },
-  { label: 'Dnevnik rada', path: '/teacher/dnevnik-rada' },
-  { label: 'Zapisnici', path: '/teacher/zapisnici' },
-  { label: 'Izvještaji', path: '/teacher/izvjestaji' },
-  { label: 'Informativka', path: '/teacher/informativka' },
-  { label: 'Pedagoška dokumentacija', path: '/teacher/pedagoska-dokumentacija' },
-  { label: 'Svjedodžbe', path: '/teacher/svjedodzbe' },
-  { label: 'Administracija', path: '/admin/school-dashboard' },
-  { label: 'Pretraživanje', path: '/teacher/pretrazivanje' },
-];
+// TEACHER_NAV is defined dynamically inside Layout component below
 
 const STUDENT_NAV: NavItem[] = [
   { label: 'Ocjene', path: '/student/ocjene' },
@@ -55,11 +46,21 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const currentSchoolRoles = userSchoolRoles.filter(r => r.schoolId === selectedSchoolId).map(r => r.role);
   const isSchoolAdmin = isMainAdmin || currentSchoolRoles.includes(Role.SCHOOL_ADMIN) || currentSchoolRoles.includes(Role.ADMIN);
   
+  const classPathPrefix = selectedClassId ? `/class/${selectedClassId}` : '';
+  const teacherNavList: NavItem[] = selectedClassId ? [
+    { id: 'imenik', label: 'Imenik', path: `${classPathPrefix}/imenik`, icon: <BookOpen size={14} /> },
+    { id: 'pregled-rada', label: 'Pregled rada', path: `${classPathPrefix}/pregled-rada`, icon: <List size={14} /> },
+    { id: 'dnevnik-rada', label: 'Dnevnik rada', path: `${classPathPrefix}/dnevnik-rada`, icon: <ClipboardList size={14} /> },
+    { id: 'zapisnici', label: 'Zapisnici', path: `${classPathPrefix}/zapisnici`, icon: <FileText size={14} /> },
+    { id: 'izvjestaji', label: 'Izvještaji', path: `${classPathPrefix}/izvjestaji`, icon: <FileSpreadsheet size={14} /> },
+    { id: 'admin', label: 'Administracija', path: isSchoolAdmin ? '/admin/school-dashboard' : `${classPathPrefix}/admin`, icon: <Settings size={14} /> },
+    { id: 'pretrazivanje', label: 'Pretraživanje', path: `${classPathPrefix}/pretrazivanje`, icon: <Search size={14} /> },
+  ] : [
+    { label: 'Pretraživanje', path: '/teacher/pretrazivanje' },
+  ];
+
   let navItems = isStaff 
-    ? TEACHER_NAV.filter(item => {
-        if (item.path === '/admin/school-dashboard') return isSchoolAdmin;
-        return true;
-      })
+    ? teacherNavList
     : STUDENT_NAV;
 
   if (isAdminPath) {
@@ -72,13 +73,37 @@ export function Layout({ children }: { children: React.ReactNode }) {
     navigate('/login');
   };
 
+  const [isBurgerOpen, setIsBurgerOpen] = React.useState(false);
+
+  // (Will add burger menu logic later if needed in layout, but for now focus on the structure)
+
   return (
     <div className="min-h-screen bg-[#f0f2f5] flex flex-col font-sans">
       {/* Header */}
-      <Header 
-        navItems={navItems} 
-        onMenuToggle={() => setIsMobileMenuOpen(!isMobileMenuOpen)} 
-      />
+      <Header />
+      
+      {/* Main Teacher Nav (Global) */}
+      {isStaff && selectedClassId && (
+        <div className="bg-white border-b border-[#dee2e6] h-14 flex items-center justify-between px-6 shadow-sm z-30">
+           <div className="flex items-center gap-1 h-full">
+             {teacherNavList.map(tab => (
+               <Link
+                 key={tab.label}
+                 to={tab.path}
+                 className={cn(
+                   "px-5 h-full flex items-center gap-2 text-[10px] font-black uppercase tracking-wider transition-all border-b-4 whitespace-nowrap cursor-pointer",
+                   location.pathname.startsWith(tab.path)
+                    ? "border-[#005c8d] text-[#005c8d] bg-sky-50" 
+                    : "text-gray-500 border-transparent hover:bg-slate-100 hover:text-slate-900"
+                 )}
+               >
+                 {tab.icon || <div className="w-3.5" />}
+                 {tab.label}
+               </Link>
+             ))}
+           </div>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-row">
