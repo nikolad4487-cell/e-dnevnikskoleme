@@ -255,6 +255,7 @@ export const mappers = {
     id: raw.id,
     studentId: raw.student_id,
     classId: raw.class_id,
+    schoolYearId: raw.school_year_id,
     school_year_id: raw.school_year_id,
     schoolYear: raw.school_year,
     average: raw.average,
@@ -263,6 +264,10 @@ export const mappers = {
     status: raw.status,
     finalizedAt: raw.finalized_at,
     finalizedBy: raw.finalized_by,
+    overallAverage: raw.overall_average,
+    overallSuccess: raw.overall_success,
+    conduct: raw.conduct,
+    calculatedAt: raw.calculated_at,
   }),
 
   schoolYear: (raw: any) => ({

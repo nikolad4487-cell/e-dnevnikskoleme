@@ -352,7 +352,11 @@ CREATE TABLE public.student_year_summaries (
     finalized_by UUID REFERENCES public.user_profiles(id),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(student_id, class_id, school_year)
+    overall_average NUMERIC(3,2),
+    overall_success INTEGER,
+    conduct TEXT,
+    calculated_at TIMESTAMPTZ,
+    UNIQUE(student_id, class_id, school_year_id)
 );
 
 -- 16. Student Subject Enrollments

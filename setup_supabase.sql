@@ -77,6 +77,18 @@ ALTER TABLE final_grades
 ADD CONSTRAINT final_grades_unique_student_subject_class_year_period
 UNIQUE (student_id, subject_id, class_id, school_year_id, period);
 
+-- student_year_summaries updates
+ALTER TABLE public.student_year_summaries ADD COLUMN IF NOT EXISTS school_year_id text;
+ALTER TABLE public.student_year_summaries ADD COLUMN IF NOT EXISTS overall_average numeric(3,2);
+ALTER TABLE public.student_year_summaries ADD COLUMN IF NOT EXISTS overall_success integer;
+ALTER TABLE public.student_year_summaries ADD COLUMN IF NOT EXISTS conduct text;
+ALTER TABLE public.student_year_summaries ADD COLUMN IF NOT EXISTS calculated_at timestamptz;
+
+-- Drop previous unique constraints if any and add the requested unique constraint for onConflict
+ALTER TABLE public.student_year_summaries DROP CONSTRAINT IF EXISTS student_year_summaries_student_id_class_id_school_year_key;
+ALTER TABLE public.student_year_summaries DROP CONSTRAINT IF EXISTS student_year_summaries_unique_student_class_year_id;
+ALTER TABLE public.student_year_summaries ADD CONSTRAINT student_year_summaries_unique_student_class_year_id UNIQUE (student_id, class_id, school_year_id);
+
 NOTIFY pgrst, 'reload schema';
 
 -- Create attachments bucket

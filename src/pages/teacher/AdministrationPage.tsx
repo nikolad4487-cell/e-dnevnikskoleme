@@ -1433,12 +1433,26 @@ setStudents(uniqueMapped as any);
         school_year_id: selectedClassData.school_year_id,
         school_year: selectedClassData.schoolYear,
         behavior,
+        conduct: behavior, // compat
       };
 
-      const { error: upsertError } = await supabase.from('student_year_summaries').upsert(payload, {
-        onConflict: 'student_id,class_id,school_year'
+      let { error: upsertError } = await supabase.from('student_year_summaries').upsert(payload, {
+        onConflict: 'student_id,class_id,school_year_id'
       });
       
+      if (upsertError && upsertError.code === 'PGRST204') {
+        const fallbackPayload = {
+          student_id: studentId,
+          class_id: selectedClassId,
+          school_year: selectedClassData.schoolYear,
+          behavior,
+        };
+        const { error: fErr } = await supabase.from('student_year_summaries').upsert(fallbackPayload, {
+          onConflict: 'student_id,class_id,school_year'
+        });
+        upsertError = fErr;
+      }
+
       if (upsertError) throw upsertError;
 
       toast.success('Vladanje ažurirano');
@@ -1454,120 +1468,155 @@ setStudents(uniqueMapped as any);
     }
   };
 
-  const handleFinalizeYearSummaries = async (classId: string) => {
-    if (!classId || !selectedClassData) return;
-    if (!confirm('Želite li izračunati i zaključiti opći uspjeh za sve učenike u ovom razredu? Ovo će prepisati postojeće nezaključene podatke.')) return;
+  const handleCalculateAndLockOverallSuccess = async (classIdArg?: any) => {
+    console.log("OVERALL BUTTON CLICKED");
+
+    const classId = (typeof classIdArg === 'string' && classIdArg) ? classIdArg : (effectiveClassId || selectedClassId);
+    if (!classId || !selectedClassData) {
+      toast.error("Nije odabran razred.");
+      return;
+    }
 
     const classStudents = students.filter(s => s.classId === classId);
-    console.log("FINALIZING FOR CLASS:", classId, "STUDENT COUNT:", classStudents.length);
-    let successCount = 0;
-    let skipCount = 0;
-    const failures: { student: string, missing: string[] }[] = [];
+    const students_log = classStudents;
+    console.log("OVERALL STUDENTS", students_log);
 
     setLoading(true);
+    let successCount = 0;
+
     try {
-      // 1. Fetch all enrollments for this class once
-      const { data: enrollData } = await supabase
-        .from('student_subject_enrollments')
-        .select('student_id, subject_id, status')
-        .eq('class_id', classId);
-      
-      // 2. Fetch all final grades for this class once
-      const yearIdForQuery = selectedClassData?.school_year_id || selectedYearId;
-      let fQuery = supabase
+      const schoolYearId = selectedClassData.school_year_id || selectedYearId || '';
+
+      const { data: finalGradesData, error: finalGradesError } = await supabase
         .from('final_grades')
         .select('student_id, subject_id, value, period, school_year_id')
         .eq('class_id', classId)
         .eq('period', 'SECOND_TERM');
 
-      if (yearIdForQuery) {
-        fQuery = fQuery.eq('school_year_id', yearIdForQuery);
+      if (finalGradesError) {
+        console.error("Error fetching final grades:", finalGradesError);
+        toast.error("Greška pri dohvaćanju zaključnih ocjena.");
+        setLoading(false);
+        return;
       }
 
-      const { data: finalGradesData } = await fQuery;
-      
-      // 3. Fetch overall notes for vladanje
-      const { data: overallNotesData } = await supabase
-        .from('student_overall_notes')
-        .select('student_id, disciplinary_actions')
-        .eq('class_id', classId);
-
       for (const student of classStudents) {
-        const studentEnrollments = (enrollData || []).filter(e => e.student_id === student.id && e.status === 'ACTIVE');
-        const studentTotalCount = (enrollData || []).filter(e => e.student_id === student.id).length;
-
-        const requiredSubjectIds = studentTotalCount > 0
-          ? studentEnrollments.map(e => e.subject_id)
+        const studentClassEnrollments = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
+        const studentTotalEnrollCount = classEnrollments.filter(e => e.studentId === student.id).length;
+        
+        const requiredSubjects = studentTotalEnrollCount > 0 
+          ? studentClassEnrollments.map(e => e.subjectId)
           : Array.from(new Set(subjectAssignments.filter(a => a.classId === classId).map(a => a.subjectId)));
 
-        const studentGrades = (finalGradesData || []).filter(g => g.student_id === student.id);
-        const studentNotes = (overallNotesData || []).find(n => n.student_id === student.id);
-        
-        let behavior = 'Uzorno';
-        if (studentNotes?.disciplinary_actions) {
-          const da = studentNotes.disciplinary_actions.toLowerCase();
-          if (da.includes('ukor')) behavior = 'Loše';
-          else if (da.includes('opomena')) behavior = 'Dobro';
-        }
-        
-        const missingSubjects: string[] = [];
-        const gradesValues: number[] = [];
+        console.log("OVERALL REQUIRED SUBJECTS", requiredSubjects);
 
-        for (const subId of requiredSubjectIds) {
-          const fg = studentGrades.find(g => g.subject_id === subId);
-          if (!fg || !fg.value) {
-            const subject = allSubjects.find(s => s.id === subId);
-            missingSubjects.push(subject?.name || 'Nepoznat predmet');
-          } else {
-            gradesValues.push(Number(fg.value));
-          }
-        }
+        const studentFinalGrades = (finalGradesData || []).filter(fg => fg.student_id === student.id);
+        const finalGrades = studentFinalGrades;
+        console.log("OVERALL FINAL GRADES", finalGrades);
+
+        const missingSubjects = requiredSubjects
+           .filter(subId => !studentFinalGrades.some(fg => fg.subject_id === subId))
+           .map(subId => allSubjects.find(s => s.id === subId)?.name)
+           .filter(Boolean);
+
+        console.log("OVERALL MISSING SUBJECTS", missingSubjects);
 
         if (missingSubjects.length > 0) {
-          failures.push({ student: `${student.surname} ${student.name}`, missing: missingSubjects });
-          skipCount++;
-          continue;
+          toast.error(`Za učenika ${student.name} ${student.surname} nije zaključeno sve (${missingSubjects.join(', ')}).`);
+          setLoading(false);
+          return;
         }
 
-        if (gradesValues.length > 0) {
-          const hasFail = gradesValues.some(v => v === 1);
-          const avg = gradesValues.reduce((a, b) => a + b, 0) / gradesValues.length;
-          const finalResultGrade = hasFail ? 1 : getFinalAverageGrade(avg);
+        const summary = summaries.find(s => s.studentId === student.id && (s.classId === selectedClassId || s.classId === classId));
+        const behavior = summary?.behavior;
+        if (!behavior) {
+          toast.error("Za učenika nije uneseno vladanje.");
+          console.log("OVERALL UPSERT ERROR", "Za učenika nije uneseno vladanje.");
+          setLoading(false);
+          return;
+        }
+
+        const behaviorLower = behavior.toLowerCase();
+        if (behaviorLower !== 'uzorno' && behaviorLower !== 'dobro' && behaviorLower !== 'loše') {
+          toast.error("Za učenika nije uneseno vladanje.");
+          console.log("OVERALL UPSERT ERROR", "Za učenika nije uneseno vladanje.");
+          setLoading(false);
+          return;
+        }
+
+        const gradesValues = studentFinalGrades
+          .filter(fg => requiredSubjects.includes(fg.subject_id) && fg.value)
+          .map(fg => Number(fg.value));
+
+        const hasFail = gradesValues.some(v => v === 1);
+        const overall_average = gradesValues.reduce((a, b) => a + b, 0) / gradesValues.length;
+        const overall_success = hasFail ? 1 : getFinalAverageGrade(overall_average);
+
+        const payload = {
+          student_id: student.id,
+          class_id: classId,
+          school_year_id: schoolYearId,
+          school_year: selectedClassData.schoolYear || '2024/2025',
           
-          const payload = {
+          overall_average: Number(overall_average.toFixed(2)),
+          overall_success: overall_success,
+          conduct: behavior,
+          status: 'LOCKED',
+          calculated_at: new Date().toISOString(),
+          
+          average: Number(overall_average.toFixed(2)),
+          behavior,
+          final_result: overall_success,
+          finalized_at: new Date().toISOString(),
+          finalized_by: user?.id,
+          updated_at: new Date().toISOString()
+        };
+
+        console.log("OVERALL UPSERT PAYLOAD", payload);
+
+        let { error } = await supabase.from('student_year_summaries').upsert(payload, {
+          onConflict: 'student_id,class_id,school_year_id'
+        });
+
+        console.log("OVERALL UPSERT ERROR", error);
+
+        if (error && error.code === 'PGRST204') {
+          console.log("Retrying with fallback compatible schema payload...");
+          const fallbackPayload = {
             student_id: student.id,
             class_id: classId,
-            school_year_id: selectedClassData.school_year_id,
-            school_year: selectedClassData.schoolYear,
-            average: Number(avg.toFixed(2)),
-            final_result: finalResultGrade,
-            behavior,
-            status: 'FINALIZED',
+            school_year: selectedClassData.schoolYear || '2024/2025',
+            average: Number(overall_average.toFixed(2)),
+            behavior: behavior,
+            final_result: overall_success,
+            status: 'LOCKED',
             finalized_at: new Date().toISOString(),
-            finalized_by: user?.id
+            finalized_by: user?.id,
+            updated_at: new Date().toISOString()
           };
 
-          const { error: upsertError } = await supabase.from('student_year_summaries').upsert(payload, {
+          const { error: fallbackError } = await supabase.from('student_year_summaries').upsert(fallbackPayload, {
             onConflict: 'student_id,class_id,school_year'
           });
 
-          if (upsertError) console.error(`Upsert error for ${student.id}:`, upsertError);
-          else successCount++;
-        } else {
-          skipCount++;
+          error = fallbackError;
+          console.log("OVERALL FALLBACK UPSERT ERROR", error);
         }
+
+        if (error) {
+          toast.error(`Greška pri spremanju za učenika ${student.name}: ${error.message}`);
+          setLoading(false);
+          return;
+        }
+
+        successCount++;
       }
 
-      if (failures.length > 0) {
-        toast(`${successCount} uspješnih, ${skipCount} preskočenih. provjerite ocjene.`, { icon: '⚠️' });
-      } else {
-        toast.success(`Uspješno zaključeno za svih ${successCount} učenika.`);
-      }
-      
+      toast.success(`Uspješno izračunat i zaključan opći uspjeh za ${successCount} učenika.`);
       fetchData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Greska pri zaključivanju.');
+      toast.error("Došlo je do greške pri zaključivanju.");
     } finally {
       setLoading(false);
     }
@@ -3573,9 +3622,9 @@ setAllSubjects(uniqueSub2);
                   <button onClick={() => setActiveTab('CLASS_DETAIL')} className="text-gray-400 hover:text-gray-600 transition-colors"><ChevronLeft size={20}/></button>
                   <h1 className="text-xl font-black text-gray-700 uppercase tracking-tighter">Opći prosjek i vladanje - {selectedClassData?.name}</h1>
                 </div>
-    {(isMainAdmin || isSchoolAdmin || selectedClassData?.homeroom_teacher_id === user?.id) && (
+                {(isMainAdmin || isSchoolAdmin || selectedClassData?.homeroom_teacher_id === user?.id) && (
                   <button 
-                    onClick={handleFinalizeYearSummaries}
+                    onClick={() => handleCalculateAndLockOverallSuccess(effectiveClassId)}
                     disabled={loading}
                     className="bg-[#005c8d] text-white px-4 py-2 text-[10px] font-black uppercase hover:bg-[#004a70] transition-colors shadow-sm disabled:opacity-50"
                   >
@@ -3585,13 +3634,13 @@ setAllSubjects(uniqueSub2);
               </div>
 
                 <div className="flex justify-between items-center bg-blue-50/50 p-3 border border-blue-100 mb-4">
-                  <div className="flex gap-4 items-center">
+                   <div className="flex gap-4 items-center">
                     <div className="flex flex-col">
                       <span className="text-[10px] font-black text-blue-800 uppercase tracking-tighter">Zaključivanje godine</span>
                       <span className="text-[9px] text-blue-600 font-medium italic">Izračun prosjeka i automatsko određivanje vladanja</span>
                     </div>
                     <button 
-                      onClick={() => handleFinalizeYearSummaries(effectiveClassId)}
+                      onClick={() => handleCalculateAndLockOverallSuccess(effectiveClassId)}
                       disabled={loading}
                       className="bg-[#005c8d] text-white px-6 py-2 border border-[#004a70] font-black text-[10px] uppercase hover:bg-[#004a70] shadow-sm disabled:opacity-50 flex items-center gap-2"
                     >
@@ -3699,8 +3748,18 @@ setAllSubjects(uniqueSub2);
                                     {summary?.finalResult || '—'}
                                  </span>
                               </td>
-                              <td className="px-4 py-3 border-r border-gray-200">
-                                 {summary?.behavior || autoBehavior}
+                              <td className="px-4 py-3 border-r border-gray-200 text-center">
+                                 <select
+                                   value={summary?.behavior || ''}
+                                   onChange={(e) => handleUpdateBehavior(student.id, e.target.value)}
+                                   disabled={isFinalized}
+                                   className="border border-gray-300 rounded px-2 py-1 text-xs font-bold text-gray-700 bg-white"
+                                 >
+                                    <option value="">-- Odaberite vladanje --</option>
+                                    <option value="Uzorno">Uzorno</option>
+                                    <option value="Dobro">Dobro</option>
+                                    <option value="Loše">Loše</option>
+                                 </select>
                               </td>
                               <td className="px-4 py-3 text-center">
                                  {isFinalized ? (
