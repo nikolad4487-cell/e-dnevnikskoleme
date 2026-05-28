@@ -13,9 +13,9 @@ import { formatPersonName } from '../../lib/utils';
 export default function ZapisniciPage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { user } = useAuth();
-  const { selectedSchoolId } = useSelection();
+  const { selectedSchoolId, selectedClassId: contextClassId } = useSelection();
   
-  const effectiveClassId = routeClassId;
+  const effectiveClassId = contextClassId || routeClassId;
 
   const [zapisnici, setZapisnici] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);

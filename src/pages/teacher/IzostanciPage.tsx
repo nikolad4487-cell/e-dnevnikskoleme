@@ -11,8 +11,9 @@ import { mappers, mapList } from '../../lib/mappers';
 export default function TeacherIzostanciPage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { user } = useAuth();
+  const { selectedClassId: contextClassId } = useSelection();
   
-  const effectiveClassId = routeClassId;
+  const effectiveClassId = contextClassId || routeClassId;
 
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [students, setStudents] = useState<User[]>([]);

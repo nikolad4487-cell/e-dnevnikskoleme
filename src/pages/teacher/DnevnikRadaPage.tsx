@@ -13,9 +13,9 @@ import { toast } from 'react-hot-toast';
 export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' }) {
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { user, isMainAdmin } = useAuth();
-  const { selectedSchoolId } = useSelection();
+  const { selectedSchoolId, selectedClassId: contextClassId } = useSelection();
   
-  const effectiveClassId = routeClassId;
+  const effectiveClassId = contextClassId || routeClassId;
 
   const [classes, setClasses] = useState<Class[]>([]);
   const selectedClass = classes.find(c => c.id === effectiveClassId);

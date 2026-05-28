@@ -28,7 +28,6 @@ export default function ClassDashboardPage() {
 
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
-  const [currentClass, setCurrentClass] = useState<Class | null>(null);
 
   useEffect(() => {
     if (classId) {
@@ -61,7 +60,6 @@ export default function ClassDashboardPage() {
       }
 
       const mappedClass = mappers.class(rawClass);
-      setCurrentClass(mappedClass);
 
       // 1b. Check if archived (class status or school year is_active)
       const { data: yearData } = await supabase
@@ -233,7 +231,7 @@ export default function ClassDashboardPage() {
         )}
         
         {/* Main Content */}
-        <div className="flex-1 overflow-auto p-6">
+        <div className="flex-1 overflow-auto p-6" key={classId}>
           <Suspense fallback={
             <div className="p-20 flex flex-col items-center justify-center opacity-50">
               <Loader2 className="w-8 h-8 animate-spin text-gray-300 mb-4" />

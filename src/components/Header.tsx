@@ -119,6 +119,7 @@ export function Header() {
     }
     
     console.log("SELECTED CLASS AFTER SET", classItem);
+    console.log("SELECT CLASS SAVED", classItem.id);
     console.log("LOCAL STORAGE SELECTED CLASS", localStorage.getItem("selectedClassId"));
     
     setIsClassMenuOpen(false);
@@ -126,8 +127,12 @@ export function Header() {
     if (location.pathname.startsWith('/class/')) {
       const currentTab = location.pathname.split('/')[3] || 'imenik';
       navigate(`/class/${classItem.id}/${currentTab}`);
-    } else if (!location.pathname.startsWith('/student/')) {
-      navigate(`/class/${classItem.id}/imenik`);
+    } else if (location.pathname.startsWith('/student/')) {
+      // For students/parents, stay on the same path but context+key will force remount
+      navigate(location.pathname);
+    } else if (location.pathname.startsWith('/admin/')) {
+      // Admin dashboard handling can stay put
+      navigate('/admin/school-dashboard');
     } else {
       navigate(`/class/${classItem.id}/imenik`);
     }

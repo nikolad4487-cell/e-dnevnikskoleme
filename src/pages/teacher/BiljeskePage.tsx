@@ -31,8 +31,9 @@ const NotesModal = ({ isOpen, onClose, title, content, onSave, loading }: { isOp
 export default function BiljeskePage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { user } = useAuth();
+  const { selectedClassId: contextClassId } = useSelection();
   
-  const effectiveClassId = routeClassId;
+  const effectiveClassId = contextClassId || routeClassId;
 
   const [notes, setNotes] = useState<StudentNote[]>([]);
   const [students, setStudents] = useState<User[]>([]);

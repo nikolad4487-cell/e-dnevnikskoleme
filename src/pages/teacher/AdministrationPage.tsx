@@ -17,7 +17,7 @@ export default function AdministrationPage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const [searchParams] = useSearchParams();
   const { user, isMainAdmin, signOut, userSchoolRoles } = useAuth();
-  const { selectedSchoolId, isArchived, setSelectedSchoolId } = useSelection();
+  const { selectedSchoolId, selectedClassId: contextClassId, isArchived, setSelectedSchoolId } = useSelection();
 
   const isAnyAdmin = React.useMemo(() => {
     // Current user's roles for the selected school
@@ -38,7 +38,7 @@ export default function AdministrationPage() {
     return canDelete;
   }, [userSchoolRoles, isMainAdmin, selectedSchoolId]);
   
-  const effectiveClassId = routeClassId;
+  const effectiveClassId = contextClassId || routeClassId;
   const isClassAdminMode = !!effectiveClassId;
 
   const [classes, setClasses] = useState<Class[]>([]);

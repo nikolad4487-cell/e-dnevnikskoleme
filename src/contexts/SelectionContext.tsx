@@ -26,6 +26,14 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
   const [selectedChildId, setSelectedChildId] = useState<string | null>(() => localStorage.getItem('selectedChildId'));
   const [isArchived, setIsArchived] = useState<boolean>(() => localStorage.getItem('isArchived') === 'true');
 
+  useEffect(() => {
+    console.log("SELECTION INIT localStorage selectedClassId", localStorage.getItem("selectedClassId"));
+  }, []);
+
+  useEffect(() => {
+    console.log("SELECTION selectedClassId STATE", selectedClassId);
+  }, [selectedClassId]);
+
   // Async validation of selections
   useEffect(() => {
     if (authLoading || !user) return;

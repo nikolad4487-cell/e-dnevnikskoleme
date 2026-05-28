@@ -8,9 +8,9 @@ import { Role } from '../../types';
 
 export default function IzvjestajiPage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
-  const { selectedSchoolId } = useSelection();
+  const { selectedSchoolId, selectedClassId: contextClassId } = useSelection();
   
-  const effectiveClassId = routeClassId;
+  const effectiveClassId = contextClassId || routeClassId;
 
   const [stats, setStats] = useState({
     totalStudents: 0,

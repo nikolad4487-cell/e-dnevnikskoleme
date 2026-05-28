@@ -172,7 +172,7 @@ export default function ImenikPage() {
   const { user, isMainAdmin } = useAuth();
   const { selectedSchoolId, selectedClassId: contextClassId, isArchived } = useSelection();
   
-  const effectiveClassId = routeClassId;
+  const effectiveClassId = contextClassId || routeClassId;
 
   if (!effectiveClassId) {
     return (
@@ -402,9 +402,16 @@ export default function ImenikPage() {
     }
   };
 
+  useEffect(() => {
+    console.log("IMENIK MOUNTED FOR CLASS:", effectiveClassId);
+    console.log("IMENIK selectedClass FROM CONTEXT:", contextClassId);
+  }, []);
+
   const fetchStudentsData = async () => {
     if (!effectiveClassId) return;
+    console.log("IMENIK fetchStudents classId", effectiveClassId);
     setLoading(true);
+    setStudents([]); // Force clear old data
     try {
       const { data, error } = await supabase
         .from('student_class_enrollments')
