@@ -316,7 +316,7 @@ export default function ClassManagementPage() {
       <div className="flex justify-between items-end mb-8 border-b-2 border-slate-100 pb-6">
         <div>
           <button 
-            onClick={() => navigate('/admin/school-dashboard')}
+            onClick={() => navigate('/admin-skole')}
             className="flex items-center gap-1 text-slate-400 hover:text-slate-600 transition-colors uppercase font-black text-[9px] tracking-widest mb-4"
           >
             <ChevronLeft size={12} strokeWidth={3} />

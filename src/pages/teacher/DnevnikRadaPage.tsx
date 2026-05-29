@@ -26,6 +26,21 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [weeks, setWeeks] = useState<WorkWeek[]>([]);
   const [view, setView] = useState<'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE'>(initialView || 'WEEKS');
   const [selectedWeek, setSelectedWeek] = useState<WorkWeek | null>(null);
+  
+  useEffect(() => {
+    if (initialView) {
+      setView(initialView);
+    }
+  }, [initialView]);
+
+  useEffect(() => {
+    if (view === 'WEEK_DETAIL' && !selectedWeek && weeks.length > 0) {
+      // Find current week based on date or just pick the last one
+      const today = new Date().toISOString().split('T')[0];
+      const activeWeek = weeks.find(w => today >= w.startDate && today <= w.endDate) || weeks[weeks.length - 1];
+      setSelectedWeek(activeWeek);
+    }
+  }, [view, selectedWeek, weeks]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [dailyLessons, setDailyLessons] = useState<Lesson[]>([]);
   const [currentWeekAbsences, setCurrentWeekAbsences] = useState<any[]>([]);
@@ -412,6 +427,8 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   useEffect(() => {
     if (!effectiveClassId) return;
     const fetchClassContext = async () => {
+      setStudents([]);
+      setWeeks([]);
       try {
         const { data: studentsData, error: se } = await supabase
           .from('student_class_enrollments')
@@ -451,6 +468,8 @@ setStudents(uniqueStudents);
   useEffect(() => {
     if (!effectiveClassId) return;
     const fetchScheduleData = async () => {
+      setScheduleCells([]);
+      setScheduleSubjects([]);
       try {
         const { data: cellsData, error: ce } = await supabase
           .from('schedule_cells')
@@ -1511,6 +1530,16 @@ setStudents(uniqueStudents);
                  </tbody>
                </table>
             </div>
+          </div>
+        )}
+
+        {view === 'WEEK_DETAIL' && !selectedWeek && (
+          <div className="w-full bg-white border border-gray-300 p-8 text-center shadow-sm">
+            <h3 className="text-gray-500 font-bold uppercase text-[11px] mb-2">Nema odabranog tjedna</h3>
+            <p className="text-gray-400 text-xs mb-4">Trenutno ne postoji niti jedan radni tjedan u bazi za ovaj razred. Molimo dodajte tjedan u pregledu rada.</p>
+            <button onClick={() => setView('WEEKS')} className="mx-auto block px-4 py-2 bg-[#005c8d] text-white font-bold uppercase text-[10px]">
+              Prebaci na Pregled rada
+            </button>
           </div>
         )}
 

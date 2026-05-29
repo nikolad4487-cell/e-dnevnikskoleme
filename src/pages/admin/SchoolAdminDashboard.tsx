@@ -77,14 +77,15 @@ export default function SchoolAdminDashboard() {
   };
 
   const adminModules = [
-    { id: 'razredi', name: 'Razredni odjeli', icon: GraduationCap, color: 'bg-blue-500', link: '/admin/razredi' },
-    { id: 'korisnici', name: 'Korisnici / Nastavnici', icon: Users, color: 'bg-indigo-500', link: '/admin/korisnici' },
-    { id: 'predmeti', name: 'Globalni predmeti', icon: BookOpen, color: 'bg-amber-500', link: '/admin/predmeti' },
-    { id: 'student-predmeti', name: 'Predmeti učenika', icon: FileText, color: 'bg-cyan-500', link: '/admin/student-predmeti' },
-    { id: 'raspored', name: 'Raspored sati', icon: Calendar, color: 'bg-purple-500', link: '/admin/raspored' },
-    { id: 'informativka', name: 'Informativka', icon: MessageSquare, color: 'bg-emerald-500', link: '/admin/informativka' },
-    { id: 'izvještaji', name: 'Izvještaji i statistika', icon: BarChart3, color: 'bg-rose-500', link: '/admin/izvjestaji' },
-    { id: 'postavke', name: 'Postavke škole', icon: Settings, color: 'bg-slate-700', link: '/admin/postavke' },
+    { id: 'godine', name: 'Školske godine', icon: Calendar, color: 'bg-emerald-500', link: '/admin-skole/skolske-godine' },
+    { id: 'razredi', name: 'Razredni odjeli', icon: GraduationCap, color: 'bg-blue-500', link: '/admin-skole/razredi' },
+    { id: 'korisnici', name: 'Korisnici / Nastavnici', icon: Users, color: 'bg-indigo-500', link: '/admin-skole/korisnici' },
+    { id: 'ucenici', name: 'Učenici u školi', icon: Users, color: 'bg-teal-500', link: '/admin-skole/ucenici' },
+    { id: 'predmeti', name: 'Globalni predmeti', icon: BookOpen, color: 'bg-amber-500', link: '/admin-skole/predmeti' },
+    { id: 'smjerovi', name: 'Smjerovi / programi', icon: BookOpen, color: 'bg-orange-500', link: '/admin-skole/programi' },
+    { id: 'prijenos', name: 'Prijenos / rollover', icon: FileText, color: 'bg-red-500', link: '/admin-skole/rollover' },
+    { id: 'informativka', name: 'Informativka', icon: MessageSquare, color: 'bg-emerald-500', link: '/admin-skole/informativka' },
+    { id: 'postavke', name: 'Postavke škole', icon: Settings, color: 'bg-slate-700', link: '/admin-skole/postavke' },
   ];
 
   if (loading) return <div className="p-8 text-center animate-pulse font-black uppercase text-slate-300">Učitavanje...</div>;

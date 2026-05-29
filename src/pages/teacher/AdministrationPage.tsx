@@ -17,7 +17,7 @@ export default function AdministrationPage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const [searchParams] = useSearchParams();
   const { user, isMainAdmin, signOut, userSchoolRoles } = useAuth();
-  const { selectedSchoolId, selectedClassId: contextClassId, isArchived, setSelectedSchoolId } = useSelection();
+  const { selectedSchoolId, selectedClassId: contextClassId, isArchived, setSelectedSchoolId, setSelectedClassId: setContextClassId } = useSelection();
 
   const isAnyAdmin = React.useMemo(() => {
     // Current user's roles for the selected school
@@ -129,7 +129,7 @@ export default function AdministrationPage() {
      return filtered;
   }, [selectedClassData, programs]);
 
-  const isSchoolAdminMode = location.pathname.startsWith('/admin/');
+  const isSchoolAdminMode = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/admin-skole');
 
   // Modals / Tabs
   const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN' | 'CONDUCT' | 'PROGRESS' | 'SUPPORTS' | 'ASSIGNMENTS' | 'DOCUMENTS' | 'INFORMATIVKA_ADMIN'>(
@@ -150,19 +150,15 @@ export default function AdministrationPage() {
     isTransferring: false
   });
   
-  useEffect(() => {
+  /* useEffect(() => {
+    console.log("EFFECT RUN: AdministrationPage setActiveTab");
     if (effectiveClassId && activeTab === 'MENU') {
       setActiveTab('CLASS_DETAIL');
     }
-  }, [effectiveClassId]);
+  }, [effectiveClassId]); */
 
   useEffect(() => {
-    if (effectiveClassId) {
-      setSelectedClassId(effectiveClassId);
-    }
-  }, [effectiveClassId]);
-
-  useEffect(() => {
+    console.log("EFFECT RUN: AdministrationPage 160");
     const shouldOpenAddClass = searchParams.get('openAddClass') === 'true';
     const yearId = searchParams.get('schoolYearId');
     if (shouldOpenAddClass && yearId && isAnyAdmin) {
@@ -171,7 +167,7 @@ export default function AdministrationPage() {
       setNewClassGrade(1);
       setNewClassSection('A');
     }
-  }, [searchParams, isAnyAdmin]);
+  }, [searchParams.toString(), isAnyAdmin]);
 
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [rolloverLogs, setRolloverLogs] = useState<RolloverLog[]>([]);
@@ -859,6 +855,7 @@ export default function AdministrationPage() {
   };
 
   useEffect(() => {
+    console.log("EFFECT RUN: AdministrationPage 857");
     if (!selectedSchoolId || (!isMainAdmin && !isSchoolAdmin)) return;
     
     const checkAndCreateSchoolYear = async () => {
@@ -905,6 +902,7 @@ export default function AdministrationPage() {
   }, [selectedSchoolId, isMainAdmin, isSchoolAdmin]);
 
   useEffect(() => {
+    console.log("EFFECT RUN: AdministrationPage 903");
     if (newClassVariant === 'CONTINUATION_FREE') {
       setNewClassName(`4.K`);
     } else if (newClassVariant === 'CONTINUATION_PAID') {
@@ -917,6 +915,7 @@ export default function AdministrationPage() {
   const [allSubjects, setAllSubjects] = useState<any[]>([]);
   const [enrollments, setEnrollments] = useState<any[]>([]);
   useEffect(() => {
+    console.log("EFFECT RUN: AdministrationPage 915");
     if (!selectedClassId || (!isMainAdmin && !isSchoolAdmin)) return;
     
     // Initial fetch
@@ -947,9 +946,10 @@ export default function AdministrationPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [selectedClassId, isMainAdmin, isSchoolAdmin]);
+  }, [selectedClassId, isMainAdmin, isSchoolAdmin, effectiveClassId]);
 
   useEffect(() => {
+    console.log("EFFECT RUN: AdministrationPage 948");
     if (!selectedStudentId || (!isMainAdmin && !isSchoolAdmin)) return;
     
     // Initial fetch
@@ -983,6 +983,7 @@ export default function AdministrationPage() {
   }, [selectedStudentId, isMainAdmin, isSchoolAdmin]);
 
   useEffect(() => {
+    console.log("EFFECT RUN: AdministrationPage 981");
     if (selectedSchoolId) {
       setProgramForm(prev => ({ ...prev, schoolId: selectedSchoolId }));
       setStudentForm(prev => ({ ...prev, schoolId: selectedSchoolId }));
@@ -999,6 +1000,7 @@ export default function AdministrationPage() {
   const selectedStudentData = students.find(s => s.id === selectedStudentId);
 
   useEffect(() => {
+    console.log("EFFECT RUN: AdministrationPage 997");
     if (selectedClassData) {
       setClassDetailForm({
         homeroom_teacher_id: selectedClassData.homeroomTeacherId || '',
@@ -1028,7 +1030,9 @@ export default function AdministrationPage() {
         if (clsInfo?.school_id) {
           console.log('DEBUG: Recovered school_id:', clsInfo.school_id);
           currentSchoolId = clsInfo.school_id;
-          if (setSelectedSchoolId) setSelectedSchoolId(clsInfo.school_id);
+          if (setSelectedSchoolId && clsInfo.school_id !== selectedSchoolId) { // Guard!
+             setSelectedSchoolId(clsInfo.school_id);
+          }
         } else if (infoErr) {
           console.error('DEBUG: School recovery error:', infoErr);
         }
@@ -1240,7 +1244,7 @@ setStudents(uniqueMapped as any);
 
   useEffect(() => {
     fetchData();
-  }, [selectedClassId, activeTab, selectedSchoolId, selectedYearId]);
+  }, [effectiveClassId, activeTab, selectedSchoolId, selectedYearId]);
 
   const handleUpdateClass = async () => {
     if (isArchived) {
@@ -3042,7 +3046,7 @@ setAllSubjects(uniqueSub2);
                 key={`${opt.tab}-${opt.label}-${opt.mode}`}
                 onClick={() => {
                   if (opt.tab === 'STUDENT_SUBJECTS_ENROLL') {
-                    navigate('/admin/student-predmeti');
+                    navigate('/admin-skole/student-predmeti');
                   } else {
                     setActiveTab(opt.tab as any)
                   }
@@ -3085,7 +3089,7 @@ setAllSubjects(uniqueSub2);
                       key={btn.tab}
                       onClick={() => {
                         if (btn.tab === 'STUDENT_SUBJECTS_ENROLL') {
-                          navigate('/admin/student-predmeti');
+                          navigate('/admin-skole/student-predmeti');
                         } else {
                           setActiveTab(btn.tab as any)
                         }

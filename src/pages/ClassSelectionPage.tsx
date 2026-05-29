@@ -42,7 +42,30 @@ export default function ClassSelectionPage() {
 
   useEffect(() => {
     const init = async () => {
-      if (!selectedSchoolId) return;
+      let schoolId = selectedSchoolId;
+
+      // 1. Resolve school ID if needed
+      if (!schoolId && user) {
+        schoolId = (user as any).school_id || 
+                   (userSchoolRoles && userSchoolRoles.length > 0 ? userSchoolRoles[0].schoolId : null) ||
+                   (user as any).profile?.school_id;
+        
+        console.log("CLASS SELECT user", user);
+        console.log("CLASS SELECT resolvedSchoolId", schoolId);
+
+        if (schoolId) {
+          setSelectedSchoolId(schoolId);
+          return; // Trigger re-render
+        } else {
+          setLoading(false);
+          console.error("No school found for user");
+          toast.error("Nije pronađena škola za korisnika.");
+          return;
+        }
+      }
+
+      if (!schoolId) return;
+
       setLoading(true);
       await fetchSchoolYears();
       if (isStaff) {
@@ -72,6 +95,7 @@ export default function ClassSelectionPage() {
       
       if (error) throw error;
       if (data) {
+        console.log("CLASS SELECT schoolYears result", data);
         const years = data.map(y => ({
           id: y.id,
           name: y.name,
@@ -86,8 +110,10 @@ export default function ClassSelectionPage() {
         // Default to active year
         const activeYear = years.find(y => y.isActive);
         if (activeYear) {
+          console.log("CLASS SELECT selectedYear", activeYear);
           setSelectedYearId(activeYear.id);
         } else if (years.length > 0) {
+          console.log("CLASS SELECT selectedYear", years[0]);
           setSelectedYearId(years[0].id);
         }
       }
@@ -273,7 +299,7 @@ export default function ClassSelectionPage() {
       return;
     }
     console.log('ADD CLASS CLICKED');
-    navigate(`/admin/school-dashboard?openAddClass=true&schoolYearId=${selectedYear.id}`);
+    navigate(`/admin-skole?openAddClass=true&schoolYearId=${selectedYear.id}`);
   };
 
   const handleSelect = (cls: ClassWithDetails) => {
@@ -338,7 +364,7 @@ export default function ClassSelectionPage() {
 
           {isSchoolAdmin && (
             <button 
-              onClick={() => navigate('/admin/school-dashboard')}
+              onClick={() => navigate('/admin-skole')}
               className="text-[10px] font-black uppercase text-white bg-[#005c8d] hover:bg-[#004a70] transition-colors flex items-center gap-2 px-6 py-2 shadow-sm"
             >
               Administracija škole

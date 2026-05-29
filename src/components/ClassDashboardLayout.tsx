@@ -14,7 +14,7 @@ interface NavItem {
   icon?: React.ReactNode;
 }
 
-// TEACHER_NAV is defined dynamically inside Layout component below
+// TEACHER_NAV is defined dynamically inside ClassDashboardLayout component below
 
 const STUDENT_NAV: NavItem[] = [
   { label: 'Ocjene', path: '/student/ocjene' },
@@ -26,21 +26,22 @@ const STUDENT_NAV: NavItem[] = [
 ];
 
 const ADMIN_NAV: NavItem[] = [
-  { label: 'Škole', path: '/admin/schools' },
-  { label: 'Administracija', path: '/admin/school-dashboard' },
-  { label: 'Razredi', path: '/admin/razredi' },
-  { label: 'Korisnici', path: '/admin/korisnici' },
-  { label: 'Predmeti', path: '/admin/predmeti' },
+  { label: 'Škole', path: '/admin-skole/schools' },
+  { label: 'Admin. škole', path: '/admin-skole' },
+  { label: 'Razredi', path: '/admin-skole/razredi' },
+  { label: 'Korisnici', path: '/admin-skole/korisnici' },
+  { label: 'Predmeti', path: '/admin-skole/predmeti' },
 ];
 
-export function Layout({ children }: { children: React.ReactNode }) {
+export function ClassDashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, signOut, userSchoolRoles, isMainAdmin, formattedRoles, isStaff } = useAuth();
   const { selectedSchoolId, selectedClassId, isArchived, clearSelection } = useSelection();
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
 
-  const isAdminPath = location.pathname.startsWith('/admin');
+  // isAdminPath is only for the specific /admin/* routes, not /admin-skole/*
+  const isAdminPath = location.pathname.startsWith('/admin/') && !location.pathname.startsWith('/admin-skole');
 
   // Current roles in selected school
   const currentSchoolRoles = userSchoolRoles.filter(r => r.schoolId === selectedSchoolId).map(r => r.role);
@@ -53,10 +54,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { id: 'dnevnik-rada', label: 'Dnevnik rada', path: `${classPathPrefix}/dnevnik-rada`, icon: <ClipboardList size={14} /> },
     { id: 'zapisnici', label: 'Zapisnici', path: `${classPathPrefix}/zapisnici`, icon: <FileText size={14} /> },
     { id: 'izvjestaji', label: 'Izvještaji', path: `${classPathPrefix}/izvjestaji`, icon: <FileSpreadsheet size={14} /> },
-    { id: 'admin', label: 'Administracija', path: isSchoolAdmin ? '/admin/school-dashboard' : `${classPathPrefix}/admin`, icon: <Settings size={14} /> },
+    { id: 'admin', label: 'Admin razreda', path: `/teacher/admin-razreda`, icon: <Settings size={14} /> },
     { id: 'pretrazivanje', label: 'Pretraživanje', path: `${classPathPrefix}/pretrazivanje`, icon: <Search size={14} /> },
+    ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : [])
   ] : [
     { label: 'Pretraživanje', path: '/teacher/pretrazivanje' },
+    ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : [])
   ];
 
   let navItems = isStaff 

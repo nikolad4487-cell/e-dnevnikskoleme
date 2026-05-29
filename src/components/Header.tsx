@@ -1,142 +1,72 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { User, LogOut, ChevronDown, Settings } from 'lucide-react';
+import { User, LogOut, Settings, Repeat } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { cn, formatPersonName } from '../lib/utils';
 import { Role } from '../types';
 
-export function Header() {
+interface HeaderProps {
+  showNav?: boolean;
+  hideClass?: boolean;
+}
+
+export function Header({ showNav = true, hideClass = false }: HeaderProps) {
   const { user, signOut, formattedRoles, userSchoolRoles } = useAuth();
   const { 
     selectedSchoolId, 
     selectedYearId, 
     selectedClassId, 
-    setSelectedSchoolId, 
-    setSelectedYearId, 
-    setSelectedClassId,
     clearSelection
   } = useSelection();
-  const [schools, setSchools] = useState<any[]>([]);
-  const [schoolYears, setSchoolYears] = useState<any[]>([]);
-  const [classes, setClasses] = useState<any[]>([]);
+  
+  const [schoolLabel, setSchoolLabel] = useState('');
+  const [yearLabel, setYearLabel] = useState('');
+  const [classLabel, setClassLabel] = useState('');
+  
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isSchoolMenuOpen, setIsSchoolMenuOpen] = useState(false);
-  const [isYearMenuOpen, setIsYearMenuOpen] = useState(false);
-  const [isClassMenuOpen, setIsClassMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   
-  const selectedSchool = schools.find(s => s.id === selectedSchoolId);
-  const selectedYear = schoolYears.find(y => y.id === selectedYearId);
-  const selectedClass = classes.find(c => c.id === selectedClassId);
-
   useEffect(() => {
-    // 1. Fetch User Schools
-    const fetchSchools = async () => {
-      const { data } = await supabase.from('schools').select('*');
-      if (data) setSchools(data);
-    };
-    fetchSchools();
-  }, [user]);
-
-  useEffect(() => {
+    console.log("EFFECT RUN: Header HandleClickOutside");
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
-        setIsSchoolMenuOpen(false);
-        setIsYearMenuOpen(false);
-        setIsClassMenuOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  useEffect(() => {
-    if (selectedSchoolId) {
-      // Fetch years
-      const fetchYears = async () => {
-        const { data } = await supabase.from('school_years')
-          .select('*')
-          .eq('school_id', selectedSchoolId)
-          .order('starts_at', { ascending: false });
-        if (data) setSchoolYears(data);
-      };
-      fetchYears();
-    } else {
-      setSchoolYears([]);
-    }
-  }, [selectedSchoolId]);
+  /* useEffect(() => {
+    const fetchLabels = async () => {
+      let sLabel = '';
+      let yLabel = '';
+      let cLabel = '';
 
-  useEffect(() => {
-    // Determine current active year if not selected
-    if (schoolYears.length > 0 && !selectedYearId) {
-      const active = schoolYears.find(y => y.is_active) || schoolYears[0];
-      setSelectedYearId(active.id);
-    }
-  }, [schoolYears, selectedYearId]);
+      if (selectedSchoolId) {
+        const { data: sData } = await supabase.from('schools').select('name').eq('id', selectedSchoolId).single();
+        if (sData) sLabel = sData.name;
+      }
+      if (selectedYearId) {
+        const { data: yData } = await supabase.from('school_years').select('name').eq('id', selectedYearId).single();
+        if (yData) yLabel = yData.name;
+      }
+      if (selectedClassId) {
+         const { data: cData } = await supabase.from('classes').select('name').eq('id', selectedClassId).single();
+         if (cData) cLabel = cData.name;
+      }
 
-  useEffect(() => {
-    if (selectedSchoolId && selectedYearId) {
-      const fetchClasses = async () => {
-        const { data, error } = await supabase.from('classes')
-          .select('*')
-          .eq('school_id', selectedSchoolId)
-          .eq('school_year_id', selectedYearId)
-          .order('name');
-        
-        if (error) {
-          console.error("DEBUG CLASSES ERROR", error);
-        }
-        if (data) {
-          setClasses(data);
-        }
-      };
-      fetchClasses();
-    } else {
-      setClasses([]);
-    }
-  }, [selectedSchoolId, selectedYearId]);
+      if (sLabel !== schoolLabel) setSchoolLabel(sLabel);
+      if (yLabel !== yearLabel) setYearLabel(yLabel);
+      if (cLabel !== classLabel) setClassLabel(cLabel);
+    };
 
-  useEffect(() => {
-    console.log("HEADER SELECTED SCHOOL", selectedSchoolId);
-    console.log("HEADER SELECTED YEAR", selectedYearId);
-    console.log("HEADER AVAILABLE CLASSES", classes);
-    console.log("HEADER SELECTED CLASS", selectedClassId);
-  }, [selectedSchoolId, selectedYearId, classes, selectedClassId]);
-
-  const selectClass = async (classItem: any) => {
-    console.log("CLASS DROPDOWN CLICKED", classItem);
-    console.log("SELECT CLASS FUNCTION CALLED", classItem.id);
-    
-    setSelectedClassId(classItem.id);
-    localStorage.setItem("selectedClassId", classItem.id);
-    if (classItem.name) {
-      localStorage.setItem("selectedClassName", classItem.name);
-    }
-    
-    console.log("SELECTED CLASS AFTER SET", classItem);
-    console.log("SELECT CLASS SAVED", classItem.id);
-    console.log("LOCAL STORAGE SELECTED CLASS", localStorage.getItem("selectedClassId"));
-    
-    setIsClassMenuOpen(false);
-
-    if (location.pathname.startsWith('/class/')) {
-      const currentTab = location.pathname.split('/')[3] || 'imenik';
-      navigate(`/class/${classItem.id}/${currentTab}`);
-    } else if (location.pathname.startsWith('/student/')) {
-      // For students/parents, stay on the same path but context+key will force remount
-      navigate(location.pathname);
-    } else if (location.pathname.startsWith('/admin/')) {
-      // Admin dashboard handling can stay put
-      navigate('/admin/school-dashboard');
-    } else {
-      navigate(`/class/${classItem.id}/imenik`);
-    }
-  };
+    fetchLabels();
+  }, [selectedSchoolId, selectedYearId, selectedClassId]); */
 
   const handleLogout = async () => {
     await signOut();
@@ -150,57 +80,21 @@ export function Header() {
       <div className="flex items-center gap-6">
         <Link to="/" className="font-black text-lg tracking-tight hover:underline">e-Dnevnik</Link>
         
-        {/* Dropdowns */}
-        <div className="flex items-center gap-2">
-           <div className="relative">
-             <button onClick={() => setIsSchoolMenuOpen(!isSchoolMenuOpen)} className="flex items-center gap-1 text-xs font-medium hover:bg-[#004a70] p-2 rounded">
-                {selectedSchool?.name || 'Odaberi školu'} <ChevronDown size={14} />
+        {/* Current Context Display */}
+        <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest bg-black/10 px-3 py-1.5 rounded">
+           {schoolLabel && <span>{schoolLabel}</span>}
+           {yearLabel && <><span className="text-white/30">/</span><span className="text-white/80">{yearLabel}</span></>}
+           {!hideClass && classLabel && <><span className="text-white/30">/</span><span className="bg-white text-[#005c8d] px-2 py-0.5 rounded-sm">{classLabel}</span></>}
+           
+           {!hideClass && showNav && (
+             <button 
+               onClick={() => navigate('/select-class')} 
+               className="ml-4 flex items-center gap-1 hover:bg-white/20 p-1 px-2 rounded transition-colors"
+               title="Promijeni razred"
+             >
+               <Repeat size={14} /> Promijeni
              </button>
-             {isSchoolMenuOpen && (
-               <div className="absolute top-full mt-1 w-48 bg-white text-gray-800 border rounded shadow-xl z-50 py-1">
-                 {schools.map(s => <button key={s.id} onClick={() => { 
-                   setSelectedSchoolId(s.id); 
-                   setIsSchoolMenuOpen(false); 
-                   setSelectedYearId(null); 
-                   setSelectedClassId(null); 
-                   if (location.pathname.startsWith('/class/')) {
-                     navigate('/select-class');
-                   }
-                 }} className="w-full text-left px-4 py-2 hover:bg-slate-100 text-xs">{s.name}</button>)}
-               </div>
-             )}
-           </div>
-
-           <div className="relative">
-             <button onClick={() => setIsYearMenuOpen(!isYearMenuOpen)} className="flex items-center gap-1 text-xs font-medium hover:bg-[#004a70] p-2 rounded">
-                {selectedYear?.name || 'Odaberi godinu'} <ChevronDown size={14} />
-             </button>
-             {isYearMenuOpen && (
-               <div className="absolute top-full mt-1 w-48 bg-white text-gray-800 border rounded shadow-xl z-50 py-1">
-                 {schoolYears.map(y => <button key={y.id} onClick={() => { 
-                   setSelectedYearId(y.id); 
-                   setIsYearMenuOpen(false); 
-                   setSelectedClassId(null); 
-                   if (location.pathname.startsWith('/class/')) {
-                     navigate('/select-class');
-                   }
-                 }} className="w-full text-left px-4 py-2 hover:bg-slate-100 text-xs">{y.name}</button>)}
-               </div>
-             )}
-           </div>
-
-           <div className="relative">
-             <button onClick={() => setIsClassMenuOpen(!isClassMenuOpen)} className="flex items-center gap-1 text-xs font-medium hover:bg-[#004a70] p-2 rounded">
-                {selectedClass?.name || 'Odaberi razred'} <ChevronDown size={14} />
-             </button>
-             {isClassMenuOpen && (
-               <div className="absolute top-full mt-1 w-48 bg-white text-gray-800 border rounded shadow-xl z-50 py-1">
-                 {classes.map(c => <button key={c.id} onClick={async () => { 
-                   await selectClass(c);
-                 }} className="w-full text-left px-4 py-2 hover:bg-slate-100 text-xs">{c.name}</button>)}
-               </div>
-             )}
-           </div>
+           )}
         </div>
       </div>
 

@@ -26,100 +26,21 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
   const [selectedChildId, setSelectedChildId] = useState<string | null>(() => localStorage.getItem('selectedChildId'));
   const [isArchived, setIsArchived] = useState<boolean>(() => localStorage.getItem('isArchived') === 'true');
 
-  useEffect(() => {
-    console.log("SELECTION INIT localStorage selectedClassId", localStorage.getItem("selectedClassId"));
-  }, []);
+  // Removed auto-sync useEffects
 
-  useEffect(() => {
-    console.log("SELECTION selectedClassId STATE", selectedClassId);
-  }, [selectedClassId]);
 
-  // Async validation of selections
-  useEffect(() => {
-    if (authLoading || !user) return;
-
-    const validateSelections = async () => {
-      console.log('[SELECTION] Validating stored selections...');
-      
-      // 1. School Validation
-      if (selectedSchoolId) {
-        const { data: school, error } = await supabase
-          .from('schools')
-          .select('id')
-          .eq('id', selectedSchoolId)
-          .maybeSingle();
-        
-        if (error || !school) {
-          console.warn('[SELECTION] Invalid school ID found, clearing:', selectedSchoolId);
-          setSelectedSchoolId(null);
-          setSelectedYearId(null);
-          setSelectedClassId(null);
-        }
-      }
-
-      // 2. Class Validation
-      if (selectedClassId) {
-        const { data: cls, error } = await supabase
-          .from('classes')
-          .select('id')
-          .eq('id', selectedClassId)
-          .maybeSingle();
-        
-        if (error || !cls) {
-          console.warn('[SELECTION] Invalid class ID found, clearing:', selectedClassId);
-          setSelectedClassId(null);
-        }
-      }
-
-      // 3. Child Validation
-      if (selectedChildId) {
-        const { data: child, error } = await supabase
-          .from('user_profiles')
-          .select('id')
-          .eq('id', selectedChildId)
-          .maybeSingle();
-        
-        if (error || !child) {
-          console.warn('[SELECTION] Invalid child ID found, clearing:', selectedChildId);
-          setSelectedChildId(null);
-        }
-      }
-    };
-
-    validateSelections();
-  }, [user, authLoading]);
-
-  useEffect(() => {
-    if (selectedSchoolId) localStorage.setItem('selectedSchoolId', selectedSchoolId);
-    else localStorage.removeItem('selectedSchoolId');
-  }, [selectedSchoolId]);
-
-  useEffect(() => {
-    if (selectedYearId) localStorage.setItem('selectedYearId', selectedYearId);
-    else localStorage.removeItem('selectedYearId');
-  }, [selectedYearId]);
-
-  useEffect(() => {
-    if (selectedClassId) localStorage.setItem('selectedClassId', selectedClassId);
-    else localStorage.removeItem('selectedClassId');
-  }, [selectedClassId]);
-
-  useEffect(() => {
-    if (selectedChildId) localStorage.setItem('selectedChildId', selectedChildId);
-    else localStorage.removeItem('selectedChildId');
-  }, [selectedChildId]);
-
-  useEffect(() => {
-    localStorage.setItem('isArchived', String(isArchived));
-  }, [isArchived]);
-
-  const clearSelection = () => {
+  const setSelectedSchoolIdCallback = React.useCallback((id: string | null) => setSelectedSchoolId(id), []);
+  const setSelectedYearIdCallback = React.useCallback((id: string | null) => setSelectedYearId(id), []);
+  const setSelectedClassIdCallback = React.useCallback((id: string | null) => setSelectedClassId(id), []);
+  const setSelectedChildIdCallback = React.useCallback((id: string | null) => setSelectedChildId(id), []);
+  const setIsArchivedCallback = React.useCallback((val: boolean) => setIsArchived(val), []);
+  const clearSelectionCallback = React.useCallback(() => {
     setSelectedSchoolId(null);
     setSelectedYearId(null);
     setSelectedClassId(null);
     setSelectedChildId(null);
     setIsArchived(false);
-  };
+  }, []);
 
   const value = React.useMemo(() => ({
     selectedSchoolId,
@@ -127,13 +48,25 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     selectedClassId,
     selectedChildId,
     isArchived,
-    setSelectedSchoolId,
-    setSelectedYearId,
-    setSelectedClassId,
-    setSelectedChildId,
-    setIsArchived,
-    clearSelection
-  }), [selectedSchoolId, selectedYearId, selectedClassId, selectedChildId, isArchived]);
+    setSelectedSchoolId: setSelectedSchoolIdCallback,
+    setSelectedYearId: setSelectedYearIdCallback,
+    setSelectedClassId: setSelectedClassIdCallback,
+    setSelectedChildId: setSelectedChildIdCallback,
+    setIsArchived: setIsArchivedCallback,
+    clearSelection: clearSelectionCallback
+  }), [
+    selectedSchoolId, 
+    selectedYearId, 
+    selectedClassId, 
+    selectedChildId, 
+    isArchived, 
+    setSelectedSchoolIdCallback,
+    setSelectedYearIdCallback,
+    setSelectedClassIdCallback,
+    setSelectedChildIdCallback,
+    setIsArchivedCallback,
+    clearSelectionCallback
+  ]);
 
   return (
     <SelectionContext.Provider value={value}>

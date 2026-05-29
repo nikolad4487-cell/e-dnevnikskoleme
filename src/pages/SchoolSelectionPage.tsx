@@ -112,7 +112,7 @@ export default function SchoolSelectionPage() {
     const isOnlyStudentOrParent = (isParent || roleNames.includes(Role.STUDENT)) && !isStaff;
 
     if (isAnyAdmin) {
-      navigate('/admin/school-dashboard');
+      navigate('/admin-skole');
     } else {
       navigate('/select-class');
     }

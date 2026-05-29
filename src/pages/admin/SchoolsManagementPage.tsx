@@ -123,7 +123,7 @@ export default function SchoolsManagementPage() {
 
   const handleSelectSchool = (id: string) => {
     setSelectedSchoolId(id);
-    navigate('/admin/school-dashboard');
+    navigate('/admin-skole');
   };
 
   return (

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSelection } from '../../contexts/SelectionContext';
 import { Absence, AbsenceStatus, User, Lesson, Subject } from '../../types';
 import { cn, getSurname, formatPersonName } from '../../lib/utils';
 import { UserX, ArrowLeft } from 'lucide-react';

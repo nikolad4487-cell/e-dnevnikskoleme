@@ -188,9 +188,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Total timeout for the entire sequence
     const controller = new AbortController();
     const loadFailsafe = setTimeout(() => {
-      console.error(`[AUTH] loadUserData TIMEOUT after 8s for ${authUserId}`);
+      console.error(`[AUTH] loadUserData TIMEOUT after 15s for ${authUserId}`);
       controller.abort();
-    }, 8000);
+    }, 15000);
     
     try {
       // 1. Fetch Profile
@@ -266,7 +266,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const roles = mapList(rolesData, mappers.userSchoolRole);
       
       setUser(profile);
-      setUserSchoolRoles(roles);
+      setUserSchoolRoles(prev => {
+        if (JSON.stringify(prev) === JSON.stringify(roles)) return prev;
+        return roles;
+      });
       setError(null);
       
       console.log(`[AUTH] loadUserData SUCCESS in ${Date.now() - startTime}ms`);

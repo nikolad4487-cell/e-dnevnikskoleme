@@ -410,6 +410,7 @@ export default function ImenikPage() {
   const fetchStudentsData = async () => {
     if (!effectiveClassId) return;
     console.log("IMENIK fetchStudents classId", effectiveClassId);
+    console.log("FETCHING DATA FOR CLASS", effectiveClassId);
     setLoading(true);
     setStudents([]); // Force clear old data
     try {
@@ -437,6 +438,9 @@ export default function ImenikPage() {
 
   useEffect(() => {
     if (effectiveClassId) {
+      setActiveStudent(null);
+      setActiveSubject(null);
+      setViewMode('STUDENTS');
       fetchStudentsData();
       fetchWarningData();
     }
@@ -1480,7 +1484,18 @@ export default function ImenikPage() {
     }
   };
 
-  const renderStudents = () => (
+  const renderStudents = () => {
+    if (students.length === 0) {
+      return (
+        <div className="p-10 text-center flex flex-col items-center justify-center">
+          <Users className="w-12 h-12 text-gray-300 mb-4" />
+          <h2 className="text-sm font-bold text-gray-500 uppercase">Nema učenika u ovom razredu</h2>
+          <p className="text-xs text-gray-400 mt-2">U administraciji škole možete dodati učenike u ovaj razredni odjel.</p>
+        </div>
+      );
+    }
+    
+    return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between border-b pb-4 border-gray-200">
         <div>
@@ -1562,6 +1577,7 @@ export default function ImenikPage() {
       </div>
     </div>
   );
+};
 
   const sortedStudents = [...students].sort((a, b) => {
     const surnameA = getSurname(String(a.name || ''));

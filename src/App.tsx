@@ -1,11 +1,11 @@
-import React, { Suspense, lazy, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import React, { Suspense, lazy, useEffect, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { ShieldAlert, Users } from 'lucide-react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SelectionProvider, useSelection } from './contexts/SelectionContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
-import { Layout } from './components/Layout';
+import { BasicLayout } from './components/BasicLayout';
 import InactivityTracker from './components/InactivityTracker';
 import { Role } from './types';
 
@@ -15,128 +15,6 @@ const SchoolSelectionPage = lazy(() => import('./pages/SchoolSelectionPage'));
 const ClassSelectionPage = lazy(() => import('./pages/ClassSelectionPage'));
 const ChildSelectionPage = lazy(() => import('./pages/ChildSelectionPage'));
 
-const DashboardRedirect = () => {
-  const { user, userSchoolRoles, isStaff, isStudent, isParent, isMainAdmin, loading, error, signOut } = useAuth();
-  const { selectedSchoolId, selectedClassId, selectedChildId } = useSelection();
-  const location = useLocation();
-
-  useEffect(() => {
-    console.count('[DASHBOARD] DashboardRedirect Render');
-    console.log('[DASHBOARD] State check:', {
-      user: user?.email,
-      rolesCount: userSchoolRoles.length,
-      loading,
-      error: !!error,
-      selection: { selectedSchoolId, selectedClassId, selectedChildId }
-    });
-
-    // Safety timeout removed in favor of AuthContext handled timeouts
-    return () => {};
-  }, [user, userSchoolRoles, loading, error, selectedSchoolId, selectedClassId, selectedChildId]);
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 font-sans">
-        <div className="flex flex-col items-center">
-          <div className="w-10 h-10 border-4 border-[#005c8d] border-t-transparent rounded-full animate-spin mb-6"></div>
-          <h2 className="text-sm font-bold text-slate-800 uppercase tracking-widest leading-none">Učitavanje podataka...</h2>
-          <p className="text-[10px] text-slate-400 mt-4 uppercase font-bold tracking-tighter leading-none">Provjera ovlaštenja sustava e-Dnevnik</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    console.error('[DASHBOARD] Failed to load dashboard:', { error });
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-slate-50 font-sans">
-        <div className="bg-white p-12 border border-gray-300 max-w-md shadow-sm">
-          <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
-            <ShieldAlert size={24} strokeWidth={3} />
-          </div>
-          <h1 className="text-xl font-black text-slate-900 mb-2 tracking-tighter uppercase leading-none">
-            Greška pri učitavanju
-          </h1>
-          <p className="text-[12px] text-slate-600 mb-8 leading-relaxed font-bold bg-red-50 p-4 border border-red-100">
-            {error || 'Sustav se ne uspijeva povezati. Provjerite internetsku vezu i pokušajte ponovno.'}
-          </p>
-          <div className="flex flex-col gap-2">
-            <button 
-              onClick={() => window.location.reload()}
-              className="w-full bg-[#005c8d] text-white py-3 border border-[#004a71] font-black uppercase tracking-widest text-[10px] hover:bg-[#004a71] transition-all"
-            >
-              Pokušaj ponovno
-            </button>
-            <button 
-              onClick={() => signOut()} 
-              className="w-full text-slate-400 font-bold uppercase tracking-[0.2em] text-[9px] hover:text-[#005c8d] py-2 transition-colors"
-            >
-              Odjava
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!user) return <Navigate to="/login" replace />;
-  
-  if (user?.requiresAuthenticatorSetup && isStaff) {
-    if (location.pathname === '/auth/setup-authenticator') return null;
-    return <Navigate to="/auth/setup-authenticator" replace />;
-  }
-
-  const roleNames = userSchoolRoles.map(r => r.role);
-  const hasAdminRole = roleNames.includes(Role.MAIN_ADMIN) || roleNames.includes(Role.ADMIN) || roleNames.includes(Role.SCHOOL_ADMIN);
-  const hasTeacherRole = roleNames.includes(Role.TEACHER) || roleNames.includes(Role.HOMEROOM) || roleNames.includes(Role.DEPUTY);
-  const hasStudentRole = roleNames.includes(Role.STUDENT);
-  const hasParentRole = roleNames.includes(Role.PARENT);
-
-  if (userSchoolRoles.length === 0 && !hasAdminRole && !hasTeacherRole && !hasStudentRole && !isParent) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen p-4 text-center bg-slate-50 font-sans">
-        <div className="bg-white p-12 border border-gray-300 max-w-md shadow-sm">
-          <h1 className="text-xl font-black text-slate-900 mb-4 tracking-tighter uppercase leading-none">Nema uloga</h1>
-          <p className="text-[12px] text-slate-600 mb-8 font-bold">Korisnik nema dodijeljenu ulogu u sustavu.</p>
-          <button onClick={() => signOut()} className="w-full bg-[#005c8d] text-white py-3 font-black uppercase text-[10px]">Odjava</button>
-        </div>
-      </div>
-    );
-  }
-
-  // Final dashboard redirects with route matching check
-  if (isParent && !isStaff && !selectedChildId) {
-    if (location.pathname === '/select-child') return null; 
-    return <Navigate to="/select-child" replace />;
-  }
-
-  if (!selectedSchoolId) {
-    if (isMainAdmin) {
-      if (location.pathname === '/admin/schools') return null;
-      return <Navigate to="/admin/schools" replace />;
-    }
-    if (location.pathname === '/select-school') return null;
-    return <Navigate to="/select-school" replace />;
-  }
-
-  if (!selectedClassId && (isStaff || isStudent)) {
-    if (location.pathname === '/select-class') return null;
-    return <Navigate to="/select-class" replace />;
-  }
-
-  if (isStaff) {
-    const target = `/class/${selectedClassId || 'missing'}`;
-    if (location.pathname.startsWith('/class/')) return null;
-    return <Navigate to={target} replace />;
-  }
-
-  if (isStudent || isParent) {
-    if (location.pathname.startsWith('/student/')) return null;
-    return <Navigate to="/student/ocjene" replace />;
-  }
-
-  return <Navigate to="/login" replace />;
-};
 
 // Teacher/Admin Pages
 const ImenikPage = lazy(() => import('./pages/teacher/ImenikPage'));
@@ -172,6 +50,11 @@ const ClassSubjectsPage = lazy(() => import('./pages/admin/ClassSubjectsPage'));
 const ClassStudentsPage = lazy(() => import('./pages/admin/ClassStudentsPage'));
 const StudentSubjectEnrollmentPage = lazy(() => import('./pages/admin/StudentSubjectEnrollmentPage'));
 const ScheduleManagementPage = lazy(() => import('./pages/admin/ScheduleManagementPage'));
+const SchoolYearsPage = lazy(() => import('./pages/admin/SchoolYearsPage'));
+const StudentsPage = lazy(() => import('./pages/admin/StudentsPage'));
+const ProgramsPage = lazy(() => import('./pages/admin/ProgramsPage'));
+const RolloverPage = lazy(() => import('./pages/admin/RolloverPage'));
+const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
 
 const ClassDashboardPage = lazy(() => import('./pages/teacher/ClassDashboardPage'));
 
@@ -228,52 +111,55 @@ export default function App() {
 
               <Route path="/" element={
                 <ProtectedRoute>
-                  <DashboardRedirect />
+                  <Navigate to="/select-class" replace />
                 </ProtectedRoute>
               } />
 
               {/* Admin Routes */}
-              <Route path="/admin/*" element={
+              <Route path="/admin-skole/*" element={
                 <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN]}>
-                  <Layout>
+                  <BasicLayout>
                     <Routes>
-                      <Route path="schools" element={<SchoolsManagementPage />} />
-                      <Route path="school-dashboard" element={<AdministrationPage />} />
+                      <Route path="" element={<SchoolAdminDashboard />} />
+                      <Route path="school-dashboard" element={<Navigate to="/admin-skole" replace />} />
+                      <Route path="skolske-godine" element={<SchoolYearsPage />} />
                       <Route path="razredi" element={<ClassManagementPage />} />
-                      <Route path="razred-predmeti" element={<ClassSubjectsPage />} />
-                      <Route path="razred-ucenici" element={<ClassStudentsPage />} />
-                      <Route path="student-predmeti" element={<StudentSubjectEnrollmentPage />} />
+                      <Route path="korisnici" element={<UserManagementPage />} />
+                      <Route path="ucenici" element={<StudentsPage />} />
+                      <Route path="predmeti" element={<SubjectManagementPage />} />
+                      <Route path="programi" element={<ProgramsPage />} />
+                      <Route path="rollover" element={<RolloverPage />} />
+                      <Route path="postavke" element={<AdminSettingsPage />} />
                       <Route path="raspored" element={<ScheduleManagementPage />} />
                       <Route path="informativka" element={<InformativkaAdminPage />} />
-                      <Route path="korisnici" element={<UserManagementPage />} />
-                      <Route path="predmeti" element={<SubjectManagementPage />} />
-                      <Route path="*" element={<Navigate to="/admin/schools" replace />} />
+                      <Route path="*" element={<Navigate to="/admin-skole" replace />} />
                     </Routes>
-                  </Layout>
+                  </BasicLayout>
                 </ProtectedRoute>
               } />
 
               <Route path="/class/:classId/*" element={
                 <ProtectedRoute allowedRoles={[Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN]}>
-                  <Layout>
+                  <BasicLayout>
                     <ClassDashboardPage />
-                  </Layout>
+                  </BasicLayout>
                 </ProtectedRoute>
               } />
 
               {/* Teacher/Admin Routes - Contextless/Global */}
               <Route path="/teacher/*" element={
                 <ProtectedRoute allowedRoles={[Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN]}>
-                    <Layout>
+                    <BasicLayout>
                       <Routes>
                         <Route path="pretrazivanje" element={<PretrazivanjePage />} />
                         <Route path="informativka" element={<InformativkaPage />} />
                         <Route path="pedagoska-dokumentacija" element={<PedagoskaDokumentacijaPage />} />
                         <Route path="svjedodzbe" element={<CertificateManagementPage />} />
                         <Route path="postavke" element={<SettingsPage />} />
+                        <Route path="admin-razreda" element={<AdministrationPage />} />
                         <Route path="*" element={<Navigate to="/" replace />} />
                       </Routes>
-                    </Layout>
+                    </BasicLayout>
                 </ProtectedRoute>
               } />
 
@@ -281,7 +167,7 @@ export default function App() {
               <Route path="/student/*" element={
                 <ProtectedRoute allowedRoles={[Role.STUDENT, Role.PARENT]}>
                   <SelectionGuard role="STUDENT">
-                    <Layout>
+                    <BasicLayout>
                       <Routes>
                         <Route path="ocjene" element={<OcjenePage />} />
                         <Route path="biljeske" element={<BiljeskePage />} />
@@ -293,7 +179,7 @@ export default function App() {
                         <Route path="postavke" element={<SettingsPage />} />
                         <Route path="*" element={<Navigate to="/student/ocjene" replace />} />
                       </Routes>
-                    </Layout>
+                    </BasicLayout>
                   </SelectionGuard>
                 </ProtectedRoute>
               } />

@@ -136,10 +136,11 @@ export default function ClassDashboardPage() {
     { id: 'imenik', label: 'Imenik', path: 'imenik', icon: BookOpen },
     { id: 'pregled-rada', label: 'Pregled rada', path: 'pregled-rada', icon: List },
     { id: 'dnevnik-rada', label: 'Dnevnik rada', path: 'dnevnik-rada', icon: ClipboardList },
+    { id: 'izostanci', label: 'Izostanci', path: 'izostanci', icon: Clock },
     { id: 'zapisnici', label: 'Zapisnici', path: 'zapisnici', icon: FileText },
-    { id: 'izvjestaji', label: 'Izvještaji', path: 'izvjestaji', icon: FileSpreadsheet },
-    { id: 'admin', label: 'Administracija', path: 'admin', icon: Settings },
-    { id: 'pretrazivanje', label: 'Pretraživanje', path: 'pretrazivanje', icon: Search },
+    { id: 'pedagoska-dokumentacija', label: 'Ped. dok.', path: 'pedagoska-dokumentacija', icon: FileText },
+    { id: 'raspored', label: 'Raspored', path: 'raspored', icon: Calendar },
+    { id: 'admin', label: 'Admin razreda', path: 'admin', icon: Settings },
   ];
 
   const burgerItems = [
@@ -153,19 +154,28 @@ export default function ClassDashboardPage() {
   const currentTab = location.pathname.split('/')[3] || 'imenik';
   const isActive = (tabPath: string) => currentTab === tabPath || (tabPath === 'dnevnik-rada' && currentTab === 'pregled-rada'); // Simplified for now
 
-  // New Sidebar Config
+  // Updated sidebar links to include all relevant dashboard modules
   const sidebarLinks: Record<string, { label: string, path: string }[]> = {
     'imenik': [
       { label: 'Imenik učenika', path: 'imenik' },
-      { label: 'Pregled predmeta', path: 'pregled-predmeta' }, // Need to ensure this path exists or map accurately
       { label: 'Bilješke', path: 'biljeske' }
     ],
+    'pregled-rada': [
+      { label: 'Pregled rada', path: 'pregled-rada' },
+      { label: 'Dnevnik rada', path: 'dnevnik-rada' },
+      { label: 'Raspored sati', path: 'raspored' }
+    ],
+    'izostanci': [
+      { label: 'Pregled izostanaka', path: 'izostanci' }
+    ],
+    'zapisnici': [
+      { label: 'Zapisnici', path: 'zapisnici' },
+      { label: 'Pedagoška dokumentacija', path: 'pedagoska-dokumentacija' }
+    ],
     'admin': [
-      { label: 'Postavke razreda', path: 'admin' },
+      { label: 'Administracija razreda', path: 'admin' },
       { label: 'Predmeti u razredu', path: 'predmeti' },
-      { label: 'Učenici u razredu', path: 'ucenici' },
-      { label: 'Opći prosjek', path: 'prosjek' },
-      { label: 'Svjedodžbe', path: 'svjedodzbe' }
+      { label: 'Učenici u razredu', path: 'ucenici' }
     ]
   };
 
@@ -250,7 +260,7 @@ export default function ClassDashboardPage() {
               <Route path="zapisnici" element={<ZapisniciPage />} />
               <Route path="izvjestaji" element={<IzvjestajiPage />} />
               <Route path="informativka" element={<InformativkaPage />} />
-              <Route path="admin" element={<AdministrationPage />} />
+              <Route path="admin" element={<Navigate to="/teacher/admin-razreda" replace />} />
               <Route path="pretrazivanje" element={<PretrazivanjePage />} />
             </Routes>
           </Suspense>
