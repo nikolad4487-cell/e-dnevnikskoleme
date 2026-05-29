@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, LogOut, Search, Settings, BookOpen, List, ClipboardList, FileText, FileSpreadsheet } from 'lucide-react';
+import { Menu, LogOut, Search, Settings, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Clock, Calendar } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { Role } from '../types';
@@ -52,15 +52,46 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     { id: 'imenik', label: 'Imenik', path: `${classPathPrefix}/imenik`, icon: <BookOpen size={14} /> },
     { id: 'pregled-rada', label: 'Pregled rada', path: `${classPathPrefix}/pregled-rada`, icon: <List size={14} /> },
     { id: 'dnevnik-rada', label: 'Dnevnik rada', path: `${classPathPrefix}/dnevnik-rada`, icon: <ClipboardList size={14} /> },
+    { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/izostanci`, icon: <Clock size={14} /> },
     { id: 'zapisnici', label: 'Zapisnici', path: `${classPathPrefix}/zapisnici`, icon: <FileText size={14} /> },
-    { id: 'izvjestaji', label: 'Izvještaji', path: `${classPathPrefix}/izvjestaji`, icon: <FileSpreadsheet size={14} /> },
-    { id: 'admin', label: 'Admin razreda', path: `/teacher/admin-razreda`, icon: <Settings size={14} /> },
-    { id: 'pretrazivanje', label: 'Pretraživanje', path: `${classPathPrefix}/pretrazivanje`, icon: <Search size={14} /> },
+    { id: 'pedagoska-dokumentacija', label: 'Ped. dok.', path: `${classPathPrefix}/pedagoska-dokumentacija`, icon: <FileText size={14} /> },
+    { id: 'raspored', label: 'Raspored', path: `${classPathPrefix}/raspored`, icon: <Calendar size={14} /> },
+    { id: 'admin', label: 'Admin razreda', path: `${classPathPrefix}/admin`, icon: <Settings size={14} /> },
     ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : [])
   ] : [
     { label: 'Pretraživanje', path: '/teacher/pretrazivanje' },
     ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : [])
   ];
+
+  const isTabActive = (tabId: string | undefined, itemPath: string) => {
+    if (!tabId) return location.pathname.startsWith(itemPath);
+    const path = location.pathname;
+    if (tabId === 'imenik') {
+      return path.includes('/imenik') || path.includes('/biljeske');
+    }
+    if (tabId === 'pregled-rada') {
+      return path.includes('/pregled-rada') || path.includes('/work-overview');
+    }
+    if (tabId === 'dnevnik-rada') {
+      return path.includes('/dnevnik-rada') || path.includes('/work-journal');
+    }
+    if (tabId === 'izostanci') {
+      return path.includes('/izostanci') || path.includes('/absences');
+    }
+    if (tabId === 'zapisnici') {
+      return path.includes('/zapisnici') || path.includes('/minutes');
+    }
+    if (tabId === 'pedagoska-dokumentacija') {
+      return path.includes('/pedagoska-dokumentacija') || path.includes('/pedagogical');
+    }
+    if (tabId === 'raspored') {
+      return path.includes('/raspored') || path.includes('/schedule');
+    }
+    if (tabId === 'admin') {
+      return path.includes('/admin-razreda') || path.includes('/admin') || path.includes('/administration');
+    }
+    return path.startsWith(itemPath);
+  };
 
   let navItems = isStaff 
     ? teacherNavList
@@ -95,7 +126,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                  to={tab.path}
                  className={cn(
                    "px-5 h-full flex items-center gap-2 text-[10px] font-black uppercase tracking-wider transition-all border-b-4 whitespace-nowrap cursor-pointer",
-                   location.pathname.startsWith(tab.path)
+                   isTabActive(tab.id, tab.path)
                     ? "border-[#005c8d] text-[#005c8d] bg-sky-50" 
                     : "text-gray-500 border-transparent hover:bg-slate-100 hover:text-slate-900"
                  )}

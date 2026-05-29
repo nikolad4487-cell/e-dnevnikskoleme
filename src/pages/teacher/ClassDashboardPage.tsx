@@ -18,6 +18,8 @@ const AdministrationPage = lazy(() => import('./AdministrationPage'));
 const ImenikPage = lazy(() => import('./ImenikPage'));
 const PedagoskaDokumentacijaPage = lazy(() => import('./PedagoskaDokumentacijaPage'));
 const PretrazivanjePage = lazy(() => import('./PretrazivanjePage'));
+const ClassSubjectsPage = lazy(() => import('../admin/ClassSubjectsPage'));
+const ClassStudentsPage = lazy(() => import('../admin/ClassStudentsPage'));
 
 export default function ClassDashboardPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -151,7 +153,15 @@ export default function ClassDashboardPage() {
     { label: 'Informativka', path: 'informativka', icon: HelpCircle },
   ];
 
-  const currentTab = location.pathname.split('/')[3] || 'imenik';
+  let currentTab = location.pathname.split('/')[3] || 'imenik';
+  if (currentTab === 'work-overview') currentTab = 'pregled-rada';
+  if (currentTab === 'work-journal') currentTab = 'dnevnik-rada';
+  if (currentTab === 'absences') currentTab = 'izostanci';
+  if (currentTab === 'minutes') currentTab = 'zapisnici';
+  if (currentTab === 'pedagogical') currentTab = 'pedagoska-dokumentacija';
+  if (currentTab === 'schedule') currentTab = 'raspored';
+  if (currentTab === 'administration') currentTab = 'admin';
+
   const isActive = (tabPath: string) => currentTab === tabPath || (tabPath === 'dnevnik-rada' && currentTab === 'pregled-rada'); // Simplified for now
 
   // Updated sidebar links to include all relevant dashboard modules
@@ -251,16 +261,35 @@ export default function ClassDashboardPage() {
             <Routes>
               <Route index element={<Navigate to="imenik" replace />} />
               <Route path="imenik" element={<ImenikPage />} />
+              
               <Route path="pregled-rada" element={<DnevnikRadaPage initialView="WEEKS" />} />
+              <Route path="work-overview" element={<DnevnikRadaPage initialView="WEEKS" />} />
+              
               <Route path="dnevnik-rada" element={<DnevnikRadaPage initialView="WEEK_DETAIL" />} />
+              <Route path="work-journal" element={<DnevnikRadaPage initialView="WEEK_DETAIL" />} />
+              
               <Route path="biljeske" element={<BiljeskePage />} />
+              
               <Route path="izostanci" element={<TeacherIzostanciPage />} />
+              <Route path="absences" element={<TeacherIzostanciPage />} />
+              
               <Route path="pedagoska-dokumentacija" element={<PedagoskaDokumentacijaPage />} />
+              <Route path="pedagogical" element={<PedagoskaDokumentacijaPage />} />
+              
               <Route path="raspored" element={<DnevnikRadaPage initialView="SCHEDULE" />} />
+              <Route path="schedule" element={<DnevnikRadaPage initialView="SCHEDULE" />} />
+              
               <Route path="zapisnici" element={<ZapisniciPage />} />
+              <Route path="minutes" element={<ZapisniciPage />} />
+              
               <Route path="izvjestaji" element={<IzvjestajiPage />} />
               <Route path="informativka" element={<InformativkaPage />} />
-              <Route path="admin" element={<Navigate to="/teacher/admin-razreda" replace />} />
+              
+              <Route path="admin" element={<AdministrationPage />} />
+              <Route path="administration" element={<AdministrationPage />} />
+              <Route path="predmeti" element={<ClassSubjectsPage />} />
+              <Route path="ucenici" element={<ClassStudentsPage />} />
+              
               <Route path="pretrazivanje" element={<PretrazivanjePage />} />
             </Routes>
           </Suspense>

@@ -19,11 +19,16 @@ import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { formatSubjectDisplayName } from '../../lib/utils';
 
 export default function ClassSubjectsPage() {
-  const { selectedSchoolId } = useSelection();
+  const { selectedSchoolId, selectedClassId } = useSelection();
   const { isMainAdmin, userSchoolRoles } = useAuth();
   const navigate = useNavigate();
+  const params = useParams<{ classId?: string }>();
   const [searchParams] = useSearchParams();
-  const classId = searchParams.get('classId');
+  const classId = params.classId || searchParams.get('classId') || selectedClassId;
+
+  console.log("ADMIN RAZREDA selectedClass", selectedClassId);
+  console.log("ADMIN RAZREDA params", params);
+  console.log("ADMIN RAZREDA resolved classId", classId);
   
   const [currentClass, setCurrentClass] = useState<Class | null>(null);
   const [assignments, setAssignments] = useState<any[]>([]);
@@ -72,8 +77,12 @@ export default function ClassSubjectsPage() {
   const [editLoading, setEditLoading] = useState(false);
 
   useEffect(() => {
-    if (!selectedSchoolId || !classId) {
-      navigate('/admin/razredi');
+    if (!selectedSchoolId) {
+      navigate('/select-school');
+      return;
+    }
+    if (!classId) {
+      setLoading(false);
       return;
     }
     fetchData();
@@ -89,6 +98,9 @@ export default function ClassSubjectsPage() {
         .select('*')
         .eq('id', classId)
         .single();
+        
+      console.log("ADMIN RAZREDA class fetch result", cls, clsError);
+      
       if (clsError) throw clsError;
       setCurrentClass(cls);
 
@@ -356,6 +368,21 @@ export default function ClassSubjectsPage() {
   };
 
   if (loading) return <div className="p-10 font-black uppercase text-slate-300 animate-pulse text-center">Učitavanje...</div>;
+
+  if (!classId) {
+    return (
+      <div className="p-10 text-center font-sans">
+        <h2 className="text-lg font-bold text-gray-700">Odaberite razred</h2>
+        <p className="text-sm text-gray-500 mt-2">Nije odabran nijedan razredni odjel.</p>
+        <button 
+          onClick={() => navigate('/select-class')}
+          className="mt-4 bg-[#005c8d] text-white px-4 py-2 font-bold text-xs uppercase"
+        >
+          Odaberi razred
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 font-sans w-full">

@@ -41,7 +41,8 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  /* useEffect(() => {
+  useEffect(() => {
+    let isMounted = true;
     const fetchLabels = async () => {
       let sLabel = '';
       let yLabel = '';
@@ -49,24 +50,29 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
 
       if (selectedSchoolId) {
         const { data: sData } = await supabase.from('schools').select('name').eq('id', selectedSchoolId).single();
-        if (sData) sLabel = sData.name;
+        if (sData && isMounted) sLabel = sData.name;
       }
       if (selectedYearId) {
         const { data: yData } = await supabase.from('school_years').select('name').eq('id', selectedYearId).single();
-        if (yData) yLabel = yData.name;
+        if (yData && isMounted) yLabel = yData.name;
       }
       if (selectedClassId) {
          const { data: cData } = await supabase.from('classes').select('name').eq('id', selectedClassId).single();
-         if (cData) cLabel = cData.name;
+         if (cData && isMounted) cLabel = cData.name;
       }
 
-      if (sLabel !== schoolLabel) setSchoolLabel(sLabel);
-      if (yLabel !== yearLabel) setYearLabel(yLabel);
-      if (cLabel !== classLabel) setClassLabel(cLabel);
+      if (isMounted) {
+        if (sLabel !== schoolLabel) setSchoolLabel(sLabel);
+        if (yLabel !== yearLabel) setYearLabel(yLabel);
+        if (cLabel !== classLabel) setClassLabel(cLabel);
+      }
     };
 
     fetchLabels();
-  }, [selectedSchoolId, selectedYearId, selectedClassId]); */
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedSchoolId, selectedYearId, selectedClassId, schoolLabel, yearLabel, classLabel]);
 
   const handleLogout = async () => {
     await signOut();

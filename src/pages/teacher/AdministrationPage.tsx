@@ -102,6 +102,18 @@ export default function AdministrationPage() {
   const [showModal, setShowModal] = useState<string | null>(null);
   const [editingClass, setEditingClass] = useState<Class | null>(null);
 
+  const params = useParams();
+  console.log("ADMIN RAZREDA selectedClass", contextClassId);
+  console.log("ADMIN RAZREDA params", params);
+  console.log("ADMIN RAZREDA resolved classId", effectiveClassId);
+
+  useEffect(() => {
+    console.log("EFFECT RUN: Sync effectiveClassId to selectedClassId", effectiveClassId);
+    if (effectiveClassId && selectedClassId !== effectiveClassId) {
+      setSelectedClassId(effectiveClassId);
+    }
+  }, [effectiveClassId, selectedClassId]);
+
   const selectedClassData = classes.find(c => c.id === selectedClassId);
 
   // If we are in class administration mode but data hasn't arrived yet
@@ -1085,6 +1097,7 @@ export default function AdministrationPage() {
         .order('grade_level')
         .order('section');
 
+      console.log("ADMIN RAZREDA class fetch result", clsData, clsError);
       console.log('CLASSES FETCH RESULT (Raw Data):', clsData);                
       console.log('ACTIVE FILTERS', { school_id: currentSchoolId, school_year_id: selectedYearId, status: 'ACTIVE' });
 

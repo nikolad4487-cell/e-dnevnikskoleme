@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SelectionProvider, useSelection } from './contexts/SelectionContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { BasicLayout } from './components/BasicLayout';
+import { ClassDashboardLayout } from './components/ClassDashboardLayout';
 import InactivityTracker from './components/InactivityTracker';
 import { Role } from './types';
 
@@ -57,6 +58,14 @@ const RolloverPage = lazy(() => import('./pages/admin/RolloverPage'));
 const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
 
 const ClassDashboardPage = lazy(() => import('./pages/teacher/ClassDashboardPage'));
+
+function TeacherRedirectToClass({ subPath }: { subPath: string }) {
+  const { selectedClassId } = useSelection();
+  if (!selectedClassId) {
+    return <Navigate to="/select-class" replace />;
+  }
+  return <Navigate to={`/class/${selectedClassId}/${subPath}`} replace />;
+}
 
 const APP_VERSION = '1.0.5';
 
@@ -140,26 +149,42 @@ export default function App() {
 
               <Route path="/class/:classId/*" element={
                 <ProtectedRoute allowedRoles={[Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN]}>
-                  <BasicLayout>
+                  <ClassDashboardLayout>
                     <ClassDashboardPage />
-                  </BasicLayout>
+                  </ClassDashboardLayout>
                 </ProtectedRoute>
               } />
 
               {/* Teacher/Admin Routes - Contextless/Global */}
               <Route path="/teacher/*" element={
                 <ProtectedRoute allowedRoles={[Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN]}>
-                    <BasicLayout>
+                    <ClassDashboardLayout>
                       <Routes>
                         <Route path="pretrazivanje" element={<PretrazivanjePage />} />
                         <Route path="informativka" element={<InformativkaPage />} />
-                        <Route path="pedagoska-dokumentacija" element={<PedagoskaDokumentacijaPage />} />
                         <Route path="svjedodzbe" element={<CertificateManagementPage />} />
                         <Route path="postavke" element={<SettingsPage />} />
-                        <Route path="admin-razreda" element={<AdministrationPage />} />
+                        
+                        {/* Core class shortcuts / redirects */}
+                        <Route path="imenik" element={<TeacherRedirectToClass subPath="imenik" />} />
+                        <Route path="pregled-rada" element={<TeacherRedirectToClass subPath="pregled-rada" />} />
+                        <Route path="work-overview" element={<TeacherRedirectToClass subPath="work-overview" />} />
+                        <Route path="dnevnik-rada" element={<TeacherRedirectToClass subPath="dnevnik-rada" />} />
+                        <Route path="work-journal" element={<TeacherRedirectToClass subPath="work-journal" />} />
+                        <Route path="izostanci" element={<TeacherRedirectToClass subPath="izostanci" />} />
+                        <Route path="absences" element={<TeacherRedirectToClass subPath="absences" />} />
+                        <Route path="zapisnici" element={<TeacherRedirectToClass subPath="zapisnici" />} />
+                        <Route path="minutes" element={<TeacherRedirectToClass subPath="minutes" />} />
+                        <Route path="pedagoska-dokumentacija" element={<TeacherRedirectToClass subPath="pedagoska-dokumentacija" />} />
+                        <Route path="pedagogical" element={<TeacherRedirectToClass subPath="pedagogical" />} />
+                        <Route path="raspored" element={<TeacherRedirectToClass subPath="raspored" />} />
+                        <Route path="schedule" element={<TeacherRedirectToClass subPath="schedule" />} />
+                        <Route path="admin-razreda" element={<TeacherRedirectToClass subPath="admin" />} />
+                        <Route path="administration" element={<TeacherRedirectToClass subPath="administration" />} />
+
                         <Route path="*" element={<Navigate to="/" replace />} />
                       </Routes>
-                    </BasicLayout>
+                    </ClassDashboardLayout>
                 </ProtectedRoute>
               } />
 
