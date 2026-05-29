@@ -124,13 +124,22 @@ export default function App() {
                 </ProtectedRoute>
               } />
 
+              <Route path="/admin/schools" element={
+                <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.ADMIN]}>
+                  <BasicLayout>
+                    <SchoolsManagementPage />
+                  </BasicLayout>
+                </ProtectedRoute>
+              } />
+
               {/* Admin Routes */}
               <Route path="/admin-skole/*" element={
-                <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN]}>
+                <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.ADMIN]}>
                   <BasicLayout>
                     <Routes>
                       <Route path="" element={<SchoolAdminDashboard />} />
                       <Route path="school-dashboard" element={<Navigate to="/admin-skole" replace />} />
+                      <Route path="schools" element={<SchoolsManagementPage />} />
                       <Route path="skolske-godine" element={<SchoolYearsPage />} />
                       <Route path="razredi" element={<ClassManagementPage />} />
                       <Route path="korisnici" element={<UserManagementPage />} />

@@ -69,6 +69,8 @@ export const mappers = {
     homeroom: raw.homeroom ? mappers.user(raw.homeroom) : undefined,
     deputy: raw.deputy ? mappers.user(raw.deputy) : undefined,
     program: raw.program ? mappers.program(raw.program) : undefined,
+    schoolYearName: raw.school_year_relation?.name,
+    schoolYearIsActive: raw.school_year_relation?.is_active,
   }),
 
   subject: (raw: any) => ({

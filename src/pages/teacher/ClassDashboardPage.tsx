@@ -160,7 +160,7 @@ export default function ClassDashboardPage() {
   if (currentTab === 'minutes') currentTab = 'zapisnici';
   if (currentTab === 'pedagogical') currentTab = 'pedagoska-dokumentacija';
   if (currentTab === 'schedule') currentTab = 'raspored';
-  if (currentTab === 'administration') currentTab = 'admin';
+  if (currentTab === 'administration' || currentTab === 'predmeti' || currentTab === 'ucenici') currentTab = 'admin';
 
   const isActive = (tabPath: string) => currentTab === tabPath || (tabPath === 'dnevnik-rada' && currentTab === 'pregled-rada'); // Simplified for now
 
@@ -239,7 +239,7 @@ export default function ClassDashboardPage() {
                  onClick={() => navigate(`/class/${classId}/${link.path}`)}
                  className={cn(
                    "w-full text-left px-4 py-2 text-[11px] font-bold uppercase tracking-wider rounded transition-colors",
-                   currentTab === link.path 
+                   location.pathname.endsWith(link.path) 
                      ? "bg-[#005c8d] text-white" 
                      : "text-slate-600 hover:bg-slate-200"
                  )}

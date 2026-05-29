@@ -29,6 +29,9 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  const isSchoolAdminRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/admin-skole');
+  const finalHideClass = hideClass || isSchoolAdminRoute;
   
   useEffect(() => {
     console.log("EFFECT RUN: Header HandleClickOutside");
@@ -57,14 +60,19 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
         if (yData && isMounted) yLabel = yData.name;
       }
       if (selectedClassId) {
-         const { data: cData } = await supabase.from('classes').select('name').eq('id', selectedClassId).single();
-         if (cData && isMounted) cLabel = cData.name;
+         const { data: cData } = await supabase.from('classes').select('name, school_year').eq('id', selectedClassId).single();
+         if (cData && isMounted) {
+           cLabel = cData.name;
+           if (!yLabel && cData.school_year) {
+             yLabel = cData.school_year;
+           }
+         }
       }
 
       if (isMounted) {
-        if (sLabel !== schoolLabel) setSchoolLabel(sLabel);
-        if (yLabel !== yearLabel) setYearLabel(yLabel);
-        if (cLabel !== classLabel) setClassLabel(cLabel);
+        setSchoolLabel(sLabel);
+        setYearLabel(yLabel);
+        setClassLabel(cLabel);
       }
     };
 
@@ -72,7 +80,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
     return () => {
       isMounted = false;
     };
-  }, [selectedSchoolId, selectedYearId, selectedClassId, schoolLabel, yearLabel, classLabel]);
+  }, [selectedSchoolId, selectedYearId, selectedClassId]);
 
   const handleLogout = async () => {
     await signOut();
@@ -89,17 +97,20 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
         {/* Current Context Display */}
         <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest bg-black/10 px-3 py-1.5 rounded">
            {schoolLabel && <span>{schoolLabel}</span>}
-           {yearLabel && <><span className="text-white/30">/</span><span className="text-white/80">{yearLabel}</span></>}
-           {!hideClass && classLabel && <><span className="text-white/30">/</span><span className="bg-white text-[#005c8d] px-2 py-0.5 rounded-sm">{classLabel}</span></>}
+           {yearLabel && <><span className="text-white/30">|</span><span className="text-white/80">{yearLabel}</span></>}
+           {!finalHideClass && classLabel && <><span className="text-white/30">|</span><span className="bg-white text-[#005c8d] px-2 py-0.5 rounded-sm font-black">{classLabel}</span></>}
            
-           {!hideClass && showNav && (
-             <button 
-               onClick={() => navigate('/select-class')} 
-               className="ml-4 flex items-center gap-1 hover:bg-white/20 p-1 px-2 rounded transition-colors"
-               title="Promijeni razred"
-             >
-               <Repeat size={14} /> Promijeni
-             </button>
+           {!finalHideClass && showNav && (
+             <>
+               <span className="text-white/30">|</span>
+               <button 
+                 onClick={() => navigate('/select-class')} 
+                 className="flex items-center gap-1 hover:bg-white/20 p-1 px-2 rounded transition-colors text-[10px]"
+                 title="Promijeni razred"
+               >
+                 <Repeat size={12} /> Promijeni
+               </button>
+             </>
            )}
         </div>
       </div>

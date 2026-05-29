@@ -7,6 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Header } from '../components/Header';
+import { parseSchoolAddress } from './admin/SchoolsManagementPage';
 
 export default function SchoolSelectionPage() {
   const { user, isMainAdmin, userSchoolRoles, isParent, isStaff } = useAuth();
@@ -73,15 +74,18 @@ export default function SchoolSelectionPage() {
 
       if (error) throw error;
       
-      let filteredSchools = (data || []).map(d => ({
-        id: d.id,
-        name: d.name,
-        type: d.type,
-        subtype: d.subtype,
-        address: d.address,
-        city: d.city,
-        status: d.status || 'ACTIVE'
-      } as any));
+      let filteredSchools = (data || []).map(d => {
+        const parsed = parseSchoolAddress(d.address);
+        return {
+          id: d.id,
+          name: d.name,
+          type: d.type,
+          subtype: d.subtype,
+          address: parsed.address,
+          city: d.city,
+          status: parsed.status || d.status || 'ACTIVE'
+        } as any;
+      });
 
       if (!isMainAdmin) {
         filteredSchools = filteredSchools.filter(s => schoolIds.includes(s.id));

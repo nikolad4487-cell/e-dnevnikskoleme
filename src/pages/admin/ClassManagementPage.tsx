@@ -68,7 +68,8 @@ export default function ClassManagementPage() {
           *,
           program:program_id(*),
           homeroom:homeroom_teacher_id(*),
-          deputy:deputy_teacher_id(*)
+          deputy:deputy_teacher_id(*),
+          school_year_relation:school_year_id(*)
         `)
         .eq('school_id', selectedSchoolId)
         .order('grade_level')
@@ -373,7 +374,14 @@ export default function ClassManagementPage() {
                     </div>
                   </div>
                 </td>
-                <td className="p-4 font-bold text-slate-600">{cls.school_year}</td>
+                <td className="p-4 font-bold text-slate-600">
+                  <div className="flex flex-col">
+                    <span>{cls.schoolYear || cls.schoolYearName || '—'}</span>
+                    {cls.schoolYearIsActive === false && (
+                      <span className="text-[9px] bg-amber-100 text-amber-800 font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider w-fit mt-1">ARHIVA</span>
+                    )}
+                  </div>
+                </td>
                 <td className="p-4">
                   <span className="font-bold text-slate-700">
                     {(cls as any).homeroom?.name || '—'}

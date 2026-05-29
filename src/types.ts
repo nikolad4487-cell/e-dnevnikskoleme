@@ -91,6 +91,8 @@ export type Class = {
   programType?: ProgramType;
   classVariant?: ClassVariant;
   isContinuationProgram?: boolean;
+  schoolYearName?: string;
+  schoolYearIsActive?: boolean;
 };
 
 export type Subject = {
