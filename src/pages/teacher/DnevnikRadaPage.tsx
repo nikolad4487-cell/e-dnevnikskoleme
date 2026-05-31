@@ -999,17 +999,55 @@ setStudents(uniqueStudents);
     const lesson = dailyLessons.find(l => l.id === lessonId);
     if (!lesson) return;
 
-    // RBAC: Admin or the teacher who created the lesson
-    if (!isMainAdmin && lesson.teacherId !== user?.id) {
-      toast.error('Niste ovlašteni za brisanje ovog sata.');
-      return;
+    // Time-based check
+    const createdAt = new Date(lesson.createdAt || lesson.updatedAt || Date.now());
+    const now = new Date();
+    const isOver24Hours = (now.getTime() - createdAt.getTime()) > (24 * 60 * 60 * 1000);
+
+    // RBAC: Admins or Razrednik can bypass time check
+    const isRazrednik = selectedClass && (selectedClass.homeroomTeacherId === user?.id || selectedClass.deputyTeacherId === user?.id);
+    const canBypassTime = isMainAdmin || user?.role === Role.ADMIN || isRazrednik;
+
+    if (!canBypassTime && lesson.teacherId !== user?.id) {
+       toast.error('Niste ovlašteni za brisanje ovog sata.');
+       return;
+    }
+
+    if (!canBypassTime && isOver24Hours) {
+        toast.error('Prošlo je više od 24 sata od unosa sata. Sat više ne možete uređivati niti brisati. Obratite se razredniku ili administratoru.');
+        return;
     }
 
     setDeleteDialog({ isOpen: true, id: lessonId, type: 'LESSON', loading: false });
   };
 
-  const confirmDelete = async () => {
+  const confirmDelete = async (totpCode?: string) => {
     if (!deleteDialog.id || !deleteDialog.type) return;
+    
+    // Check if TOTP is required for this deletion type and user
+    const lesson = deleteDialog.type === 'LESSON' ? dailyLessons.find(l => l.id === deleteDialog.id) : null;
+    const isRazrednik = selectedClass && (selectedClass.homeroomTeacherId === user?.id || selectedClass.deputyTeacherId === user?.id);
+    const requiresTotp = (deleteDialog.type === 'LESSON' && (isMainAdmin || user?.role === Role.ADMIN || isRazrednik)) || deleteDialog.type === 'ABSENCE'; // Assuming we handle absence deletion confirmation too
+
+    if (requiresTotp) {
+      if (!totpCode) {
+        toast.error('Potreban je autentifikator kod.');
+        return;
+      }
+      
+      const res = await fetch('/api/verify-totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authUserId: user?.id, totpCode })
+      });
+      const { success } = await res.json();
+      
+      if (!success) {
+        toast.error('Neispravan autentifikator kod.');
+        return;
+      }
+    }
+
     setDeleteDialog(prev => ({ ...prev, loading: true }));
 
     try {
@@ -1029,6 +1067,19 @@ setStudents(uniqueStudents);
           .delete()
           .eq('id', lessonId);
         if (le) throw le;
+        
+        // Audit log
+        await fetch('/api/audit-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                actionType: 'DELETE_LESSON',
+                recordId: lessonId,
+                userId: user?.id,
+                userRole: user?.role,
+                details: `Deleted lesson ${lessonId}`
+            })
+        });
         
         // 3. Update local state
         setDailyLessons(prev => prev.filter(l => l.id !== lessonId));
@@ -1058,6 +1109,7 @@ setStudents(uniqueStudents);
         setWeeks(prev => prev.filter(w => w.id !== deleteDialog.id));
         toast.success('Radni tjedan je uspješno obrisan.');
       }
+
     } catch (err) {
       console.error(err);
       toast.error('Brisanje nije uspjelo.');
@@ -1065,6 +1117,7 @@ setStudents(uniqueStudents);
       setDeleteDialog({ isOpen: false, id: '', type: null, loading: false });
     }
   };
+
 
   const saveLessonDetailed = async () => {
     if (editingHour === null || !effectiveClassId || !selectedDate || !user) return;
@@ -2986,6 +3039,7 @@ setStudents(uniqueStudents);
         onClose={() => setDeleteDialog({ ...deleteDialog, isOpen: false })}
         onConfirm={confirmDelete}
         loading={deleteDialog.loading}
+        showTotp={deleteDialog.type === 'LESSON' && (isMainAdmin || user?.role === Role.ADMIN || (selectedClass && (selectedClass.homeroomTeacherId === user?.id || selectedClass.deputyTeacherId === user?.id)))}
       />
     </div>
   );

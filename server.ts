@@ -80,10 +80,52 @@ async function startServer() {
       next();
     });
 
-    // API Routes
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+  // TOTP Verification
+  app.post("/api/verify-totp", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { authUserId, totpCode } = req.body;
+      
+      const { data: profile } = await supabaseAdmin
+        .from('user_profiles')
+        .select('authenticator_secret')
+        .eq('auth_user_id', authUserId)
+        .single();
+        
+      if (!profile || !profile.authenticator_secret) {
+        return res.status(403).json({ error: "Korisnik nema postavljen autentifikator." });
+      }
+      
+      const isValid = authenticator.check(totpCode, profile.authenticator_secret);
+      res.json({ success: isValid });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
+
+  // Audit Log
+  app.post("/api/audit-log", async (req, res) => {
+      try {
+          if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+          const { actionType, recordId, userId, userRole, details, reason } = req.body;
+          
+          const { error } = await supabaseAdmin.from('audit_logs').insert({
+              action_type: actionType,
+              record_id: recordId,
+              user_id: userId,
+              user_role: userRole,
+              details: details,
+              reason: reason,
+              created_at: new Date().toISOString()
+          });
+          
+          if (error) throw error;
+          res.json({ success: true });
+      } catch (err: any) {
+          res.status(500).json({ error: err.message });
+      }
+  });
+
 
   // 1. Lektire APIs
   app.get("/api/lektire", (req, res) => {

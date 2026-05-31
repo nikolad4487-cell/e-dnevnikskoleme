@@ -6,6 +6,7 @@ import { Class, Subject, ScheduleCell, ScheduleCellSubject, Role } from '../../t
 import { formatPersonName } from '../../lib/utils';
 import { Clock, Monitor, BookOpen } from 'lucide-react';
 import { mappers } from '../../lib/mappers';
+import { ScheduleGrid } from '../../components/ScheduleGrid';
 
 export default function RasporedPage() {
   const { user } = useAuth();
@@ -135,11 +136,6 @@ export default function RasporedPage() {
     return scheduleSubjects.filter(ss => ss.scheduleCellId === cell.id);
   };
 
-  const getTeacherName = (teacherId: string) => {
-    const tp = teacherProfiles.find(t => t.id === teacherId);
-    if (!tp) return '—';
-    return formatPersonName(tp);
-  };
 
   if (loading) {
     return (
@@ -168,24 +164,24 @@ export default function RasporedPage() {
           </div>
         ) : (
           <>
-            <SimpleScheduleGrid 
+            <ScheduleGrid 
               title="Jutarnja smjena" 
               shift="MORNING" 
               periods={morningPeriods} 
               days={days} 
-              getSubjects={getSubjects} 
+              getCellSubjects={getSubjects} 
               allSubjects={subjects}
-              getTeacherName={getTeacherName}
+              teachers={teacherProfiles}
             />
 
-            <SimpleScheduleGrid 
+            <ScheduleGrid 
               title="Popodnevna smjena" 
               shift="AFTERNOON" 
               periods={afternoonPeriods} 
               days={days} 
-              getSubjects={getSubjects} 
+              getCellSubjects={getSubjects} 
               allSubjects={subjects}
-              getTeacherName={getTeacherName}
+              teachers={teacherProfiles}
             />
           </>
         )}
@@ -194,70 +190,3 @@ export default function RasporedPage() {
   );
 }
 
-function SimpleScheduleGrid({ title, shift, periods, days, getSubjects, allSubjects, getTeacherName }: any) {
-  return (
-    <div className="bg-white border border-gray-300 shadow-none w-full">
-      <div className="bg-gray-50 border-b border-gray-300 p-3 flex items-center gap-2">
-        {shift === 'MORNING' ? <Monitor size={15} className="text-[#005c8d]" /> : <Clock size={15} className="text-[#005c8d]" />}
-        <h3 className="text-[11px] font-black uppercase text-gray-700 tracking-wider font-sans">{title}</h3>
-      </div>
-      <div className="overflow-x-auto w-full">
-        <table className="w-full border-collapse min-w-[800px] table-fixed">
-          <thead>
-            <tr className="bg-gray-100/70 border-b border-gray-300">
-              <th className="w-[70px] border-r border-gray-300 p-2.5 text-[10px] font-black text-gray-500 uppercase tracking-widest text-center">
-                SAT
-              </th>
-              {days.map((day: string) => (
-                <th key={day} className="p-2.5 text-[10px] font-black text-gray-600 uppercase border-r border-gray-200 last:border-r-0 text-center">
-                  {day}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {periods.map((period: number) => (
-              <tr key={period} className="border-b border-gray-200 last:border-b-0 hover:bg-gray-50/20 transition-colors">
-                <td className="bg-gray-50/70 border-r border-gray-300 p-3 text-center align-middle font-black text-gray-600 text-xs w-[70px]">
-                  {period}. sat
-                </td>
-                {days.map((day: string) => {
-                  const subjects = getSubjects(day, shift, period);
-                  return (
-                    <td key={`${day}-${period}`} className="p-2 border-r border-gray-200 last:border-r-0 align-top min-h-[75px]">
-                      <div className="space-y-1.5 h-full min-h-[50px] flex flex-col justify-start">
-                        {subjects.length === 0 ? (
-                          <div className="text-gray-300 text-[10px] text-center my-auto py-2 font-mono tracking-tighter">—</div>
-                        ) : (
-                          subjects.map((s: any) => {
-                            const sub = allSubjects.find((sub: any) => sub.id === s.subjectId);
-                            const tName = getTeacherName(s.teacherId);
-                            return (
-                              <div key={s.id} className="bg-blue-50/60 border border-blue-100/90 p-2 rounded shadow-sm text-center">
-                                <div className="text-[10.5px] font-black text-blue-900 uppercase leading-snug tracking-wide">
-                                  {sub?.name || 'Nepoznat predmet'}
-                                </div>
-                                <div className="text-[9px] text-[#005c8d] font-bold uppercase mt-0.5 tracking-wider">
-                                  {tName}
-                                </div>
-                                {s.classroom && (
-                                  <div className="text-[8px] text-gray-400 font-extrabold uppercase mt-1 tracking-tight">
-                                    Učionica: {s.classroom}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })
-                        )}
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}

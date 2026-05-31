@@ -3,15 +3,16 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
-import { Absence, AbsenceStatus, User, Lesson, Subject } from '../../types';
+import { Absence, AbsenceStatus, User, Lesson, Role } from '../../types';
 import { cn, getSurname, formatPersonName } from '../../lib/utils';
-import { UserX, ArrowLeft } from 'lucide-react';
+import { UserX, ArrowLeft, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mappers, mapList } from '../../lib/mappers';
+import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 
 export default function TeacherIzostanciPage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
-  const { user } = useAuth();
+  const { user, isMainAdmin } = useAuth();
   const { selectedClassId: contextClassId } = useSelection();
   
   const effectiveClassId = contextClassId || routeClassId;
@@ -23,6 +24,16 @@ export default function TeacherIzostanciPage() {
   
   const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
   const [justifyingDate, setJustifyingDate] = useState<string | null>(null);
+  
+  const [deleteDialog, setDeleteDialog] = useState<{
+    isOpen: boolean;
+    id: string;
+    loading: boolean;
+  }>({
+    isOpen: false,
+    id: '',
+    loading: false
+  });
 
   useEffect(() => {
     if (effectiveClassId) {
@@ -58,6 +69,56 @@ export default function TeacherIzostanciPage() {
       toast.error('Greška pri učitavanju podataka');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const confirmDeleteAbsence = async (totpCode?: string) => {
+    if (!deleteDialog.id) return;
+    
+    // TOTP check
+    if (isMainAdmin || user?.role === Role.ADMIN) {
+      if (!totpCode) {
+        toast.error('Potreban je autentifikator kod.');
+        return;
+      }
+      
+      const res = await fetch('/api/verify-totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authUserId: user?.id, totpCode })
+      });
+      const { success } = await res.json();
+      
+      if (!success) {
+        toast.error('Neispravan autentifikator kod.');
+        return;
+      }
+    }
+
+    setDeleteDialog(prev => ({ ...prev, loading: true }));
+    try {
+        const { error } = await supabase.from('absences').delete().eq('id', deleteDialog.id);
+        if (error) throw error;
+
+        // Audit log
+        await fetch('/api/audit-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                actionType: 'DELETE_ABSENCE',
+                recordId: deleteDialog.id,
+                userId: user?.id,
+                userRole: user?.role,
+                details: `Deleted absence ${deleteDialog.id}`
+            })
+        });
+
+        toast.success('Izostanak obrisan.');
+        fetchData();
+    } catch (e) {
+        toast.error('Greška pri brisanju izostanka.');
+    } finally {
+        setDeleteDialog({ isOpen: false, id: '', loading: false });
     }
   };
 
@@ -111,7 +172,7 @@ export default function TeacherIzostanciPage() {
            <div className="text-center"><div className="text-[9px] font-black text-gray-400 uppercase">Ukupno</div><div className="text-lg font-black">{stats.total}</div></div>
            <div className="text-center"><div className="text-[9px] font-black text-green-600 uppercase">Opravdano</div><div className="text-lg font-black text-green-600">{stats.justified}</div></div>
            <div className="text-center"><div className="text-[9px] font-black text-red-600 uppercase">Neopravd.</div><div className="text-lg font-black text-red-600">{stats.unjustified}</div></div>
-           <div className="text-center"><div className="text-[9px] font-black text-orange-500 uppercase">Čeka</div><div className="text-lg font-black text-orange-500">{stats.pending}</div></div>
+           <div className="text-center"><div className="text-[9px] font-black text-black uppercase">Čeka odluku</div><div className="text-lg font-black text-black">{stats.pending}</div></div>
         </div>
       </div>
 
@@ -140,14 +201,31 @@ export default function TeacherIzostanciPage() {
             </tbody>
           </table>
         ) : (
-          <StudentDetailView student={selectedStudent} absences={absences.filter(a => a.studentId === selectedStudent.id)} lessons={lessons} onJustify={(date: string) => setJustifyingDate(date)} />
+          <StudentDetailView 
+            student={selectedStudent} 
+            absences={absences.filter(a => a.studentId === selectedStudent.id)} 
+            lessons={lessons} 
+            onJustify={(date: string) => setJustifyingDate(date)}
+            onDelete={(id: string) => setDeleteDialog({ isOpen: true, id, loading: false })}
+            showDeleteButton={isMainAdmin || user?.role === Role.ADMIN}
+          />
         )}
       </div>
+      
+      <DeleteConfirmDialog
+          isOpen={deleteDialog.isOpen}
+          onClose={() => setDeleteDialog({ ...deleteDialog, isOpen: false })}
+          onConfirm={confirmDeleteAbsence}
+          loading={deleteDialog.loading}
+          showTotp={isMainAdmin || user?.role === Role.ADMIN}
+          title="Potvrda brisanja izostanka"
+          message="Za brisanje izostanka potrebno je potvrditi radnju kodom iz autentifikatora."
+      />
     </div>
   );
 }
 
-const StudentDetailView = ({ student, absences, lessons, onJustify }: any) => {
+const StudentDetailView = ({ student, absences, lessons, onJustify, onDelete, showDeleteButton }: any) => {
     // Group absences by date
     const grouped = absences.reduce((acc: any, a: any) => {
         if (!acc[a.date]) acc[a.date] = [];
@@ -167,7 +245,7 @@ const StudentDetailView = ({ student, absences, lessons, onJustify }: any) => {
                 <tr className="bg-gray-100 uppercase font-bold text-gray-500">
                     <th className="p-2 border-r">Datum</th>
                     {hours.map(h => <th key={h} className="p-2 border-r">{h}.</th>)}
-                    <th className="p-2">Akcija</th>
+                    <th className="p-2">Akcije</th>
                 </tr>
             </thead>
             <tbody>
@@ -196,8 +274,9 @@ const StudentDetailView = ({ student, absences, lessons, onJustify }: any) => {
                                     </td>
                                 );
                             })}
-                            <td className="p-2 text-center">
+                            <td className="p-2 text-center flex gap-1 justify-center">
                                 {hasPending && <button onClick={() => onJustify(date)} className="bg-[#005c8d] text-white px-2 py-1 uppercase text-[9px] font-bold">Opravdaj</button>}
+                                {showDeleteButton && <button onClick={() => onDelete(absList[0].id)} className="bg-red-600 text-white px-2 py-1 uppercase text-[9px] font-bold"><Trash2 size={10} /></button>}
                             </td>
                         </tr>
                     );

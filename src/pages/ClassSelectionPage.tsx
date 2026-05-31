@@ -71,7 +71,10 @@ export default function ClassSelectionPage() {
       if (isStaff) {
         await fetchStaffClasses();
       } else {
-        await fetchEnrollments();
+        const enrollments = await fetchEnrollments();
+        // Filter school years based on enrollments
+        const yearIds = new Set(enrollments.map((e: any) => e.classes?.school_year_id));
+        setSchoolYears(prev => prev.filter(y => yearIds.has(y.id)));
       }
       setLoading(false);
     };
@@ -198,7 +201,7 @@ export default function ClassSelectionPage() {
   };
 
   const fetchEnrollments = async () => {
-    if (!user) return;
+    if (!user) return [];
 
     try {
       let studentId = user.id;
@@ -274,9 +277,11 @@ export default function ClassSelectionPage() {
       });
 
       setClasses(classesData);
+      return enrollments || [];
     } catch (error) {
       console.error(error);
       toast.error('Greška pri učitavanju razreda');
+      return [];
     }
   };
 
@@ -440,19 +445,25 @@ export default function ClassSelectionPage() {
                         className="cursor-pointer group select-none"
                         onClick={() => handleSelect(cls)}
                       >
-                        <div className="flex justify-between items-start mb-4">
-                          <div>
-                            <div className="text-2xl font-black text-[#005c8d] uppercase tracking-tight group-hover:text-[#004a70] transition-colors">
-                              {cls.name}
-                            </div>
-                            <div className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mt-1">
-                              Šk. god. {getShortenedYear(cls.yearName)}
-                            </div>
+                        <div className="flex flex-col mb-4">
+                          <div className="text-2xl font-black text-[#005c8d] uppercase tracking-tight group-hover:text-[#004a70] transition-colors mb-2">
+                            {cls.name}
                           </div>
-                          <div className="text-right max-w-[60%]">
-                            <div className="text-slate-600 font-extrabold uppercase text-[10px] bg-slate-50 border border-slate-200/60 rounded px-2.5 py-1 whitespace-nowrap overflow-hidden text-ellipsis shadow-xs">
-                              {cls.programName || 'Gimnazija'}
-                            </div>
+                          
+                          <div className="text-[10px] text-slate-600 font-bold uppercase">
+                             Razrednik: {cls.homeroomTeacherName || 'NIJE DODIJELJEN'}
+                          </div>
+                          {cls.deputyTeacherName && (
+                              <div className="text-[10px] text-slate-600 font-bold uppercase">
+                                Zamjenik: {cls.deputyTeacherName}
+                              </div>
+                          )}
+
+                          <div className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mt-3">
+                              Program:
+                          </div>
+                          <div className="text-slate-600 font-bold uppercase text-[11px]">
+                              {cls.programName || `${cls.gradeLevel}. razred`}
                           </div>
                         </div>
                       </div>

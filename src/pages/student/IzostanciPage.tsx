@@ -9,6 +9,7 @@ import { Calendar as CalendarIcon, UserX, Clock, CheckCircle2, XCircle, ChevronL
 interface AbsenceWithDetails extends Absence {
   lessonTopic?: string;
   subjectName?: string;
+  absenceType?: string; // Add this
 }
 
 const CROATIAN_MONTHS = [
@@ -53,6 +54,17 @@ export default function IzostanciPage() {
         if (absError) throw absError;
 
         const rawAbsences = absencesData || [];
+
+        // DEBUG: inspect fields
+        if (rawAbsences.length > 0) {
+            console.log("ABSENCE_DEBUG Structure:", Object.keys(rawAbsences[0]));
+            console.log("ABSENCE_DEBUG Example Row:", rawAbsences[0]);
+        }
+        
+        // Ensure abs.absence_type is captured
+        rawAbsences.forEach(abs => {
+            console.log("DEBUG_ABSENCE_TYPE:", abs.absence_type);
+        });
 
         // 2. Fetch linked Lessons & Subjects details to show subject and topics of the absence
         const lessonIds = [...new Set(rawAbsences.map(a => a.lesson_id).filter(Boolean))];
@@ -99,6 +111,7 @@ export default function IzostanciPage() {
             teacherId: abs.teacher_id,
             lessonTopic: lesson?.topic,
             subjectName: subjectName,
+            absenceType: abs.absence_type, // Map it
           };
         });
 
@@ -118,7 +131,7 @@ export default function IzostanciPage() {
     const s = String(statusValue || '').toUpperCase();
     if (s === 'OPRAVDANO' || s === 'JUSTIFIED') return 'OPRAVDANO';
     if (s === 'NEOPRAVDANO' || s === 'UNJUSTIFIED') return 'NEOPRAVDANO';
-    if (s === 'CEKA' || s === 'PENDING' || s === 'ČEKA') return 'CEKA';
+    if (s === 'PENDING' || s === 'ČEKA' || s === 'CEKA') return 'CEKA_ODLUKU';
     return 'OSTALO';
   };
 
@@ -127,7 +140,7 @@ export default function IzostanciPage() {
     total: absences.length,
     justified: absences.filter(a => getStatusType(a.status) === 'OPRAVDANO').length,
     unjustified: absences.filter(a => getStatusType(a.status) === 'NEOPRAVDANO').length,
-    pending: absences.filter(a => getStatusType(a.status) === 'CEKA').length,
+    pending: absences.filter(a => getStatusType(a.status) === 'CEKA_ODLUKU').length,
     other: absences.filter(a => getStatusType(a.status) === 'OSTALO').length,
   };
 
@@ -150,41 +163,65 @@ export default function IzostanciPage() {
     setSelectedDayStr(null);
   };
 
-  // Map of date string 'YYYY-MM-DD' of absences in currently displayed month
+  // Map of date string 'YYYY-MM-DD' of absences
   const absencesByDate: Record<string, AbsenceWithDetails[]> = {};
   absences.forEach(abs => {
-    const absDateStr = abs.date; // assuming standard 'YYYY-MM-DD' format
-    if (!absencesByDate[absDateStr]) {
-      absencesByDate[absDateStr] = [];
+    if (!absencesByDate[abs.date]) {
+      absencesByDate[abs.date] = [];
     }
-    absencesByDate[absDateStr].push(abs);
+    absencesByDate[abs.date].push(abs);
   });
 
-  // Filter actual absences details to display
-  // We show either of the selected day, or the entire active month
-  const currentMonthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
-  
-  const displayedAbsences = absences.filter(abs => {
-    if (selectedDayStr) {
-      return abs.date === selectedDayStr;
-    } else {
-      // Show absences inside the current month
-      return abs.date.startsWith(currentMonthStr);
-    }
+  // Group and sort absences
+  const groupedAbsences = absences.reduce((acc, abs) => {
+    const absDate = new Date(abs.date);
+    const month = String(absDate.getMonth() + 1).padStart(2, '0');
+    const year = absDate.getFullYear();
+    const monthKey = `${year}-${month}`;
+    if (!acc[monthKey]) acc[monthKey] = [];
+    acc[monthKey].push(abs);
+    return acc;
+  }, {} as Record<string, AbsenceWithDetails[]>);
+
+  const sortedMonthKeys = Object.keys(groupedAbsences).sort((a, b) => {
+    const [yA, mA] = a.split('-');
+    const [yB, mB] = b.split('-');
+    
+    // School year logic: 09, 10, 11, 12 is before 01, 02...08
+    const getOrder = (m: string, y: string) => {
+        const monthNum = parseInt(m);
+        if (monthNum >= 9) return `${y}.0`;
+        return `${parseInt(y)-1}.1`;
+    };
+    
+    return getOrder(mA, yA).localeCompare(getOrder(mB, yB));
   });
+
+  // Default to the first (earliest) sorted month with absences
+  const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(sortedMonthKeys[0] || null);
+  
+  // Initialize default selected month when data loads
+  useEffect(() => {
+    if (sortedMonthKeys.length > 0 && !selectedMonthKey) {
+        setSelectedMonthKey(sortedMonthKeys[0]);                
+    }
+  }, [sortedMonthKeys, selectedMonthKey]);
+
+  const absencesForSelectedMonth = selectedMonthKey ? groupedAbsences[selectedMonthKey] : [];
 
   const getStatusBadgeStyles = (statusVal: string) => {
     const norm = getStatusType(statusVal);
     if (norm === 'OPRAVDANO') return 'bg-green-50 text-green-700 border-green-200';
     if (norm === 'NEOPRAVDANO') return 'bg-red-50 text-red-700 border-red-200';
-    if (norm === 'CEKA') return 'bg-amber-50 text-amber-700 border-amber-200';
-    return 'bg-gray-50 text-gray-700 border-gray-200';
+    if (norm === 'CEKA_ODLUKU') return 'bg-black text-white border-black';
+    return 'bg-yellow-50 text-yellow-700 border-yellow-200';
   };
 
   const getStatusDotColor = (absencesList: AbsenceWithDetails[]) => {
     if (absencesList.some(a => getStatusType(a.status) === 'NEOPRAVDANO')) return 'bg-red-500';
-    if (absencesList.some(a => getStatusType(a.status) === 'CEKA')) return 'bg-amber-500';
+    if (absencesList.some(a => getStatusType(a.status) === 'CEKA_ODLUKU')) return 'bg-black';
     if (absencesList.some(a => getStatusType(a.status) === 'OPRAVDANO')) return 'bg-green-500';
+    if (absencesList.some(a => getStatusType(a.status) === 'OSTALO')) return 'bg-yellow-500';
     return 'bg-gray-400';
   };
 
@@ -277,6 +314,15 @@ export default function IzostanciPage() {
                   const isToday = new Date().toISOString().split('T')[0] === dateString;
                   const isSelected = selectedDayStr === dateString;
 
+                  const counts = { OPRAVDANO: 0, NEOPRAVDANO: 0, CEKA_ODLUKU: 0, OSTALO: 0 };
+                  dayAbsences.forEach(a => {
+                    const status = getStatusType(a.status);
+                    if (status === 'OPRAVDANO') counts.OPRAVDANO++;
+                    else if (status === 'NEOPRAVDANO') counts.NEOPRAVDANO++;
+                    else if (status === 'CEKA_ODLUKU') counts.CEKA_ODLUKU++;
+                    else counts.OSTALO++;
+                  });
+
                   return (
                     <button
                       key={`day-${dayNum}`}
@@ -288,28 +334,31 @@ export default function IzostanciPage() {
                         }
                       }}
                       className={cn(
-                        "p-2.5 h-11 border transition-all text-center flex flex-col justify-between items-center relative",
+                        "p-1 border transition-all text-center flex flex-col items-center relative min-h-[44px]",
                         dayAbsences.length === 0 ? "text-gray-400 border-gray-100" : "text-gray-800 font-bold border-gray-300 cursor-pointer hover:border-[#005c8d]",
                         isToday && "bg-blue-50/50 text-blue-800 ring-1 ring-blue-300",
-                        isSelected && "bg-blue-600 text-white! border-blue-600 hover:border-blue-700"
+                        isSelected && "bg-blue-600 text-white! border-blue-600"
                       )}
                     >
-                      <span>{dayNum}</span>
+                      <span className="text-[10px] w-full">{dayNum}</span>
                       {dayAbsences.length > 0 && (
-                        <span className={cn(
-                          "w-1.5 h-1.5 rounded-full mt-0.5 shrink-0",
-                          isSelected ? "bg-white" : getStatusDotColor(dayAbsences)
-                        )}></span>
+                        <div className="text-[7px] flex flex-col gap-[1px] w-full mt-0.5">
+                          {counts.OPRAVDANO > 0 && <span className="flex items-center gap-[1px] justify-center text-green-600">🟢 {counts.OPRAVDANO}</span>}
+                          {counts.NEOPRAVDANO > 0 && <span className="flex items-center gap-[1px] justify-center text-red-600">🔴 {counts.NEOPRAVDANO}</span>}
+                          {counts.CEKA_ODLUKU > 0 && <span className="flex items-center gap-[1px] justify-center">⚫ {counts.CEKA_ODLUKU}</span>}
+                          {counts.OSTALO > 0 && <span className="flex items-center gap-[1px] justify-center text-yellow-600">🟡 {counts.OSTALO}</span>}
+                        </div>
                       )}
                     </button>
                   );
                 })}
               </div>
 
-              <div className="mt-4 pt-3 border-t border-gray-100 text-[10px] text-gray-400 flex items-center gap-4 justify-center">
+              <div className="mt-4 pt-3 border-t border-gray-100 text-[10px] text-gray-400 flex flex-wrap items-center gap-4 justify-center">
                 <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-green-500 rounded-full"></span> Opravdano</span>
                 <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-red-500 rounded-full"></span> Neopravdano</span>
-                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-amber-500 rounded-full"></span> Na provjeri</span>
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-black rounded-full"></span> Čeka odluku</span>
+                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 bg-yellow-500 rounded-full"></span> Ostalo</span>
               </div>
             </div>
 
@@ -334,46 +383,67 @@ export default function IzostanciPage() {
               </div>
 
               <div className="flex-1 overflow-auto space-y-3">
-                {displayedAbsences.length === 0 ? (
+                {sortedMonthKeys.length === 0 ? (
                   <div className="text-center py-12 text-slate-400 italic text-xs bg-slate-50 border border-slate-200 p-6">
-                    {selectedDayStr 
-                      ? "Nema unesenih izostanaka za odabrani dan." 
-                      : `Nema unesenih izostanaka u mjesecu ${CROATIAN_MONTHS[month].toLowerCase()}.`
-                    }
+                    Nema unesenih izostanaka.
                   </div>
                 ) : (
-                  Object.entries(
-                    displayedAbsences.reduce((acc, abs) => {
-                      if (!acc[abs.date]) acc[abs.date] = [];
-                      acc[abs.date].push(abs);
-                      return acc;
-                    }, {} as Record<string, AbsenceWithDetails[]>)
-                  )
-                  .sort((a,b) => b[0].localeCompare(a[0]))
-                  .map(([date, absencesForDate]) => (
-                    <div key={date} className="space-y-2">
-                        <div className="font-black text-[10px] text-slate-500 uppercase tracking-widest bg-slate-100 p-2 border-b border-slate-200">
-                            {new Date(date).toLocaleDateString('hr-HR', { day: 'numeric', month: 'long' })}
+                  <div className="space-y-4">
+                      {/* Month selector */}
+                      <div className="flex gap-2 overflow-x-auto pb-2">
+                          {sortedMonthKeys.map(key => {
+                             const [y, m] = key.split('-');
+                             const monthName = CROATIAN_MONTHS[parseInt(m) - 1];
+                             const label = `${monthName} ${y}`;
+                             return (
+                               <button 
+                                key={key} 
+                                onClick={() => setSelectedMonthKey(key)}
+                                className={cn(
+                                    "px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border rounded-full transition-colors",
+                                    selectedMonthKey === key 
+                                        ? "bg-blue-600 text-white border-blue-600" 
+                                        : "bg-white text-slate-600 border-slate-200 hover:border-slate-300"
+                                )}
+                               >
+                                {label}
+                               </button>
+                             );
+                          })}
+                      </div>
+
+                      {/* Selected month absences */}
+                      {selectedMonthKey && (
+                        <div>
+                           <div className="grid grid-cols-[60px_1fr_100px_1fr] p-3 bg-gray-50/50 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-gray-200 items-center">
+                             <span>SAT</span>
+                             <span>PREDMET</span>
+                             <span>STATUS</span>
+                             <span>RAZLOG</span>
+                           </div>
+                           {groupedAbsences[selectedMonthKey].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || (a.hour || 0) - (b.hour || 0)).map(abs => {
+                             const normStatus = getStatusType(abs.status);
+                             const statusColor = normStatus === 'OPRAVDANO' ? 'bg-green-500' : normStatus === 'NEOPRAVDANO' ? 'bg-red-500' : normStatus === 'CEKA_ODLUKU' ? 'bg-black' : 'bg-yellow-500';
+                             
+                             return (
+                               <div key={abs.id} className="grid grid-cols-[60px_1fr_100px_1fr] items-center p-3 border-b border-slate-100 last:border-b-0 hover:bg-slate-50 gap-2">
+                                 <span className="font-bold text-slate-400 text-xs">{abs.hour}.</span>
+                                 <span className="font-bold text-slate-800 text-sm truncate">{abs.subjectName || 'Sat razrednika'}</span>
+                                 <div className="flex items-center gap-2">
+                                   <span className={cn("w-2 h-2 rounded-full", statusColor)}></span>
+                                   <span className={cn("text-[10px] font-bold uppercase tracking-wider", normStatus === 'OPRAVDANO' ? 'text-green-600' : normStatus === 'NEOPRAVDANO' ? 'text-red-600' : normStatus === 'CEKA_ODLUKU' ? 'text-black' : 'text-yellow-600')}>
+                                       {normStatus === 'OPRAVDANO' ? 'Opravdano' : normStatus === 'NEOPRAVDANO' ? 'Neopravdano' : normStatus === 'CEKA_ODLUKU' ? 'Čeka odluku' : 'Ostalo'}
+                                   </span>
+                                 </div>
+                                 <span className="text-xs text-slate-500 truncate">
+                                {normStatus === 'OPRAVDANO' ? (abs.absenceType || '—') : (abs.note || '—')}
+                              </span>
+                               </div>
+                             );
+                           })}
                         </div>
-                        {(absencesForDate as any[]).sort((a,b) => (a.hour || 0) - (b.hour || 0)).map(abs => {
-                          const normStatus = getStatusType(abs.status);
-                          const statusColor = normStatus === 'OPRAVDANO' ? 'bg-green-500' : normStatus === 'NEOPRAVDANO' ? 'bg-red-500' : 'bg-amber-500';
-                          
-                          return (
-                            <div key={abs.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 p-3 border-b border-slate-100 last:border-b-0 hover:bg-slate-50">
-                              <span className="font-bold text-slate-400 text-xs">{abs.hour}.</span>
-                              <span className="font-bold text-slate-800 text-sm truncate">{abs.subjectName || 'Sat razrednika'}</span>
-                              <div className="flex items-center gap-2">
-                                <span className={cn("w-2 h-2 rounded-full", statusColor)}></span>
-                                <span className={cn("text-[10px] font-bold uppercase tracking-wider", normStatus === 'OPRAVDANO' ? 'text-green-600' : normStatus === 'NEOPRAVDANO' ? 'text-red-600' : 'text-amber-600')}>
-                                    {normStatus === 'OPRAVDANO' ? 'Opravdano' : normStatus === 'NEOPRAVDANO' ? 'Neopravdano' : 'Čeka opravdanje'}
-                                </span>
-                              </div>
-                            </div>
-                          );
-                        })}
-                    </div>
-                  ))
+                      )}
+                  </div>
                 )}
               </div>
             </div>

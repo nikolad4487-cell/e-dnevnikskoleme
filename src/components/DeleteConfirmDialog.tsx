@@ -5,10 +5,11 @@ import { cn } from '../lib/utils';
 interface DeleteConfirmDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: (totpCode?: string) => void;
   title?: string;
   message?: string;
   loading?: boolean;
+  showTotp?: boolean;
 }
 
 export function DeleteConfirmDialog({
@@ -17,8 +18,11 @@ export function DeleteConfirmDialog({
   onConfirm,
   title = "Jeste li sigurni?",
   message = "Jeste li sigurni da želite obrisati ovaj zapis?",
-  loading = false
+  loading = false,
+  showTotp = false
 }: DeleteConfirmDialogProps) {
+  const [totpCode, setTotpCode] = React.useState('');
+  
   if (!isOpen) return null;
 
   return (
@@ -39,6 +43,19 @@ export function DeleteConfirmDialog({
             </div>
           </div>
           
+          {showTotp && (
+            <div className="mb-4">
+               <label className="block text-[10px] font-black text-gray-700 uppercase tracking-widest mb-1.5">TOTP Kod</label>
+               <input
+                 type="text"
+                 value={totpCode}
+                 onChange={(e) => setTotpCode(e.target.value)}
+                 className="w-full border border-gray-300 p-2 text-sm font-bold uppercase tracking-widest focus:ring-1 focus:ring-red-500"
+                 placeholder="Upišite kod..."
+               />
+            </div>
+          )}
+          
           <div className="flex gap-2 mt-8">
             <button
               onClick={onClose}
@@ -48,14 +65,14 @@ export function DeleteConfirmDialog({
               Odustani
             </button>
             <button
-              onClick={onConfirm}
-              disabled={loading}
+              onClick={() => showTotp ? onConfirm(totpCode) : onConfirm()}
+              disabled={loading || (showTotp && !totpCode)}
               className="flex-1 px-4 py-2 bg-red-600 text-white text-[10px] font-black uppercase hover:bg-red-700 transition-colors flex items-center justify-center disabled:opacity-50"
             >
               {loading ? (
                 <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                "Obriši"
+                "Potvrdi"
               )}
             </button>
           </div>
