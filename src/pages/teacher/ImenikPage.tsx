@@ -252,11 +252,20 @@ export default function ImenikPage() {
     isImportant: true, 
     customDate: new Date().toISOString().split('T')[0] 
   });
-  const [newSpecialExam, setNewSpecialExam] = useState({
-    type: 'SUPPLEMENTARY_WORK',
+  const [newSpecialExam, setNewSpecialExam] = useState<{
+    type: 'SUPPLEMENTARY' | 'REMEDIAL' | 'DIFFERENCE' | 'SUPPLEMENTARY_WORK' | 'MAKEUP_EXAM' | 'DIFFERENTIAL_EXAM' | 'CLASS_EXAM' | 'SUBJECT_EXAM';
+    note: string;
+    grade: number;
+    customDate: string;
+    gradeLevel: number;
+    subjectId: string;
+  }>({
+    type: 'SUPPLEMENTARY',
     note: '',
     grade: 0,
-    customDate: new Date().toISOString().split('T')[0]
+    customDate: new Date().toISOString().split('T')[0],
+    gradeLevel: 1,
+    subjectId: ''
   });
   const [newNote, setNewNote] = useState({
     content: '',
@@ -662,7 +671,10 @@ export default function ImenikPage() {
             'MAKEUP_EXAM',
             'DIFFERENTIAL_EXAM',
             'CLASS_EXAM',
-            'SUBJECT_EXAM'
+            'SUBJECT_EXAM',
+            'DIFFERENCE',
+            'SUPPLEMENTARY',
+            'REMEDIAL'
         ]);
       
       console.log("TEACHER INITIAL SPECIAL EXAMS LOAD");
@@ -1115,21 +1127,44 @@ export default function ImenikPage() {
     const schoolYearId = selectedClass?.school_year_id || '';
     
     try {
-      const payload = {
+      const targetSubjectId = newSpecialExam.subjectId || activeSubject.id;
+      const payloadWithLevel = {
         student_id: activeStudent.id,
-        subject_id: activeSubject.id,
+        subject_id: targetSubjectId,
         class_id: effectiveClassId,
         teacher_id: user.id,
         school_year_id: schoolYearId,
         exam_type: newSpecialExam.type,
-        note: newSpecialExam.note,
-        value: newSpecialExam.grade || null,
-        exam_date: newSpecialExam.customDate || new Date().toISOString().split('T')[0]
+        note: newSpecialExam.note || null,
+        grade_value: newSpecialExam.grade || null,
+        exam_date: newSpecialExam.customDate || new Date().toISOString().split('T')[0],
+        exam_grade_level: newSpecialExam.gradeLevel
       };
-      console.log("EXAM PAYLOAD", payload);
       
-      const { error } = await supabase.from('exams').insert([payload]);
-      if (error) throw error;
+      console.log("EXAM PAYLOAD WITH LEVEL", payloadWithLevel);
+      
+      const { error } = await supabase.from('exams').insert([payloadWithLevel]);
+      
+      if (error && (error.message?.includes('exam_grade_level') || error.code === 'PGRST204')) {
+        console.warn("DB lacks exam_grade_level column. Retrying with serialized fallback...");
+        const fallbackNote = `__grade_level:${newSpecialExam.gradeLevel}__ ${newSpecialExam.note || ''}`;
+        const payloadFallback = {
+          student_id: activeStudent.id,
+          subject_id: targetSubjectId,
+          class_id: effectiveClassId,
+          teacher_id: user.id,
+          school_year_id: schoolYearId,
+          exam_type: newSpecialExam.type,
+          note: fallbackNote,
+          grade_value: payloadWithLevel.grade_value,
+          exam_date: payloadWithLevel.exam_date
+        };
+        const { error: error2 } = await supabase.from('exams').insert([payloadFallback]);
+        if (error2) throw error2;
+      } else if (error) {
+        throw error;
+      }
+      
       setShowSpecialExamModal(false);
       fetchGradesAndNotes();
     } catch (err: any) {
@@ -1972,55 +2007,73 @@ export default function ImenikPage() {
         <div className="space-y-4 pt-2">
            <div className="flex items-center justify-between border-b-2 border-slate-100 pb-2">
               <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest">DOPUNSKI / RAZLIKOVNI / POPRAVNI ISPITI</h2>
-              <button onClick={() => setShowSpecialExamModal(true)} className="text-[10px] font-bold text-[#005c8d] uppercase hover:underline">+ Dodaj ispit</button>
+              <button onClick={() => {
+                setNewSpecialExam({
+                  type: 'SUPPLEMENTARY',
+                  note: '',
+                  grade: 0,
+                  customDate: new Date().toISOString().split('T')[0],
+                  gradeLevel: 1,
+                  subjectId: activeSubject?.id || ''
+                });
+                setShowSpecialExamModal(true);
+              }} className="text-[10px] font-bold text-[#005c8d] uppercase hover:underline">+ Dodaj ispit</button>
            </div>
            
-           <div className="bg-white border border-slate-300 overflow-hidden shadow-sm">
-             <table className="w-full text-left text-[11px] border-collapse">
-               <thead>
-                 <tr className="bg-slate-50 border-b border-slate-300 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-                   <th className="p-3 border-r border-slate-300 w-1/4">Vrsta</th>
-                   <th className="p-3 border-r border-slate-300">Bilješka</th>
-                   <th className="p-3 text-center w-20 border-r border-slate-300">Ocjena</th>
-                   <th className="p-3 text-center w-28 border-r border-slate-300">Datum</th>
-                   <th className="p-3 text-center w-12">Akcije</th>
-                 </tr>
-               </thead>
-               <tbody className="divide-y divide-slate-200">
-                 {specialExams.length === 0 ? (
-                   <tr>
-                     <td colSpan={5} className="p-8 text-center text-slate-400 italic font-bold">Nema unesenih ispita</td>
-                   </tr>
-                 ) : (
-                   specialExams.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(ex => (
-                     <tr key={ex.id} className="hover:bg-slate-50 text-[11px] text-slate-700 font-medium">
-                       <td className="p-3 border-r border-slate-300 font-bold text-[#005c8d]">
-                         {specialExamTypeLabels[ex.type] || ex.type}
-                       </td>
-                       <td className="p-3 border-r border-slate-300 text-slate-600">
-                         {ex.note || '—'}
-                       </td>
-                       <td className="p-3 text-center border-r border-slate-300 font-black text-[#005c8d] text-xs">
-                         {ex.gradeValue || '—'}
-                       </td>
-                       <td className="p-3 text-center border-r border-slate-300 font-bold text-slate-500">
-                         {ex.date ? new Date(ex.date).toLocaleDateString('hr-HR') + '.' : '—'}
-                       </td>
-                       <td className="p-3 text-center w-12">
-                         <button 
-                           onClick={() => handleDeleteSpecialExam(ex.id)} 
-                           className="text-slate-300 hover:text-red-500 p-1"
-                           title="Obriši ispit"
-                         >
-                           <Trash2 size={12}/>
-                         </button>
-                       </td>
-                     </tr>
-                   ))
-                 )}
-               </tbody>
-             </table>
-           </div>
+            <div className="bg-white border border-slate-300 overflow-hidden shadow-sm">
+              <table className="w-full text-left text-[11px] border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-300 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                    <th className="p-3 border-r border-slate-300 w-1/4">Vrsta</th>
+                    <th className="p-3 border-r border-slate-300 w-24 text-center">Za razred</th>
+                    <th className="p-3 border-r border-slate-300 w-1/4">Predmet</th>
+                    <th className="p-3 border-r border-slate-300">Bilješka</th>
+                    <th className="p-3 text-center w-20 border-r border-slate-300">Ocjena</th>
+                    <th className="p-3 text-center w-28 border-r border-slate-300">Datum</th>
+                    <th className="p-3 text-center w-12">Akcije</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {specialExams.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-slate-400 italic font-bold">Nema unesenih ispita</td>
+                    </tr>
+                  ) : (
+                    specialExams.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(ex => (
+                      <tr key={ex.id} className="hover:bg-slate-50 text-[11px] text-slate-700 font-medium">
+                        <td className="p-3 border-r border-slate-300 font-bold text-[#005c8d]">
+                          {specialExamTypeLabels[ex.type] || ex.type}
+                        </td>
+                        <td className="p-3 border-r border-slate-300 text-center font-bold text-slate-600">
+                          {ex.examGradeLevel ? `${ex.examGradeLevel}. razred` : '—'}
+                        </td>
+                        <td className="p-3 border-r border-slate-300 font-bold text-slate-600">
+                          {allSubjects.find(s => s.id === ex.subjectId)?.name || 'Opći predmet'}
+                        </td>
+                        <td className="p-3 border-r border-slate-300 text-slate-600">
+                          {ex.note || '—'}
+                        </td>
+                        <td className="p-3 text-center border-r border-slate-300 font-black text-[#005c8d] text-xs">
+                          {ex.gradeValue || '—'}
+                        </td>
+                        <td className="p-3 text-center border-r border-slate-300 font-bold text-slate-500">
+                          {ex.date ? new Date(ex.date).toLocaleDateString('hr-HR') + '.' : '—'}
+                        </td>
+                        <td className="p-3 text-center w-12">
+                          <button 
+                            onClick={() => handleDeleteSpecialExam(ex.id)} 
+                            className="text-slate-300 hover:text-red-500 p-1"
+                            title="Obriši ispit"
+                          >
+                            <Trash2 size={12}/>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
         </div>
       </div>
     );
@@ -2174,39 +2227,97 @@ export default function ImenikPage() {
       {showSpecialExamModal && (
         <div className="fixed inset-0 bg-[#005c8d]/60 backdrop-blur-none flex items-center justify-center z-[300] p-4 text-center">
           <div className="bg-white max-w-xl w-full relative overflow-hidden border border-gray-400">
-             <div className="p-2 bg-[#005c8d] text-white flex justify-between items-center text-[11px] font-bold uppercase"><h3>Ispiti</h3><button onClick={()=>setShowSpecialExamModal(false)}><X size={16}/></button></div>
+             <div className="p-2 bg-[#005c8d] text-white flex justify-between items-center text-[11px] font-bold uppercase"><h3>Unošenje ispita</h3><button onClick={()=>setShowSpecialExamModal(false)}><X size={16}/></button></div>
              <div className="p-6 space-y-4 text-left">
-                <div className="font-bold text-sm text-[#005c8d] border-b pb-2 mb-2">{subjectDisplayName}</div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Vrsta</label>
-                  <select value={newSpecialExam.type} onChange={e => setNewSpecialExam({...newSpecialExam, type: e.target.value as any})} className="w-full border p-1 text-[11px] font-bold leading-tight">
-                    {(() => {
-                      const fg = finalGrades.find(f => f.period === 'FIRST_TERM' || f.period === 'SECOND_TERM');
-                      // If '1', show one set, if 'Neocijenjen' show another
-                      if (fg?.value === 'Neocijenjen') {
-                        return (
-                          <>
-                            <option value="CLASS_EXAM">Razredni ispit</option>
-                            <option value="SUBJECT_EXAM">Predmetni ispit</option>
-                          </>
-                        );
-                      }
-                      // Default or Grade 1
-                      return (
-                        <>
-                          <option value="SUPPLEMENTARY_WORK">Dopunski ispit</option>
-                          <option value="MAKEUP_EXAM">Popravni ispit</option>
-                          <option value="DIFFERENTIAL_EXAM">Razlikovni ispit</option>
-                        </>
-                      );
-                    })()}
+                <div className="font-bold text-sm text-[#005c8d] border-b pb-2 mb-2">Unos razlikovnog / dopunskog / popravnog ispita za učenika: {activeStudent?.name}</div>
+                
+                {/* 1. Predmet Select */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-gray-400 block mb-1">Predmet</label>
+                  <select 
+                    value={newSpecialExam.subjectId || activeSubject?.id || ''} 
+                    onChange={e => setNewSpecialExam({...newSpecialExam, subjectId: e.target.value})} 
+                    className="w-full border p-1.5 text-[11px] font-bold leading-tight"
+                  >
+                    <option value="">Aktivni predmet ({subjectDisplayName})</option>
+                    {allSubjects.map(sub => (
+                      <option key={sub.id} value={sub.id}>{sub.name}</option>
+                    ))}
                   </select>
-                  </div>
-                  <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Ocjena</label><select value={newSpecialExam.grade} onChange={e => setNewSpecialExam({...newSpecialExam, grade: parseInt(e.target.value)})} className="w-full border p-1 text-[11px] font-bold leading-tight"><option value="0">Unesi...</option>{[1,2,3,4,5].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
                 </div>
-                <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Datum</label><input type="date" value={newSpecialExam.customDate || new Date().toISOString().split('T')[0]} onChange={e => setNewSpecialExam({...newSpecialExam, customDate: e.target.value})} className="w-full border p-1 text-[11px] font-bold leading-tight" /></div>
-                <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Bilješka / Opis</label><textarea value={newSpecialExam.note} onChange={e => setNewSpecialExam({...newSpecialExam, note: e.target.value})} rows={2} className="w-full border p-2 text-[11px]" placeholder="npr. Pismeni dio, opis rezultata..." /></div>
-                <button onClick={handleAddSpecialExam} className="w-full py-2 bg-[#005c8d] text-white font-bold uppercase text-[11px]">Spremi ispit</button>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* 2. Vrsta ispita Select */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 block mb-1">Vrsta ispita</label>
+                    <select 
+                      value={newSpecialExam.type} 
+                      onChange={e => setNewSpecialExam({...newSpecialExam, type: e.target.value as any})} 
+                      className="w-full border p-1.5 text-[11px] font-bold leading-tight"
+                    >
+                      <option value="SUPPLEMENTARY">Dopunski ispit</option>
+                      <option value="REMEDIAL">Popravni ispit</option>
+                      <option value="DIFFERENCE">Razlikovni ispit</option>
+                      <option value="CLASS_EXAM">Razredni ispit</option>
+                      <option value="SUBJECT_EXAM">Predmetni ispit</option>
+                    </select>
+                  </div>
+
+                  {/* 3. Razred Select */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 block mb-1">Razred za koji se polaže</label>
+                    <select 
+                      value={newSpecialExam.gradeLevel} 
+                      onChange={e => setNewSpecialExam({...newSpecialExam, gradeLevel: parseInt(e.target.value)})} 
+                      className="w-full border p-1.5 text-[11px] font-bold leading-tight"
+                    >
+                      <option value="1">1. razred</option>
+                      <option value="2">2. razred</option>
+                      <option value="3">3. razred</option>
+                      <option value="4">4. razred</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* 4. Ocjena Select */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 block mb-1">Ocjena</label>
+                    <select 
+                      value={newSpecialExam.grade} 
+                      onChange={e => setNewSpecialExam({...newSpecialExam, grade: parseInt(e.target.value)})} 
+                      className="w-full border p-1.5 text-[11px] font-bold leading-tight"
+                    >
+                      <option value="0">Odaberi ocjenu...</option>
+                      {[1,2,3,4,5].map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                  </div>
+
+                  {/* 5. Datum Input */}
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 block mb-1">Datum ispita</label>
+                    <input 
+                      type="date" 
+                      value={newSpecialExam.customDate || new Date().toISOString().split('T')[0]} 
+                      onChange={e => setNewSpecialExam({...newSpecialExam, customDate: e.target.value})} 
+                      className="w-full border p-1.5 text-[11px] font-bold leading-tight" 
+                    />
+                  </div>
+                </div>
+
+                {/* 6. Opis / Bilješka Textarea */}
+                <div className="space-y-1">
+                  <label className="text-[10px] font-black uppercase text-gray-400 block mb-1">Opis / Bilješka</label>
+                  <textarea 
+                    value={newSpecialExam.note} 
+                    onChange={e => setNewSpecialExam({...newSpecialExam, note: e.target.value})} 
+                    rows={2} 
+                    className="w-full border p-2 text-[11px]" 
+                    placeholder="npr. Pismeni dio, opis rezultata..." 
+                  />
+                </div>
+
+                <button onClick={handleAddSpecialExam} className="w-full py-2 bg-[#005c8d] hover:bg-[#004e78] text-white font-bold uppercase text-[11px] transition-colors mt-2">Spremi ispit</button>
              </div>
           </div>
         </div>

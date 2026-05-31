@@ -13,7 +13,20 @@ export type SchoolDocumentSettings = {
   default_klasa?: string;
   default_urbroj?: string;
   stamp_image_url?: string;
+  stamp_url?: string;
+  stamp_path?: string;
+  signature_url?: string;
+  signature_path?: string;
   principal_signature_url?: string;
+  principal_signature_path?: string;
+  teacher_signature_url?: string;
+  teacher_signature_path?: string;
+  overall_success_label?: string;
+  conduct_label?: string;
+  certificate_place?: string;
+  certificate_date?: string;
+  desired_school_name?: string;
+  homeroom_teacher_title?: string;
   updated_at: string;
 };
 

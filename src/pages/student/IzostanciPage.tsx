@@ -342,61 +342,38 @@ export default function IzostanciPage() {
                     }
                   </div>
                 ) : (
-                  displayedAbsences.map(abs => {
-                    const normStatus = getStatusType(abs.status);
-                    
-                    return (
-                      <div key={abs.id} className="border border-slate-200 bg-white p-4 shadow-3xs flex flex-col md:flex-row md:items-center justify-between gap-3 hover:border-blue-500 transition-colors">
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="bg-slate-100 text-slate-700 font-black text-[10px] px-2 py-0.5 rounded leading-none shrink-0 border border-slate-200">
-                              {abs.hour ? `${abs.hour}. sat` : 'Nekategorizirano'}
-                            </span>
-                            <span className="font-bold text-slate-800 text-sm">
-                              {abs.subjectName ? abs.subjectName : 'Izostanak / Sat razrednika'}
-                            </span>
-                          </div>
-
-                          <div className="text-xs text-gray-500 font-medium">
-                            Datum: {new Date(abs.date).toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' })}
-                          </div>
-
-                          {abs.lessonTopic && (
-                            <div className="text-xs text-gray-600 italic">
-                              Nastavna tema: "{abs.lessonTopic}"
-                            </div>
-                          )}
-
-                          {abs.note ? (
-                            <div className="text-xs text-red-500/80 font-semibold bg-gray-50 border border-gray-100 p-2 rounded mt-1.5 italic">
-                              Razlog / Napomena: "{abs.note}"
-                            </div>
-                          ) : (
-                            <div className="text-xs text-gray-400 italic mt-1 bg-gray-50/50 p-2 rounded">
-                              Nema upisane napomene o razlogu izostanka.
-                            </div>
-                          )}
+                  Object.entries(
+                    displayedAbsences.reduce((acc, abs) => {
+                      if (!acc[abs.date]) acc[abs.date] = [];
+                      acc[abs.date].push(abs);
+                      return acc;
+                    }, {} as Record<string, AbsenceWithDetails[]>)
+                  )
+                  .sort((a,b) => b[0].localeCompare(a[0]))
+                  .map(([date, absencesForDate]) => (
+                    <div key={date} className="space-y-2">
+                        <div className="font-black text-[10px] text-slate-500 uppercase tracking-widest bg-slate-100 p-2 border-b border-slate-200">
+                            {new Date(date).toLocaleDateString('hr-HR', { day: 'numeric', month: 'long' })}
                         </div>
-
-                        <div className="flex items-center gap-2.5 shrink-0 self-start md:self-center">
-                          {normStatus === 'CEKA' && <Clock size={15} className="text-amber-500" />}
-                          {normStatus === 'OPRAVDANO' && <CheckCircle2 size={15} className="text-green-500" />}
-                          {normStatus === 'NEOPRAVDANO' && <XCircle size={15} className="text-red-500" />}
-
-                          <span className={cn(
-                            "font-black uppercase text-[9px] tracking-wide px-2 py-1 rounded border",
-                            getStatusBadgeStyles(abs.status)
-                          )}>
-                            {abs.status === 'PENDING' ? 'ČEKA ODLUKU' :
-                             abs.status === 'JUSTIFIED' ? 'OPRAVDANO' :
-                             abs.status === 'UNJUSTIFIED' ? 'NEOPRAVDANO' :
-                             abs.status === 'OTHER' ? 'OSTALO' :
-                             (abs.status || 'NA PROVJERI')}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
+                        {(absencesForDate as any[]).sort((a,b) => (a.hour || 0) - (b.hour || 0)).map(abs => {
+                          const normStatus = getStatusType(abs.status);
+                          const statusColor = normStatus === 'OPRAVDANO' ? 'bg-green-500' : normStatus === 'NEOPRAVDANO' ? 'bg-red-500' : 'bg-amber-500';
+                          
+                          return (
+                            <div key={abs.id} className="grid grid-cols-[auto_1fr_auto] items-center gap-3 p-3 border-b border-slate-100 last:border-b-0 hover:bg-slate-50">
+                              <span className="font-bold text-slate-400 text-xs">{abs.hour}.</span>
+                              <span className="font-bold text-slate-800 text-sm truncate">{abs.subjectName || 'Sat razrednika'}</span>
+                              <div className="flex items-center gap-2">
+                                <span className={cn("w-2 h-2 rounded-full", statusColor)}></span>
+                                <span className={cn("text-[10px] font-bold uppercase tracking-wider", normStatus === 'OPRAVDANO' ? 'text-green-600' : normStatus === 'NEOPRAVDANO' ? 'text-red-600' : 'text-amber-600')}>
+                                    {normStatus === 'OPRAVDANO' ? 'Opravdano' : normStatus === 'NEOPRAVDANO' ? 'Neopravdano' : 'Čeka opravdanje'}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  ))
                 )}
               </div>
             </div>

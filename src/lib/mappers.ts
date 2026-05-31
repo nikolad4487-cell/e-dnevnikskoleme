@@ -143,20 +143,36 @@ export const mappers = {
     content: raw.content,
   }),
 
-  exam: (raw: any) => ({
-    id: raw.id,
-    classId: raw.class_id,
-    subjectId: raw.subject_id,
-    studentId: raw.student_id,
-    teacherId: raw.teacher_id,
-    schoolYearId: raw.school_year_id,
-    value: raw.value ? raw.value.toString() : undefined,
-    note: raw.note,
-    date: raw.exam_date || raw.date, // fallback for backwards compat if needed momentarily
-    type: raw.exam_type || raw.type,
-    description: raw.description,
-    createdBy: raw.created_by,
-  }),
+  exam: (raw: any) => {
+    let examGradeLevel = raw.exam_grade_level;
+    let note = raw.note || '';
+    if (examGradeLevel === undefined || examGradeLevel === null) {
+      if (typeof note === 'string') {
+        const match = note.match(/__grade_level:(\d)__/);
+        if (match) {
+          examGradeLevel = parseInt(match[1]);
+          note = note.replace(/__grade_level:(\d)__\s*/, '');
+        }
+      }
+    }
+    const val = (raw.grade_value !== undefined && raw.grade_value !== null) ? raw.grade_value.toString() : (raw.value ? raw.value.toString() : undefined);
+    return {
+      id: raw.id,
+      classId: raw.class_id,
+      subjectId: raw.subject_id,
+      studentId: raw.student_id,
+      teacherId: raw.teacher_id,
+      schoolYearId: raw.school_year_id,
+      value: val,
+      gradeValue: val,
+      note: note,
+      date: raw.exam_date || raw.date,
+      type: raw.exam_type || raw.type,
+      description: raw.description,
+      createdBy: raw.created_by,
+      examGradeLevel: examGradeLevel ?? null,
+    };
+  },
 
   finalGrade: (raw: any) => ({
     id: raw.id,

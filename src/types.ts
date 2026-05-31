@@ -257,7 +257,10 @@ export const specialExamTypeLabels: Record<string, string> = {
   MAKEUP_EXAM: 'Popravni ispit',
   DIFFERENTIAL_EXAM: 'Razlikovni ispit',
   CLASS_EXAM: 'Razredni ispit',
-  SUBJECT_EXAM: 'Predmetni ispit'
+  SUBJECT_EXAM: 'Predmetni ispit',
+  DIFFERENCE: 'Razlikovni ispit',
+  SUPPLEMENTARY: 'Dopunski ispit',
+  REMEDIAL: 'Popravni ispit'
 };
 
 export const specialExamTypes = Object.keys(specialExamTypeLabels);
@@ -275,6 +278,7 @@ export type Exam = {
   type: string;
   description?: string;
   createdBy?: string;
+  examGradeLevel?: number; // Optional, added for differential/supplementary/remedial exams (1-4)
 };
 
 export type ScheduleCell = {
