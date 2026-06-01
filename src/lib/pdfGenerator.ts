@@ -112,42 +112,79 @@ export const generateClassCertificatePDF = async (student: any, data: Certificat
     doc.setFont('helvetica', 'normal');
     let y = layout.topMargin || 15;
 
-    // --- COUNTRY HEADER AND SCHOOL NAME ---
-    doc.setFontSize(10);
-    doc.text(texts.headerCountry || 'REPUBLIKA HRVATSKA', 105, y, { align: 'center' });
-    y += 6;
+    // --- OFFICIAL BORDER FRAME ---
+    if (layout.showBorder) {
+        doc.saveGraphicsState();
+        if (layout.borderStyle === 'double-turquoise') {
+            doc.setDrawColor(78, 190, 199);
+            doc.setLineWidth(1.2);
+            doc.rect(4, 4, 202, 289, 'S');
+            doc.setLineWidth(0.4);
+            doc.rect(5.5, 5.5, 199, 286, 'S');
+        } else if (layout.borderStyle === 'sleek-dark') {
+            doc.setDrawColor(40, 45, 55);
+            doc.setLineWidth(0.5);
+            doc.rect(4, 4, 202, 289, 'S');
+        } else if (layout.borderStyle === 'gold-line') {
+            doc.setDrawColor(212, 175, 55);
+            doc.setLineWidth(1.0);
+            doc.rect(4, 4, 202, 289, 'S');
+            doc.setLineWidth(0.3);
+            doc.rect(5.5, 5.5, 199, 286, 'S');
+        } else if (layout.borderStyle === 'minimal') {
+            doc.setDrawColor(30, 40, 60);
+            doc.setLineWidth(0.8);
+            doc.line(4, 4, 206, 4);
+            doc.line(4, 293, 206, 293);
+        }
+        doc.restoreGraphicsState();
+    }
+
+    // --- TRIAL WATERMARK ---
+    if (isTrial && layout.showWatermark !== false) {
+        doc.saveGraphicsState();
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(215, 215, 215);
+        doc.setFontSize(48);
+        doc.text('PROBNI ISPIS', 50, 180, { angle: 45 });
+        doc.restoreGraphicsState();
+    }
+
+    // --- HEADER ---
+    doc.setTextColor(20, 20, 30);
+    doc.setFont('helvetica', 'normal');
+    
+    // --- REPUBLIKA HRVATSKA ---
     doc.setFontSize(12);
+    doc.text('REPUBLIKA HRVATSKA', 105, y, { align: 'center' });
+    y += 10;
+    
+    // --- NAZIV ŠKOLE ---
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.text(data.schoolName.toUpperCase(), 105, y, { align: 'center' });
+    y += 10;
     
-    // OIB (left), KLASA/URBROJ (right)
-    y += 5;
-    doc.setFontSize(9);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`OIB škole: ${data.oib || 'N/A'}`, 20, y);
-    doc.text(`KLASA: ${data.klasa || 'N/A'}`, 190, y, { align: 'right' });
-    y += 4;
-    doc.text(`URBROJ: ${data.urbroj || 'N/A'}`, 190, y, { align: 'right' });
-    
+    // Vodoravna linija
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.5);
+    doc.line(20, y, 190, y);
     y += 15;
     
     // --- SVJEDODŽBA TITLE ---
-    doc.setFontSize(22);
+    doc.setFontSize(24);
     doc.setFont('helvetica', 'bold');
-    doc.text(texts.documentTitle || 'SVJEDODŽBA', 105, y, { align: 'center' });
+    doc.text('SVJEDODŽBA', 105, y, { align: 'center' });
+    y += 15;
     
-    // --- STUDENT DETAILS ---
-    y += 10;
-    doc.setFontSize(16);
+    // --- IME I PREZIME ---
+    doc.setFontSize(28);
     doc.text(data.studentName.toUpperCase(), 105, y, { align: 'center' });
-    
-    y += 6;
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text(`OIB: ${data.studentOib}   |   spol: ${student?.gender === 'FEMALE' || student?.gender === 'Ž' ? 'Ženski' : 'Muški'}`, 105, y, { align: 'center' });
+    y += 15;
     
     // --- TEMPLATED BODY PARAGRAPH ---
-    y += 12;
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
     let bodyText = texts.bodyTemplate || defaultTemplateConfig.texts.bodyTemplate;
     bodyText = bodyText.replace('{birthday}', student?.dob || '____________');
     bodyText = bodyText.replace('{birthplace}', student?.birthplace || student?.pob || '____________');
@@ -163,7 +200,7 @@ export const generateClassCertificatePDF = async (student: any, data: Certificat
 
     const bodyParagraphLines = doc.splitTextToSize(bodyText, 170);
     doc.text(bodyParagraphLines, 20, y);
-    y += (bodyParagraphLines.length * 6) + 5;
+    y += (bodyParagraphLines.length * 8) + 10;
 
     // --- SUBJECTS ---
     const formatGradeRepresentation = (val: any) => {
@@ -185,84 +222,84 @@ export const generateClassCertificatePDF = async (student: any, data: Certificat
         return t === 'ELECTIVE' || t === 'IZBORNI';
     });
 
-    // Obligatory
-    if (obligatoryGrades.length > 0) {
+    const drawSubjects = (grades: any[], title: string) => {
         doc.setFont('helvetica', 'bold');
-        doc.text('OBVEZNI PREDMETI:', 20, y);
-        y += 7;
+        doc.text(title, 20, y);
+        y += 8;
         doc.setFont('helvetica', 'normal');
-        obligatoryGrades.forEach(g => {
-            doc.text(g.subjectName, 20, y);
+        grades.forEach(g => {
             const gradeText = formatGradeRepresentation(g.gradeValue);
-            // Measure widths to draw dots
-            const subjectWidth = doc.getTextWidth(g.subjectName);
-            const gradeWidth = doc.getTextWidth(gradeText);
-            const startX = 20 + subjectWidth + 2;
-            const endX = 190 - gradeWidth - 2;
+            
+            // Draw subject name
+            doc.text(g.subjectName, 20, y);
             
             // Draw dotted line
-            doc.setLineDash([0.5, 1], 0);
-            doc.line(startX, y - 1, endX, y - 1);
-            doc.setLineDash([], 0);
-            
-            doc.text(gradeText, 190, y, { align: 'right' });
-            y += 6;
-        });
-        y += 5;
-    }
-
-    // Elective
-    if (electiveGrades.length > 0) {
-        doc.setFont('helvetica', 'bold');
-        doc.text('IZBORNI PREDMETI:', 20, y);
-        y += 7;
-        doc.setFont('helvetica', 'normal');
-        electiveGrades.forEach(g => {
-            doc.text(g.subjectName, 20, y);
-            const gradeText = formatGradeRepresentation(g.gradeValue);
-            // Measure widths to draw dots
             const subjectWidth = doc.getTextWidth(g.subjectName);
             const gradeWidth = doc.getTextWidth(gradeText);
-            const startX = 20 + subjectWidth + 2;
-            const endX = 190 - gradeWidth - 2;
+            const startX = 20 + subjectWidth + 3;
+            const endX = 190 - gradeWidth - 3;
             
-            // Draw dotted line
-            doc.setLineDash([0.5, 1], 0);
-            doc.line(startX, y - 1, endX, y - 1);
-            doc.setLineDash([], 0);
+            // Ensure dots don't overlap text
+            if (endX > startX) {
+                doc.setLineDash([0.5, 1], 0);
+                doc.line(startX, y - 1, endX, y - 1);
+                doc.setLineDash([], 0);
+            }
             
             doc.text(gradeText, 190, y, { align: 'right' });
-            y += 6;
+            y += 7;
         });
         y += 5;
-    }
+    };
 
-    // --- SUMMARY ---
+    if (obligatoryGrades.length > 0) drawSubjects(obligatoryGrades, 'OBVEZNI PREDMETI');
+    if (electiveGrades.length > 0) drawSubjects(electiveGrades, 'IZBORNI PREDMETI');
+
+    // --- FRAME FOR SUCCESS ---
     y += 5;
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    doc.rect(20, y, 170, 30);
+    
+    // Left side:
     doc.setFontSize(10);
-    doc.text(`Ukupno izostanaka: ${student?.absences || 0} sati; od toga neopravdano: ${student?.unjustified_absences || 0} sati.`, 20, y);
-    y += 6;
-    doc.text(`Vladanje: ${data.conduct || 'uzorno'}.`, 20, y);
-    y += 8;
-    doc.text(`Učenik je s ${data.overallSuccess} (${data.overallAverage}) uspjehom završio ${data.className} razred.`, 20, y);
+    doc.text(`Ukupno izostanaka: ${student?.absences || 0} sati`, 25, y+7);
+    doc.text(`Neopravdano: ${student?.unjustified_absences || 0} sati`, 25, y+12);
+    doc.text(`Vladanje: ${data.conduct || 'uzorno'}`, 25, y+19);
     
-    // --- SIGNATURES ---
-    const sigY = elements.signatureLineY || 255;
-    y = sigY - 20;
+    // Right side:
+    doc.text(`Opći uspjeh: ${data.overallSuccess}`, 120, y+7);
+    doc.text(`Prosjek: ${data.overallAverage}`, 120, y+12);
+    y += 40;
     
-    // Signature lines
-    doc.line(20, y, 70, y);
-    doc.line(140, y, 190, y);
+    // --- TEXT USPJEHA ---
+    const gradeLevelMapping: any = { '1': 'prvi', '2': 'drugi', '3': 'treći', '4': 'četvrti' };
+    const gradeLevel = data.className.split('.')[0];
+    const gradeLevelWord = gradeLevelMapping[gradeLevel] || gradeLevel;
     
-    doc.setFontSize(9);
-    doc.text(data.homeroomTeacherTitle || 'Razrednik', 45, y + 5, { align: 'center' });
-    doc.text(data.principalTitle || 'Ravnatelj', 165, y + 5, { align: 'center' });
-
+    doc.setFontSize(12);
+    doc.text(`Učenik je s ${data.overallSuccess} (${data.overallAverage.replace('.',',')}) uspjehom završio ${gradeLevelWord} razred.`, 20, y);
+    y += 25;
+    
+    // --- POTPISI ---
+    doc.setFontSize(11);
+    doc.text('Razrednik', 50, y, { align: 'center' });
+    doc.text('Ravnatelj', 160, y, { align: 'center' });
+    
+    // Line for signatures
+    y += 10;
+    doc.line(30, y, 70, y);
+    doc.line(140, y, 180, y);
+    
+    // Name under lines
+    doc.text(data.homeroomTeacherName || '____________', 50, y + 5, { align: 'center' });
+    doc.text(data.principalName || '____________', 160, y + 5, { align: 'center' });
+    
     // Stamp
     if (elements.showStamp) {
-        doc.setFontSize(9);
-        doc.text('M. P.', 105, y+2, { align: 'center' });
+        doc.text('M. P.', 105, y - 5, { align: 'center' });
     }
+
 
     return doc;
 };
