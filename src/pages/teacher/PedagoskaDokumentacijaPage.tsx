@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { mappers } from '../../lib/mappers';
+import { usePageTitle } from '../../hooks/usePageTitle';
 import { 
   Users, BookOpen, Heart, ShieldAlert, Edit2, Plus, Trash2, 
   Save, X, FileText, User, Calendar, MessageSquare, AlertCircle, FileSpreadsheet, GraduationCap
@@ -56,6 +57,8 @@ export default function PedagoskaDokumentacijaPage() {
   const [activeClass, setActiveClass] = useState<any>(null);
   const [students, setStudents] = useState<any[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
+
+  usePageTitle(selectedStudent ? `Pedagoška dokumentacija - ${selectedStudent.name}` : "Pedagoška dokumentacija");
 
   // Decoupled Pedagogical State
   const [profile, setProfile] = useState<StudentPedagogicalProfile>({

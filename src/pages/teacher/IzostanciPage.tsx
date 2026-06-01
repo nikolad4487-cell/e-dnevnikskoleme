@@ -9,8 +9,10 @@ import { UserX, ArrowLeft, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mappers, mapList } from '../../lib/mappers';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 export default function TeacherIzostanciPage() {
+  usePageTitle("Izostanci");
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { user, isMainAdmin } = useAuth();
   const { selectedClassId: contextClassId } = useSelection();

@@ -9,8 +9,10 @@ import { cn, getSurname, formatPersonName, sortStudentsBySurname } from '../../l
 import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, UserX } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' }) {
+  usePageTitle("Dnevnik rada");
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { user, isMainAdmin } = useAuth();
   const { selectedSchoolId, selectedClassId: contextClassId } = useSelection();

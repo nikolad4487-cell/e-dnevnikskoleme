@@ -10,6 +10,7 @@ import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, 
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { SpecialExamReGradeModal } from '../../components/SpecialExamReGradeModal';
 import { toast } from 'react-hot-toast';
+import { usePageTitle } from '../../hooks/usePageTitle';
 
 type ViewMode = 'STUDENTS' | 'SUBJECTS' | 'GRADES' | 'NOTES';
 
@@ -173,6 +174,8 @@ export default function ImenikPage() {
   const { selectedSchoolId, selectedClassId: contextClassId, isArchived } = useSelection();
   
   const effectiveClassId = contextClassId || routeClassId;
+
+  usePageTitle("Imenik");
 
   if (!effectiveClassId) {
     return (
