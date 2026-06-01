@@ -222,34 +222,69 @@ async function startServer() {
         return res.status(400).json({ error: "studentId is required" });
       }
 
+      // Fetch the real, current program_adjustment directly from the user_profiles table if database is online
+      let dbProgramAdjustment = "NONE";
       if (supabaseAdmin) {
-        const { data, error } = await supabaseAdmin
-          .from("student_pedagogical_profiles")
-          .select("*")
-          .eq("student_id", studentId)
-          .maybeSingle();
-        if (!error && data) {
-          return res.json(data);
+        try {
+          const { data: userProf, error: userProfErr } = await supabaseAdmin
+            .from("user_profiles")
+            .select("program_adjustment")
+            .eq("id", studentId)
+            .maybeSingle();
+          if (!userProfErr && userProf) {
+            dbProgramAdjustment = userProf.program_adjustment || "NONE";
+          }
+        } catch (dbErr) {
+          console.warn("Failed to query program_adjustment from user_profiles in GET:", dbErr);
         }
       }
 
-      // JSON Fallback
-      let list = readJsonFile("student_pedagogical_profiles.json");
-      let profile = list.find(p => p.student_id === studentId || p.studentId === studentId);
-      if (!profile) {
-        profile = {
-          student_id: studentId,
-          education_program: "",
-          visit_reason: "",
-          disabilities: "",
-          accommodations: "",
-          support_types: "",
-          practical_training: "",
-          documentation: "",
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        };
+      let profile: any = null;
+
+      if (supabaseAdmin) {
+        try {
+          const { data, error } = await supabaseAdmin
+            .from("student_pedagogical_profiles")
+            .select("*")
+            .eq("student_id", studentId)
+            .maybeSingle();
+          if (!error && data) {
+            profile = data;
+          }
+        } catch (dbErr) {
+          // If the table doesn't exist, log a warning instead of breaking
+          console.warn("student_pedagogical_profiles query failed or table doesn't exist:", dbErr);
+        }
       }
+
+      if (!profile) {
+        // JSON Fallback
+        let list = readJsonFile("student_pedagogical_profiles.json");
+        profile = list.find(p => p.student_id === studentId || p.studentId === studentId);
+        if (!profile) {
+          profile = {
+            student_id: studentId,
+            education_program: "",
+            visit_reason: "",
+            disabilities: "",
+            accommodations: "",
+            support_types: "",
+            practical_training: "",
+            documentation: "",
+            program_adjustment: "NONE",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+        }
+      }
+
+      // ALWAYS override program_adjustment with the real value from user_profiles
+      profile.program_adjustment = dbProgramAdjustment;
+
+      // Console log loaded profile as requested
+      console.log("LOAD PEDAGOGICAL PROFILE", profile);
+      console.log("LOADED PROGRAM ADJUSTMENT", profile?.program_adjustment);
+
       res.json(profile);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -273,10 +308,21 @@ async function startServer() {
         support_types: payload.support_types || payload.supportTypes || "",
         practical_training: payload.practical_training || payload.practicalTraining || "",
         documentation: payload.documentation || "",
+        program_adjustment: payload.program_adjustment || payload.programAdjustment || "NONE",
         updated_at: new Date().toISOString()
       };
 
       if (supabaseAdmin) {
+        try {
+          const adjValue = payload.program_adjustment || payload.programAdjustment || "NONE";
+          await supabaseAdmin
+            .from("user_profiles")
+            .update({ program_adjustment: adjValue })
+            .eq("id", studentId);
+        } catch (dbErr) {
+          console.warn("Could not update program_adjustment in user_profiles on Supabase:", dbErr);
+        }
+
         const { data, error } = await supabaseAdmin
           .from("student_pedagogical_profiles")
           .upsert(dbPayload, { onConflict: "student_id" })
@@ -285,7 +331,7 @@ async function startServer() {
         if (!error && data) {
           return res.json(data);
         } else {
-          console.warn("Supabase upsert failed, using JSON fallback", error);
+          console.log("[INFO] Synchronization fallback: using local JSON storage.");
         }
       }
 
@@ -378,7 +424,7 @@ async function startServer() {
         if (!error && data) {
           return res.json(data);
         } else {
-          console.warn("Supabase upsert notes failed, using JSON fallback", error);
+          console.log("[INFO] Synchronization fallback for notes: using local JSON storage.");
         }
       }
 

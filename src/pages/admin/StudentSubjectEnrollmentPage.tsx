@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Subject, Role } from '../../types';
-import { getSurname, matchesSearch } from '../../lib/utils';
+import { getSurname, matchesSearch, sortStudentsBySurname } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
@@ -226,13 +226,10 @@ export default function StudentSubjectEnrollmentPage() {
     }
   };
 
-  const filteredStudents = students.filter(s => 
+  const rawFiltered = students.filter(s => 
     matchesSearch(s.name, searchTerm)
-  ).sort((a,b) => {
-    const surnameA = getSurname(String(a.name || ''));
-    const surnameB = getSurname(String(b.name || ''));
-    return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-  });
+  );
+  const filteredStudents = sortStudentsBySurname(rawFiltered);
 
   return (
     <div className="p-6 font-sans w-full">

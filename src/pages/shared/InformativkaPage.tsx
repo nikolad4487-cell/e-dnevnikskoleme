@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { ChatGroup, Message, User, Role } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
-import { cn, formatPersonName } from '../../lib/utils';
+import { cn, formatPersonName, sortStudentsBySurname } from '../../lib/utils';
 import { Send, Users, Info, MoreVertical, Search, UserPlus, BookOpen, MessageSquare, ArrowLeft, Check, Shield } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -531,7 +531,7 @@ export default function InformativkaPage() {
       
       const uniqueContacts = Array.from(new Map(contacts.map(item => [item.id, item])).values());
       console.log("INFORMATIVKA USERS FETCHED", uniqueContacts);
-      setAvailableContacts(uniqueContacts.sort((a, b) => a.name.localeCompare(b.name)));
+      setAvailableContacts(sortStudentsBySurname(uniqueContacts));
     } catch (err) {
       console.error('Error loading contacts:', err);
     } finally {

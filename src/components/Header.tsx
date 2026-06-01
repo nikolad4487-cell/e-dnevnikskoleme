@@ -13,7 +13,7 @@ interface HeaderProps {
 }
 
 export function Header({ showNav = true, hideClass = false }: HeaderProps) {
-  const { user, signOut, formattedRoles, userSchoolRoles } = useAuth();
+  const { user, signOut, formattedRoles, userSchoolRoles, isStudent, isParent } = useAuth();
   const { 
     selectedSchoolId, 
     selectedYearId, 
@@ -130,6 +130,18 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
 
         {isMenuOpen && (
           <div className="absolute right-0 top-full mt-2 w-48 bg-white text-gray-800 border border-gray-200 shadow-xl rounded py-1 z-[100] animate-in fade-in zoom-in-95 duration-100">
+            {(isStudent || isParent) && (
+              <button 
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  navigate('/student/osobni-podaci');
+                }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100"
+              >
+                <User size={14} />
+                Osobni podaci
+              </button>
+            )}
             <button 
               onClick={() => {
                 setIsMenuOpen(false);

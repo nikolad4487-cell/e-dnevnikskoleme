@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { User, StudentNote, Class, ClassNotes, StudentNotes } from '../../types';
-import { cn, formatName, getSurname, matchesSearch } from '../../lib/utils';
+import { cn, formatName, getSurname, matchesSearch, sortStudentsBySurname } from '../../lib/utils';
 import { MessageSquare, Plus, Search, Calendar, User as UserIcon, Edit2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mappers, mapList } from '../../lib/mappers';
@@ -73,9 +73,8 @@ export default function BiljeskePage() {
         .eq('status', 'ACTIVE');
 
       const studentsList = (enrollData || []).map((e: any) => mappers.user(e.student)).filter(Boolean);
-      
-const uniqueStudents = Array.from(new Map(studentsList.map(s => [s.id, s])).values());
-setStudents(uniqueStudents);
+      const uniqueStudents = Array.from(new Map(studentsList.map(s => [s.id, s])).values());
+      setStudents(sortStudentsBySurname(uniqueStudents));
 
 
       // 3. Fetch Subjects
@@ -240,11 +239,7 @@ setStudents(uniqueStudents);
              <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Aktivnosti i pedagoške mjere</h3>
           </div>
           <div className="grid grid-cols-1 gap-6">
-            {students.sort((a, b) => {
-              const surnameA = getSurname(String(a.name || ''));
-              const surnameB = getSurname(String(b.name || ''));
-              return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-            }).map(s => {
+            {sortStudentsBySurname(students).map(s => {
               const son = studentOverallNotes.find(n => n.studentId === s.id);
               
               return (

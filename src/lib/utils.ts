@@ -11,6 +11,29 @@ export const getSurname = (fullName?: string) => {
   return parts[parts.length - 1] || '';
 };
 
+export function sortStudentsBySurname(students: any[]): any[] {
+  if (!students) return [];
+  return [...students].sort((a, b) => {
+    const aName = a.name ? String(a.name) : "";
+    const bName = b.name ? String(b.name) : "";
+
+    const splitName = (fullName: string) => {
+      const parts = fullName.trim().split(/\s+/);
+      const lastName = parts.pop() || "";
+      const firstName = parts.join(" ");
+      return { firstName, lastName };
+    };
+
+    const aParsed = splitName(aName);
+    const bParsed = splitName(bName);
+
+    return (
+      aParsed.lastName.localeCompare(bParsed.lastName, "hr", { sensitivity: "base" }) ||
+      aParsed.firstName.localeCompare(bParsed.firstName, "hr", { sensitivity: "base" })
+    );
+  });
+}
+
 export function removeDiacritics(str: string): string {
   return (str || '')
     .normalize("NFD")

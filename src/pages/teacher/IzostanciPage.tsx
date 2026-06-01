@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Absence, AbsenceStatus, User, Lesson, Role } from '../../types';
-import { cn, getSurname, formatPersonName } from '../../lib/utils';
+import { cn, getSurname, formatPersonName, sortStudentsBySurname } from '../../lib/utils';
 import { UserX, ArrowLeft, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mappers, mapList } from '../../lib/mappers';
@@ -51,7 +51,7 @@ export default function TeacherIzostanciPage() {
         .eq('status', 'ACTIVE');
       
       const studentsList = (enrollData || []).map((e: any) => mappers.user(e.student));
-      setStudents(studentsList);
+      setStudents(sortStudentsBySurname(studentsList));
 
       const { data: absData } = await supabase
         .from('absences')
@@ -123,7 +123,7 @@ export default function TeacherIzostanciPage() {
   };
 
   const studentStats = useMemo(() => {
-    return students.map(s => {
+    const rawStats = students.map(s => {
       const studAbs = absences.filter(a => a.studentId === s.id);
       return {
         ...s,
@@ -132,11 +132,8 @@ export default function TeacherIzostanciPage() {
         unjustified: studAbs.filter(a => a.status === AbsenceStatus.UNJUSTIFIED).length,
         pending: studAbs.filter(a => a.status === AbsenceStatus.PENDING).length
       };
-    }).sort((a, b) => {
-      const surnameA = getSurname(String(a.name || ''));
-      const surnameB = getSurname(String(b.name || ''));
-      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
     });
+    return sortStudentsBySurname(rawStats);
   }, [students, absences]);
 
   const stats = useMemo(() => ({

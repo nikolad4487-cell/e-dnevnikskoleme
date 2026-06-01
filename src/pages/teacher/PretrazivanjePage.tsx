@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Search, User, Mail, Hash, BookOpen } from 'lucide-react';
-import { cn, getSurname, matchesSearch } from '../../lib/utils';
+import { cn, getSurname, matchesSearch, sortStudentsBySurname } from '../../lib/utils';
 import { Role } from '../../types';
 
 export default function PretrazivanjePage() {
@@ -118,11 +118,7 @@ export default function PretrazivanjePage() {
                   Rezultati pretrage: {activeTab === 'STUDENTS' ? results.students.length : results.lessons.length} zapisa
                 </div>
                 <div className="divide-y divide-gray-200">
-                  {activeTab === 'STUDENTS' && results.students.sort((a, b) => {
-                    const surnameA = getSurname(String(a.name || ''));
-                    const surnameB = getSurname(String(b.name || ''));
-                    return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-                  }).map(u => (
+                  {activeTab === 'STUDENTS' && sortStudentsBySurname(results.students).map(u => (
                     <div key={u.id} className="p-4 flex items-center gap-6 hover:bg-blue-50 transition-colors">
                       <div className="w-12 h-12 border border-gray-200 bg-gray-50 flex items-center justify-center text-[#94a3b8] shrink-0">
                         <User size={24} />

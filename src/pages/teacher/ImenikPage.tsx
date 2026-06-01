@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, Grade, Subject, StudentNote, Exam, FinalGrade, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary, specialExamTypeLabels } from '../../types';
-import { cn, formatName, getSurname, formatSubjectDisplayName, finalGradeLabels } from '../../lib/utils';
+import { cn, formatName, getSurname, formatSubjectDisplayName, finalGradeLabels, sortStudentsBySurname } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2, Check } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
@@ -1409,11 +1409,7 @@ export default function ImenikPage() {
 
   const navigateStudent = (dir: 'PREV' | 'NEXT') => {
     if (!activeStudent || students.length === 0) return;
-    const sorted = [...students].sort((a, b) => {
-      const surnameA = getSurname(String(a.name || ''));
-      const surnameB = getSurname(String(b.name || ''));
-      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-    });
+    const sorted = sortStudentsBySurname(students);
     const idx = sorted.findIndex(s => s.id === activeStudent.id);
     
     if (idx === -1) return;
@@ -1556,11 +1552,7 @@ export default function ImenikPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {students.sort((a, b) => {
-              const surnameA = getSurname(String(a.name || ''));
-              const surnameB = getSurname(String(b.name || ''));
-              return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-            }).map((s, idx) => {
+            {sortStudentsBySurname(students).map((s, idx) => {
               const failingCount = classWarnings.failingGrades[s.id] || 0;
               const hasPending = classWarnings.pendingAbsences[s.id];
 
@@ -1614,11 +1606,7 @@ export default function ImenikPage() {
   );
 };
 
-  const sortedStudents = [...students].sort((a, b) => {
-    const surnameA = getSurname(String(a.name || ''));
-    const surnameB = getSurname(String(b.name || ''));
-    return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-  });
+  const sortedStudents = sortStudentsBySurname(students);
   const studentIndex = sortedStudents.findIndex(s => s.id === activeStudent?.id);
 
   const renderNavButtons = () => (
@@ -1728,11 +1716,7 @@ export default function ImenikPage() {
       return null;
     };
 
-    const sortedStudents = [...students].sort((a, b) => {
-      const surnameA = getSurname(String(a.name || ''));
-      const surnameB = getSurname(String(b.name || ''));
-      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-    });
+    const sortedStudents = sortStudentsBySurname(students);
     const studentIndex = sortedStudents.findIndex(s => s.id === activeStudent?.id);
     
     const gridGrades: Record<string, Record<string, Grade[]>> = {};
@@ -2364,11 +2348,7 @@ export default function ImenikPage() {
                     <tr><th className="p-2 w-64">Učenik</th><th className="p-2 w-32 border-x border-gray-300 text-center">Ocjena</th><th className="p-2">Bilješka</th></tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {students.sort((a, b) => {
-                      const surnameA = getSurname(String(a.name || ''));
-                      const surnameB = getSurname(String(b.name || ''));
-                      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-                    }).map(s => (
+                    {sortStudentsBySurname(students).map(s => (
                       <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                          <td className="p-2 text-[11px] font-bold text-gray-700">{s.name}</td>
                          <td className="p-1 border-x border-gray-200">
@@ -2422,11 +2402,7 @@ export default function ImenikPage() {
                     <tr><th className="p-2 w-64 border-r border-gray-300">Učenik</th><th className="p-2">Bilješka</th></tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {students.sort((a, b) => {
-                      const surnameA = getSurname(String(a.name || ''));
-                      const surnameB = getSurname(String(b.name || ''));
-                      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-                    }).map(s=>(
+                    {sortStudentsBySurname(students).map(s=>(
                       <tr key={s.id} className="hover:bg-gray-50 transition-colors">
                         <td className="p-2 text-[11px] font-bold text-gray-700 border-r border-gray-200">{s.name}</td>
                         <td className="p-1"><textarea rows={2} value={groupNoteForm.studentNotes[s.id]||''} onChange={e=>setGroupNoteForm({...groupNoteForm,studentNotes:{...groupNoteForm.studentNotes,[s.id]:e.target.value}})} className="w-full border p-1 text-[11px]" /></td>

@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
+import { sortStudentsBySurname } from '../../lib/utils';
 
 interface StudentPedagogicalProfile {
   student_id: string;
@@ -20,6 +21,7 @@ interface StudentPedagogicalProfile {
   support_types: string;
   practical_training: string;
   documentation: string;
+  program_adjustment?: string;
 }
 
 interface LogEntry {
@@ -64,7 +66,8 @@ export default function PedagoskaDokumentacijaPage() {
     accommodations: '',
     support_types: '',
     practical_training: '',
-    documentation: ''
+    documentation: '',
+    program_adjustment: ''
   });
 
   const [yearNotes, setYearNotes] = useState<StudentPedagogicalYearNotes>({
@@ -133,6 +136,14 @@ export default function PedagoskaDokumentacijaPage() {
     }
   }, [effectiveClassId]);
 
+  // Log profile when loaded or changed, in accordance with step 4
+  useEffect(() => {
+    if (profile && profile.student_id) {
+      console.log("LOAD PEDAGOGICAL PROFILE", profile);
+      console.log("LOADED PROGRAM ADJUSTMENT", profile.program_adjustment);
+    }
+  }, [profile]);
+
   const loadClassData = async (cId: string) => {
     setLoading(true);
     try {
@@ -161,7 +172,7 @@ export default function PedagoskaDokumentacijaPage() {
 
       const studentsList = (enrollData || []).map((e: any) => mappers.user(e.student)).filter(Boolean);
       const uniqueStudents = Array.from(new Map(studentsList.map(s => [s.id, s])).values());
-      const sortedStudents = uniqueStudents.sort((a, b) => a.name.localeCompare(b.name));
+      const sortedStudents = sortStudentsBySurname(uniqueStudents);
       setStudents(sortedStudents);
 
       // 3. Selection default
@@ -189,7 +200,8 @@ export default function PedagoskaDokumentacijaPage() {
       accommodations: '',
       support_types: '',
       practical_training: '',
-      documentation: ''
+      documentation: '',
+      program_adjustment: ''
     });
     setYearNotes({
       student_id: '',
@@ -208,6 +220,9 @@ export default function PedagoskaDokumentacijaPage() {
       if (profileRes.ok) {
         const profData = await profileRes.json();
         setProfile(profData);
+        const profile = profData;
+        console.log("LOAD PEDAGOGICAL PROFILE", profile);
+        console.log("LOADED PROGRAM ADJUSTMENT", profile?.program_adjustment);
       }
 
       // B. Load yearly Notes
@@ -246,7 +261,10 @@ export default function PedagoskaDokumentacijaPage() {
 
   // EDIT OPERATORS
   const handleEditBasicCard = () => {
-    setEditProfileForm({ ...profile });
+    setEditProfileForm({ 
+      ...profile,
+      programAdjustment: profile.program_adjustment || selectedStudent?.programAdjustment || 'NONE'
+    } as any);
     setModalType('CARD');
     setShowModal(true);
   };
@@ -346,27 +364,73 @@ export default function PedagoskaDokumentacijaPage() {
     try {
       // 1. SAVE PROFILE (CARD & PERSONAL TEXTS)
       if (modalType === 'CARD' && editProfileForm) {
-        const response = await fetch('/api/student-pedagogical-profile', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            studentId: selectedStudent.id,
-            education_program: editProfileForm.education_program,
-            visit_reason: editProfileForm.visit_reason,
-            disabilities: editProfileForm.disabilities,
-            accommodations: editProfileForm.accommodations,
-            support_types: editProfileForm.support_types,
-            practical_training: editProfileForm.practical_training,
-            documentation: editProfileForm.documentation
-          })
-        });
+        const valAdjustment = (editProfileForm as any).programAdjustment || 'NONE';
+        const programAdjustment = valAdjustment;
+
+        let response: Response;
+        let dbProfileUpdate: any;
+
+        try {
+          const [resUpdate, dbUpdate] = await Promise.all([
+            fetch('/api/student-pedagogical-profile', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                studentId: selectedStudent.id,
+                education_program: editProfileForm.education_program,
+                visit_reason: editProfileForm.visit_reason,
+                disabilities: editProfileForm.disabilities,
+                accommodations: editProfileForm.accommodations,
+                support_types: editProfileForm.support_types,
+                practical_training: editProfileForm.practical_training,
+                documentation: editProfileForm.documentation,
+                program_adjustment: valAdjustment
+              })
+            }),
+            supabase
+              .from('user_profiles')
+              .update({ program_adjustment: valAdjustment })
+              .eq('id', selectedStudent.id)
+          ]);
+          response = resUpdate;
+          dbProfileUpdate = dbUpdate;
+        } catch (err: any) {
+          console.log("SAVE PROGRAM ADJUSTMENT studentId", selectedStudent.id);
+          console.log("SAVE PROGRAM ADJUSTMENT value", programAdjustment);
+          console.log("SAVE PROGRAM ADJUSTMENT result", null, err);
+          throw err;
+        }
+
+        if (dbProfileUpdate && dbProfileUpdate.error) {
+          console.error("Failed to update program adjustment in user_profiles", dbProfileUpdate.error);
+        }
 
         if (response.ok) {
           const freshProfile = await response.json();
           setProfile(freshProfile);
+          
+          const data = freshProfile;
+          const error = null;
+          console.log("SAVE PROGRAM ADJUSTMENT studentId", selectedStudent.id);
+          console.log("SAVE PROGRAM ADJUSTMENT value", programAdjustment);
+          console.log("SAVE PROGRAM ADJUSTMENT result", data, error);
+
+          // Refresh client states immediately
+          setSelectedStudent(prev => prev ? { ...prev, programAdjustment: valAdjustment } : null);
+          setStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, programAdjustment: valAdjustment } : s));
+
+          // 3. Complete actual refetch from the API / Supabase
+          await loadClassData(activeClass.id);
+          await loadStudentPedagogicalData(selectedStudent.id, activeClass.id, activeClass.school_year_id);
+
           toast.success("Osnovni karton uspješno spremljen.");
           setShowModal(false);
-        } else throw new Error();
+        } else {
+          console.log("SAVE PROGRAM ADJUSTMENT studentId", selectedStudent.id);
+          console.log("SAVE PROGRAM ADJUSTMENT value", programAdjustment);
+          console.log("SAVE PROGRAM ADJUSTMENT result", null, new Error("API response error"));
+          throw new Error();
+        }
       }
 
       // 2. SAVE INLINE SINGLE PERMANENT FIELDS
@@ -584,10 +648,18 @@ export default function PedagoskaDokumentacijaPage() {
                 </div>
 
                 {/* Grid details (Decoupled & organized) */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6 bg-slate-50/50 p-4 border border-gray-200/65 rounded-md text-xs font-bold shadow-inner">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6 bg-slate-50/50 p-4 border border-gray-200/65 rounded-md text-xs font-bold shadow-inner">
                   <div>
                     <span className="text-[8.5px] font-black uppercase text-slate-400 tracking-wider block mb-1">Program obrazovanja (trajni podatak)</span>
                     <p className="text-slate-800 uppercase tracking-tight">{profile.education_program || '--'}</p>
+                  </div>
+                  <div>
+                    <span className="text-[8.5px] font-black uppercase text-slate-400 tracking-wider block mb-1">Prilagodba programa</span>
+                    <p className="text-emerald-700 font-extrabold uppercase tracking-tight">
+                      {(profile.program_adjustment === 'REGULAR_WITH_ADAPTATION' || selectedStudent.programAdjustment === 'REGULAR_WITH_ADAPTATION') && "Redovni program uz prilagodbu"}
+                      {(profile.program_adjustment === 'REGULAR_WITH_INDIVIDUALIZATION' || selectedStudent.programAdjustment === 'REGULAR_WITH_INDIVIDUALIZATION') && "Redovni program uz individualizaciju"}
+                      {(!profile.program_adjustment || profile.program_adjustment === 'NONE') && (!selectedStudent.programAdjustment || selectedStudent.programAdjustment === 'NONE') && "—"}
+                    </p>
                   </div>
                   <div>
                     <span className="text-[8.5px] font-black uppercase text-slate-400 tracking-wider block mb-1">Teškoće i specifičnosti (trajni podatak)</span>
@@ -959,6 +1031,19 @@ export default function PedagoskaDokumentacijaPage() {
                         placeholder="Npr. Poteškoće u ponašanju, rješenje..."
                       />
                     </div>
+                  </div>
+
+                  <div>
+                    <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Prilagodba programa</span>
+                    <select
+                      value={(editProfileForm as any).programAdjustment || 'NONE'}
+                      onChange={(e) => setEditProfileForm({ ...editProfileForm, programAdjustment: e.target.value } as any)}
+                      className="w-full border border-gray-300 p-2.5 rounded font-bold text-slate-800 bg-white focus:outline-[#005c8d]"
+                    >
+                      <option value="NONE">Nema prilagodbe</option>
+                      <option value="REGULAR_WITH_ADAPTATION">Redovni program uz prilagodbu</option>
+                      <option value="REGULAR_WITH_INDIVIDUALIZATION">Redovni program uz individualizaciju</option>
+                    </select>
                   </div>
 
                   <div>

@@ -23,6 +23,7 @@ const STUDENT_NAV: NavItem[] = [
   { label: 'Izostanci', path: '/student/izostanci' },
   { label: 'Raspored', path: '/student/raspored' },
   { label: 'Informativka', path: '/student/informativka' },
+  { label: 'Osobni podaci', path: '/student/osobni-podaci' },
 ];
 
 const ADMIN_NAV: NavItem[] = [

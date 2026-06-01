@@ -1,0 +1,24 @@
+import dotenv from "dotenv";
+dotenv.config();
+
+const url = process.env.VITE_SUPABASE_URL || "";
+const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+
+async function run() {
+  try {
+    const res = await fetch(`${url}/rest/v1/`, {
+      headers: {
+        "apikey": key,
+        "Authorization": `Bearer ${key}`
+      }
+    });
+    const schema = await res.json();
+    console.log("=== USER PROFILES DEFINITION ===");
+    console.log(schema.definitions?.user_profiles?.properties);
+    console.log("=== TABLES AVAILABLE ===");
+    console.log(Object.keys(schema.definitions || {}));
+  } catch (err: any) {
+    console.error("Error:", err);
+  }
+}
+run();

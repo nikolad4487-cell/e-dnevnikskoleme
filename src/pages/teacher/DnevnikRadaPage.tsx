@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
-import { cn, getSurname, formatPersonName } from '../../lib/utils';
+import { cn, getSurname, formatPersonName, sortStudentsBySurname } from '../../lib/utils';
 import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, UserX } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
@@ -123,13 +123,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const getAutoDutyStudents = (weekNum: number) => {
     if (!students || students.length === 0) return [];
     
-    const sorted = [...students].sort((a, b) => {
-      const surnameA = getSurname(String(a.name || ''));
-      const surnameB = getSurname(String(b.name || ''));
-      const cmp = surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-      if (cmp !== 0) return cmp;
-      return String(a.name || '').localeCompare(String(b.name || ''), 'hr', { sensitivity: 'base' });
-    });
+    const sorted = sortStudentsBySurname(students);
     
     const total = sorted.length;
     const startIndex = ((weekNum - 1) * 2) % total;
@@ -1663,11 +1657,7 @@ setStudents(uniqueStudents);
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {students.sort((a, b) => {
-                      const surnameA = getSurname(String(a.name || ''));
-                      const surnameB = getSurname(String(b.name || ''));
-                      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-                    }).map(s => {
+                    {sortStudentsBySurname(students).map(s => {
                       let total = 0;
                       return (
                         <tr key={`absence-row-${s.id}`} className="hover:bg-gray-50 transition-colors">
@@ -2528,11 +2518,7 @@ setStudents(uniqueStudents);
                         <UserIcon size={14} /> Odaberi učenike koji nisu prisutni
                       </h4>
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                        {students.sort((a, b) => {
-                          const surnameA = getSurname(String(a.name || ''));
-                          const surnameB = getSurname(String(b.name || ''));
-                          return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-                        }).map(s => {
+                        {sortStudentsBySurname(students).map(s => {
                           const isSelected = selectedAbsentees.includes(s.id);
                           return (
                             <button 
@@ -2634,13 +2620,7 @@ setStudents(uniqueStudents);
 
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               <div className="border border-gray-300 divide-y divide-gray-100 bg-white">
-                {students
-                  .slice()
-                  .sort((a, b) => {
-                    const surnameA = getSurname(String(a.name || ''));
-                    const surnameB = getSurname(String(b.name || ''));
-                    return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-                  })
+                {sortStudentsBySurname(students)
                   .map((student, idx) => {
                     const isSelected = absenceEntrySelectedStudents.includes(student.id);
                     return (

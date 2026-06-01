@@ -20,6 +20,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { Role } from '../../types';
+import { sortStudentsBySurname } from '../../lib/utils';
 
 interface StudentProfile {
   id: string; // user profile id
@@ -437,7 +438,7 @@ export default function StudentsPage() {
   };
 
   // Filter students in-memory
-  const filteredStudents = students.filter(student => {
+  const rawFiltered = students.filter(student => {
     const matchesSearch = 
       student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -446,7 +447,8 @@ export default function StudentsPage() {
     const matchesClass = classFilter === 'ALL' || student.classId === classFilter;
 
     return matchesSearch && matchesClass;
-  }).sort((a, b) => a.name.localeCompare(b.name));
+  });
+  const filteredStudents = sortStudentsBySurname(rawFiltered);
 
   return (
     <div className="p-6 font-sans bg-[#f8f9fa] min-h-screen">

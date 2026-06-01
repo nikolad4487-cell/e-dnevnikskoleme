@@ -1,7 +1,8 @@
 import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { ShieldAlert, Users } from 'lucide-react';
+import { ShieldAlert, Users, Loader2 } from 'lucide-react';
+import { supabase } from './lib/supabase';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SelectionProvider, useSelection } from './contexts/SelectionContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -34,6 +35,7 @@ const BiljeskePage = lazy(() => import('./pages/student/BiljeskePage'));
 const IzostanciPage = lazy(() => import('./pages/student/IzostanciPage'));
 const RasporedPage = lazy(() => import('./pages/student/RasporedPage'));
 const StudentIspitiPage = lazy(() => import('./pages/student/StudentIspitiPage'));
+const OsobniPodaciPage = lazy(() => import('./pages/student/OsobniPodaciPage'));
 
 // Shared
 const InformativkaPage = lazy(() => import('./pages/shared/InformativkaPage'));
@@ -208,6 +210,7 @@ export default function App() {
                         <Route path="ispiti" element={<StudentIspitiPage />} />
                         <Route path="izostanci" element={<IzostanciPage />} />
                         <Route path="raspored" element={<RasporedPage />} />
+                        <Route path="osobni-podaci" element={<OsobniPodaciPage />} />
                         <Route path="informativka" element={<InformativkaPage />} />
                         <Route path="informatika" element={<Navigate to="/student/informativka" replace />} />
                         <Route path="postavke" element={<SettingsPage />} />
@@ -228,10 +231,85 @@ export default function App() {
 }
 
 function SelectionGuard({ children, role }: { children: React.ReactNode, role: 'STAFF' | 'STUDENT' }) {
-  const { selectedSchoolId, selectedClassId, selectedChildId } = useSelection();
-  const { isMainAdmin, isParent } = useAuth();
+  const { 
+    selectedSchoolId, 
+    selectedClassId, 
+    selectedChildId, 
+    selectedYearId,
+    setSelectedClassId,
+    setSelectedSchoolId,
+    setSelectedYearId
+  } = useSelection();
+  const { user, isMainAdmin, isParent } = useAuth();
   const location = window.location.pathname;
-  
+
+  const [loading, setLoading] = React.useState(false);
+  const [errorText, setErrorText] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    // Only auto-resolve if role is STUDENT and selectedClassId is NOT set.
+    if (role !== 'STUDENT' || selectedClassId) {
+      return;
+    }
+
+    const targetStudentId = isParent ? selectedChildId : user?.id;
+    if (!targetStudentId) {
+      return;
+    }
+
+    const autoResolve = async () => {
+      setLoading(true);
+      setErrorText(null);
+      try {
+        const { data: enrollments, error } = await supabase
+          .from('student_class_enrollments')
+          .select(`
+            id,
+            status,
+            class_id,
+            classes:class_id (
+              id,
+              name,
+              school_id,
+              school_year_id
+            )
+          `)
+          .eq('student_id', targetStudentId)
+          .eq('status', 'ACTIVE')
+          .order('created_at', { ascending: false });
+
+        if (error) {
+          console.error("Auto resolve enrollments error:", error);
+          setErrorText("Greška pri učitavanju razreda učenika.");
+          return;
+        }
+
+        if (!enrollments || enrollments.length === 0) {
+          setErrorText("Niste upisani ni u jedan razred.");
+          return;
+        }
+
+        // If only one active enrollment, set it immediately!
+        if (enrollments.length === 1) {
+          const enroll = enrollments[0];
+          const cls = enroll.classes as any;
+          if (cls) {
+            setSelectedClassId(cls.id);
+            setSelectedSchoolId(cls.school_id);
+            setSelectedYearId(cls.school_year_id);
+          }
+        }
+      } catch (err: any) {
+        console.error("Error in autoResolve:", err);
+        setErrorText("Neočekivana greška pri obradi razreda.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    autoResolve();
+  }, [role, selectedClassId, selectedChildId, user, isParent, setSelectedClassId, setSelectedSchoolId, setSelectedYearId]);
+
   console.log(`[GUARD] Guarding ${location} | Role: ${role}`);
 
   // Admins can bypass selection guards for browsing
@@ -251,11 +329,40 @@ function SelectionGuard({ children, role }: { children: React.ReactNode, role: '
   }
   
   if (role === 'STUDENT' && !selectedClassId) {
+    if (loading) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-white">
+          <Loader2 className="w-8 h-8 animate-spin text-[#005c8d]" />
+          <p className="mt-4 text-xs font-bold text-slate-500 uppercase tracking-widest animate-pulse">
+            Provjera podataka upisa...
+          </p>
+        </div>
+      );
+    }
+
+    if (errorText) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center">
+          <div className="bg-white p-8 max-w-md border border-gray-200 rounded-lg shadow-sm">
+            <h1 className="text-sm font-black text-slate-900 uppercase tracking-tight">Upis u razred</h1>
+            <p className="text-xs font-bold text-red-600 uppercase tracking-widest mt-4 bg-red-50 py-2.5 px-4 border border-red-100 rounded">
+              {errorText}
+            </p>
+            <p className="text-[11px] font-semibold text-slate-500 leading-relaxed mt-4">
+              Molimo kontaktirajte školskog administratora ili razrednika za dodjelu u razredni odjel.
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    // Checking if they have multiple active enrollments so we didn't auto-resolve
+    // We let them go to select-class to make a choice
     if (!selectedSchoolId) {
       console.log('[GUARD] Student missing school selection');
       return <Navigate to="/select-school" replace />;
     }
-    console.log('[GUARD] Student missing class selection');
+    console.log('[GUARD] Student missing class selection (multiple active)');
     return <Navigate to="/select-class" replace />;
   }
   

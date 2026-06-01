@@ -29,17 +29,58 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
   // Removed auto-sync useEffects
 
 
-  const setSelectedSchoolIdCallback = React.useCallback((id: string | null) => setSelectedSchoolId(id), []);
-  const setSelectedYearIdCallback = React.useCallback((id: string | null) => setSelectedYearId(id), []);
-  const setSelectedClassIdCallback = React.useCallback((id: string | null) => setSelectedClassId(id), []);
-  const setSelectedChildIdCallback = React.useCallback((id: string | null) => setSelectedChildId(id), []);
-  const setIsArchivedCallback = React.useCallback((val: boolean) => setIsArchived(val), []);
+  const setSelectedSchoolIdCallback = React.useCallback((id: string | null) => {
+    setSelectedSchoolId(id);
+    if (id !== null) {
+      localStorage.setItem('selectedSchoolId', id);
+    } else {
+      localStorage.removeItem('selectedSchoolId');
+    }
+  }, []);
+
+  const setSelectedYearIdCallback = React.useCallback((id: string | null) => {
+    setSelectedYearId(id);
+    if (id !== null) {
+      localStorage.setItem('selectedYearId', id);
+    } else {
+      localStorage.removeItem('selectedYearId');
+    }
+  }, []);
+
+  const setSelectedClassIdCallback = React.useCallback((id: string | null) => {
+    setSelectedClassId(id);
+    if (id !== null) {
+      localStorage.setItem('selectedClassId', id);
+    } else {
+      localStorage.removeItem('selectedClassId');
+    }
+  }, []);
+
+  const setSelectedChildIdCallback = React.useCallback((id: string | null) => {
+    setSelectedChildId(id);
+    if (id !== null) {
+      localStorage.setItem('selectedChildId', id);
+    } else {
+      localStorage.removeItem('selectedChildId');
+    }
+  }, []);
+
+  const setIsArchivedCallback = React.useCallback((val: boolean) => {
+    setIsArchived(val);
+    localStorage.setItem('isArchived', String(val));
+  }, []);
+
   const clearSelectionCallback = React.useCallback(() => {
     setSelectedSchoolId(null);
     setSelectedYearId(null);
     setSelectedClassId(null);
     setSelectedChildId(null);
     setIsArchived(false);
+    localStorage.removeItem('selectedSchoolId');
+    localStorage.removeItem('selectedYearId');
+    localStorage.removeItem('selectedClassId');
+    localStorage.removeItem('selectedChildId');
+    localStorage.removeItem('isArchived');
   }, []);
 
   const value = React.useMemo(() => ({

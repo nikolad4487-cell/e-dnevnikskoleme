@@ -32,6 +32,14 @@ export const mappers = {
     programId: raw.program_id,
     classId: raw.class_id,
     class_id: raw.class_id,
+    studentRegistryNumber: raw.student_registry_number,
+    fatherName: raw.father_name,
+    motherName: raw.mother_name,
+    birthplace: raw.birthplace,
+    birthCountry: raw.birth_country,
+    citizenship: raw.citizenship,
+    gender: raw.gender,
+    programAdjustment: raw.program_adjustment,
   }),
 
   userSchoolRole: (raw: any) => ({
