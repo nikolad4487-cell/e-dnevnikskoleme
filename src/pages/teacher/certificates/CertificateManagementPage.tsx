@@ -3,6 +3,7 @@ import { FileText, Printer, Lock, Unlock, Loader2, Award, User } from 'lucide-re
 import { supabase } from '../../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { generateClassCertificatePDF } from '../../../lib/pdfGenerator';
+import { sortStudentsBySurname } from '../../../lib/utils';
 import { StudentDocument } from '../../../types/certificates';
 import { CertificateData } from '../../../lib/pdfGenerator';
 import { useSelection } from '../../../contexts/SelectionContext';
@@ -182,7 +183,7 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
       console.error("LOAD STUDENTS ERROR", error);
       toast.error("Greška pri učitavanju učenika: " + error.message);
     } else {
-      setStudents(students || []);
+      setStudents(sortStudentsBySurname(students || []));
     }
     setLoading(false);
   };
@@ -726,6 +727,9 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
         .single();
 
       console.log("LOCK CERTIFICATE ERROR", docErr);
+      
+      console.log("SELECTED STUDENT", selectedStudent);
+      if (!selectedStudent?.id) throw new Error("Nedostaje student_id za zaključavanje svjedodžbe.");
 
       if (docErr) {
         throw docErr;
@@ -735,7 +739,14 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
         .from('student_document_snapshots')
         .insert({
           document_id: docRecord.id,
-          snapshot_data: certificateData as any
+          student_id: selectedStudent.id,
+          class_id: classId,
+          school_id: targetSchoolId,
+          school_year: schoolYearName,
+          school_year_id: selectedStudent.school_year_id || null,
+          document_type: 'CLASS_CERTIFICATE',
+          snapshot_data: certificateData as any,
+          created_by: user?.id || null
         });
 
       if (snapErr) {
