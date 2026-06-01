@@ -55,7 +55,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     { id: 'dnevnik-rada', label: 'Dnevnik rada', path: `${classPathPrefix}/dnevnik-rada`, icon: <ClipboardList size={14} /> },
     { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/izostanci`, icon: <Clock size={14} /> },
     { id: 'zapisnici', label: 'Zapisnici', path: `${classPathPrefix}/zapisnici`, icon: <FileText size={14} /> },
-    { id: 'pedagoska-dokumentacija', label: 'Ped. dok.', path: `${classPathPrefix}/pedagoska-dokumentacija`, icon: <FileText size={14} /> },
+    { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: `${classPathPrefix}/pedagoska-dokumentacija`, icon: <FileText size={14} /> },
     { id: 'raspored', label: 'Raspored', path: `${classPathPrefix}/raspored`, icon: <Calendar size={14} /> },
     { id: 'admin', label: 'Admin razreda', path: `${classPathPrefix}/admin`, icon: <Settings size={14} /> },
     ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : [])
@@ -126,7 +126,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                  key={tab.label}
                  to={tab.path}
                  className={cn(
-                   "px-5 h-full flex items-center gap-2 text-[10px] font-black uppercase tracking-wider transition-all border-b-4 whitespace-nowrap cursor-pointer",
+                   "px-2 xl:px-3 h-full flex items-center gap-1 text-xs font-black uppercase tracking-wider transition-all border-b-4 whitespace-nowrap cursor-pointer",
                    isTabActive(tab.id, tab.path)
                     ? "border-[#005c8d] text-[#005c8d] bg-sky-50" 
                     : "text-gray-500 border-transparent hover:bg-slate-100 hover:text-slate-900"

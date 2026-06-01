@@ -140,7 +140,7 @@ export default function ClassDashboardPage() {
     { id: 'dnevnik-rada', label: 'Dnevnik rada', path: 'dnevnik-rada', icon: ClipboardList },
     { id: 'izostanci', label: 'Izostanci', path: 'izostanci', icon: Clock },
     { id: 'zapisnici', label: 'Zapisnici', path: 'zapisnici', icon: FileText },
-    { id: 'pedagoska-dokumentacija', label: 'Ped. dok.', path: 'pedagoska-dokumentacija', icon: FileText },
+    { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: 'pedagoska-dokumentacija', icon: FileText },
     { id: 'raspored', label: 'Raspored', path: 'raspored', icon: Calendar },
     { id: 'admin', label: 'Admin razreda', path: 'admin', icon: Settings },
   ];
