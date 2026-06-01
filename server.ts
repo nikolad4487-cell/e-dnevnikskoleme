@@ -1421,12 +1421,11 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       const { email, password, totpCode, loginType } = req.body;
 
-      console.log(`[LOGIN_API] Attempting login for ${email} (${loginType})`);
-      console.log("AUTH email", email);
-      console.log("AUTH role type", loginType);
-      console.log("AUTH has supabase url", !!process.env.VITE_SUPABASE_URL || !!process.env.SUPABASE_URL);
-      console.log("password length sent to Supabase", password?.length);
-      console.log("otp length", totpCode?.length);
+      console.log("[LOGIN_API] Attempting login for", email);
+      console.log("[LOGIN_API] password length sent to Supabase:", password?.length);
+      console.log("[LOGIN_API] otp length:", totpCode?.length || 0);
+      console.log("[LOGIN_API] has SUPABASE_URL:", !!process.env.SUPABASE_URL);
+      console.log("[LOGIN_API] has SERVICE_ROLE:", !!process.env.SUPABASE_SERVICE_ROLE_KEY);
 
       if (!supabaseAdmin) {
         console.error("[LOGIN_API] supabaseAdmin is NULL");
