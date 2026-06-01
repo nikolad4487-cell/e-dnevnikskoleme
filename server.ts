@@ -1425,8 +1425,8 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       console.log("AUTH email", email);
       console.log("AUTH role type", loginType);
       console.log("AUTH has supabase url", !!process.env.VITE_SUPABASE_URL || !!process.env.SUPABASE_URL);
-      console.log("AUTH password length", password?.length);
-      console.log("AUTH otp present", !!totpCode);
+      console.log("password length sent to Supabase", password?.length);
+      console.log("otp length", totpCode?.length);
 
       if (!supabaseAdmin) {
         console.error("[LOGIN_API] supabaseAdmin is NULL");
