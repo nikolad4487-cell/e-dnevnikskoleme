@@ -265,8 +265,16 @@ export default function StudentsPage() {
           body: JSON.stringify(payload)
         });
 
+        const text = await res.text();
+        let errData;
+        try {
+          errData = JSON.parse(text);
+        } catch (e) {
+          console.error("NON JSON RESPONSE", text);
+          throw new Error('Server error: Neispravan format odgovora');
+        }
+
         if (!res.ok) {
-          const errData = await res.json();
           throw new Error(errData.error || 'Ažuriranje učenika nije uspjelo');
         }
 
@@ -327,12 +335,18 @@ export default function StudentsPage() {
           body: JSON.stringify(payload)
         });
 
-        if (!res.ok) {
-          const errData = await res.json();
-          throw new Error(errData.error || 'Stvaranje učenika nije uspjelo');
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          console.error("NON JSON RESPONSE", text);
+          throw new Error('Server error: Neispravan format odgovora');
         }
 
-        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Stvaranje učenika nije uspjelo');
+        }
         
         // Let's check if the user has specified extra parameters (dob, pob, mobile)
         // because create-user API might not save those inside custom properties.
