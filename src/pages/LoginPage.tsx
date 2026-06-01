@@ -105,7 +105,9 @@ export default function LoginPage() {
     } catch (err: any) {
       console.error('LOGIN REQUEST FAILED', err);
       let msg = err.message || 'Neispravna e-mail adresa ili lozinka.';
-      if (err.message.includes('Invalid login credentials')) msg = 'Neispravna lozinka ili podaci za prijavu.';
+      if (err.message.includes('Invalid login credentials') || err.message.includes('Neispravni podaci za prijavu')) {
+        msg = 'Neispravni podaci za prijavu.';
+      }
       setError(msg);
     } finally {
       setLoading(false);

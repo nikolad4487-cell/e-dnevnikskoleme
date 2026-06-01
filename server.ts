@@ -1422,6 +1422,11 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       const { email, password, totpCode, loginType } = req.body;
 
       console.log(`[LOGIN_API] Attempting login for ${email} (${loginType})`);
+      console.log("AUTH email", email);
+      console.log("AUTH role type", loginType);
+      console.log("AUTH has supabase url", !!process.env.VITE_SUPABASE_URL || !!process.env.SUPABASE_URL);
+      console.log("AUTH password length", password?.length);
+      console.log("AUTH otp present", !!totpCode);
 
       if (!supabaseAdmin) {
         console.error("[LOGIN_API] supabaseAdmin is NULL");
@@ -1436,6 +1441,9 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       if (error) {
         console.error(`[LOGIN_API] Supabase signIn Error for ${email}:`, error.message);
+        if (error.message === 'Invalid login credentials') {
+          return res.status(401).json({ error: "Neispravni podaci za prijavu." });
+        }
         return res.status(401).json({ error: error.message });
       }
 
