@@ -26,6 +26,7 @@ export default function ClassManagementPage() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [deleteDialog, setDeleteDialog] = useState<{isOpen: boolean, classId: string}>({isOpen: false, classId: ''});
 
   const isAnyAdmin = isMainAdmin || userSchoolRoles.some(r => r.schoolId === selectedSchoolId && (r.role === Role.SCHOOL_ADMIN || r.role === Role.ADMIN));
 
@@ -241,19 +242,25 @@ export default function ClassManagementPage() {
     }
 
     console.log("DELETE CLASS CLICKED", { classId });
+    setDeleteDialog({ isOpen: true, classId });
+  };
 
-    const confirmMsg = isMainAdmin 
-      ? 'Jeste li sigurni da želite obrisati ovaj razredi i SVE povezane podatke? Ova radnja je trajna.'
-      : 'Jeste li sigurni da želite obrisati ovaj razred?';
+  const confirmDeleteClass = async () => {
+    if (!deleteDialog.classId) return;
+    const classId = deleteDialog.classId;
 
-    if (!window.confirm(confirmMsg)) return;
+    setDeleteDialog({ isOpen: false, classId: '' });
 
     try {
       setLoading(true);
+      console.log("DELETE CLASS START", classId);
+
+      let deleteError = null;
+
       if (isMainAdmin) {
         console.log("PERFORMING CASCADE DELETE AS MAIN ADMIN for class:", classId);
         // Cascade delete helpers
-        const results = await Promise.all([
+        await Promise.all([
           supabase.from('grades').delete().eq('class_id', classId),
           supabase.from('absences').delete().eq('class_id', classId),
           supabase.from('lessons').delete().eq('class_id', classId),
@@ -263,26 +270,26 @@ export default function ClassManagementPage() {
           supabase.from('curriculum_plans').delete().eq('class_id', classId),
           supabase.from('class_subject_teachers').delete().eq('class_id', classId),
         ]);
-        console.log("CASCADE DELETE RESULTS:", results);
-        
-        const { data, error } = await supabase.from('classes').delete().eq('id', classId).select();
-        console.log("FINAL CLASS DELETE RESULT:", { data, error });
-        if (error) throw error;
-        toast.success('Razred i povezani podaci obrisani.');
-      } else {
-        const { data, error } = await supabase.from('classes').delete().eq('id', classId).select();
-        console.log("REGULAR CLASS DELETE RESULT:", { data, error });
-        if (error) {
-           if (error.message?.includes('foreign key constraint')) {
-             toast.error('Razred sadrži podatke. Samo glavni administrator ga može obrisati.');
-           } else {
-             throw error;
-           }
-        } else {
-          toast.success('Razred obrisan.');
-        }
       }
-      fetchData();
+
+      const { data, error } = await supabase
+        .from("classes")
+        .delete()
+        .eq("id", classId)
+        .select();
+
+      console.log("DELETE CLASS RESULT", { data, error });
+
+      if (error) {
+         if (error.message?.includes('foreign key constraint') || error.code === '23503') {
+           toast.error('Razred sadrži podatke. Najprije uklonite ili premjestite povezane podatke.');
+         } else {
+           throw new Error(error.message || 'Server error');
+         }
+      } else {
+        toast.success('Razred je obrisan.');
+        fetchData();
+      }
     } catch (err: any) {
       console.error("DELETE CLASS FAILED:", err);
       toast.error('Brisanje nije uspjelo: ' + (err.message || 'Nepoznata greška'));
@@ -350,6 +357,35 @@ export default function ClassManagementPage() {
         />
       </div>
 
+      {deleteDialog.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+           <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6">
+             <h3 className="text-xl font-black text-slate-900 uppercase tracking-tighter mb-2">Potvrda brisanja</h3>
+             <p className="text-slate-500 font-medium mb-6">
+               {isMainAdmin 
+                 ? 'Jeste li sigurni da želite obrisati ovaj razred i SVE povezane podatke? Ova radnja je trajna.' 
+                 : 'Jeste li sigurni da želite obrisati ovaj razred?'}
+             </p>
+             <div className="flex gap-3">
+               <button 
+                 onClick={() => setDeleteDialog({ isOpen: false, classId: '' })}
+                 disabled={loading}
+                 className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-xl font-black uppercase text-[10px] tracking-widest disabled:opacity-50"
+               >
+                 Odustani
+               </button>
+               <button 
+                 onClick={confirmDeleteClass}
+                 disabled={loading}
+                 className="flex-1 bg-red-600 text-white py-3 rounded-xl font-black uppercase text-[10px] tracking-widest disabled:opacity-50"
+               >
+                 {loading ? 'Brisanje...' : 'Obriši'}
+               </button>
+             </div>
+           </div>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead>
@@ -357,6 +393,7 @@ export default function ClassManagementPage() {
               <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Naziv</th>
               <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Godina</th>
               <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Razrednik</th>
+              <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest">Zamjenik razrednika</th>
               <th className="p-4 text-[10px] font-black uppercase text-slate-400 tracking-widest text-right">Akcije</th>
             </tr>
           </thead>
@@ -385,6 +422,11 @@ export default function ClassManagementPage() {
                 <td className="p-4">
                   <span className="font-bold text-slate-700">
                     {(cls as any).homeroom?.name || '—'}
+                  </span>
+                </td>
+                <td className="p-4">
+                  <span className="font-bold text-slate-700">
+                    {(cls as any).deputy?.name || '—'}
                   </span>
                 </td>
                 <td className="p-4 text-right">
