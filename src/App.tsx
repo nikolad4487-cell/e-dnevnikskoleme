@@ -36,6 +36,8 @@ const IzostanciPage = lazy(() => import('./pages/student/IzostanciPage'));
 const RasporedPage = lazy(() => import('./pages/student/RasporedPage'));
 const StudentIspitiPage = lazy(() => import('./pages/student/StudentIspitiPage'));
 const OsobniPodaciPage = lazy(() => import('./pages/student/OsobniPodaciPage'));
+const FinalThesisPage = lazy(() => import('./pages/student/FinalThesisPage'));
+const FinalThesisTeacherPage = lazy(() => import('./pages/teacher/FinalThesisTeacherPage'));
 
 // Shared
 const InformativkaPage = lazy(() => import('./pages/shared/InformativkaPage'));
@@ -174,6 +176,7 @@ export default function App() {
                         <Route path="pretrazivanje" element={<PretrazivanjePage />} />
                         <Route path="informativka" element={<InformativkaPage />} />
                         <Route path="svjedodzbe" element={<CertificateManagementPage />} />
+                        <Route path="zavrsni-radovi" element={<FinalThesisTeacherPage />} />
                         <Route path="postavke" element={<SettingsPage />} />
                         
                         {/* Core class shortcuts / redirects */}
@@ -203,7 +206,7 @@ export default function App() {
               <Route path="/student/*" element={
                 <ProtectedRoute allowedRoles={[Role.STUDENT, Role.PARENT]}>
                   <SelectionGuard role="STUDENT">
-                    <BasicLayout>
+                    <ClassDashboardLayout>
                       <Routes>
                         <Route path="ocjene" element={<OcjenePage />} />
                         <Route path="biljeske" element={<BiljeskePage />} />
@@ -211,12 +214,13 @@ export default function App() {
                         <Route path="izostanci" element={<IzostanciPage />} />
                         <Route path="raspored" element={<RasporedPage />} />
                         <Route path="osobni-podaci" element={<OsobniPodaciPage />} />
+                        <Route path="zavrsni-rad" element={<FinalThesisPage />} />
                         <Route path="informativka" element={<InformativkaPage />} />
                         <Route path="informatika" element={<Navigate to="/student/informativka" replace />} />
                         <Route path="postavke" element={<SettingsPage />} />
                         <Route path="*" element={<Navigate to="/student/ocjene" replace />} />
                       </Routes>
-                    </BasicLayout>
+                    </ClassDashboardLayout>
                   </SelectionGuard>
                 </ProtectedRoute>
               } />

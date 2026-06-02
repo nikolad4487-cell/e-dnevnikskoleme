@@ -441,7 +441,7 @@ export type AssistantStudentAssignment = {
   created_at: string;
 };
 
-// Removed duplicate and conflicting type definitions
+// ... existing code ...
 
 export type ChatGroup = {
   id: string;
@@ -457,3 +457,49 @@ export type Message = {
   content: string;
   createdAt: string;
 };
+
+export interface ThesisCommitteeMember {
+  id: string;
+  thesis_application_id: string;
+  teacher_id: string;
+  created_at: string;
+}
+
+export interface ThesisApplication {
+  id: string;
+  student_id: string;
+  class_id: string;
+  school_id: string;
+  school_year_id?: string;
+  school_year?: string;
+  title: string;
+  mentor_id: string;
+  exam_term: string;
+  student_note?: string;
+  status: 'CREATED' | 'ACCEPTED' | 'REJECTED' | 'DEREGISTERED' | 'COMPLETED' | 'THESIS_CREATED' | 'THESIS_ACCEPTED' | 'THESIS_WORK_GRADED' | 'THESIS_DEFENSE_GRADED' | 'THESIS_FINAL_GRADED';
+  submitted_at: string;
+  accepted_at?: string;
+  accepted_by?: string;
+  application_classification_number?: string;
+  application_registry_number?: string;
+  rejected_at?: string;
+  rejected_by?: string;
+  rejection_note?: string;
+  deregistered_at?: string;
+  deregistration_note?: string;
+  deregistration_classification_number?: string;
+  deregistration_registry_number?: string;
+  
+  // New grading fields
+  work_grade?: number;
+  work_grade_date?: string;
+  defense_grade?: number;
+  defense_grade_date?: string;
+  final_grade?: number;
+  final_grade_date?: string;
+  work_graded_by?: string;
+  defense_graded_by?: string;
+  final_graded_by?: string;
+  
+  committee_members?: ThesisCommitteeMember[];
+}

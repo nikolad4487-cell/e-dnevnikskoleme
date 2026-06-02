@@ -292,9 +292,9 @@ export const mappers = {
     status: raw.status,
     finalizedAt: raw.finalized_at,
     finalizedBy: raw.finalized_by,
-    overallAverage: raw.overall_average,
-    overallSuccess: raw.overall_success,
-    conduct: raw.conduct,
+    overallAverage: raw.average,
+    overallSuccess: raw.overall_success || raw.final_result,
+    conduct: raw.conduct || raw.behavior,
     calculatedAt: raw.calculated_at,
   }),
 

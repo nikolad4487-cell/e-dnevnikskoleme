@@ -1576,10 +1576,6 @@ setStudents(uniqueMapped as any);
           status: 'UNLOCKED',
           finalized_at: null,
           finalized_by: null,
-          average: null,
-          overall_average: null,
-          final_result: null,
-          overall_success: null,
           updated_at: new Date().toISOString()
         })
         .eq('id', summary.id);
@@ -1703,13 +1699,7 @@ setStudents(uniqueMapped as any);
         class_id: classId,
         school_year_id: schoolYearId,
         school_year: selectedClassData.schoolYear || '2024/2025',
-        
-        overall_average: Number(overall_average.toFixed(2)),
-        overall_success: overall_success,
-        conduct: behavior,
-        status: 'LOCKED',
-        calculated_at: new Date().toISOString(),
-        
+        status: 'FINALIZED',
         average: Number(overall_average.toFixed(2)),
         behavior,
         final_result: overall_success,
@@ -1732,7 +1722,7 @@ setStudents(uniqueMapped as any);
           average: Number(overall_average.toFixed(2)),
           behavior: behavior,
           final_result: overall_success,
-          status: 'LOCKED',
+          status: 'FINALIZED',
           finalized_at: new Date().toISOString(),
           finalized_by: user?.id,
           updated_at: new Date().toISOString()
@@ -1858,13 +1848,7 @@ setStudents(uniqueMapped as any);
           class_id: classId,
           school_year_id: schoolYearId,
           school_year: selectedClassData.schoolYear || '2024/2025',
-          
-          overall_average: Number(overall_average.toFixed(2)),
-          overall_success: overall_success,
-          conduct: behavior,
-          status: 'LOCKED',
-          calculated_at: new Date().toISOString(),
-          
+          status: 'FINALIZED',
           average: Number(overall_average.toFixed(2)),
           behavior,
           final_result: overall_success,
@@ -1887,7 +1871,7 @@ setStudents(uniqueMapped as any);
             average: Number(overall_average.toFixed(2)),
             behavior: behavior,
             final_result: overall_success,
-            status: 'LOCKED',
+            status: 'FINALIZED',
             finalized_at: new Date().toISOString(),
             finalized_by: user?.id,
             updated_at: new Date().toISOString()
@@ -2249,7 +2233,8 @@ setStudents(uniqueMapped as any);
           name: originalFullName,
           globalRole: 'STUDENT',
           schoolId: classToUse.school_id || selectedSchoolId,
-          authOnly: true,
+          classId: classIdToUse,
+          authOnly: false,
           studentData: {
             oib: studentForm.oib || Math.floor(Math.random() * 100000000000).toString(),
             dob: studentForm.dob,
@@ -2257,7 +2242,9 @@ setStudents(uniqueMapped as any);
             mobile: studentForm.mobile,
             address: studentForm.address || '',
             classId: classIdToUse,
-            programId: programIdToUse
+            programId: programIdToUse,
+            schoolYearId: classToUse.school_year_id || null,
+            schoolId: classToUse.school_id || selectedSchoolId
           }
         };
 
@@ -2271,83 +2258,9 @@ setStudents(uniqueMapped as any);
         if (!response.ok) throw new Error(result.error || 'Neuspješno kreiranje korisničkog računa');
 
         const createdAuthUser = { id: result.userId, email: result.email || studentEmail };
+        const createdProfile = { id: result.profileId };
 
-        console.log("CREATED AUTH USER", createdAuthUser);
-
-        // 1. user_profiles
-        const profileInsertPayload = {
-          auth_user_id: createdAuthUser.id,
-          email: createdAuthUser.email,
-          name: originalFullName,
-          role: 'STUDENT',
-          class_id: classIdToUse,
-          school_id: classToUse.school_id || selectedSchoolId,
-          school_year_id: classToUse.school_year_id || null,
-          requires_password_change: false,
-          requires_authenticator_setup: false,
-          password_type: 'student_static',
-          dob: studentForm.dob || null,
-          pob: studentForm.pob || null,
-          mobile: studentForm.mobile || null,
-          address: studentForm.address || '',
-          oib: studentForm.oib || Math.floor(Math.random() * 100000000000).toString()
-        };
-
-        const { data: createdProfile, error: profileErr } = await supabase
-          .from('user_profiles')
-          .insert([profileInsertPayload])
-          .select()
-          .single();
-
-        if (profileErr) {
-          console.error("Profile creation failed:", profileErr);
-          throw new Error("Greška pri kreiranju profila učenika: " + profileErr.message);
-        }
-
-        console.log("CREATED PROFILE", createdProfile);
-
-        // 2. user_school_roles
-        const roleInsertPayload = {
-          user_id: createdProfile.id,
-          school_id: classToUse.school_id || selectedSchoolId,
-          role: 'STUDENT'
-        };
-
-        const { data: roleResult, error: roleErr } = await supabase
-          .from('user_school_roles')
-          .insert([roleInsertPayload])
-          .select()
-          .single();
-
-        if (roleErr) {
-          console.error("School role creation failed:", roleErr);
-          throw new Error("Greška pri kreiranju uloge u školi: " + roleErr.message);
-        }
-
-        console.log("CREATED USER SCHOOL ROLE", roleResult);
-
-        // 3. student_class_enrollments
-        const enrollmentInsertPayload = {
-          student_id: createdProfile.id,
-          class_id: classIdToUse,
-          school_year_id: classToUse.school_year_id || null,
-          school_year: classToUse.schoolYear || '2024/2025',
-          program_id: programIdToUse,
-          status: 'ACTIVE'
-        };
-
-        const { data: enrollmentResult, error: enrollErr } = await supabase
-          .from('student_class_enrollments')
-          .insert([enrollmentInsertPayload])
-          .select()
-          .single();
-
-        if (enrollErr) {
-          console.error("Enrollment failed:", enrollErr);
-          throw new Error("Greška pri kreiranju upisa u razred: " + enrollErr.message);
-        }
-
-        console.log("CREATED STUDENT ENROLLMENT", enrollmentResult);
+        console.log("CREATED AUTH USER AND PROFILE SERVER SIDE VIA SERVICE ROLE", createdAuthUser, createdProfile);
 
         // 4. Enroll subjects if selected
         if (studentForm.enrollSubjects) {
@@ -4025,7 +3938,7 @@ setAllSubjects(uniqueSub2);
                          });
 
                          const summary = summaries.find(s => s.studentId === student.id && (s.classId === selectedClassId || s.classId === effectiveClassId));
-                         const isFinalized = !!summary?.finalizedAt;
+                         const isFinalized = summary && summary.status === 'FINALIZED';
 
                          const studentNotes = overallNotes.find(n => n.studentId === student.id);
                          let autoBehavior = 'Uzorno';

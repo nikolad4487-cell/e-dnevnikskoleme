@@ -379,8 +379,8 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
           return;
       }
 
-      if (!summaryData || (summaryData.status !== 'LOCKED' && summaryData.status !== 'FINALIZED')) {
-          console.log("CERT SUMMARY STATUS UNLOCKED or NULL", summaryData);
+      if (!summaryData || summaryData.status !== 'FINALIZED') {
+          console.log("CERT SUMMARY STATUS NOT FINALIZED or NULL", summaryData);
 
           toast.error("Opći uspjeh učenika nije zaključen.");
           setLoading(false);
@@ -552,7 +552,7 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
 
       console.log("SUMMARY CHECK", summary);
 
-      if (!summary || !summary.final_result || (summary.status !== 'LOCKED' && summary.status !== 'FINALIZED')) {
+      if (!summary || !summary.final_result || summary.status !== 'FINALIZED') {
         toast.error("Opći uspjeh učenika nije zaključen.");
         setLoading(false);
         return;

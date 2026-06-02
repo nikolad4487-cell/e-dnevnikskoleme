@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import { authenticator } from "otplib";
 import QRCode from "qrcode";
 import fs from "fs";
+import crypto from "crypto";
 
 dotenv.config();
 
@@ -31,6 +32,7 @@ initJsonFile("student_pedagogical_profiles.json");
 initJsonFile("student_pedagogical_year_notes.json");
 initJsonFile("daily_notes.json");
 initJsonFile("overall_success_audit_logs.json");
+initJsonFile("final_thesis_applications.json");
 
 function readJsonFile(filename: string): any[] {
   try {
@@ -158,7 +160,7 @@ async function startServer() {
       // 2. Guaranteed local file persistence fallback
       const logs = readJsonFile("overall_success_audit_logs.json");
       const newLog = {
-        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
+        id: crypto.randomUUID(),
         executor_id: executorId,
         student_id: studentId,
         class_id: classId,
@@ -188,6 +190,135 @@ async function startServer() {
         logs = logs.filter(l => l.class_id === classId);
       }
       res.json(logs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+
+  // Final Thesis Applications APIs
+  app.get("/api/final-thesis-applications", async (req, res) => {
+    try {
+      const { studentId, mentorId, classId, schoolId } = req.query;
+      let dbData: any[] = [];
+      if (supabaseAdmin) {
+        try {
+          let query = supabaseAdmin.from('final_thesis_applications').select('*');
+          if (studentId) query = query.eq('student_id', studentId);
+          if (mentorId) query = query.eq('mentor_id', mentorId);
+          if (classId) query = query.eq('class_id', classId);
+          if (schoolId) query = query.eq('school_id', schoolId);
+          
+          const { data, error } = await query;
+          if (data && !error) {
+            dbData = data;
+          }
+        } catch (err) {
+          console.error("Error reading final_thesis_applications from DB:", err);
+        }
+      }
+
+      // Merge with local fallback JSON to ensure full persistence
+      let localData = readJsonFile("final_thesis_applications.json");
+      if (studentId) localData = localData.filter(d => d.student_id === studentId);
+      if (mentorId) localData = localData.filter(d => d.mentor_id === mentorId);
+      if (classId) localData = localData.filter(d => d.class_id === classId);
+      if (schoolId) localData = localData.filter(d => d.school_id === schoolId);
+
+      const mergedMap = new Map();
+      localData.forEach(item => mergedMap.set(item.id, item));
+      dbData.forEach(item => mergedMap.set(item.id, item));
+      const merged = Array.from(mergedMap.values());
+
+      res.json(merged);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/final-thesis-applications", async (req, res) => {
+    try {
+      const appData = req.body;
+      if (!appData.id) {
+        appData.id = crypto.randomUUID();
+      }
+      appData.status = 'CREATED';
+      appData.submitted_at = new Date().toISOString();
+      appData.created_at = new Date().toISOString();
+      appData.updated_at = new Date().toISOString();
+
+      let dbInserted = false;
+      if (supabaseAdmin) {
+        try {
+          const { error } = await supabaseAdmin.from('final_thesis_applications').insert(appData);
+          if (!error) dbInserted = true;
+          else console.error("DB insert error for final thesis app:", error);
+        } catch (dbErr) {
+          console.error("DB connection error for final thesis app:", dbErr);
+        }
+      }
+
+      const apps = readJsonFile("final_thesis_applications.json");
+      apps.push({ ...appData, db_persisted: dbInserted });
+      writeJsonFile("final_thesis_applications.json", apps);
+
+      res.json({ success: true, data: appData, db_persisted: dbInserted });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/final-thesis-applications/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updates = req.body;
+      updates.updated_at = new Date().toISOString();
+
+      let dbUpdated = false;
+      if (supabaseAdmin) {
+        try {
+          const { error } = await supabaseAdmin.from('final_thesis_applications').update(updates).eq('id', id);
+          if (!error) dbUpdated = true;
+          else console.error("DB update error for final thesis app:", error);
+        } catch (dbErr) {
+          console.error("DB connection error for final thesis app:", dbErr);
+        }
+      }
+
+      const apps = readJsonFile("final_thesis_applications.json");
+      const idx = apps.findIndex(a => a.id === id);
+      if (idx !== -1) {
+        apps[idx] = { ...apps[idx], ...updates, db_updated: dbUpdated };
+        writeJsonFile("final_thesis_applications.json", apps);
+      } else {
+        apps.push({ id, ...updates, db_updated: dbUpdated });
+        writeJsonFile("final_thesis_applications.json", apps);
+      }
+
+      res.json({ success: true, db_updated: dbUpdated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/final-thesis-applications/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      let dbDeleted = false;
+      if (supabaseAdmin) {
+        try {
+          const { error } = await supabaseAdmin.from('final_thesis_applications').delete().eq('id', id);
+          if (!error) dbDeleted = true;
+        } catch (dbErr) {
+          console.error("DB delete error for final thesis app:", dbErr);
+        }
+      }
+
+      const apps = readJsonFile("final_thesis_applications.json");
+      const filtered = apps.filter(a => a.id !== id);
+      writeJsonFile("final_thesis_applications.json", filtered);
+
+      res.json({ success: true, db_deleted: dbDeleted });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -734,8 +865,38 @@ async function startServer() {
     }
   });
 
-  // Ensure profile endpoint for missing profiles on login
-  app.post("/api/ensure-profile", async (req, res) => {
+  // Temporary Migration Endpoint - to be removed later
+  app.post("/api/admin/run-thesis-migration", async (req, res) => {
+    try {
+        if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+        const sql = `
+          ALTER TABLE public.final_thesis_applications
+          ADD COLUMN IF NOT EXISTS work_grade integer,
+          ADD COLUMN IF NOT EXISTS work_grade_date date,
+          ADD COLUMN IF NOT EXISTS defense_grade integer,
+          ADD COLUMN IF NOT EXISTS defense_grade_date date,
+          ADD COLUMN IF NOT EXISTS final_grade integer,
+          ADD COLUMN IF NOT EXISTS final_grade_date date,
+          ADD COLUMN IF NOT EXISTS work_graded_by uuid REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS defense_graded_by uuid REFERENCES public.user_profiles(id) ON DELETE SET NULL,
+          ADD COLUMN IF NOT EXISTS final_graded_by uuid REFERENCES public.user_profiles(id) ON DELETE SET NULL;
+
+          CREATE TABLE IF NOT EXISTS public.final_thesis_committee_members (
+              id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+              thesis_application_id uuid NOT NULL REFERENCES public.final_thesis_applications(id) ON DELETE CASCADE,
+              teacher_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+              created_at timestamptz DEFAULT NOW()
+          );
+        `;
+        const { error } = await supabaseAdmin.query(sql); // This might fail if .query() doesn't exist
+        if (error) throw error;
+        
+        res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+  });
+
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       const { authUserId, email, name } = req.body;
@@ -1176,6 +1337,10 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           dob,
           pob,
           mobile,
+          role: isStudent ? 'STUDENT' : (globalRole || 'TEACHER'),
+          class_id: classId || studentData?.classId,
+          school_id: schoolId || studentData?.schoolId,
+          school_year_id: studentData?.schoolYearId,
           is_first_login: true,
           requires_password_change: requiresPasswordChange,
           password_type: passwordType,

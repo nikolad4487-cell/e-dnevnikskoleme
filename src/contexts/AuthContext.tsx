@@ -174,6 +174,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
+  const withTimeout = <T,>(promise: any, ms: number, errorMessage: string): Promise<T> => {
+    return Promise.race([
+      promise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(errorMessage)), ms)
+      ),
+    ]) as Promise<T>;
+  };
+
   const loadUserData = async (authUserId: string) => {
     if (isFetchingUserDataRef.current) {
       console.log(`[AUTH] loadUserData already in progress for ${authUserId}, skipping.`);
@@ -195,11 +204,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // 1. Fetch Profile
       console.log(`[AUTH] Fetching profile for ${authUserId}...`);
-      const { data: profileRaw, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('auth_user_id', authUserId)
-        .maybeSingle();
+      const { data: profileRaw, error: profileError } = await withTimeout(
+        supabase
+          .from('user_profiles')
+          .select('*')
+          .eq('auth_user_id', authUserId)
+          .maybeSingle(),
+        4000,
+        "Dohvaćanje profila je vremenski isteklo (Baza podataka nije dostupna)."
+      ) as any;
 
       console.log(`[AUTH] Profile Result for ${authUserId}:`, { hasData: !!profileRaw, error: profileError });
 
@@ -218,10 +231,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // 2. Fetch Roles
       console.log(`[AUTH] Fetching roles for profile ${profile.id}...`);
-      const { data: rolesRawResult, error: rolesError } = await supabase
-        .from('user_school_roles')
-        .select('*')
-        .eq('user_id', profile.id);
+      const { data: rolesRawResult, error: rolesError } = await withTimeout(
+        supabase
+          .from('user_school_roles')
+          .select('*')
+          .eq('user_id', profile.id),
+        4000,
+        "Dohvaćanje uloga je vremenski isteklo."
+      ) as any;
 
       console.log(`[AUTH] Roles Result for ${profile.id}:`, { count: rolesRawResult?.length, error: rolesError });
 
@@ -234,11 +251,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       // Optional: Auto-repair enrollments if needed, but keep it tight
       try {
-        const { data: enrollments } = await supabase
-          .from('student_class_enrollments')
-          .select('class_id, classes(school_id)')
-          .eq('student_id', profile.id)
-          .eq('status', 'ACTIVE');
+        const { data: enrollments } = await withTimeout(
+          supabase
+            .from('student_class_enrollments')
+            .select('class_id, classes(school_id)')
+            .eq('student_id', profile.id)
+            .eq('status', 'ACTIVE'),
+          3000,
+          "Dohvaćanje upisa u razred je vremenski isteklo."
+        ) as any;
 
         if (enrollments && enrollments.length > 0) {
           const enrolledSchoolIds = [...new Set(enrollments.map((e: any) => e.classes?.school_id).filter(Boolean))];
@@ -254,8 +275,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               status: 'ACTIVE'
             }));
             
-            await supabase.from('user_school_roles').insert(newRoles);
-            const { data: refetchedRoles } = await supabase.from('user_school_roles').select('*').eq('user_id', profile.id);
+            await withTimeout(
+              supabase.from('user_school_roles').insert(newRoles),
+              3000,
+              "Spremanje uloga je vremenski isteklo."
+            );
+            const { data: refetchedRoles } = await withTimeout(
+              supabase.from('user_school_roles').select('*').eq('user_id', profile.id),
+              2000,
+              "Osvježavanje uloga je vremenski isteklo."
+            ) as any;
             if (refetchedRoles) rolesData = refetchedRoles;
           }
         }

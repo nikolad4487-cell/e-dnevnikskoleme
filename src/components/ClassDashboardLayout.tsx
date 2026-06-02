@@ -23,7 +23,7 @@ const STUDENT_NAV: NavItem[] = [
   { label: 'Izostanci', path: '/student/izostanci' },
   { label: 'Raspored', path: '/student/raspored' },
   { label: 'Informativka', path: '/student/informativka' },
-  { label: 'Osobni podaci', path: '/student/osobni-podaci' },
+  { label: 'Završni rad', path: '/student/zavrsni-rad' },
 ];
 
 const ADMIN_NAV: NavItem[] = [
@@ -56,11 +56,13 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/izostanci`, icon: <Clock size={14} /> },
     { id: 'zapisnici', label: 'Zapisnici', path: `${classPathPrefix}/zapisnici`, icon: <FileText size={14} /> },
     { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: `${classPathPrefix}/pedagoska-dokumentacija`, icon: <FileText size={14} /> },
+    { id: 'zavrsni-rad', label: 'Završni radovi', path: '/teacher/zavrsni-radovi', icon: <FileSpreadsheet size={14} /> },
     { id: 'raspored', label: 'Raspored', path: `${classPathPrefix}/raspored`, icon: <Calendar size={14} /> },
     { id: 'admin', label: 'Admin razreda', path: `${classPathPrefix}/admin`, icon: <Settings size={14} /> },
     ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : [])
   ] : [
     { label: 'Pretraživanje', path: '/teacher/pretrazivanje' },
+    { id: 'zavrsni-rad', label: 'Završni radovi', path: '/teacher/zavrsni-radovi', icon: <FileSpreadsheet size={14} /> },
     ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : [])
   ];
 
@@ -84,6 +86,9 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     }
     if (tabId === 'pedagoska-dokumentacija') {
       return path.includes('/pedagoska-dokumentacija') || path.includes('/pedagogical');
+    }
+    if (tabId === 'zavrsni-rad') {
+      return path.includes('zavrsni-radovi');
     }
     if (tabId === 'raspored') {
       return path.includes('/raspored') || path.includes('/schedule');
@@ -144,7 +149,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       <div className="flex-1 flex flex-row">
         {/* Mobile Sidebar Overlay */}
         {isMobileMenuOpen && (
-          <div className="lg:hidden fixed inset-0 z-[60] flex">
+          <div className="md:hidden fixed inset-0 z-[60] flex">
             <div className="fixed inset-0 bg-black/50" onClick={() => setIsMobileMenuOpen(false)}></div>
             <div className="relative w-72 h-full bg-[#005c8d] text-white flex flex-col shadow-xl animate-in slide-in-from-left duration-300">
               <div className="p-4 border-b border-[#004a70] flex items-center justify-between">
@@ -168,7 +173,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                         "px-4 py-3 text-[12px] font-bold uppercase tracking-wide border-l-4 transition-colors",
                         location.pathname.startsWith(item.path) 
                           ? "bg-[#004a70] border-white" 
-                          : "border-transparent hover:bg-[#004a70]"
+                           : "border-transparent hover:bg-[#004a70]"
                       )}
                     >
                       {item.label}
@@ -186,7 +191,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
 
         {/* Student Sidebar (desktop only) */}
         {!isStaff && !isAdminPath && (
-          <aside className="w-64 bg-white border-r border-gray-200 hidden lg:flex flex-col p-4 gap-2">
+          <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col p-4 gap-2">
             {STUDENT_NAV.map((item) => (
               <Link
                 key={item.path}
@@ -204,7 +209,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
           </aside>
         )}
 
-        <main className="flex-1 flex flex-col w-full mb-16 lg:mb-0">
+        <main className="flex-1 flex flex-col w-full mb-16 md:mb-0">
           <div key={selectedClassId || 'none'} className="bg-white border-b border-r border-[#005c8d]/20 flex-1 flex flex-col min-h-0">
             {children}
           </div>
@@ -212,19 +217,43 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       </div>
 
       {/* Mobile Bottom Nav */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#005c8d] text-white flex justify-around items-center h-16 border-t border-[#004a70] z-50">
-        {navItems.slice(0, 5).map((item) => (
-          <Link
-            key={item.path}
-            to={item.path}
-            className={cn(
-              "flex flex-col items-center justify-center flex-1 h-full gap-1",
-              location.pathname.startsWith(item.path) ? "bg-[#004a70]" : ""
-            )}
-          >
-            <span className="text-[10px] font-medium">{item.label}</span>
-          </Link>
-        ))}
+      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#005c8d] text-white flex justify-around items-center h-16 border-t border-[#004a70] z-50">
+        {navItems.length <= 5 ? (
+          navItems.map((item) => (
+            <Link
+              key={item.path}
+              to={item.path}
+              className={cn(
+                "flex flex-col items-center justify-center flex-1 h-full gap-1",
+                location.pathname.startsWith(item.path) ? "bg-[#004a70]" : ""
+              )}
+            >
+              <span className="text-[10px] font-medium text-center break-all leading-tight px-1">{item.label}</span>
+            </Link>
+          ))
+        ) : (
+          <>
+            {navItems.slice(0, 4).map((item) => (
+              <Link
+                key={item.path}
+                to={item.path}
+                className={cn(
+                  "flex flex-col items-center justify-center flex-1 h-full gap-1",
+                  location.pathname.startsWith(item.path) ? "bg-[#004a70]" : ""
+                )}
+              >
+                <span className="text-[10px] font-medium text-center break-all leading-tight px-1">{item.label}</span>
+              </Link>
+            ))}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="flex flex-col items-center justify-center flex-1 h-full gap-1 hover:bg-[#004a70]"
+            >
+              <Menu size={18} />
+              <span className="text-[10px] font-medium">Izbornik</span>
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
