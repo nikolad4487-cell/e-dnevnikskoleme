@@ -9,10 +9,10 @@ interface ThesisGradingModalProps {
 }
 
 export default function ThesisGradingModal({ app, onClose, onSubmit, students }: ThesisGradingModalProps) {
-  const [workGrade, setWorkGrade] = useState(app.work_grade?.toString() || '');
-  const [workDate, setWorkDate] = useState(app.work_grade_date || new Date().toISOString().split('T')[0]);
+  const [workGrade, setWorkGrade] = useState(app.creation_grade?.toString() || '');
+  const [workDate, setWorkDate] = useState(app.creation_grade_date || new Date().toISOString().split('T')[0]);
   const [defenseGrade, setDefenseGrade] = useState(app.defense_grade?.toString() || '');
-  const [defenseDate, setDefenseDate] = useState(app.defense_grade_date || new Date().toISOString().split('T')[0]);
+  const [defenseDate, setDefenseDate] = useState(app.defense_date || new Date().toISOString().split('T')[0]);
   const [finalGrade, setFinalGrade] = useState(app.final_grade?.toString() || '');
   
   const student = students.find(s => s.id === app.student_id);
@@ -33,7 +33,7 @@ export default function ThesisGradingModal({ app, onClose, onSubmit, students }:
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-lg w-full p-6 animate-in zoom-in-95 duration-200">
         <h3 className="text-base font-black text-gray-800 uppercase tracking-tight mb-2">Ocjenjivanje završnog rada</h3>
-        <p className="text-xs text-gray-500 mb-4">Učenik: <strong>{student?.name}</strong>, Rad: <em>"{app.title}"</em></p>
+        <p className="text-xs text-gray-500 mb-4">Učenik: <strong>{student?.name}</strong>, Rad: <em>"{app.thesis_title}"</em></p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">

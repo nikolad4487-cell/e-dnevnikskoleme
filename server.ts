@@ -32,7 +32,7 @@ initJsonFile("student_pedagogical_profiles.json");
 initJsonFile("student_pedagogical_year_notes.json");
 initJsonFile("daily_notes.json");
 initJsonFile("overall_success_audit_logs.json");
-initJsonFile("final_thesis_applications.json");
+initJsonFile("final_thesis.json");
 
 function readJsonFile(filename: string): any[] {
   try {
@@ -197,29 +197,31 @@ async function startServer() {
 
 
   // Final Thesis Applications APIs
-  app.get("/api/final-thesis-applications", async (req, res) => {
+  app.get("/api/final-thesis", async (req, res) => {
     try {
       const { studentId, mentorId, classId, schoolId } = req.query;
       let dbData: any[] = [];
       if (supabaseAdmin) {
         try {
-          let query = supabaseAdmin.from('final_thesis_applications').select('*');
+          let query = supabaseAdmin.from('final_thesis').select('*');
           if (studentId) query = query.eq('student_id', studentId);
           if (mentorId) query = query.eq('mentor_id', mentorId);
           if (classId) query = query.eq('class_id', classId);
           if (schoolId) query = query.eq('school_id', schoolId);
           
-          const { data, error } = await query;
+          const { error } = await query;
           if (data && !error) {
             dbData = data;
+          } else if (error && error.code !== 'PGRST205') {
+            console.error("Error reading final_thesis from DB:", error);
           }
-        } catch (err) {
-          console.error("Error reading final_thesis_applications from DB:", err);
+        } catch (err: any) {
+          if (err?.code !== 'PGRST205') console.error("Error connecting to DB for final_thesis:", err);
         }
       }
 
       // Merge with local fallback JSON to ensure full persistence
-      let localData = readJsonFile("final_thesis_applications.json");
+      let localData = readJsonFile("final_thesis.json");
       if (studentId) localData = localData.filter(d => d.student_id === studentId);
       if (mentorId) localData = localData.filter(d => d.mentor_id === mentorId);
       if (classId) localData = localData.filter(d => d.class_id === classId);
@@ -236,7 +238,27 @@ async function startServer() {
     }
   });
 
-  app.post("/api/final-thesis-applications", async (req, res) => {
+  const ALLOWED_DB_FIELDS = [
+    'id', 'student_id', 'school_year_id', 'thesis_title', 'mentor_name',
+    'creation_grade', 'defense_grade', 'creation_date', 'defense_date',
+    'exam_period', 'created_at', 'mentor_id', 'status', 'final_grade',
+    'final_grade_date', 'application_classification_number',
+    'application_registry_number', 'application_data_entered_at',
+    'accepted_at', 'accepted_by', 'student_note', 'updated_at',
+    'rejected_at', 'rejected_by', 'rejection_note' // in case these applied
+  ];
+
+  function sanitizeForDb(data: any) {
+    const clean: any = {};
+    for (const key of Object.keys(data)) {
+      if (ALLOWED_DB_FIELDS.includes(key) && data[key] !== undefined) {
+        clean[key] = data[key];
+      }
+    }
+    return clean;
+  }
+
+  app.post("/api/final-thesis", async (req, res) => {
     try {
       const appData = req.body;
       if (!appData.id) {
@@ -250,17 +272,20 @@ async function startServer() {
       let dbInserted = false;
       if (supabaseAdmin) {
         try {
-          const { error } = await supabaseAdmin.from('final_thesis_applications').insert(appData);
+          const dbPayload = sanitizeForDb(appData);
+          console.log("FINAL THESIS SAVE PAYLOAD (POST)", dbPayload);
+          const { data, error } = await supabaseAdmin.from('final_thesis').insert(dbPayload).select();
+          console.log("FINAL THESIS SAVE RESULT (POST)", data, error);
           if (!error) dbInserted = true;
-          else console.error("DB insert error for final thesis app:", error);
-        } catch (dbErr) {
-          console.error("DB connection error for final thesis app:", dbErr);
+          else if (error.code !== 'PGRST205') console.error("DB insert error for final thesis app:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== 'PGRST205') console.error("DB connection error for final thesis app:", dbErr);
         }
       }
 
-      const apps = readJsonFile("final_thesis_applications.json");
+      const apps = readJsonFile("final_thesis.json");
       apps.push({ ...appData, db_persisted: dbInserted });
-      writeJsonFile("final_thesis_applications.json", apps);
+      writeJsonFile("final_thesis.json", apps);
 
       res.json({ success: true, data: appData, db_persisted: dbInserted });
     } catch (err: any) {
@@ -268,7 +293,7 @@ async function startServer() {
     }
   });
 
-  app.put("/api/final-thesis-applications/:id", async (req, res) => {
+  app.put("/api/final-thesis/:id", async (req, res) => {
     try {
       const { id } = req.params;
       const updates = req.body;
@@ -277,22 +302,25 @@ async function startServer() {
       let dbUpdated = false;
       if (supabaseAdmin) {
         try {
-          const { error } = await supabaseAdmin.from('final_thesis_applications').update(updates).eq('id', id);
+          const dbUpdates = sanitizeForDb(updates);
+          console.log("FINAL THESIS SAVE PAYLOAD (PUT)", dbUpdates);
+          const { data, error } = await supabaseAdmin.from('final_thesis').update(dbUpdates).eq('id', id).select();
+          console.log("FINAL THESIS SAVE RESULT (PUT)", data, error);
           if (!error) dbUpdated = true;
-          else console.error("DB update error for final thesis app:", error);
-        } catch (dbErr) {
-          console.error("DB connection error for final thesis app:", dbErr);
+          else if (error.code !== 'PGRST205') console.error("DB update error for final thesis app:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== 'PGRST205') console.error("DB connection error for final thesis app:", dbErr);
         }
       }
 
-      const apps = readJsonFile("final_thesis_applications.json");
+      const apps = readJsonFile("final_thesis.json");
       const idx = apps.findIndex(a => a.id === id);
       if (idx !== -1) {
         apps[idx] = { ...apps[idx], ...updates, db_updated: dbUpdated };
-        writeJsonFile("final_thesis_applications.json", apps);
+        writeJsonFile("final_thesis.json", apps);
       } else {
         apps.push({ id, ...updates, db_updated: dbUpdated });
-        writeJsonFile("final_thesis_applications.json", apps);
+        writeJsonFile("final_thesis.json", apps);
       }
 
       res.json({ success: true, db_updated: dbUpdated });
@@ -301,22 +329,23 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/final-thesis-applications/:id", async (req, res) => {
+  app.delete("/api/final-thesis/:id", async (req, res) => {
     try {
       const { id } = req.params;
       let dbDeleted = false;
       if (supabaseAdmin) {
         try {
-          const { error } = await supabaseAdmin.from('final_thesis_applications').delete().eq('id', id);
+          const { error } = await supabaseAdmin.from('final_thesis').delete().eq('id', id);
           if (!error) dbDeleted = true;
-        } catch (dbErr) {
-          console.error("DB delete error for final thesis app:", dbErr);
+          else if (error.code !== 'PGRST205') console.error("DB delete error for final thesis app:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== 'PGRST205') console.error("DB connection error for final thesis app delete:", dbErr);
         }
       }
 
-      const apps = readJsonFile("final_thesis_applications.json");
+      const apps = readJsonFile("final_thesis.json");
       const filtered = apps.filter(a => a.id !== id);
-      writeJsonFile("final_thesis_applications.json", filtered);
+      writeJsonFile("final_thesis.json", filtered);
 
       res.json({ success: true, db_deleted: dbDeleted });
     } catch (err: any) {
@@ -866,29 +895,66 @@ async function startServer() {
   });
 
   // Temporary Migration Endpoint - to be removed later
-  app.post("/api/admin/run-thesis-migration", async (req, res) => {
+  app.post("/api/admin/update-program-years", async (req, res) => {
+    try {
+        if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+        
+        const { data: programs, error: fetchErr } = await supabaseAdmin
+          .from('programs')
+          .select('*');
+        
+        if (fetchErr) throw fetchErr;
+
+        for (const program of programs) {
+           let years = 4;
+           if (program.name.toLowerCase().includes('kuhar') || 
+               program.name.toLowerCase().includes('konobar') || 
+               program.name.toLowerCase().includes('slastičar')) {
+               years = 3;
+           }
+           
+           await supabaseAdmin
+             .from('programs')
+             .update({ duration_years: years })
+             .eq('id', program.id);
+        }
+        
+        res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/run-thesis-migration2", async (req, res) => {
     try {
         if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
         const sql = `
-          ALTER TABLE public.final_thesis_applications
-          ADD COLUMN IF NOT EXISTS work_grade integer,
-          ADD COLUMN IF NOT EXISTS work_grade_date date,
-          ADD COLUMN IF NOT EXISTS defense_grade integer,
-          ADD COLUMN IF NOT EXISTS defense_grade_date date,
-          ADD COLUMN IF NOT EXISTS final_grade integer,
-          ADD COLUMN IF NOT EXISTS final_grade_date date,
-          ADD COLUMN IF NOT EXISTS work_graded_by uuid REFERENCES public.user_profiles(id) ON DELETE SET NULL,
-          ADD COLUMN IF NOT EXISTS defense_graded_by uuid REFERENCES public.user_profiles(id) ON DELETE SET NULL,
-          ADD COLUMN IF NOT EXISTS final_graded_by uuid REFERENCES public.user_profiles(id) ON DELETE SET NULL;
+ALTER TABLE public.final_thesis
+ADD COLUMN IF NOT EXISTS mentor_id uuid REFERENCES public.user_profiles(id),
+ADD COLUMN IF NOT EXISTS status text DEFAULT 'CREATED',
+ADD COLUMN IF NOT EXISTS final_grade integer,
+ADD COLUMN IF NOT EXISTS final_grade_date date,
+ADD COLUMN IF NOT EXISTS class_id uuid REFERENCES public.classes(id),
+ADD COLUMN IF NOT EXISTS school_id uuid REFERENCES public.schools(id),
+ADD COLUMN IF NOT EXISTS application_classification_number text,
+ADD COLUMN IF NOT EXISTS application_registry_number text,
+ADD COLUMN IF NOT EXISTS application_data_entered_at timestamptz,
+ADD COLUMN IF NOT EXISTS accepted_at timestamptz,
+ADD COLUMN IF NOT EXISTS accepted_by uuid REFERENCES public.user_profiles(id),
+ADD COLUMN IF NOT EXISTS student_note text,
+ADD COLUMN IF NOT EXISTS updated_at timestamptz DEFAULT now(),
+ADD COLUMN IF NOT EXISTS rejected_at timestamptz,
+ADD COLUMN IF NOT EXISTS rejected_by uuid REFERENCES public.user_profiles(id),
+ADD COLUMN IF NOT EXISTS rejection_note text;
 
-          CREATE TABLE IF NOT EXISTS public.final_thesis_committee_members (
-              id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-              thesis_application_id uuid NOT NULL REFERENCES public.final_thesis_applications(id) ON DELETE CASCADE,
-              teacher_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
-              created_at timestamptz DEFAULT NOW()
-          );
+CREATE TABLE IF NOT EXISTS public.final_thesis_committee_members (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  final_thesis_id uuid NOT NULL REFERENCES public.final_thesis(id) ON DELETE CASCADE,
+  teacher_id uuid NOT NULL REFERENCES public.user_profiles(id),
+  created_at timestamptz DEFAULT now()
+);
         `;
-        const { error } = await supabaseAdmin.query(sql); // This might fail if .query() doesn't exist
+        const { error } = await supabaseAdmin.query(sql);
         if (error) throw error;
         
         res.json({ success: true });
@@ -897,6 +963,8 @@ async function startServer() {
     }
   });
 
+  // Ensure profile endpoint for missing profiles on login
+  app.post("/api/ensure-profile", async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       const { authUserId, email, name } = req.body;
@@ -1842,6 +1910,50 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
   });
 
   // Vite middleware for development
+  app.post("/api/admin/fix-classes", async (req, res) => {
+    try {
+      if (supabaseAdmin) {
+        const sql = `
+          DROP POLICY IF EXISTS "Authenticated manage classes" ON public.classes;
+          CREATE POLICY "Authenticated manage classes" ON public.classes FOR ALL TO authenticated USING (true);
+        `;
+        const { error } = await supabaseAdmin.rpc('exec_sql', { query: sql });
+        res.json({ success: true, error });
+      } else {
+        res.status(500).json({ error: "supabaseAdmin not available" });
+      }
+    } catch (e: any) {
+      res.status(500).json({ error: e.message });
+    }
+  });
+
+  app.delete("/api/classes/:id", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Database admin client not configured");
+      const authHeader = req.headers.authorization;
+      if (!authHeader) return res.status(401).json({ error: "Missing authorization header" });
+      const token = authHeader.replace('Bearer ', '');
+      
+      const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+      if (authError || !user) return res.status(401).json({ error: "Invalid token" });
+
+      const { id } = req.params;
+      
+      // Perform delete using service role key (bypasses RLS)
+      const { data, error, count } = await supabaseAdmin
+        .from('classes')
+        .delete({ count: 'exact' })
+        .eq('id', id)
+        .select();
+
+      if (error) throw error;
+      res.json({ success: true, data, count });
+    } catch (e: any) {
+      console.error("API delete class error:", e);
+      res.status(500).json({ error: e.message });
+    }
+  });
+
   if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({

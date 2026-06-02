@@ -197,9 +197,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Total timeout for the entire sequence
     const controller = new AbortController();
     const loadFailsafe = setTimeout(() => {
-      console.error(`[AUTH] loadUserData TIMEOUT after 15s for ${authUserId}`);
+      console.error(`[AUTH] loadUserData TIMEOUT after 35s for ${authUserId}`);
       controller.abort();
-    }, 15000);
+    }, 35000);
     
     try {
       // 1. Fetch Profile
@@ -210,7 +210,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .select('*')
           .eq('auth_user_id', authUserId)
           .maybeSingle(),
-        4000,
+        10000,
         "Dohvaćanje profila je vremenski isteklo (Baza podataka nije dostupna)."
       ) as any;
 
@@ -236,7 +236,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           .from('user_school_roles')
           .select('*')
           .eq('user_id', profile.id),
-        4000,
+        10000,
         "Dohvaćanje uloga je vremenski isteklo."
       ) as any;
 
@@ -257,7 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             .select('class_id, classes(school_id)')
             .eq('student_id', profile.id)
             .eq('status', 'ACTIVE'),
-          3000,
+          10000,
           "Dohvaćanje upisa u razred je vremenski isteklo."
         ) as any;
 

@@ -460,7 +460,7 @@ export type Message = {
 
 export interface ThesisCommitteeMember {
   id: string;
-  thesis_application_id: string;
+  final_thesis_id: string;
   teacher_id: string;
   created_at: string;
 }
@@ -472,9 +472,10 @@ export interface ThesisApplication {
   school_id: string;
   school_year_id?: string;
   school_year?: string;
-  title: string;
+  thesis_title: string;
   mentor_id: string;
-  exam_term: string;
+  mentor_name?: string;
+  exam_period: string;
   student_note?: string;
   status: 'CREATED' | 'ACCEPTED' | 'REJECTED' | 'DEREGISTERED' | 'COMPLETED' | 'THESIS_CREATED' | 'THESIS_ACCEPTED' | 'THESIS_WORK_GRADED' | 'THESIS_DEFENSE_GRADED' | 'THESIS_FINAL_GRADED';
   submitted_at: string;
@@ -482,6 +483,7 @@ export interface ThesisApplication {
   accepted_by?: string;
   application_classification_number?: string;
   application_registry_number?: string;
+  application_data_entered_at?: string;
   rejected_at?: string;
   rejected_by?: string;
   rejection_note?: string;
@@ -490,11 +492,11 @@ export interface ThesisApplication {
   deregistration_classification_number?: string;
   deregistration_registry_number?: string;
   
-  // New grading fields
-  work_grade?: number;
-  work_grade_date?: string;
+  // New grading fields mapping
+  creation_grade?: number;
+  creation_date?: string;
   defense_grade?: number;
-  defense_grade_date?: string;
+  defense_date?: string;
   final_grade?: number;
   final_grade_date?: string;
   work_graded_by?: string;

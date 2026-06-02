@@ -15,7 +15,34 @@ export default function FinalThesisPage() {
   const [applications, setApplications] = useState<ThesisApplication[]>([]);
   const [mentors, setMentors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAccessible, setIsAccessible] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Checking access logic
+  useEffect(() => {
+    if (!studentId) return;
+    const checkAccess = async () => {
+        const { data: enrollment } = await supabase
+            .from('student_class_enrollments')
+            .select('class_id, student_id, classes:class_id(grade_level, program_id, programs:program_id(duration_years))')
+            .eq('student_id', studentId)
+            .eq('status', 'ACTIVE')
+            .maybeSingle();
+
+        if (enrollment && enrollment.classes) {
+            const clazz = enrollment.classes as any;
+            const program = clazz.programs as any;
+            if (program && clazz.grade_level !== undefined) {
+               setIsAccessible(clazz.grade_level === program.duration_years);
+            } else {
+               setIsAccessible(false);
+            }
+        } else {
+            setIsAccessible(false);
+        }
+    };
+    checkAccess();
+  }, [studentId]);
 
   // Form State
   const [title, setTitle] = useState('');
@@ -40,14 +67,14 @@ export default function FinalThesisPage() {
       setMentors(mentorsData || []);
 
       // Fetch applications via api route
-      const response = await fetch(`/api/final-thesis-applications?studentId=${studentId}`);
+      const response = await fetch(`/api/final-thesis?studentId=${studentId}`);
       if (response.ok) {
         const data = await response.json();
         setApplications(data || []);
       } else {
         // Fallback to Supabase directly
         const { data } = await supabase
-          .from('final_thesis_applications')
+          .from('final_thesis')
           .select('*')
           .eq('student_id', studentId)
           .order('submitted_at', { ascending: false });
@@ -62,8 +89,10 @@ export default function FinalThesisPage() {
   };
 
   useEffect(() => {
-    fetchAppData();
-  }, [studentId]);
+    if (isAccessible) {
+        fetchAppData();
+    }
+  }, [studentId, isAccessible]);
 
   // Check if has active application
   const activeApp = applications.find(
@@ -98,14 +127,14 @@ export default function FinalThesisPage() {
         student_id: studentId,
         class_id,
         school_id,
-        title: title.trim(),
+        thesis_title: title.trim(),
         mentor_id: mentorId,
-        exam_term: examTerm,
+        exam_period: examTerm,
         student_note: studentNote.trim(),
         status: 'CREATED'
       };
 
-      const response = await fetch('/api/final-thesis-applications', {
+      const response = await fetch('/api/final-thesis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(appPayload)
@@ -131,7 +160,7 @@ export default function FinalThesisPage() {
     if (!confirm('Jeste li sigurni da želite obrisati prijavu?')) return;
 
     try {
-      const response = await fetch(`/api/final-thesis-applications/${id}`, {
+      const response = await fetch(`/api/final-thesis/${id}`, {
         method: 'DELETE'
       });
 
@@ -154,7 +183,7 @@ export default function FinalThesisPage() {
     }
 
     try {
-      const response = await fetch(`/api/final-thesis-applications/${deregisteringApp.id}`, {
+      const response = await fetch(`/api/final-thesis/${deregisteringApp.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -195,11 +224,20 @@ export default function FinalThesisPage() {
     }
   };
 
-  if (loading) {
+  if (loading || isAccessible === null) {
     return (
       <div className="p-8 flex items-center justify-center font-sans text-gray-500">
         Učitavanje podataka o završnom radu...
       </div>
+    );
+  }
+
+  if (!isAccessible) {
+    return (
+        <div className="p-8 flex flex-col items-center justify-center font-sans text-gray-500 space-y-4">
+            <Ban size={48} className="text-amber-500" />
+            <p className="text-center text-lg font-bold">Završni rad dostupan je samo učenicima završnih razreda.</p>
+        </div>
     );
   }
 
@@ -226,7 +264,7 @@ export default function FinalThesisPage() {
               <div className="p-6 space-y-4">
                 <div>
                   <h3 className="text-xs text-gray-400 font-black uppercase tracking-wider">Naslov završnog rada</h3>
-                  <p className="text-base font-bold text-gray-900 mt-1">{activeApp.title}</p>
+                  <p className="text-base font-bold text-gray-900 mt-1">{activeApp.thesis_title}</p>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
@@ -242,7 +280,7 @@ export default function FinalThesisPage() {
                     <h3 className="text-xs text-gray-400 font-black uppercase tracking-wider">Rok obrane</h3>
                     <p className="font-semibold text-gray-800 mt-1 flex items-center gap-1">
                       <Calendar size={14} className="text-gray-400" />
-                      {activeApp.exam_term} rok
+                      {activeApp.exam_period} rok
                     </p>
                   </div>
                 </div>
@@ -448,11 +486,11 @@ export default function FinalThesisPage() {
                   .filter(app => app.id !== activeApp?.id)
                   .map((app) => (
                     <tr key={app.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="p-3 font-bold text-gray-800">{app.title}</td>
+                      <td className="p-3 font-bold text-gray-800">{app.thesis_title}</td>
                       <td className="p-3 font-semibold text-gray-600">
                         {mentors.find(m => m.id === app.mentor_id)?.name || 'Opći mentor'}
                       </td>
-                      <td className="p-3 font-semibold text-gray-600">{app.exam_term}</td>
+                      <td className="p-3 font-semibold text-gray-600">{app.exam_period}</td>
                       <td className="p-3 font-bold">{getStatusBadge(app.status)}</td>
                       <td className="p-3 font-mono text-gray-500">
                         {app.application_classification_number ? (

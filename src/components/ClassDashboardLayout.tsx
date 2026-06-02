@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Menu, LogOut, Search, Settings, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Clock, Calendar } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { Role } from '../types';
@@ -48,8 +49,63 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
   const currentSchoolRoles = userSchoolRoles.filter(r => r.schoolId === selectedSchoolId).map(r => r.role);
   const isSchoolAdmin = isMainAdmin || currentSchoolRoles.includes(Role.SCHOOL_ADMIN) || currentSchoolRoles.includes(Role.ADMIN);
   
+  // Thesis visibility logic
+  const [canAccessThesis, setCanAccessThesis] = React.useState(true);
+  React.useEffect(() => {
+    if (isAdminPath || !user) return;
+    
+    const checkAccess = async () => {
+        if (!isStaff) {
+            const { data: enrollment } = await supabase
+                .from('student_class_enrollments')
+                .select('class_id, student_id, classes:class_id(grade_level, program_id, programs:program_id(duration_years))')
+                .eq('student_id', user.id)
+                .eq('status', 'ACTIVE')
+                .maybeSingle();
+
+            if (enrollment && enrollment.classes) {
+                const clazz = enrollment.classes as any;
+                const program = clazz.programs as any;
+                if (program && clazz.grade_level) {
+                   setCanAccessThesis(clazz.grade_level === program.duration_years);
+                } else {
+                   setCanAccessThesis(false);
+                }
+            } else {
+               setCanAccessThesis(false);
+            }
+        } else {
+            if (selectedClassId) {
+                const { data: clazz } = await supabase
+                    .from('classes')
+                    .select('grade_level, program_id, programs:program_id(duration_years)')
+                    .eq('id', selectedClassId)
+                    .maybeSingle();
+                
+                if (clazz) {
+                    const program = clazz.programs as any;
+                    if (program && clazz.grade_level) {
+                        setCanAccessThesis(clazz.grade_level === program.duration_years);
+                    } else {
+                        setCanAccessThesis(false);
+                    }
+                } else {
+                    setCanAccessThesis(false);
+                }
+            } else {
+                setCanAccessThesis(true);
+            }
+        }
+    };
+    checkAccess();
+  }, [isStaff, isAdminPath, user, selectedClassId]);
+
+  const studentNavFiltered = STUDENT_NAV.filter(item => 
+      item.label !== 'Završni rad' || canAccessThesis
+  );
+  
   const classPathPrefix = selectedClassId ? `/class/${selectedClassId}` : '';
-  const teacherNavList: NavItem[] = selectedClassId ? [
+  let teacherNavList: NavItem[] = selectedClassId ? [
     { id: 'imenik', label: 'Imenik', path: `${classPathPrefix}/imenik`, icon: <BookOpen size={14} /> },
     { id: 'pregled-rada', label: 'Pregled rada', path: `${classPathPrefix}/pregled-rada`, icon: <List size={14} /> },
     { id: 'dnevnik-rada', label: 'Dnevnik rada', path: `${classPathPrefix}/dnevnik-rada`, icon: <ClipboardList size={14} /> },
@@ -65,6 +121,10 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     { id: 'zavrsni-rad', label: 'Završni radovi', path: '/teacher/zavrsni-radovi', icon: <FileSpreadsheet size={14} /> },
     ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : [])
   ];
+
+  teacherNavList = teacherNavList.filter(item => 
+      item.id !== 'zavrsni-rad' || canAccessThesis
+  );
 
   const isTabActive = (tabId: string | undefined, itemPath: string) => {
     if (!tabId) return location.pathname.startsWith(itemPath);
@@ -101,7 +161,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
 
   let navItems = isStaff 
     ? teacherNavList
-    : STUDENT_NAV;
+    : studentNavFiltered;
 
   if (isAdminPath) {
     navItems = ADMIN_NAV;
@@ -192,7 +252,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
         {/* Student Sidebar (desktop only) */}
         {!isStaff && !isAdminPath && (
           <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col p-4 gap-2">
-            {STUDENT_NAV.map((item) => (
+            {studentNavFiltered.map((item) => (
               <Link
                 key={item.path}
                 to={item.path}

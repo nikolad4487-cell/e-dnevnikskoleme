@@ -56,16 +56,27 @@ export const FinalThesisTab = () => {
            date: "14.6.2024.",
            schoolYear: "2023/2024",
         };
+        
+        const getDesc = (val: number) => {
+            switch(val) {
+                case 1: return 'nedovoljan';
+                case 2: return 'dovoljan';
+                case 3: return 'dobar';
+                case 4: return 'vrlo dobar';
+                case 5: return 'odličan';
+                default: return 'nedovoljan';
+            }
+        };
 
         const doc = await generateFinalWorkCertificatePDF(selectedStudent, {
             ...globalData,
             studentName: selectedStudent.name,
             studentOib: selectedStudent.oib,
-            thesisTitle: finalThesisData.title,
-            creationGrade: finalThesisData.creation_grade,
-            defenseGrade: finalThesisData.defense_grade,
-            overallSuccess: finalThesisData.overall_success,
-            programName: finalThesisData.program_name
+            thesisTitle: finalThesisData.thesis_title,
+            creationGrade: finalThesisData.creation_grade ? `${getDesc(finalThesisData.creation_grade)} (${finalThesisData.creation_grade})` : '-',
+            defenseGrade: finalThesisData.defense_grade ? `${getDesc(finalThesisData.defense_grade)} (${finalThesisData.defense_grade})` : '-',
+            overallSuccess: finalThesisData.final_grade ? `${getDesc(finalThesisData.final_grade)} (${finalThesisData.final_grade})` : '-',
+            programName: finalThesisData.program_name || 'Kuhar' // Fallback
         });
         
         doc.save(`svjedodzba_zavrsni_rad_${selectedStudent.name}.pdf`);

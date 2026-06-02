@@ -51,6 +51,33 @@ export default function FinalThesisTeacherPage() {
   const [showGradingModal, setShowGradingModal] = useState(false);
   const [gradingApp, setGradingApp] = useState<ThesisApplication | null>(null);
 
+  const [canAccessClass, setCanAccessClass] = useState(true);
+
+  useEffect(() => {
+    if (selectedClassId) {
+        const check = async () => {
+             const { data: clazz } = await supabase
+                .from('classes')
+                .select('grade_level, program_id, programs:program_id(duration_years)')
+                .eq('id', selectedClassId)
+                .maybeSingle();
+            if (clazz) {
+                const program = clazz.programs as any;
+                if (program && clazz.grade_level) {
+                    setCanAccessClass(clazz.grade_level === program.duration_years);
+                } else {
+                    setCanAccessClass(false);
+                }
+            } else {
+                setCanAccessClass(false);
+            }
+        };
+        check();
+    } else {
+        setCanAccessClass(true);
+    }
+  }, [selectedClassId]);
+
   const fetchTeacherData = async () => {
     setLoading(true);
     try {
@@ -75,7 +102,7 @@ export default function FinalThesisTeacherPage() {
       setClasses(classesData || []);
 
       // 4. Fetch Applications via API
-      const response = await fetch('/api/final-thesis-applications');
+      const response = await fetch('/api/final-thesis');
       if (response.ok) {
         const data = await response.json();
         setApplications(data || []);
@@ -117,7 +144,7 @@ export default function FinalThesisTeacherPage() {
 
       console.log(`[STATUS_UPDATE] Payload: ${JSON.stringify(payload)}`);
 
-      const response = await fetch(`/api/final-thesis-applications/${id}`, {
+      const response = await fetch(`/api/final-thesis/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -147,10 +174,10 @@ export default function FinalThesisTeacherPage() {
     try {
       const payload: any = {
         ...data,
-        status: (data.defense_grade ? 'THESIS_DEFENSE_GRADED' : (data.work_grade ? 'THESIS_WORK_GRADED' : gradingApp.status)),
+        status: (data.defense_grade ? 'THESIS_DEFENSE_GRADED' : (data.creation_grade ? 'THESIS_WORK_GRADED' : gradingApp.status)),
         updated_at: new Date().toISOString()
       };
-      if (data.work_grade) payload.work_graded_by = user?.id;
+      if (data.creation_grade) payload.creation_graded_by = user?.id;
       if (data.defense_grade) payload.defense_graded_by = user?.id;
       if (data.final_grade) {
           payload.final_graded_by = user?.id;
@@ -159,7 +186,7 @@ export default function FinalThesisTeacherPage() {
 
       console.log(`[STATUS_UPDATE] Grading application ${gradingApp.id}, Payload: ${JSON.stringify(payload)}`);
 
-      const response = await fetch(`/api/final-thesis-applications/${gradingApp.id}`, {
+      const response = await fetch(`/api/final-thesis/${gradingApp.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -196,7 +223,7 @@ export default function FinalThesisTeacherPage() {
 
       console.log(`[STATUS_UPDATE] Payload: ${JSON.stringify(payload)}`);
 
-      const response = await fetch(`/api/final-thesis-applications/${rejectingApp.id}`, {
+      const response = await fetch(`/api/final-thesis/${rejectingApp.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -224,7 +251,7 @@ export default function FinalThesisTeacherPage() {
     if (!classifyingApp) return;
 
     try {
-      const response = await fetch(`/api/final-thesis-applications/${classifyingApp.id}`, {
+      const response = await fetch(`/api/final-thesis/${classifyingApp.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -255,7 +282,7 @@ export default function FinalThesisTeacherPage() {
     if (!deregClassifyingApp) return;
 
     try {
-      const response = await fetch(`/api/final-thesis-applications/${deregClassifyingApp.id}`, {
+      const response = await fetch(`/api/final-thesis/${deregClassifyingApp.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -304,7 +331,7 @@ export default function FinalThesisTeacherPage() {
       const mentorName = mentors.find(m => m.id === app.mentor_id)?.name || '';
       const className = classes.find(c => c.id === app.class_id)?.name || '';
       return (
-        app.title.toLowerCase().includes(term) ||
+        app.thesis_title.toLowerCase().includes(term) ||
         studentName.toLowerCase().includes(term) ||
         mentorName.toLowerCase().includes(term) ||
         className.toLowerCase().includes(term)
@@ -335,6 +362,23 @@ export default function FinalThesisTeacherPage() {
         Učitavanje podataka za mentore i razrednike...
       </div>
     );
+  }
+
+  if (!canAccessClass) {
+      return (
+         <div className="p-8 flex flex-col items-center justify-center font-sans">
+             <div className="border-l-4 border-red-500 p-6 bg-red-50 w-full max-w-2xl rounded shadow-sm flex flex-col items-center text-center">
+                 <ShieldAlert className="text-red-500 mb-2" size={32} />
+                 <h2 className="text-lg font-black text-red-800 uppercase tracking-wider">Završni radovi nedostupni</h2>
+                 <p className="text-red-700 font-semibold mt-2">
+                     Administracija završnih radova dostupna je samo za završne razrede programa (ovisno o trajanju odabranog programa: 3. ili 4. razred).
+                 </p>
+                 <p className="text-xs text-red-600 mt-2">
+                     Provjerite je li u administraciji razreda ispravno odabran program.
+                 </p>
+             </div>
+         </div>
+      );
   }
 
   return (
@@ -438,7 +482,7 @@ export default function FinalThesisTeacherPage() {
                         <div className="text-[10px] text-gray-400 font-bold uppercase mt-1">Razred: {schoolClass?.name || '—'}</div>
                       </td>
                       <td className="p-4 max-w-xs">
-                        <div className="font-semibold text-gray-800 leading-normal">{app.title}</div>
+                        <div className="font-semibold text-gray-800 leading-normal">{app.thesis_title}</div>
                         {app.student_note && (
                           <div className="text-[10px] text-gray-400 italic mt-1 line-clamp-1 truncate" title={app.student_note}>
                             Napomena: {app.student_note}
@@ -449,7 +493,7 @@ export default function FinalThesisTeacherPage() {
                         {mentor?.name || '—'}
                       </td>
                       <td className="p-4 font-semibold text-gray-600">
-                        {app.exam_term} rok
+                        {app.exam_period} rok
                       </td>
                       <td className="p-4">
                         {getStatusBadge(app.status)}
@@ -679,7 +723,7 @@ export default function FinalThesisTeacherPage() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
             <h3 className="text-base font-black text-gray-800 uppercase tracking-tight mb-2">Odbijanje prijave završnog rada</h3>
             <p className="text-xs text-gray-500 mb-4">
-              Unesite razlog za odbijanje prijave učenika <strong>{students.find(s => s.id === rejectingApp.student_id)?.name}</strong> za rad s naslovom <em>"{rejectingApp.title}"</em>.
+              Unesite razlog za odbijanje prijave učenika <strong>{students.find(s => s.id === rejectingApp.student_id)?.name}</strong> za rad s naslovom <em>"{rejectingApp.thesis_title}"</em>.
             </p>
 
             <form onSubmit={handleRejectSubmit} className="space-y-4">

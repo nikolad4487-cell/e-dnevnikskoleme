@@ -2581,62 +2581,62 @@ setAllSubjects(uniqueSub2);
     try {
       if (deleteDialog.type === 'CLASS') {
         const classId = deleteDialog.id;
-        console.log("DELETE CLASS CONFIRMED", classId);
+        console.log("DELETE CLASS", classId);
         
-        // MAIN_ADMIN can force delete with cascade
+        // 1. Check for linked data
+        const checks = await Promise.all([
+          supabase.from('student_class_enrollments').select('id', { count: 'exact', head: true }).eq('class_id', classId),
+          supabase.from('grades').select('id', { count: 'exact', head: true }).eq('class_id', classId),
+          supabase.from('absences').select('id', { count: 'exact', head: true }).eq('class_id', classId),
+          supabase.from('lessons').select('id', { count: 'exact', head: true }).eq('class_id', classId),
+          supabase.from('schedule_cells').select('id', { count: 'exact', head: true }).eq('class_id', classId),
+          supabase.from('class_subject_teachers').select('id', { count: 'exact', head: true }).eq('class_id', classId),
+          supabase.from('exams').select('id', { count: 'exact', head: true }).eq('class_id', classId),
+          supabase.from('student_year_summaries').select('id', { count: 'exact', head: true }).eq('class_id', classId),
+          supabase.from('student_overall_notes').select('id', { count: 'exact', head: true }).eq('class_id', classId),
+          supabase.from('class_overall_notes').select('id', { count: 'exact', head: true }).eq('class_id', classId),
+          supabase.from('final_thesis').select('id', { count: 'exact', head: true }).eq('class_id', classId)
+        ]);
+
+        const hasData = checks.some(r => !r.error && (r.count || 0) > 0);
+        
+        if (hasData) {
+          toast.error("Nije moguće obrisati razred jer sadrži podatke. Najprije uklonite ili premjestite povezane podatke.");
+          setDeleteDialog(prev => ({ ...prev, loading: false, isOpen: false }));
+          return;
+        }
+
         if (isAnyAdmin) {
-          console.log("EXECUTING CASCADE DELETE FOR CLASS:", classId);
-          // Manual cascade for safety
-          const cleanupResults = await Promise.all([
-            supabase.from('grades').delete().eq('class_id', classId),
-            supabase.from('absences').delete().eq('class_id', classId),
-            supabase.from('lessons').delete().eq('class_id', classId),
-            supabase.from('schedule_cells').delete().eq('class_id', classId),
-            supabase.from('student_class_enrollments').delete().eq('class_id', classId),
-            supabase.from('student_subject_enrollments').delete().eq('class_id', classId),
-            supabase.from('curriculum_plans').delete().eq('class_id', classId),
-            supabase.from('class_subject_teachers').delete().eq('class_id', classId),
-            supabase.from('student_year_summaries').delete().eq('class_id', classId),
-            supabase.from('student_overall_notes').delete().eq('class_id', classId),
-            supabase.from('class_overall_notes').delete().eq('class_id', classId),
-          ]);
+          console.log("EXECUTING DELETE FOR EMPTY CLASS:", classId);
 
-          console.log("CASCADE CLEANUP RESULTS:", cleanupResults);
+          const session = await supabase.auth.getSession();
+          const token = session.data.session?.access_token;
 
-          const { error: deleteError, count } = await supabase
-            .from('classes')
-            .delete({ count: 'exact' })
-            .eq('id', classId);
+          const response = await fetch(`/api/classes/${classId}`, {
+             method: 'DELETE',
+             headers: {
+                 'Authorization': `Bearer ${token}`
+             }
+          });
+          const result = await response.json();
             
-          console.log('DELETE CLASS RESULT', { error: deleteError, count });
+          console.log('DELETE RESULT', result);
 
-          if (deleteError) {
-            console.error("SUPABASE DELETE ERROR:", deleteError);
-            throw deleteError;
+          if (!response.ok || result.error) {
+            console.error("API DELETE ERROR:", result.error);
+            throw new Error(result.error || 'Server error');
           }
           
-          if (count === 0) {
-            console.warn('Razred nije obrisan jer nije pronađen u bazi.');
-          }
-          
-          toast.success('Razred i svi povezani podaci su obrisani.');
-          await fetchData();
-        } else {
-          const { error: deleteError, count } = await supabase
-            .from('classes')
-            .delete({ count: 'exact' })
-            .eq('id', classId);
-            
-          console.log('DELETE CLASS RESULT', { error: deleteError, count });
-          
-          if (deleteError) throw deleteError;
-          
-          if (count === 0) {
+          if (result.count === 0) {
             console.warn('Razred nije obrisan jer nije pronađen u bazi.');
           }
           
           toast.success('Razred je obrisan.');
           await fetchData();
+        } else {
+          toast.error('Samo administrator može obrisati razred.');
+          setDeleteDialog(prev => ({ ...prev, loading: false, isOpen: false }));
+          return;
         }
       } else if ((deleteDialog.type as string) === 'SCHOOL_YEAR') {
         const yearId = deleteDialog.id;
@@ -3242,70 +3242,83 @@ setAllSubjects(uniqueSub2);
                   <div className="text-xs font-black uppercase">Nema pronađenih razreda za odabrane kriterije</div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {classes
-                    .filter(c => !selectedYearId || c.school_year_id === selectedYearId)
-                    .sort((a,b) => String(a.name || '').localeCompare(String(b.name || '')))
-                    .map(cls => {
-                    const year = schoolYears.find(y => y.id === cls.school_year_id);
-                    return (
-                      <div key={cls.id} className="bg-white border-2 border-gray-100 p-4 hover:border-[#005c8d] transition-all group relative">
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="text-3xl font-black text-gray-800 tracking-tighter">{cls.name}</div>
-                          <div className={cn(
-                            "text-[8px] font-black px-1.5 py-0.5 rounded leading-none uppercase",
-                            cls.status === 'ACTIVE' ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
-                          )}>
-                            {cls.status === 'ACTIVE' ? 'Aktivan' : 'Arhiv'}
-                          </div>
-                        </div>
-                        
-                        <div className="space-y-1">
-                          <div className="text-[9px] font-black text-gray-400 uppercase">Šk. godina: <span className="text-gray-600">{year?.name || cls.schoolYear}</span></div>
-                          <div className="text-[9px] font-black text-gray-400 uppercase">Razrednik: <span className="text-gray-600 truncate block">
-                            {(() => {
-                              const ht = allUsers.find(u => u.id === cls.homeroomTeacherId);
-                              return ht ? formatPersonName(ht) : 'Nije dodijeljen';
-                            })()}
-                          </span></div>
-                        </div>
-
-                        <div className="mt-4 pt-4 border-t border-gray-100 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className="flex gap-2">
-                             {isAnyAdmin && (
-                               <>
-                                 <button 
-                                   onClick={() => {
-                                     setEditingClass(cls);
-                                     setNewClassGrade(cls.gradeLevel);
-                                     setNewClassSection(cls.section || '');
-                                     setShowModal('NEW_CLASS');
-                                   }}
-                                   className="p-1.5 text-gray-400 hover:text-[#005c8d] hover:bg-blue-50 rounded"
-                                   title="Uredi"
-                                 >
-                                   <Settings2 size={16} />
-                                 </button>
-                                 <button 
-                                   onClick={() => setDeleteDialog({ isOpen: true, id: cls.id, type: 'CLASS', loading: false, message: `Jeste li sigurni da želite obrisati razred ${cls.name}?` })}
-                                   className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
-                                   title="Obriši"
-                                 >
-                                   <Trash2 size={16} />
-                                 </button>
-                               </>
-                             )}
-                          </div>
-                          <button 
-                            onClick={() => setSelectedClassId(cls.id)}
-                            className="text-[9px] font-black text-[#005c8d] uppercase border-b-2 border-transparent hover:border-[#005c8d]"
-                          >
-                            Upravljaj razredom
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="bg-white border-2 border-gray-100 overflow-hidden">
+                  <table className="w-full text-left border-collapse">
+                    <thead className="bg-gray-50 border-b-2 border-gray-100 text-[10px] font-black text-gray-500 uppercase tracking-widest">
+                      <tr>
+                        <th className="px-4 py-3">Naziv</th>
+                        <th className="px-4 py-3">Godina</th>
+                        <th className="px-4 py-3">Razrednik</th>
+                        <th className="px-4 py-3">Zamjenik razrednika</th>
+                        <th className="px-4 py-3 text-right">Akcije</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {classes
+                        .filter(c => !selectedYearId || c.school_year_id === selectedYearId)
+                        .sort((a,b) => String(a.name || '').localeCompare(String(b.name || '')))
+                        .map(cls => {
+                          const year = schoolYears.find(y => y.id === cls.school_year_id);
+                          const ht = allUsers.find(u => u.id === cls.homeroomTeacherId);
+                          const dt = allUsers.find(u => u.id === cls.deputyTeacherId);
+                          return (
+                            <tr key={cls.id} className="hover:bg-gray-50 transition-colors group">
+                              <td className="px-4 py-3">
+                                <span className="font-black text-lg text-gray-800 align-middle">{cls.name}</span>
+                                <span className={cn(
+                                  "ml-3 text-[8px] font-black px-1.5 py-0.5 rounded leading-none uppercase align-middle",
+                                  cls.status === 'ACTIVE' ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-600"
+                                )}>
+                                  {cls.status === 'ACTIVE' ? 'Aktivan' : 'Arhiv'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-[11px] font-bold text-gray-600">
+                                {year?.name || cls.schoolYear}
+                              </td>
+                              <td className="px-4 py-3 text-[11px] font-bold text-gray-800">
+                                {ht ? formatPersonName(ht) : <span className="text-gray-400 italic font-medium">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-[11px] font-bold text-gray-800">
+                                {dt ? formatPersonName(dt) : <span className="text-gray-400 italic font-medium">—</span>}
+                              </td>
+                              <td className="px-4 py-3 text-right">
+                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button 
+                                    onClick={() => setSelectedClassId(cls.id)}
+                                    className="text-[9px] font-black text-[#005c8d] uppercase hover:underline mr-2"
+                                  >
+                                    Upravljaj razredom
+                                  </button>
+                                  {isAnyAdmin && (
+                                    <>
+                                      <button 
+                                        onClick={() => {
+                                          setEditingClass(cls);
+                                          setNewClassGrade(cls.gradeLevel);
+                                          setNewClassSection(cls.section || '');
+                                          setShowModal('NEW_CLASS');
+                                        }}
+                                        className="p-1.5 text-gray-400 hover:text-[#005c8d] rounded"
+                                        title="Uredi"
+                                      >
+                                        <Settings2 size={16} />
+                                      </button>
+                                      <button 
+                                        onClick={() => setDeleteDialog({ isOpen: true, id: cls.id, type: 'CLASS', loading: false, message: `Jeste li sigurni da želite obrisati razred ${cls.name}?` })}
+                                        className="p-1.5 text-gray-400 hover:text-red-500 rounded"
+                                        title="Obriši"
+                                      >
+                                        <Trash2 size={16} />
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -3363,6 +3376,11 @@ setAllSubjects(uniqueSub2);
                                 <option key={p.id} value={p.id}>{p.name}</option>
                               ))}
                             </select>
+                            {!classDetailForm.program_id && (
+                               <div className="text-[9px] font-bold text-red-500 mt-1 uppercase tracking-wider">
+                                 Program razreda nije odabran.
+                               </div>
+                            )}
                          </div>
                          <div className="space-y-1">
                             <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Razrednik</label>
