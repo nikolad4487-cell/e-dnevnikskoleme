@@ -1485,6 +1485,129 @@ setStudents(uniqueMapped as any);
     }
   };
 
+  const recordOverallSuccessAuditLog = async (studentId: string, studentName: string, action: string, details: string) => {
+    try {
+      const classId = effectiveClassId || selectedClassId;
+      await fetch("/api/overall-success-audit-logs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          executorId: user?.id,
+          studentId: studentId,
+          classId: classId,
+          action: action,
+          details: details
+        })
+      });
+    } catch (err) {
+      console.error("Error recording overall success audit log:", err);
+    }
+  };
+
+  const handleUnlockStudentOverall = async (student: any) => {
+    console.log("UNLOCK SINGLE STUDENT OVERALL", student);
+    if (!student || !selectedClassData) {
+      toast.error("Podaci nisu ispravno učitani.");
+      return;
+    }
+    const classId = effectiveClassId || selectedClassId;
+    if (!classId) {
+      toast.error("Nije odabran razred.");
+      return;
+    }
+
+    const isHomeroomTeacher = selectedClassData?.homeroom_teacher_id === user?.id;
+    if (!isAnyAdmin && !isHomeroomTeacher) {
+      toast.error("Nemate ovlasti za otključavanje općeg uspjeha.");
+      return;
+    }
+
+    const studentName = student.name || student.full_name || "Nepoznati učenik";
+    setLoading(true);
+
+    try {
+      // 1. Fetch required subjects for this student
+      const studentClassEnrollments = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
+      const studentTotalEnrollCount = classEnrollments.filter(e => e.studentId === student.id).length;
+      
+      const requiredSubjects = studentTotalEnrollCount > 0 
+        ? studentClassEnrollments.map(e => e.subjectId)
+        : Array.from(new Set(subjectAssignments.filter(a => a.classId === classId).map(a => a.subjectId)));
+
+      // 2. Fetch final grades for this student
+      const { data: finalGradesData, error: finalGradesError } = await supabase
+        .from('final_grades')
+        .select('student_id, subject_id, value, period, school_year_id')
+        .eq('student_id', student.id)
+        .eq('class_id', classId)
+        .eq('period', 'SECOND_TERM');
+
+      if (finalGradesError) {
+        console.error("Error fetching final grades for unlock check:", finalGradesError);
+        toast.error("Greška pri dohvaćanju zaključnih ocjena.");
+        setLoading(false);
+        return;
+      }
+
+      const hasRequiredSubjects = requiredSubjects.length > 0;
+      const missingSubjects = requiredSubjects.filter(subId => !finalGradesData.some(fg => fg.subject_id === subId));
+
+      const isAllFinalGradesClosed = hasRequiredSubjects && missingSubjects.length === 0;
+
+      if (isAllFinalGradesClosed) {
+        toast.error("Nije moguće otključati opći uspjeh jer su sve zaključne ocjene zaključene.");
+        setLoading(false);
+        return;
+      }
+
+      // 3. Update status to 'UNLOCKED', clearing all locking summaries
+      const summary = summaries.find(s => s.studentId === student.id && (s.classId === selectedClassId || s.classId === classId));
+      if (!summary) {
+        toast.error("Dokument općeg uspjeha ne postoji za tog učenika.");
+        setLoading(false);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('student_year_summaries')
+        .update({
+          status: 'UNLOCKED',
+          finalized_at: null,
+          finalized_by: null,
+          average: null,
+          overall_average: null,
+          final_result: null,
+          overall_success: null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', summary.id);
+
+      if (error) {
+        toast.error(`Greška pri otključavanju: ${error.message}`);
+        setLoading(false);
+        return;
+      }
+
+      // 4. Record audit log
+      await recordOverallSuccessAuditLog(
+        student.id,
+        studentName,
+        'UNLOCK_OVERALL_SUCCESS',
+        `Otključan opći uspjeh za učenika ${studentName} u razredu ${selectedClassData?.name || classId}.`
+      );
+
+      toast.success(`Opći uspjeh za učenika ${studentName} je uspješno otključan.`);
+      fetchData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Došlo je do greške pri otključavanju.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCalculateAndLockStudentOverall = async (student: any) => {
     console.log("LOCK SINGLE STUDENT OVERALL", student);
     if (!student || !selectedClassData) {
@@ -1627,6 +1750,13 @@ setStudents(uniqueMapped as any);
         setLoading(false);
         return;
       }
+
+      await recordOverallSuccessAuditLog(
+        student.id,
+        studentName,
+        'LOCK_OVERALL_SUCCESS',
+        `Zaključan opći uspjeh za učenika ${studentName} u razredu ${selectedClassData?.name || classId}.`
+      );
 
       toast.success(`Uspješno izračunato i zaključano za učenika ${studentName}.`);
       fetchData();
@@ -1777,6 +1907,12 @@ setStudents(uniqueMapped as any);
         }
 
         successCount++;
+        await recordOverallSuccessAuditLog(
+          student.id,
+          studentName,
+          'LOCK_OVERALL_SUCCESS',
+          `Skupno zaključan opći uspjeh za učenika ${studentName} u razredu ${selectedClassData?.name || classId}.`
+        );
       }
 
       if (successCount > 0) {
@@ -3948,20 +4084,44 @@ setAllSubjects(uniqueSub2);
                               <td className="px-4 py-3 border-r border-gray-200 text-center">
                                  {isFinalized ? (
                                     <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-black uppercase tracking-tighter text-[9px] border border-green-200">Zaključeno</span>
-                                 ) : missingGrades ? (
-                                    <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-black uppercase tracking-tighter text-[9px] border border-red-200">Nedostaju ocjene</span>
+                                 ) : summary?.status === 'UNLOCKED' ? (
+                                    <div className="flex flex-col items-center gap-1">
+                                       <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded border border-amber-200 font-extrabold uppercase tracking-tighter text-[8px] leading-tight block text-center">
+                                          Potrebno ponovno zaključavanje općeg uspjeha.
+                                       </span>
+                                    </div>
                                  ) : (
-                                    <span className="px-2 py-0.5 bg-blue-100 text-[#005c8d] rounded-full font-black uppercase tracking-tighter text-[9px] border border-blue-200">Spremno</span>
+                                    <div className="flex flex-col items-center gap-1">
+                                       <span className={cn(
+                                          "px-2 py-0.5 rounded-full font-black uppercase tracking-tighter text-[9px] border",
+                                          missingGrades ? "bg-red-100 text-red-700 border-red-200" : "bg-blue-100 text-[#005c8d] border-blue-200"
+                                       )}>
+                                          {missingGrades ? "Nedostaju ocjene" : "Spremno"}
+                                       </span>
+                                       <span className="text-[8px] text-gray-400 font-medium italic block text-center">
+                                          Opći uspjeh nije zaključen.
+                                       </span>
+                                    </div>
                                  )}
                               </td>
                               <td className="px-4 py-3 text-center">
-                                 <button
-                                   onClick={() => handleCalculateAndLockStudentOverall(student)}
-                                   disabled={loading}
-                                   className="bg-[#005c8d] hover:bg-[#004a70] text-white px-2.5 py-1 text-[9px] font-black uppercase transition-colors shadow-m disabled:opacity-50"
-                                 >
-                                    Zaključi opći uspjeh
-                                 </button>
+                                 {isFinalized ? (
+                                    <button
+                                      onClick={() => handleUnlockStudentOverall(student)}
+                                      disabled={loading}
+                                      className="bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 text-[9px] font-black uppercase transition-colors shadow-sm disabled:opacity-50 cursor-pointer"
+                                    >
+                                       Otključaj opći uspjeh
+                                    </button>
+                                 ) : (
+                                    <button
+                                      onClick={() => handleCalculateAndLockStudentOverall(student)}
+                                      disabled={loading || missingGrades}
+                                      className="bg-[#005c8d] hover:bg-[#004a70] text-white px-2.5 py-1 text-[9px] font-black uppercase transition-colors shadow-sm disabled:opacity-50 disabled:bg-gray-100 disabled:text-gray-300"
+                                    >
+                                       Zaključi opći uspjeh
+                                    </button>
+                                 )}
                               </td>
                            </tr>
                          );

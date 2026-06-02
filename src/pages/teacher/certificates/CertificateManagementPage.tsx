@@ -258,10 +258,10 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
           return;
       }
 
-      // 2. Fetch class data (including program)
+      // 2. Fetch class data (including program and homeroom teacher)
       const { data: classData, error: cErr } = await supabase
         .from('classes')
-        .select('*, program:program_id(*)')
+        .select('*, program:program_id(*), homeroom:user_profiles!classes_homeroom_teacher_id_fkey(name)')
         .eq('id', studentData.class_id || '')
         .maybeSingle();
 
@@ -379,15 +379,10 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
           return;
       }
 
-      if (!summaryData) {
-          console.log("CERT SETTINGS ERROR", settingsError);
-          console.log("CERT SETTINGS DATA", settings);
-          console.log("CERT STUDENT ERROR", studentError);
-          console.log("CERT SUMMARY ERROR", summaryError);
-          console.log("CERT FINAL GRADES ERROR", finalGradesError);
-          console.log("CERT CLASS ERROR", classError);
+      if (!summaryData || (summaryData.status !== 'LOCKED' && summaryData.status !== 'FINALIZED')) {
+          console.log("CERT SUMMARY STATUS UNLOCKED or NULL", summaryData);
 
-          toast.error("Nije zaključen opći uspjeh učenika.");
+          toast.error("Opći uspjeh učenika nije zaključen.");
           setLoading(false);
           return;
       }
@@ -505,9 +500,11 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
           date: settings?.certificate_date || new Date().toISOString().split('T')[0],
           klasa: classData.document_klasa || settings?.default_klasa || 'N/A',
           urbroj: classData.document_urbroj || settings?.default_urbroj || 'N/A',
+          oib: settings?.oib || '____________',
           principalName: settings?.principal_name || 'N/A',
           principalTitle: settings?.principal_title || 'Ravnatelj',
           homeroomTeacherTitle: settings?.homeroom_teacher_title || 'Razrednik',
+          homeroomTeacherName: classData?.homeroom?.name || '________________',
           certificatePlace: settings?.certificate_place || classData?.city || 'Zagreb',
           stampUrl,
           principalSigUrl,
@@ -555,8 +552,8 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
 
       console.log("SUMMARY CHECK", summary);
 
-      if (!summary || !summary.final_result) {
-        toast.error("Nije zaključen opći uspjeh učenika.");
+      if (!summary || !summary.final_result || (summary.status !== 'LOCKED' && summary.status !== 'FINALIZED')) {
+        toast.error("Opći uspjeh učenika nije zaključen.");
         setLoading(false);
         return;
       }
@@ -626,7 +623,7 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
 
       const { data: classData } = await supabase
         .from('classes')
-        .select('*, program:program_id(*)')
+        .select('*, program:program_id(*), homeroom:user_profiles!classes_homeroom_teacher_id_fkey(name)')
         .eq('id', classId)
         .maybeSingle();
 
@@ -694,9 +691,11 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
           date: settings?.certificate_date || new Date().toISOString().split('T')[0],
           klasa: classData?.document_klasa || settings?.default_klasa || 'N/A',
           urbroj: classData?.document_urbroj || settings?.default_urbroj || 'N/A',
+          oib: settings?.oib || '____________',
           principalName: settings?.principal_name || 'N/A',
           principalTitle: settings?.principal_title || 'Ravnatelj',
           homeroomTeacherTitle: settings?.homeroom_teacher_title || 'Razrednik',
+          homeroomTeacherName: classData?.homeroom?.name || '________________',
           certificatePlace: settings?.certificate_place || classData?.city || 'Zagreb',
           stampUrl,
           principalSigUrl,

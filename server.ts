@@ -30,6 +30,7 @@ initJsonFile("pedagoska_dokumentacija.json");
 initJsonFile("student_pedagogical_profiles.json");
 initJsonFile("student_pedagogical_year_notes.json");
 initJsonFile("daily_notes.json");
+initJsonFile("overall_success_audit_logs.json");
 
 function readJsonFile(filename: string): any[] {
   try {
@@ -124,6 +125,72 @@ async function startServer() {
       } catch (err: any) {
           res.status(500).json({ error: err.message });
       }
+  });
+
+  // Overall Success Audit Logs
+  app.post("/api/overall-success-audit-logs", async (req, res) => {
+    try {
+      const { executorId, studentId, classId, action, details } = req.body;
+      let dbInserted = false;
+      let dbErrorMsg = "";
+
+      // 1. Try DB insert
+      if (supabaseAdmin) {
+        try {
+          const { error } = await supabaseAdmin.from('overall_success_audit_logs').insert({
+            executor_id: executorId,
+            student_id: studentId,
+            class_id: classId,
+            action: action,
+            details: details,
+            created_at: new Date().toISOString()
+          });
+          if (error) {
+            dbErrorMsg = error.message;
+          } else {
+            dbInserted = true;
+          }
+        } catch (dbErr: any) {
+          dbErrorMsg = dbErr.message;
+        }
+      }
+
+      // 2. Guaranteed local file persistence fallback
+      const logs = readJsonFile("overall_success_audit_logs.json");
+      const newLog = {
+        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
+        executor_id: executorId,
+        student_id: studentId,
+        class_id: classId,
+        action: action,
+        details: details,
+        db_persisted: dbInserted,
+        db_error: dbErrorMsg,
+        created_at: new Date().toISOString()
+      };
+      logs.push(newLog);
+      writeJsonFile("overall_success_audit_logs.json", logs);
+
+      res.json({ success: true, db_persisted: dbInserted, error: dbErrorMsg || null });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/overall-success-audit-logs", (req, res) => {
+    try {
+      const { studentId, classId } = req.query;
+      let logs = readJsonFile("overall_success_audit_logs.json");
+      if (studentId) {
+        logs = logs.filter(l => l.student_id === studentId);
+      }
+      if (classId) {
+        logs = logs.filter(l => l.class_id === classId);
+      }
+      res.json(logs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
   });
 
 

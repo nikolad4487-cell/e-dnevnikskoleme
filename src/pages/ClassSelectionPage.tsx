@@ -428,8 +428,8 @@ export default function ClassSelectionPage() {
                     s.class_id === cls.id && 
                     (s.school_year_id === selectedYearId || (!s.school_year_id && s.school_year === cls.yearName))
                   );
-                  const isFinalized = summary && summary.status === 'LOCKED';
-                  const overall_average = isFinalized ? (summary.overall_average ?? summary.average) : null;
+                  const isFinalized = summary && (summary.status === 'LOCKED' || summary.status === 'FINALIZED') && !!(summary.finalized_at || summary.finalizedAt);
+                  const overall_average = isFinalized ? (summary.overall_average ?? summary.overallAverage ?? summary.average) : null;
 
                   console.log("CLASS SELECT OVERALL SUMMARY", summary);
                   console.log("OVERALL AVERAGE", overall_average);
@@ -507,7 +507,7 @@ export default function ClassSelectionPage() {
                           <>
                             <span className="text-slate-400">Opći uspjeh</span>
                             <span className="text-slate-400 font-black text-sm bg-slate-50 border border-slate-200 px-3 py-1 rounded">
-                              —
+                              -
                             </span>
                           </>
                         )}
