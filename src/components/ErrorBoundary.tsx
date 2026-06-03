@@ -1,4 +1,5 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import * as React from 'react';
+import { ErrorInfo, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 
 interface Props {
@@ -10,7 +11,7 @@ interface State {
   errorMessage: string;
 }
 
-export class ErrorBoundary extends Component<Props, State> {
+export class ErrorBoundary extends React.Component<Props, State> {
   public state: State = {
     hasError: false,
     errorMessage: ""

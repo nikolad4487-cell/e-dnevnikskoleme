@@ -15,10 +15,9 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   usePageTitle("Dnevnik rada");
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { user, isMainAdmin } = useAuth();
-  const { selectedSchoolId, selectedClassId: contextClassId } = useSelection();
+  const { selectedSchoolId, selectedClassId: contextClassId, selectedYearId } = useSelection();
   
   const effectiveClassId = contextClassId || routeClassId;
-
   const [classes, setClasses] = useState<Class[]>([]);
   const selectedClass = classes.find(c => c.id === effectiveClassId);
   const [students, setStudents] = useState<User[]>([]);
@@ -268,7 +267,10 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     subjectId: '',
     completedDate: new Date().toISOString().split('T')[0],
     title: '',
-    description: ''
+    description: '',
+    author: '',
+    processingMethod: '',
+    processingDetails: ''
   });
 
   const fetchLektire = async () => {
@@ -306,21 +308,43 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
       const isNew = !editingLektira;
       const url = isNew ? `/api/lektire` : `/api/lektire/${editingLektira.id}`;
       const method = isNew ? 'POST' : 'PUT';
+      
+      const schoolYearId = selectedYearId || selectedClass?.school_year_id || null;
+      const schoolId = selectedSchoolId || selectedClass?.school_id || user?.school_id || null;
+      const classIdForLektira = effectiveClassId || null;
+
+      if (!classIdForLektira || !schoolId) {
+        toast.error('Nije moguće odrediti razred ili školu.');
+        return;
+      }
+
+      const payload = {
+        classId: classIdForLektira,
+        subjectId: targetSubjectId,
+        completedDate: lektiraForm.completedDate,
+        title: lektiraForm.title,
+        description: lektiraForm.description,
+        createdBy: user?.id,
+        schoolId: schoolId,
+        schoolYearId: schoolYearId,
+        teacherId: user?.id,
+        author: lektiraForm.author || '',
+        processingMethod: lektiraForm.processingMethod || '',
+        processingDetails: lektiraForm.processingDetails || ''
+      };
+
+      console.log("[LEKTIRA] SAVE PAYLOAD", payload);
 
       const res = await fetch(url, {
         method,
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          classId: effectiveClassId,
-          subjectId: targetSubjectId,
-          completedDate: lektiraForm.completedDate,
-          title: lektiraForm.title,
-          description: lektiraForm.description,
-          createdBy: user?.id
-        })
+        body: JSON.stringify(payload)
       });
+      
+      const responseData = await res.json();
+      console.log("[LEKTIRA] SAVE RESPONSE", responseData);
 
       if (res.ok) {
         toast.success(isNew ? 'Lektira uspješno dodana!' : 'Lektira uspješno spremljena!');
@@ -328,16 +352,20 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
           subjectId: '',
           completedDate: new Date().toISOString().split('T')[0],
           title: '',
-          description: ''
+          description: '',
+          author: '',
+          processingMethod: '',
+          processingDetails: ''
         });
         setEditingLektira(null);
         setShowLektiraModal(false);
         fetchLektire();
       } else {
-        throw new Error();
+        console.error("[LEKTIRA] SAVE ERROR", responseData);
+        throw new Error(responseData.error || 'Greška pri spremanju lektire');
       }
-    } catch (err) {
-      toast.error('Greška pri spremanju lektire');
+    } catch (err: any) {
+      toast.error(err.message || 'Greška pri spremanju lektire');
     }
   };
 
