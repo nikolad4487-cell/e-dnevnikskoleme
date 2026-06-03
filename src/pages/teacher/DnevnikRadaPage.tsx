@@ -277,6 +277,10 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
       const res = await fetch(`/api/lektire?classId=${effectiveClassId}`);
       if (res.ok) {
         const data = await res.json();
+        console.log("[LEKTIRA] Loaded records:", data ? data.length : 0);
+        console.log("[LEKTIRA] User role:", user?.role);
+        console.log("[LEKTIRA] Class:", effectiveClassId);
+        console.log("[LEKTIRA] Query result:", data);
         setLektire(data || []);
       }
     } catch (e) {

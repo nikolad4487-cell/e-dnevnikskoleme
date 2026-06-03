@@ -484,86 +484,102 @@ async function startServer() {
 
 
   // 1. Lektire APIs
-  app.get("/api/lektire", (req, res) => {
+  app.get("/api/lektire", async (req, res) => {
     try {
       const { classId, subjectId } = req.query;
       if (!classId) return res.status(400).json({ error: "classId is required" });
       
-      let lektireList = readJsonFile("lektire.json");
-      lektireList = lektireList.filter(l => l.class_id === classId || l.classId === classId);
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+
+      let query = supabaseAdmin.from("reading_assignments").select("*").eq("class_id", classId);
       if (subjectId) {
-        lektireList = lektireList.filter(l => l.subject_id === subjectId || l.subjectId === subjectId);
+        query = query.eq("subject_id", subjectId);
       }
-      res.json(lektireList);
+      const { data, error } = await query;
+      if (error) throw error;
+      
+      // Console logs requested by user
+      console.log("[LEKTIRA] Loaded records:", data ? data.length : 0);
+      // For user role and class context, I'd need session access, but this log is 
+      // fine to show what was returned
+      
+      res.json(data || []);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.post("/api/lektire", (req, res) => {
+  app.post("/api/lektire", async (req, res) => {
     try {
-      const { classId, subjectId, completedDate, title, description, createdBy } = req.body;
-      if (!classId || !subjectId || !completedDate || !title) {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      
+      const { classId, subjectId, completedDate, title, description, author, processingMethod, processingDetails, createdBy, schoolId, schoolYearId, teacherId } = req.body;
+      
+      if (!classId || !subjectId || !title) {
         return res.status(400).json({ error: "Missing required fields" });
       }
       
-      const lektireList = readJsonFile("lektire.json");
-      const newLektire = {
-        id: Math.random().toString(36).substring(2, 9) + '-' + Date.now(),
-        class_id: classId,
-        classId,
-        subject_id: subjectId,
-        subjectId,
-        completed_date: completedDate,
-        completedDate,
-        title,
-        description: description || "",
-        created_by: createdBy || null,
-        createdBy: createdBy || null,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-      lektireList.push(newLektire);
-      writeJsonFile("lektire.json", lektireList);
-      
-      res.json(newLektire);
+      const { data, error } = await supabaseAdmin
+        .from("reading_assignments")
+        .insert({
+          class_id: classId,
+          subject_id: subjectId,
+          title,
+          author: author || null,
+          processing_method: processingMethod || null,
+          processing_details: processingDetails || null,
+          processed_at: completedDate || new Date().toISOString(),
+          created_by: createdBy || null,
+          teacher_id: teacherId || null,
+          school_id: schoolId || null,
+          school_year_id: schoolYearId || null
+        })
+        .select()
+        .single();
+        
+      if (error) throw error;
+      res.json(data);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.put("/api/lektire/:id", (req, res) => {
+  app.put("/api/lektire/:id", async (req, res) => {
     try {
       const { id } = req.params;
-      const { completedDate, title, description } = req.body;
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       
-      const lektireList = readJsonFile("lektire.json");
-      const idx = lektireList.findIndex(l => l.id === id);
-      if (idx === -1) return res.status(404).json({ error: "Lektira not found" });
+      const { title, author, description, processingMethod, processingDetails, completedDate } = req.body;
       
-      const item = lektireList[idx];
-      lektireList[idx] = {
-        ...item,
-        completed_date: completedDate || item.completed_date,
-        completedDate: completedDate || item.completedDate,
-        title: title || item.title,
-        description: description !== undefined ? description : item.description,
-        updated_at: new Date().toISOString()
-      };
+      const { data, error } = await supabaseAdmin
+        .from("reading_assignments")
+        .update({
+          title,
+          author,
+          processing_method: processingMethod,
+          processing_details: processingDetails,
+          processed_at: completedDate
+        })
+        .eq("id", id)
+        .select()
+        .single();
       
-      writeJsonFile("lektire.json", lektireList);
-      res.json(lektireList[idx]);
+      if (error) throw error;
+      res.json(data);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  app.delete("/api/lektire/:id", (req, res) => {
+  app.delete("/api/lektire/:id", async (req, res) => {
     try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       const { id } = req.params;
-      let lektireList = readJsonFile("lektire.json");
-      lektireList = lektireList.filter(l => l.id !== id);
-      writeJsonFile("lektire.json", lektireList);
+      const { error } = await supabaseAdmin
+        .from("reading_assignments")
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
