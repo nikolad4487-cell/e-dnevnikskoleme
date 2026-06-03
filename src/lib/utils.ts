@@ -74,12 +74,24 @@ export function formatName(item: any) {
 }
 
 export function formatSubjectDisplayName(subjectName: string, subjectType: string) {
-  if (!subjectType || subjectType.toLowerCase() === 'redovni') {
+  if (!subjectType) return subjectName;
+  const t = subjectType.toLowerCase().trim();
+  if (t === 'redovni' || t === 'required' || t === 'obvezni' || t === 'obvezan') {
     return subjectName;
   }
-  const suffix = subjectType.toLowerCase();
-  
-  return `${subjectName} (${suffix})`;
+  if (t === 'elective' || t === 'izborni') {
+    return `${subjectName} (izborni)`;
+  }
+  return `${subjectName} (${subjectType})`;
+}
+
+export function sanitizeSubjectType(type: string | null | undefined): 'REQUIRED' | 'ELECTIVE' {
+  if (!type) return 'REQUIRED';
+  const val = type.toLowerCase().trim();
+  if (val === 'izborni' || val === 'elective' || val.includes('izborni') || val.includes('elective')) {
+    return 'ELECTIVE';
+  }
+  return 'REQUIRED';
 }
 
 export const finalGradeLabels: Record<string, string> = {

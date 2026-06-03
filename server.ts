@@ -209,7 +209,7 @@ async function startServer() {
           if (classId) query = query.eq('class_id', classId);
           if (schoolId) query = query.eq('school_id', schoolId);
           
-          const { error } = await query;
+          const { data, error } = await query;
           if (data && !error) {
             dbData = data;
           } else if (error && error.code !== 'PGRST205') {

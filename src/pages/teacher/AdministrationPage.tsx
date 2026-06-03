@@ -7,7 +7,7 @@ import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, Cu
 import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info, FileText } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
-import { cn, getSurname, formatSubjectDisplayName, formatPersonName } from '../../lib/utils';
+import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import CertificateManagementPage from './certificates/CertificateManagementPage';
 import InformativkaAdminPage from '../admin/InformativkaAdminPage';
@@ -2455,9 +2455,9 @@ setAllSubjects(uniqueSub2);
         class_id: assignmentForm.classId,
         subject_id: assignmentForm.subjectId,
         school_id: selectedSchoolId,
-        subject_type: assignmentForm.subjectType,
-        is_foreign_language: assignmentForm.isForeignLanguage,
-        subject_period: assignmentForm.subjectPeriod,
+        subject_type: sanitizeSubjectType(assignmentForm.subjectType),
+        is_foreign_language: typeof assignmentForm.isForeignLanguage === 'boolean' ? assignmentForm.isForeignLanguage : false,
+        subject_period: assignmentForm.subjectPeriod || 'FULL_YEAR',
         planned_hours_semester_1: assignmentForm.plannedHoursSemester1 ? parseInt(assignmentForm.plannedHoursSemester1) : null,
         planned_hours_total: assignmentForm.plannedHoursTotal ? parseInt(assignmentForm.plannedHoursTotal) : null
       };

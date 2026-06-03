@@ -16,7 +16,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
-import { formatSubjectDisplayName } from '../../lib/utils';
+import { formatSubjectDisplayName, sanitizeSubjectType } from '../../lib/utils';
 
 export default function ClassSubjectsPage() {
   const { selectedSchoolId, selectedClassId } = useSelection();
@@ -187,7 +187,8 @@ export default function ClassSubjectsPage() {
         class_id: classId,
         subject_id: selectedSubjectId,
         school_id: selectedSchoolId,
-        subject_type: 'redovni',
+        subject_type: 'REQUIRED',
+        is_foreign_language: false,
         subject_period: 'FULL_YEAR'
       }], { onConflict: 'class_id,subject_id' });
       if (csError) throw csError;
@@ -253,7 +254,7 @@ export default function ClassSubjectsPage() {
           class_id: classId,
           subject_id: subjectId,
           school_id: selectedSchoolId,
-          subject_type: subjectType,
+          subject_type: sanitizeSubjectType(subjectType),
           subject_period: subjectPeriod
         }], { onConflict: 'class_id,subject_id' });
 

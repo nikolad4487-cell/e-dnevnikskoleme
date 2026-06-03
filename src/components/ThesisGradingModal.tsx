@@ -10,7 +10,7 @@ interface ThesisGradingModalProps {
 
 export default function ThesisGradingModal({ app, onClose, onSubmit, students }: ThesisGradingModalProps) {
   const [workGrade, setWorkGrade] = useState(app.creation_grade?.toString() || '');
-  const [workDate, setWorkDate] = useState(app.creation_grade_date || new Date().toISOString().split('T')[0]);
+  const [workDate, setWorkDate] = useState(app.creation_date || new Date().toISOString().split('T')[0]);
   const [defenseGrade, setDefenseGrade] = useState(app.defense_grade?.toString() || '');
   const [defenseDate, setDefenseDate] = useState(app.defense_date || new Date().toISOString().split('T')[0]);
   const [finalGrade, setFinalGrade] = useState(app.final_grade?.toString() || '');
