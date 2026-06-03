@@ -17,6 +17,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: 'Škole', path: '/admin-skole/schools' },
   { label: 'Admin. škole', path: '/admin-skole' },
   { label: 'Razredi', path: '/admin-skole/razredi' },
+  { label: 'Zamjene', path: '/admin-skole/zamjene' },
   { label: 'Korisnici', path: '/admin-skole/korisnici' },
   { label: 'Predmeti', path: '/admin-skole/predmeti' },
 ];

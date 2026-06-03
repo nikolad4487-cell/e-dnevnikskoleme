@@ -505,3 +505,34 @@ export interface ThesisApplication {
   
   committee_members?: ThesisCommitteeMember[];
 }
+
+export interface SystemAuditLog {
+  id: string;
+  executor_id?: string;
+  school_id?: string;
+  action_type: string;
+  entity_type: string;
+  entity_id: string;
+  old_value?: any;
+  new_value?: any;
+  created_at: string;
+}
+
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  type: 'GRADE' | 'ABSENCE' | 'MESSAGE' | 'THESIS' | 'SYSTEM' | string;
+  is_read: boolean;
+  link?: string;
+  created_at: string;
+}
+
+export interface StudentParentLink {
+  id: string;
+  parent_id: string;
+  student_id: string;
+  created_at: string;
+  student?: UserProfile;
+}

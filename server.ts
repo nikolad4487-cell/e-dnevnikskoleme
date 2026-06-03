@@ -963,6 +963,21 @@ CREATE TABLE IF NOT EXISTS public.final_thesis_committee_members (
     }
   });
 
+  app.post("/api/admin/run-audit-migration", async (req, res) => {
+    try {
+        if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+        const sql1 = fs.readFileSync("migrations/20260603000001_notifications.sql", "utf8");
+        const sql2 = fs.readFileSync("migrations/20260603000002_notification_triggers.sql", "utf8");
+        
+        await supabaseAdmin.query(sql1);
+        await supabaseAdmin.query(sql2);
+        
+        res.json({ success: true });
+    } catch (err: any) {
+        res.status(500).json({ error: err.message });
+    }
+  });
+
   // Ensure profile endpoint for missing profiles on login
   app.post("/api/ensure-profile", async (req, res) => {
     try {

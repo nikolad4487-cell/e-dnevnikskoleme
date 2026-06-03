@@ -60,6 +60,7 @@ const StudentsPage = lazy(() => import('./pages/admin/StudentsPage'));
 const ProgramsPage = lazy(() => import('./pages/admin/ProgramsPage'));
 const RolloverPage = lazy(() => import('./pages/admin/RolloverPage'));
 const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
+const ZamjenePage = lazy(() => import('./pages/admin/ZamjenePage'));
 
 const ClassDashboardPage = lazy(() => import('./pages/teacher/ClassDashboardPage'));
 
@@ -146,6 +147,7 @@ export default function App() {
                       <Route path="schools" element={<SchoolsManagementPage />} />
                       <Route path="skolske-godine" element={<SchoolYearsPage />} />
                       <Route path="razredi" element={<ClassManagementPage />} />
+                      <Route path="zamjene" element={<ZamjenePage />} />
                       <Route path="korisnici" element={<UserManagementPage />} />
                       <Route path="ucenici" element={<StudentsPage />} />
                       <Route path="predmeti" element={<SubjectManagementPage />} />

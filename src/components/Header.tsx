@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { User, LogOut, Settings, Repeat } from 'lucide-react';
+import { User, LogOut, Settings, Repeat, Bell } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { cn, formatPersonName } from '../lib/utils';
-import { Role } from '../types';
+import { Role, Notification } from '../types';
 
 interface HeaderProps {
   showNav?: boolean;
@@ -28,21 +28,61 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  
   const menuRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
 
   const isSchoolAdminRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/admin-skole');
   const finalHideClass = hideClass || isSchoolAdminRoute;
   
   useEffect(() => {
-    console.log("EFFECT RUN: Header HandleClickOutside");
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setIsMenuOpen(false);
+      }
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setIsNotifOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    
+    const fetchNotifications = async () => {
+      const { data } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      if (data) {
+        setNotifications(data as Notification[]);
+      }
+    };
+    
+    fetchNotifications();
+    
+    const notifSub = supabase
+      .channel('notifications_channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, 
+        () => fetchNotifications()
+      )
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(notifSub);
+    };
+  }, [user]);
+
+  const markAsRead = async (id: string) => {
+    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -116,19 +156,53 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
       </div>
 
       {/* User Info Right */}
-      <div className="flex items-center gap-4 relative" ref={menuRef}>
-        <div className="text-right">
-             <div className="text-[12px] font-bold leading-tight">{formatPersonName(user)}</div>
-             <div className="text-[10px] text-white/70 uppercase">{formattedRoles}</div>
+      <div className="flex items-center gap-4 relative">
+        <div className="relative" ref={notifRef}>
+          <button
+            onClick={() => setIsNotifOpen(!isNotifOpen)}
+            className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 relative"
+          >
+            <Bell size={18} />
+            {notifications.filter(n => !n.is_read).length > 0 && (
+              <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#005c8d]"></span>
+            )}
+          </button>
+          
+          {isNotifOpen && (
+            <div className="absolute right-0 top-full mt-2 w-80 bg-white text-gray-800 border border-gray-200 shadow-xl rounded py-2 z-[100] animate-in fade-in zoom-in-95 duration-100 max-h-[400px] overflow-y-auto">
+              <div className="px-4 pb-2 border-b border-gray-100 font-bold text-sm">Obavijesti</div>
+              {notifications.length === 0 ? (
+                <div className="px-4 py-6 text-center text-sm text-gray-500">Nema novih obavijesti.</div>
+              ) : (
+                notifications.map(n => (
+                  <div key={n.id} className={cn("px-4 py-3 border-b border-gray-50 text-sm hover:bg-slate-50 cursor-pointer", n.is_read ? 'opacity-70' : 'bg-blue-50/30')} onClick={() => {
+                    markAsRead(n.id);
+                    if (n.link) navigate(n.link);
+                    setIsNotifOpen(false);
+                  }}>
+                    <div className="font-semibold text-gray-800">{n.title}</div>
+                    <div className="text-gray-600 text-xs mt-0.5 line-clamp-2">{n.message}</div>
+                    <div className="text-gray-400 text-[10px] mt-1">{new Date(n.created_at).toLocaleDateString('hr-HR')}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
-        <button 
-          onClick={() => setIsMenuOpen(!isMenuOpen)}
-          className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30"
-        >
-          <User size={18} />
-        </button>
 
-        {isMenuOpen && (
+        <div className="flex items-center gap-4 relative" ref={menuRef}>
+          <div className="text-right">
+               <div className="text-[12px] font-bold leading-tight">{formatPersonName(user)}</div>
+               <div className="text-[10px] text-white/70 uppercase">{formattedRoles}</div>
+          </div>
+          <button 
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30"
+          >
+            <User size={18} />
+          </button>
+
+          {isMenuOpen && (
           <div className="absolute right-0 top-full mt-2 w-48 bg-white text-gray-800 border border-gray-200 shadow-xl rounded py-1 z-[100] animate-in fade-in zoom-in-95 duration-100">
             {(isStudent || isParent) && (
               <button 
@@ -169,6 +243,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
           </div>
         )}
       </div>
+     </div>
     </header>
   );
 }

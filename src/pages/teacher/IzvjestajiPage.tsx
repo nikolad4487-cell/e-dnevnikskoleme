@@ -2,15 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
-import { BarChart3, PieChart, TrendingUp, Users, Award, AlertTriangle } from 'lucide-react';
+import { BarChart3, PieChart, TrendingUp, Users, Award, AlertTriangle, FileText, User } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Role } from '../../types';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart as RechartsPieChart, Pie } from 'recharts';
+
+type ReportTab = 'GENERAL' | 'STUDENTS' | 'CLASSES' | 'SUBJECTS' | 'ABSENCES' | 'FINAL_GRADES';
 
 export default function IzvjestajiPage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { selectedSchoolId, selectedClassId: contextClassId } = useSelection();
   
   const effectiveClassId = contextClassId || routeClassId;
+
+  const [activeTab, setActiveTab] = useState<ReportTab>('GENERAL');
+  const [loading, setLoading] = useState(false);
 
   const [stats, setStats] = useState({
     totalStudents: 0,
@@ -19,64 +25,159 @@ export default function IzvjestajiPage() {
     gradesDistribution: [0, 0, 0, 0, 0] // 1-5
   });
 
+  const [reportData, setReportData] = useState<any[]>([]);
+
   useEffect(() => {
     const fetchData = async () => {
-      // Students count
-      let studentsQ = supabase.from('student_class_enrollments').select('id', { count: 'exact', head: true }).eq('status', 'ACTIVE');
-      if (effectiveClassId) {
-        studentsQ = studentsQ.eq('class_id', effectiveClassId);
-      } else if (selectedSchoolId) {
-        studentsQ = studentsQ.eq('school_id', selectedSchoolId);
+      setLoading(true);
+      if (activeTab === 'GENERAL') {
+          // Students count
+          let studentsQ = supabase.from('student_class_enrollments').select('id', { count: 'exact', head: true }).eq('status', 'ACTIVE');
+          if (effectiveClassId) studentsQ = studentsQ.eq('class_id', effectiveClassId);
+          else if (selectedSchoolId) studentsQ = studentsQ.eq('school_id', selectedSchoolId);
+          const { count: studentsCount } = await studentsQ;
+
+          // Grades
+          let gradeQ = supabase.from('grades').select('value');
+          if (effectiveClassId) gradeQ = gradeQ.eq('class_id', effectiveClassId);
+          else if (selectedSchoolId) gradeQ = gradeQ.eq('school_id', selectedSchoolId);
+          const { data: gradesData } = await gradeQ;
+
+          // Absences count
+          let absenceQ = supabase.from('absences').select('id', { count: 'exact', head: true });
+          if (effectiveClassId) absenceQ = absenceQ.eq('class_id', effectiveClassId);
+          else if (selectedSchoolId) absenceQ = absenceQ.eq('school_id', selectedSchoolId);
+          const { count: absencesCount } = await absenceQ;
+
+          const grades = (gradesData || []).map(d => d.value);
+          const avg = grades.length > 0 ? (grades.reduce((a, b) => a + b, 0) / grades.length).toFixed(2) : '0';
+          
+          const distribution = [0, 0, 0, 0, 0];
+          grades.forEach(v => {
+            if (v >= 1 && v <= 5) distribution[v-1]++;
+          });
+
+          setStats({
+            totalStudents: studentsCount || 0,
+            avgGrade: Number(avg),
+            totalAbsences: absencesCount || 0,
+            gradesDistribution: distribution
+          });
+      } else if (activeTab === 'STUDENTS') {
+          // fetch students stats
+          let studentsQ = supabase.from('student_class_enrollments').select('student_id, user_profiles(name, email)').eq('status', 'ACTIVE');
+          if (effectiveClassId) studentsQ = studentsQ.eq('class_id', effectiveClassId);
+          
+          const { data: stdData } = await studentsQ;
+          if (stdData) {
+              const studentRows = await Promise.all(stdData.map(async (st: any) => {
+                  let { data: gr } = await supabase.from('grades').select('value').eq('student_id', st.student_id);
+                  let { count: absCount } = await supabase.from('absences').select('id', { count: 'exact', head: true }).eq('student_id', st.student_id);
+                  
+                  const avg = gr && gr.length > 0 ? (gr.reduce((a,b)=>a+b.value, 0)/gr.length).toFixed(2) : '0';
+                  return {
+                      id: st.student_id,
+                      name: st.user_profiles?.name || 'Nepoznato',
+                      avg: Number(avg),
+                      absences: absCount || 0
+                  };
+              }));
+              setReportData(studentRows.sort((a,b)=> a.name.localeCompare(b.name)));
+          }
+      } else if (activeTab === 'CLASSES') {
+          // fetch classes stats
+          const { data: clsData } = await supabase.from('classes').select('id, name, school_year');
+          if (clsData) {
+             const classRows = await Promise.all(clsData.map(async (c: any) => {
+                  let { data: gr } = await supabase.from('grades').select('value').eq('class_id', c.id);
+                  const avg = gr && gr.length > 0 ? (gr.reduce((a,b)=>a+b.value, 0)/gr.length).toFixed(2) : '0';
+                  return {
+                      id: c.id,
+                      name: c.name + " (" + (c.school_year || "") + ")",
+                      avg: Number(avg),
+                      gradesCount: gr ? gr.length : 0
+                  };
+             }));
+             setReportData(classRows.sort((a,b)=> b.avg - a.avg)); // sort by avg grade descending
+          }
+      } else if (activeTab === 'SUBJECTS') {
+         // Subjects
+         let subQ = supabase.from('class_subjects').select('subject_id, subjects(name)').eq('class_id', effectiveClassId || '');
+         const { data: csData } = effectiveClassId ? await subQ : await supabase.from('subjects').select('id, name').eq('school_id', selectedSchoolId || '');
+         
+         const subList = effectiveClassId ? (csData||[]).map((c:any)=>({id: c.subject_id, name: c.subjects?.name})) : (csData||[]);
+         const subRows = await Promise.all(subList.map(async (s:any) => {
+               let q = supabase.from('grades').select('value').eq('subject_id', s.id);
+               if(effectiveClassId) q = q.eq('class_id', effectiveClassId);
+               const { data: gr } = await q;
+               const avg = gr && gr.length > 0 ? (gr.reduce((a,b)=>a+b.value, 0)/gr.length).toFixed(2) : '0';
+               return { id: s.id, name: s.name, avg: Number(avg), count: gr?gr.length:0 };
+         }));
+         setReportData(subRows.sort((a,b)=> b.avg - a.avg));
+      } else if (activeTab === 'ABSENCES') {
+         // Absences breakdown
+         let absQ = supabase.from('absences').select('status');
+         if (effectiveClassId) absQ = absQ.eq('class_id', effectiveClassId);
+         const { data: abData } = await absQ;
+         
+         const breakdown = { EXCUSED: 0, UNEXCUSED: 0, UNRESOLVED: 0 };
+         (abData||[]).forEach(a => {
+             if(a.status === 'EXCUSED') breakdown.EXCUSED++;
+             else if(a.status === 'UNEXCUSED') breakdown.UNEXCUSED++;
+             else breakdown.UNRESOLVED++;
+         });
+         setReportData([{ status: 'Opravdani', count: breakdown.EXCUSED, color: '#16a34a' }, { status: 'Neopravdani', count: breakdown.UNEXCUSED, color: '#dc2626' }, { status: 'Neriješeni', count: breakdown.UNRESOLVED, color: '#f59e0b'}]);
+      } else if (activeTab === 'FINAL_GRADES') {
+         let subQ = supabase.from('class_subjects').select('subject_id, subjects(name)').eq('class_id', effectiveClassId || '');
+         const { data: csData } = effectiveClassId ? await subQ : await supabase.from('subjects').select('id, name').eq('school_id', selectedSchoolId || '');
+         
+         const subList = effectiveClassId ? (csData||[]).map((c:any)=>({id: c.subject_id, name: c.subjects?.name})) : (csData||[]);
+         const subRows = await Promise.all(subList.map(async (s:any) => {
+               let q = supabase.from('final_grades').select('grade').eq('subject_id', s.id);
+               if(effectiveClassId) q = q.eq('class_id', effectiveClassId);
+               const { data: gr } = await q;
+               const avg = gr && gr.length > 0 ? (gr.reduce((a,b)=>a+b.grade, 0)/gr.length).toFixed(2) : '0';
+               return { id: s.id, name: s.name, avg: Number(avg), count: gr?gr.length:0 };
+         }));
+         setReportData(subRows.sort((a,b)=> b.avg - a.avg));
       }
-      const { count: studentsCount } = await studentsQ;
-
-      // Grades
-      let gradeQ = supabase.from('grades').select('value');
-      if (effectiveClassId) {
-        gradeQ = gradeQ.eq('class_id', effectiveClassId);
-      } else if (selectedSchoolId) {
-        gradeQ = gradeQ.eq('school_id', selectedSchoolId);
-      }
-      const { data: gradesData } = await gradeQ;
-
-      // Absences count
-      let absenceQ = supabase.from('absences').select('id', { count: 'exact', head: true });
-      if (effectiveClassId) {
-        absenceQ = absenceQ.eq('class_id', effectiveClassId);
-      } else if (selectedSchoolId) {
-        absenceQ = absenceQ.eq('school_id', selectedSchoolId);
-      }
-      const { count: absencesCount } = await absenceQ;
-
-      const grades = (gradesData || []).map(d => d.value);
-      const avg = grades.length > 0 ? (grades.reduce((a, b) => a + b, 0) / grades.length).toFixed(2) : '0';
-      
-      const distribution = [0, 0, 0, 0, 0];
-      grades.forEach(v => {
-        if (v >= 1 && v <= 5) distribution[v-1]++;
-      });
-
-      setStats({
-        totalStudents: studentsCount || 0,
-        avgGrade: Number(avg),
-        totalAbsences: absencesCount || 0,
-        gradesDistribution: distribution
-      });
+      setLoading(false);
     };
     fetchData();
-  }, [selectedSchoolId, effectiveClassId]);
+  }, [selectedSchoolId, effectiveClassId, activeTab]);
 
   return (
     <div className="flex flex-col h-full bg-white font-sans">
-      <div className="bg-[#f8fafc] border-b border-gray-300 px-4 py-2 flex items-center justify-between">
-        <h2 className="text-sm font-black text-[#005c8d] flex items-center gap-2 uppercase tracking-widest leading-none">
-          <BarChart3 size={16} />
-          Izvještaji i statistika
-        </h2>
-        <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest underline decoration-dotted">Školska godina 2023/2024</div>
+      <div className="bg-[#f8fafc] border-b border-gray-300 px-4 py-0 flex flex-col pt-3">
+        <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-black text-[#005c8d] flex items-center gap-2 uppercase tracking-widest leading-none">
+            <BarChart3 size={16} />
+            Izvještaji i statistika
+            </h2>
+            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest underline decoration-dotted">Školska godina 2023/2024</div>
+        </div>
+        
+        <div className="flex gap-4 overflow-x-auto">
+            {(['GENERAL', 'STUDENTS', 'CLASSES', 'SUBJECTS', 'ABSENCES', 'FINAL_GRADES'] as ReportTab[]).map((tab) => (
+               <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={cn(
+                    "px-4 py-2 text-[10px] font-black uppercase tracking-widest whitespace-nowrap transition-colors border-b-2",
+                    activeTab === tab ? "border-[#005c8d] text-[#005c8d]" : "border-transparent text-gray-500 hover:text-gray-800"
+                  )}
+               >
+                 {tab === 'GENERAL' ? 'Opći izvještaj' : tab === 'STUDENTS' ? 'Po učeniku' : tab === 'CLASSES' ? 'Po razredu' : tab === 'SUBJECTS' ? 'Po predmetu' : tab === 'ABSENCES' ? 'Izostanci' : 'Zaključne ocjene'}
+               </button>
+            ))}
+        </div>
       </div>
 
       <div className="p-6 overflow-auto">
+        {loading ? (
+           <div className="py-12 text-center text-sm font-bold text-gray-400">Učitavanje...</div>
+        ) : activeTab === 'GENERAL' ? (
+        <>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-0 border border-gray-300 divide-x divide-gray-300 mb-8 shadow-sm">
           <div className="bg-white p-6">
             <div className="flex items-center justify-between mb-4">
@@ -145,6 +246,48 @@ export default function IzvjestajiPage() {
              <button className="mt-8 px-6 py-2 border border-[#005c8d] text-[#005c8d] text-[10px] font-black uppercase tracking-widest hover:bg-[#005c8d] hover:text-white transition-all">Ispiši izvještaj</button>
           </div>
         </div>
+        </>
+        ) : activeTab === 'ABSENCES' ? (
+           <div className="bg-white border border-gray-300 p-6">
+               <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-6 border-b border-gray-200 pb-2">Status izostanaka</h3>
+               <div className="h-80 w-full flex justify-center">
+                   <ResponsiveContainer width="100%" height="100%">
+                       <RechartsPieChart>
+                           <Tooltip formatter={(value: any, name: any) => [`${value} sati`, name]} />
+                           <Pie data={reportData} dataKey="count" nameKey="status" cx="50%" cy="50%" outerRadius={100} label>
+                               {reportData.map((entry, index) => (
+                                   <Cell key={`cell-${index}`} fill={entry.color} />
+                               ))}
+                           </Pie>
+                       </RechartsPieChart>
+                   </ResponsiveContainer>
+               </div>
+           </div>
+        ) : (
+           <div className="bg-white border border-gray-300 shadow-sm overflow-hidden">
+               <table className="w-full text-left border-collapse">
+                   <thead>
+                       <tr className="bg-[#f8fafc] border-b border-gray-300">
+                           <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest">Naziv</th>
+                           <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right">Prosjek ocjena</th>
+                           {activeTab === 'STUDENTS' && <th className="px-4 py-3 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right">Izostanci</th>}
+                       </tr>
+                   </thead>
+                   <tbody className="divide-y divide-gray-200">
+                       {reportData.map((row, i) => (
+                           <tr key={i} className="hover:bg-gray-50">
+                               <td className="px-4 py-3 text-[12px] font-bold text-gray-900 border-r border-gray-100">{row.name}</td>
+                               <td className="px-4 py-3 text-[12px] font-bold text-[#005c8d] text-right border-r border-gray-100">{row.avg > 0 ? row.avg : '—'}</td>
+                               {activeTab === 'STUDENTS' && <td className="px-4 py-3 text-[12px] font-bold text-orange-600 text-right">{row.absences || '0'}</td>}
+                           </tr>
+                       ))}
+                       {reportData.length === 0 && (
+                           <tr><td colSpan={3} className="px-4 py-8 text-center text-gray-400 text-sm">Nema podataka za prikaz</td></tr>
+                       )}
+                   </tbody>
+               </table>
+           </div>
+        )}
       </div>
     </div>
   );
