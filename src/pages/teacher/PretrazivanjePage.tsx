@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Search, User, Mail, Hash, BookOpen } from 'lucide-react';
@@ -6,6 +7,7 @@ import { cn, getSurname, matchesSearch, sortStudentsBySurname } from '../../lib/
 import { Role } from '../../types';
 
 export default function PretrazivanjePage() {
+  const navigate = useNavigate();
   const { selectedSchoolId } = useSelection();
   const [searchTerm, setSearchTerm] = useState('');
   const [results, setResults] = useState<{ students: any[], lessons: any[] }>({ students: [], lessons: [] });
@@ -130,7 +132,12 @@ export default function PretrazivanjePage() {
                           <div className="flex items-center gap-2 text-[10px] text-gray-400 font-bold uppercase"><Hash size={12} className="text-gray-300" /> OIB: {u.oib || 'N/A'}</div>
                         </div>
                       </div>
-                      <button className="text-[10px] font-black text-[#005c8d] uppercase border border-gray-200 px-3 py-1 hover:bg-[#005c8d] hover:text-white transition-all whitespace-nowrap">Otvori dosje</button>
+                      <button 
+                        onClick={() => navigate(`/teacher/dosje?studentId=${u.id}`)}
+                        className="text-[10px] font-black text-[#005c8d] uppercase border border-gray-200 px-3 py-1 hover:bg-[#005c8d] hover:text-white transition-all whitespace-nowrap"
+                      >
+                        Otvori dosje
+                      </button>
                     </div>
                   ))}
                   {activeTab === 'LESSONS' && results.lessons.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(l => (

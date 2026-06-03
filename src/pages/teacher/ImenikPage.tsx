@@ -1573,7 +1573,15 @@ export default function ImenikPage() {
                   )}
                 >
                   <td className="px-3 py-2 text-center font-bold text-gray-500 border-r border-gray-200">{idx + 1}.</td>
-                  <td className="px-4 py-2 font-bold text-[#005c8d] border-r border-gray-200 group-hover:underline">{s.name}</td>
+                  <td className="px-4 py-2 font-bold text-[#005c8d] border-r border-gray-200 group-hover:underline">
+                    {s.name}
+                    {s.programAdjustment === 'REGULAR_WITH_ADAPTATION' && (
+                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200" title="Redovni program uz prilagodbu">P</span>
+                    )}
+                    {s.programAdjustment === 'REGULAR_WITH_INDIVIDUALIZATION' && (
+                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-purple-100 text-purple-800 border border-purple-200" title="Redovni program uz individualizaciju">I</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2 border-r border-gray-200">
                     {(() => {
                       const enrollment = studentEnrollments.find(e => e.student_id === s.id);

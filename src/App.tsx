@@ -39,11 +39,17 @@ const OsobniPodaciPage = lazy(() => import('./pages/student/OsobniPodaciPage'));
 const FinalThesisPage = lazy(() => import('./pages/student/FinalThesisPage'));
 const FinalThesisTeacherPage = lazy(() => import('./pages/teacher/FinalThesisTeacherPage'));
 
+const RavnateljDashboardPage = lazy(() => import('./pages/admin/RavnateljDashboardPage'));
+const MaticnaKnjigaPage = lazy(() => import('./pages/admin/MaticnaKnjigaPage'));
+const SkolskiKalendarPage = lazy(() => import('./pages/shared/SkolskiKalendarPage'));
+const InterniDokumentiPage = lazy(() => import('./pages/shared/InterniDokumentiPage'));
+
 // Shared
 const InformativkaPage = lazy(() => import('./pages/shared/InformativkaPage'));
 const InformativkaAdminPage = lazy(() => import('./pages/admin/InformativkaAdminPage'));
 const SettingsPage = lazy(() => import('./pages/shared/SettingsPage'));
 const AuthenticatorSetupPage = lazy(() => import('./pages/auth/AuthenticatorSetupPage'));
+const DigitalniDosjePage = lazy(() => import('./pages/shared/DigitalniDosjePage'));
 
 // Admin Pages
 const SchoolsManagementPage = lazy(() => import('./pages/admin/SchoolsManagementPage'));
@@ -61,6 +67,8 @@ const ProgramsPage = lazy(() => import('./pages/admin/ProgramsPage'));
 const RolloverPage = lazy(() => import('./pages/admin/RolloverPage'));
 const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
 const ZamjenePage = lazy(() => import('./pages/admin/ZamjenePage'));
+const SystemCheckPage = lazy(() => import('./pages/admin/SystemCheckPage'));
+const SystemHealthPage = lazy(() => import('./pages/admin/SystemHealthPage'));
 
 const ClassDashboardPage = lazy(() => import('./pages/teacher/ClassDashboardPage'));
 
@@ -154,8 +162,12 @@ export default function App() {
                       <Route path="programi" element={<ProgramsPage />} />
                       <Route path="rollover" element={<RolloverPage />} />
                       <Route path="postavke" element={<AdminSettingsPage />} />
+                      <Route path="system-check" element={<SystemCheckPage />} />
+                      <Route path="system-health" element={<SystemHealthPage />} />
                       <Route path="raspored" element={<ScheduleManagementPage />} />
                       <Route path="informativka" element={<InformativkaAdminPage />} />
+                      <Route path="ravnatelj-dashboard" element={<RavnateljDashboardPage />} />
+                      <Route path="maticna-knjiga" element={<MaticnaKnjigaPage />} />
                       <Route path="*" element={<Navigate to="/admin-skole" replace />} />
                     </Routes>
                   </BasicLayout>
@@ -179,7 +191,10 @@ export default function App() {
                         <Route path="informativka" element={<InformativkaPage />} />
                         <Route path="svjedodzbe" element={<CertificateManagementPage />} />
                         <Route path="zavrsni-radovi" element={<FinalThesisTeacherPage />} />
+                        <Route path="kalendar" element={<SkolskiKalendarPage />} />
+                        <Route path="dokumenti" element={<InterniDokumentiPage />} />
                         <Route path="postavke" element={<SettingsPage />} />
+                        <Route path="dosje" element={<DigitalniDosjePage />} />
                         
                         {/* Core class shortcuts / redirects */}
                         <Route path="imenik" element={<TeacherRedirectToClass subPath="imenik" />} />
@@ -191,6 +206,10 @@ export default function App() {
                         <Route path="absences" element={<TeacherRedirectToClass subPath="absences" />} />
                         <Route path="zapisnici" element={<TeacherRedirectToClass subPath="zapisnici" />} />
                         <Route path="minutes" element={<TeacherRedirectToClass subPath="minutes" />} />
+                        <Route path="student-dosje" element={<TeacherRedirectToClass subPath="dosje" />} />
+                        <Route path="roditeljski-sastanci" element={<TeacherRedirectToClass subPath="roditeljski-sastanci" />} />
+                        <Route path="individualni-razgovori" element={<TeacherRedirectToClass subPath="individualni-razgovori" />} />
+                        <Route path="dolasci-roditelja" element={<TeacherRedirectToClass subPath="dolasci-roditelja" />} />
                         <Route path="pedagoska-dokumentacija" element={<TeacherRedirectToClass subPath="pedagoska-dokumentacija" />} />
                         <Route path="pedagogical" element={<TeacherRedirectToClass subPath="pedagogical" />} />
                         <Route path="raspored" element={<TeacherRedirectToClass subPath="raspored" />} />
@@ -216,7 +235,10 @@ export default function App() {
                         <Route path="izostanci" element={<IzostanciPage />} />
                         <Route path="raspored" element={<RasporedPage />} />
                         <Route path="osobni-podaci" element={<OsobniPodaciPage />} />
+                        <Route path="dosje" element={<DigitalniDosjePage />} />
                         <Route path="zavrsni-rad" element={<FinalThesisPage />} />
+                        <Route path="kalendar" element={<SkolskiKalendarPage />} />
+                        <Route path="dokumenti" element={<InterniDokumentiPage />} />
                         <Route path="informativka" element={<InformativkaPage />} />
                         <Route path="informatika" element={<Navigate to="/student/informativka" replace />} />
                         <Route path="postavke" element={<SettingsPage />} />

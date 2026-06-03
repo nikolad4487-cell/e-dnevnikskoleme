@@ -1,0 +1,21 @@
+{
+  "name": "e-Dnevnik Plus",
+  "short_name": "Sustav",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#005c8d",
+  "description": "Potpuni školski informacijski sustav za učenike, roditelje i nastavnike.",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

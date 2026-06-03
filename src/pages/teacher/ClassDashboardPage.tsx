@@ -20,6 +20,9 @@ const PedagoskaDokumentacijaPage = lazy(() => import('./PedagoskaDokumentacijaPa
 const PretrazivanjePage = lazy(() => import('./PretrazivanjePage'));
 const ClassSubjectsPage = lazy(() => import('../admin/ClassSubjectsPage'));
 const ClassStudentsPage = lazy(() => import('../admin/ClassStudentsPage'));
+const RoditeljskiSastanciPage = lazy(() => import('./RoditeljskiSastanciPage'));
+const IndividualniRazgovoriPage = lazy(() => import('./IndividualniRazgovoriPage'));
+const DolasciRoditeljaPage = lazy(() => import('./DolasciRoditeljaPage'));
 
 export default function ClassDashboardPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -157,7 +160,7 @@ export default function ClassDashboardPage() {
   if (currentTab === 'work-overview') currentTab = 'pregled-rada';
   if (currentTab === 'work-journal') currentTab = 'dnevnik-rada';
   if (currentTab === 'absences') currentTab = 'izostanci';
-  if (currentTab === 'minutes') currentTab = 'zapisnici';
+  if (currentTab === 'minutes' || currentTab === 'roditeljski-sastanci' || currentTab === 'individualni-razgovori' || currentTab === 'dolasci-roditelja') currentTab = 'zapisnici';
   if (currentTab === 'pedagogical') currentTab = 'pedagoska-dokumentacija';
   if (currentTab === 'schedule') currentTab = 'raspored';
   if (currentTab === 'administration' || currentTab === 'predmeti' || currentTab === 'ucenici') currentTab = 'admin';
@@ -179,7 +182,10 @@ export default function ClassDashboardPage() {
       { label: 'Pregled izostanaka', path: 'izostanci' }
     ],
     'zapisnici': [
-      { label: 'Zapisnici', path: 'zapisnici' },
+      { label: 'Zapisnici vijeća', path: 'zapisnici' },
+      { label: 'Roditeljski sastanci', path: 'roditeljski-sastanci' },
+      { label: 'Individualni razgovori', path: 'individualni-razgovori' },
+      { label: 'Dolasci roditelja', path: 'dolasci-roditelja' },
       { label: 'Pedagoška dokumentacija', path: 'pedagoska-dokumentacija' }
     ],
     'admin': [
@@ -281,6 +287,10 @@ export default function ClassDashboardPage() {
               
               <Route path="zapisnici" element={<ZapisniciPage />} />
               <Route path="minutes" element={<ZapisniciPage />} />
+              
+              <Route path="roditeljski-sastanci" element={<RoditeljskiSastanciPage />} />
+              <Route path="individualni-razgovori" element={<IndividualniRazgovoriPage />} />
+              <Route path="dolasci-roditelja" element={<DolasciRoditeljaPage />} />
               
               <Route path="izvjestaji" element={<IzvjestajiPage />} />
               <Route path="informativka" element={<InformativkaPage />} />

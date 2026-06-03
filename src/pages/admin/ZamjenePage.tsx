@@ -55,7 +55,7 @@ export default function ZamjenePage() {
              .eq('school_id', selectedSchoolId)
              .in('role', ['TEACHER', 'HOMEROOM', 'DEPUTY', 'SCHOOL_ADMIN']);
              
-          const uniqueTeachers = Array.from(new Map((tp || []).map(r => [r.user_id, { id: r.user_id, name: r.user_profiles?.name || 'Nepoznato' }])).values());
+          const uniqueTeachers = Array.from(new Map((tp || []).map(r => [r.user_id, { id: r.user_id, name: (Array.isArray(r.user_profiles) ? (r.user_profiles[0] as any)?.name : (r.user_profiles as any)?.name) || 'Nepoznato' }])).values());
           setTeachers(uniqueTeachers as any);
 
           // fetch classes

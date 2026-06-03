@@ -48,7 +48,7 @@ interface StudentPedagogicalYearNotes {
 export default function PedagoskaDokumentacijaPage() {
   const { classId } = useParams<{ classId: string }>();
   const { user, isMainAdmin, userSchoolRoles } = useAuth();
-  const { selectedClassId } = useSelection();
+  const { selectedClassId, selectedSchoolId } = useSelection();
 
   const effectiveClassId = classId || selectedClassId;
 
@@ -94,6 +94,31 @@ export default function PedagoskaDokumentacijaPage() {
 
   // Active sub-tab
   const [activeSubTab, setActiveSubTab] = useState<string>('INFO');
+
+  // Pedagogical Measures States
+  const [pmMeasures, setPmMeasures] = useState<any[]>([]);
+  const [showPmForm, setShowPmForm] = useState(false);
+  const [editingPm, setEditingPm] = useState<any | null>(null);
+  const [pmDate, setPmDate] = useState('');
+  const [pmType, setPmType] = useState('Pohvala');
+  const [pmExplanation, setPmExplanation] = useState('');
+  const [pmIssuer, setPmIssuer] = useState('');
+  const [pmDocNumber, setPmDocNumber] = useState('');
+  const [pmStatus, setPmStatus] = useState('ACTIVE');
+
+  // Expert Service Activities States
+  const [expertActivities, setExpertActivities] = useState<any[]>([]);
+  const [eaRoleFilter, setEaRoleFilter] = useState<string>('SVI');
+  const [eaTypeFilter, setEaTypeFilter] = useState<string>('SVE');
+  const [showEaForm, setShowEaForm] = useState(false);
+  const [editingEa, setEditingEa] = useState<any | null>(null);
+  const [eaDate, setEaDate] = useState('');
+  const [eaRole, setEaRole] = useState('pedagog');
+  const [eaStaffName, setEaStaffName] = useState('');
+  const [eaType, setEaType] = useState('razgovor s učenikom');
+  const [eaDescription, setEaDescription] = useState('');
+  const [eaConclusion, setEaConclusion] = useState('');
+  const [eaRecommendation, setEaRecommendation] = useState('');
 
   // Delete Dialog state
   const [deleteDialog, setDeleteDialog] = useState<{
@@ -234,6 +259,30 @@ export default function PedagoskaDokumentacijaPage() {
         const yearData = await notesRes.json();
         setYearNotes(yearData);
       }
+
+      // C. Load pedagogical measures
+      const { data: pmData, error: pmErr } = await supabase
+        .from('pedagogical_measures')
+        .select('*')
+        .eq('student_id', studentId)
+        .order('date', { ascending: false });
+      if (!pmErr && pmData) {
+        setPmMeasures(pmData);
+      } else {
+        setPmMeasures([]);
+      }
+
+      // D. Load expert service activities
+      const { data: eaData, error: eaErr } = await supabase
+        .from('expert_service_activities')
+        .select('*')
+        .eq('student_id', studentId)
+        .order('date', { ascending: false });
+      if (!eaErr && eaData) {
+        setExpertActivities(eaData);
+      } else {
+        setExpertActivities([]);
+      }
     } catch (err) {
       console.error("Failed to fetch pedagogical datasets for student", err);
       resetPedagogicalState();
@@ -260,6 +309,150 @@ export default function PedagoskaDokumentacijaPage() {
       recs = { teacher: yearNotes.recommendations || '', parent: '' };
     }
     return recs;
+  };
+
+  // CRUD FOR PEDAGOGICAL MEASURES
+  const handleSavePm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudent || !activeClass || !selectedSchoolId) return;
+
+    try {
+      if (editingPm) {
+        const { error } = await supabase
+          .from('pedagogical_measures')
+          .update({
+            school_year: activeClass.school_year_id || '2025/2026',
+            measure_type: pmType,
+            date: pmDate,
+            explanation: pmExplanation,
+            issuer: pmIssuer,
+            document_number: pmDocNumber,
+            status: pmStatus,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingPm.id);
+
+        if (error) throw error;
+        toast.success('Pedagoška mjera ažurirana');
+      } else {
+        const { error } = await supabase
+          .from('pedagogical_measures')
+          .insert([{
+            student_id: selectedStudent.id,
+            class_id: activeClass.id,
+            school_year_id: activeClass.school_year_id,
+            school_id: selectedSchoolId,
+            school_year: activeClass.school_year_id || '2025/2026',
+            measure_type: pmType,
+            date: pmDate,
+            explanation: pmExplanation,
+            issuer: pmIssuer,
+            document_number: pmDocNumber,
+            status: pmStatus
+          }]);
+
+        if (error) throw error;
+        toast.success('Pedagoška mjera dodana');
+      }
+
+      // Reload
+      setShowPmForm(false);
+      setEditingPm(null);
+      loadStudentPedagogicalData(selectedStudent.id, activeClass.id, activeClass.school_year_id);
+    } catch (err) {
+      console.error(err);
+      toast.error('Greška pri spremanju pedagoške mjere');
+    }
+  };
+
+  const handleDeletePm = async (id: string) => {
+    if (!confirm('Jeste li sigurni da želite obrisati ovu pedagošku mjeru?')) return;
+    try {
+      const { error } = await supabase
+        .from('pedagogical_measures')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success('Pedagoška mjera obrisana');
+      if (selectedStudent && activeClass) {
+        loadStudentPedagogicalData(selectedStudent.id, activeClass.id, activeClass.school_year_id);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Greška pri brisanju mjere');
+    }
+  };
+
+  // CRUD FOR EXPERT SERVICE ACTIVITIES
+  const handleSaveEa = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudent || !activeClass || !selectedSchoolId) return;
+
+    try {
+      if (editingEa) {
+        const { error } = await supabase
+          .from('expert_service_activities')
+          .update({
+            activity_type: eaType,
+            staff_role: eaRole,
+            staff_name: eaStaffName,
+            description: eaDescription,
+            conclusion: eaConclusion,
+            recommendation: eaRecommendation,
+            date: eaDate,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingEa.id);
+
+        if (error) throw error;
+        toast.success('Aktivnost stručne službe ažurirana');
+      } else {
+        const { error } = await supabase
+          .from('expert_service_activities')
+          .insert([{
+            student_id: selectedStudent.id,
+            class_id: activeClass.id,
+            school_id: selectedSchoolId,
+            activity_type: eaType,
+            staff_role: eaRole,
+            staff_name: eaStaffName,
+            description: eaDescription,
+            conclusion: eaConclusion,
+            recommendation: eaRecommendation,
+            date: eaDate
+          }]);
+
+        if (error) throw error;
+        toast.success('Aktivnost stručne službe evidentirana');
+      }
+
+      setShowEaForm(false);
+      setEditingEa(null);
+      loadStudentPedagogicalData(selectedStudent.id, activeClass.id, activeClass.school_year_id);
+    } catch (err) {
+      console.error(err);
+      toast.error('Greška pri spremanju aktivnosti');
+    }
+  };
+
+  const handleDeleteEa = async (id: string) => {
+    if (!confirm('Jeste li sigurni da želite obrisati ovaj zapis aktivnosti stručne službe?')) return;
+    try {
+      const { error } = await supabase
+        .from('expert_service_activities')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success('Aktivnost stručne službe obrisana');
+      if (selectedStudent && activeClass) {
+        loadStudentPedagogicalData(selectedStudent.id, activeClass.id, activeClass.school_year_id);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Greška pri brisanju aktivnosti');
+    }
   };
 
   // EDIT OPERATORS
@@ -744,8 +937,25 @@ export default function PedagoskaDokumentacijaPage() {
                     >
                       <span className="flex items-center gap-1.5"><GraduationCap size={12} /> Praksa (trajno)</span>
                     </button>
+                    <button
+                      onClick={() => setActiveSubTab('STRUCNA_AKTIVNOSTI')}
+                      className={`px-5 py-4 text-[10px] font-black uppercase tracking-wider transition-all border-b-4 whitespace-nowrap/80 ${
+                        activeSubTab === 'STRUCNA_AKTIVNOSTI' ? "text-[#005c8d] border-[#005c8d] font-black" : "text-gray-400 border-transparent hover:text-slate-600"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5"><Heart size={12} /> Djelatnosti stručne službe</span>
+                    </button>
                   </>
                 )}
+                
+                <button
+                  onClick={() => setActiveSubTab('MJERE')}
+                  className={`px-5 py-4 text-[10px] font-black uppercase tracking-wider transition-all border-b-4 whitespace-nowrap ${
+                    activeSubTab === 'MJERE' ? "text-[#005c8d] border-[#005c8d] font-black" : "text-gray-400 border-transparent hover:text-slate-600"
+                  }`}
+                >
+                  <span className="flex items-center gap-1.5"><ShieldAlert size={12} /> Pedagoške mjere</span>
+                </button>
               </div>
 
               {/* TABS VIEW CONTROLLER */}
@@ -976,6 +1186,496 @@ export default function PedagoskaDokumentacijaPage() {
                         </div>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* 4. PEDAGOŠKE MJERE TAB */}
+                {activeSubTab === 'MJERE' && (
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center bg-white border border-gray-200/80 p-4 rounded-md shadow-sm">
+                      <div>
+                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-tight">Registar pedagoških mjera</h3>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Povijest odricanja, opomena, pohvala i odluka razrednog/nastavničkog vijeća</p>
+                      </div>
+                      {hasFullAccess && !showPmForm && (
+                        <button
+                          onClick={() => {
+                            setEditingPm(null);
+                            setPmDate(new Date().toISOString().split('T')[0]);
+                            setPmType('Pohvala');
+                            setPmExplanation('');
+                            setPmIssuer(user?.name || '');
+                            setPmDocNumber('');
+                            setPmStatus('ACTIVE');
+                            setShowPmForm(true);
+                          }}
+                          className="px-4 py-2 bg-[#005c8d] text-white hover:bg-[#004a71] text-[10px] font-black uppercase tracking-widest rounded shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          Nova mjera
+                        </button>
+                      )}
+                    </div>
+
+                    {showPmForm && (
+                      <form onSubmit={handleSavePm} className="bg-slate-50 border border-gray-300 p-5 rounded-md shadow-sm space-y-4">
+                        <h4 className="text-[11px] font-black uppercase text-[#005c8d] border-b pb-1">
+                          {editingPm ? 'Uredi pedagošku mjeru' : 'Formuliraj novu pedagošku mjeru'}
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Datum donošenja</span>
+                            <input
+                              type="date"
+                              required
+                              value={pmDate}
+                              onChange={(e) => setPmDate(e.target.value)}
+                              className="w-full border border-gray-300 p-2 text-xs font-bold text-slate-800 rounded focus:outline-[#005c8d]"
+                            />
+                          </div>
+                          <div>
+                            <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Vrsta mjere</span>
+                            <select
+                              value={pmType}
+                              onChange={(e) => setPmType(e.target.value)}
+                              className="w-full border border-gray-300 p-2 text-xs font-bold text-slate-800 rounded bg-white focus:outline-[#005c8d]"
+                            >
+                              <option value="Pohvala">Pohvala</option>
+                              <option value="Opomena razrednika">Opomena razrednika</option>
+                              <option value="Ukor razrednika">Ukor razrednika</option>
+                              <option value="Ukor razrednog vijeća">Ukor razrednog vijeća</option>
+                              <option value="Opomena pred isključenje">Opomena pred isključenje</option>
+                              <option value="Odluka nastavničkog vijeća">Odluka nastavničkog vijeća</option>
+                              <option value="Ostalo">Ostalo</option>
+                            </select>
+                          </div>
+                          <div>
+                            <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Donositelj mjere</span>
+                            <input
+                              type="text"
+                              required
+                              value={pmIssuer}
+                              onChange={(e) => setPmIssuer(e.target.value)}
+                              className="w-full border border-gray-300 p-2 text-xs font-bold text-slate-800 rounded focus:outline-[#005c8d]"
+                              placeholder="Npr. Razredno vijeće, Razrednik..."
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Broj dokumenta / odluke</span>
+                            <input
+                              type="text"
+                              value={pmDocNumber}
+                              onChange={(e) => setPmDocNumber(e.target.value)}
+                              className="w-full border border-gray-300 p-2 text-xs font-bold text-slate-800 rounded focus:outline-[#005c8d]"
+                              placeholder="Klasa/Urbroj ili interni broj odluke..."
+                            />
+                          </div>
+                          <div>
+                            <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Status mjere</span>
+                            <select
+                              value={pmStatus}
+                              onChange={(e) => setPmStatus(e.target.value)}
+                              className="w-full border border-gray-300 p-2 text-xs font-bold text-slate-800 rounded bg-white focus:outline-[#005c8d]"
+                            >
+                              <option value="ACTIVE">Aktivna</option>
+                              <option value="REVOKED">Ukinuta / Izvan snage</option>
+                              <option value="ARCHIVED">Arhivirana / Istekla</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Obrazloženje ključnih razloga / ponašanja</span>
+                          <textarea
+                            rows={3}
+                            required
+                            value={pmExplanation}
+                            onChange={(e) => setPmExplanation(e.target.value)}
+                            className="w-full border border-gray-300 p-2 text-xs font-semibold text-slate-800 rounded focus:outline-[#005c8d]"
+                            placeholder="Unesite detaljno službeno obrazloženje i postignuti pedagoški sporazum..."
+                          />
+                        </div>
+
+                        <div className="flex justify-end gap-2 text-xs pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowPmForm(false);
+                              setEditingPm(null);
+                            }}
+                            className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 font-black uppercase tracking-wider rounded"
+                          >
+                            Odustani
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-6 py-2 bg-[#005c8d] text-white hover:bg-[#004a71] font-black uppercase tracking-wider rounded shadow"
+                          >
+                            Upiši mjeru
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {pmMeasures.length === 0 ? (
+                      <div className="bg-slate-50 border border-gray-200 p-8 rounded text-center text-xs font-bold text-slate-400 uppercase tracking-wide">
+                        Nema upisanih pedagoških mjera za ovog učenika.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-3">
+                        {pmMeasures.map((measure) => (
+                          <div key={measure.id} className="bg-white border border-gray-200 rounded p-4 shadow-sm flex justify-between gap-4">
+                            <div>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
+                                  measure.measure_type === 'Pohvala' 
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
+                                    : 'bg-red-100 text-red-800 border border-red-200'
+                                }`}>
+                                  {measure.measure_type}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-bold uppercase">
+                                  {new Date(measure.date).toLocaleDateString('hr-HR')}
+                                </span>
+                                <span className="text-slate-300">|</span>
+                                <span className={`text-[9px] font-black uppercase ${
+                                  measure.status === 'ACTIVE' ? 'text-blue-700' : 'text-slate-400 line-through'
+                                }`}>
+                                  {measure.status === 'ACTIVE' ? 'Aktivna' : measure.status === 'REVOKED' ? 'Ukinuta' : 'Istekla'}
+                                </span>
+                              </div>
+
+                              <p className="text-xs text-slate-800 font-semibold leading-relaxed whitespace-pre-wrap mb-3 italic">
+                                "{measure.explanation}"
+                              </p>
+
+                              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[9px] text-slate-400 font-bold uppercase tracking-wider border-t pt-2">
+                                <span>Donositelj: <span className="text-slate-700">{measure.issuer}</span></span>
+                                {measure.document_number && (
+                                  <span>Dokument: <span className="text-slate-700">{measure.document_number}</span></span>
+                                )}
+                              </div>
+                            </div>
+
+                            {hasFullAccess && (
+                              <div className="flex flex-col gap-2 shrink-0 select-none">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingPm(measure);
+                                    setPmDate(measure.date);
+                                    setPmType(measure.measure_type);
+                                    setPmExplanation(measure.explanation);
+                                    setPmIssuer(measure.issuer);
+                                    setPmDocNumber(measure.document_number || '');
+                                    setPmStatus(measure.status);
+                                    setShowPmForm(true);
+                                  }}
+                                  className="px-2.5 py-1 text-[10px] font-black text-slate-600 hover:text-blue-700 border hover:bg-slate-50 rounded"
+                                  title="Uredi"
+                                >
+                                  Uredi
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeletePm(measure.id)}
+                                  className="px-2.5 py-1 text-[10px] font-black text-red-600 hover:text-red-750 hover:bg-red-50 border border-red-100 rounded"
+                                  title="Obriši"
+                                >
+                                  Obriši
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 5. DJELATNOSTI STRUČNE SLUŽBE TAB */}
+                {activeSubTab === 'STRUCNA_AKTIVNOSTI' && (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white border border-gray-200/80 p-4 rounded-md shadow-sm gap-4">
+                      <div>
+                        <h3 className="text-xs font-black text-slate-800 uppercase tracking-tight">Djelatnosti i stručni dosje suradnika</h3>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Unosi psihologa, pedagoga, i drugih stručnih službenika</p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {hasFullAccess && !showEaForm && (
+                          <button
+                            onClick={() => {
+                              setEditingEa(null);
+                              setEaDate(new Date().toISOString().split('T')[0]);
+                              setEaRole('pedagog');
+                              setEaStaffName(user?.name || '');
+                              setEaType('razgovor s učenikom');
+                              setEaDescription('');
+                              setEaConclusion('');
+                              setEaRecommendation('');
+                              setShowEaForm(true);
+                            }}
+                            className="px-4 py-2 bg-[#005c8d] text-white hover:bg-[#004a71] text-[10px] font-black uppercase tracking-widest rounded shadow"
+                          >
+                            Evidentiraj radnju
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Filters bar */}
+                    <div className="bg-slate-100/70 p-3 rounded-md border text-xs font-bold text-slate-600 flex flex-wrap gap-4 items-center">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] uppercase tracking-wider text-slate-400">Profil suradnika:</span>
+                        <select
+                          value={eaRoleFilter}
+                          onChange={(e) => setEaRoleFilter(e.target.value)}
+                          className="bg-white border p-1 rounded font-bold text-slate-800 focus:outline-none text-[11px]"
+                        >
+                          <option value="SVI">Svi profili</option>
+                          <option value="pedagog">Pedagog</option>
+                          <option value="psiholog">Psiholog</option>
+                          <option value="edukacijski rehabilitator">Edukacijski rehabilitator</option>
+                          <option value="socijalni pedagog">Socijalni pedagog</option>
+                          <option value="stručni suradnik">Stručni suradnik</option>
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] uppercase tracking-wider text-slate-400">Vrsta evidencije:</span>
+                        <select
+                          value={eaTypeFilter}
+                          onChange={(e) => setEaTypeFilter(e.target.value)}
+                          className="bg-white border p-1 rounded font-bold text-slate-800 focus:outline-none text-[11px]"
+                        >
+                          <option value="SVE">Sve vrste</option>
+                          <option value="razgovor s učenikom">Razgovor s učenikom</option>
+                          <option value="razgovor s roditeljem">Razgovor s roditeljem</option>
+                          <option value="razgovor s nastavnikom">Razgovor s nastavnikom</option>
+                          <option value="preporuka">Preporuka</option>
+                          <option value="procjena">Procjena</option>
+                          <option value="plan podrške">Plan podrške</option>
+                          <option value="prilagodba programa">Prilagodba programa</option>
+                          <option value="individualizirani pristup">Individualizirani pristup</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {showEaForm && (
+                      <form onSubmit={handleSaveEa} className="bg-slate-50 border border-gray-300 p-5 rounded-md shadow space-y-4">
+                        <h4 className="text-[11px] font-black uppercase text-[#005c8d] border-b pb-1">
+                          {editingEa ? 'Uredi stručni karton rada' : 'Upiši novi stručni rad s učenikom'}
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                          <div>
+                            <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Datum radnje</span>
+                            <input
+                              type="date"
+                              required
+                              value={eaDate}
+                              onChange={(e) => setEaDate(e.target.value)}
+                              className="w-full border border-gray-300 p-2 text-xs font-bold text-slate-800 rounded focus:outline-[#005c8d]"
+                            />
+                          </div>
+                          <div>
+                            <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Uloga suradnika</span>
+                            <select
+                              value={eaRole}
+                              onChange={(e) => setEaRole(e.target.value)}
+                              className="w-full border border-gray-300 p-2 text-xs font-bold text-slate-800 rounded bg-white focus:outline-[#005c8d]"
+                            >
+                              <option value="pedagog">pedagog</option>
+                              <option value="psiholog">psiholog</option>
+                              <option value="edukacijski rehabilitator">edukacijski rehabilitator</option>
+                              <option value="socijalni pedagog">socijalni pedagog</option>
+                              <option value="stručni suradnik">stručni suradnik</option>
+                            </select>
+                          </div>
+                          <div>
+                            <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Ime i prezime djelatnika</span>
+                            <input
+                              type="text"
+                              required
+                              value={eaStaffName}
+                              onChange={(e) => setEaStaffName(e.target.value)}
+                              className="w-full border border-gray-300 p-2 text-xs font-bold text-slate-800 rounded focus:outline-[#005c8d]"
+                            />
+                          </div>
+                          <div>
+                            <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Vrsta aktivnosti</span>
+                            <select
+                              value={eaType}
+                              onChange={(e) => setEaType(e.target.value)}
+                              className="w-full border border-gray-300 p-2 text-xs font-bold text-slate-800 rounded bg-white focus:outline-[#005c8d]"
+                            >
+                              <option value="razgovor s učenikom">razgovor s učenikom</option>
+                              <option value="razgovor s roditeljem">razgovor s roditeljem</option>
+                              <option value="razgovor s nastavnikom">razgovor s nastavnikom</option>
+                              <option value="preporuka">preporuka</option>
+                              <option value="procjena">procjena</option>
+                              <option value="plan podrške">plan podrške</option>
+                              <option value="prilagodba programa">prilagodba programa</option>
+                              <option value="individualizirani pristup">individualizirani pristup</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div>
+                          <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Opis ponašanja / razgovora / poteškoća</span>
+                          <textarea
+                            rows={3}
+                            required
+                            value={eaDescription}
+                            onChange={(e) => setEaDescription(e.target.value)}
+                            className="w-full border border-gray-300 p-2 text-xs font-semibold text-slate-800 rounded focus:outline-[#005c8d]"
+                            placeholder="Unesite opis slučaja ili sadržaj razgovora..."
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Zaključak</span>
+                            <textarea
+                              rows={2}
+                              value={eaConclusion}
+                              onChange={(e) => setEaConclusion(e.target.value)}
+                              className="w-full border border-gray-300 p-2 text-xs font-semibold text-slate-800 rounded focus:outline-[#005c8d]"
+                              placeholder="Stručni zaključak suradnika..."
+                            />
+                          </div>
+                          <div>
+                            <span className="block text-[9px] font-black uppercase text-slate-400 tracking-wider mb-1">Preporuke za daljnji rad</span>
+                            <textarea
+                              rows={2}
+                              value={eaRecommendation}
+                              onChange={(e) => setEaRecommendation(e.target.value)}
+                              className="w-full border border-gray-300 p-2 text-xs font-semibold text-slate-800 rounded focus:outline-[#005c8d]"
+                              placeholder="Smjernice za razrednika ili predmetne nastavnike..."
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex justify-end gap-2 text-xs pt-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowEaForm(false);
+                              setEditingEa(null);
+                            }}
+                            className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 font-black uppercase tracking-wider rounded"
+                          >
+                            Odustani
+                          </button>
+                          <button
+                            type="submit"
+                            className="px-6 py-2 bg-[#005c8d] text-white hover:bg-[#004a71] font-black uppercase tracking-wider rounded shadow"
+                          >
+                            Spremi unos
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {/* Filter and display Expert activities list */}
+                    {(() => {
+                      const filteredEa = expertActivities.filter(item => {
+                        const matchesRole = eaRoleFilter === 'SVI' || item.staff_role === eaRoleFilter;
+                        const matchesType = eaTypeFilter === 'SVE' || item.activity_type === eaTypeFilter;
+                        return matchesRole && matchesType;
+                      });
+
+                      if (filteredEa.length === 0) {
+                        return (
+                          <div className="bg-slate-50 border border-gray-200 p-8 rounded text-center text-xs font-bold text-slate-400 uppercase tracking-wide">
+                            Nema evidentiranih aktivnosti za odabrane kriterije.
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="grid grid-cols-1 gap-4">
+                          {filteredEa.map((activity) => (
+                            <div key={activity.id} className="bg-white border border-gray-200 rounded p-5 shadow-sm space-y-4">
+                              <div className="flex justify-between items-start gap-4">
+                                <div className="space-y-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="text-[10px] font-black uppercase bg-[#005c8d]/10 text-[#005c8d] border border-[#005c8d]/20 px-2 py-0.5 rounded">
+                                      {activity.activity_type}
+                                    </span>
+                                    <span className="text-[9px] font-black uppercase bg-slate-100 text-slate-600 border px-1.5 py-0.5 rounded">
+                                      {activity.staff_role}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 font-bold uppercase">
+                                      {new Date(activity.date).toLocaleDateString('hr-HR')}
+                                    </span>
+                                  </div>
+                                  <p className="text-[10.5px] text-slate-500 font-bold uppercase">
+                                    Evidentirao: <span className="text-slate-700 font-black">{activity.staff_name}</span>
+                                  </p>
+                                </div>
+
+                                {hasFullAccess && (
+                                  <div className="flex gap-1.5 select-none">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingEa(activity);
+                                        setEaDate(activity.date);
+                                        setEaRole(activity.staff_role);
+                                        setEaStaffName(activity.staff_name);
+                                        setEaType(activity.activity_type);
+                                        setEaDescription(activity.description);
+                                        setEaConclusion(activity.conclusion || '');
+                                        setEaRecommendation(activity.recommendation || '');
+                                        setShowEaForm(true);
+                                      }}
+                                      className="px-2.5 py-1 text-[10px] font-black text-slate-600 hover:text-blue-700 border hover:bg-slate-50 rounded"
+                                    >
+                                      Uredi
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteEa(activity.id)}
+                                      className="px-2.5 py-1 text-[10px] font-black text-red-600 hover:text-red-700 hover:bg-red-50 border border-red-100 rounded"
+                                    >
+                                      Obriši
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="bg-slate-50/50 p-4 border rounded space-y-3">
+                                <div>
+                                  <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Sadržaj / Opis:</span>
+                                  <p className="text-xs text-slate-800 font-medium leading-relaxed whitespace-pre-wrap">
+                                    {activity.description}
+                                  </p>
+                                </div>
+                                {activity.conclusion && (
+                                  <div>
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block mb-0.5">Zaključak:</span>
+                                    <p className="text-xs text-slate-800 font-black leading-relaxed whitespace-pre-wrap">
+                                      {activity.conclusion}
+                                    </p>
+                                  </div>
+                                )}
+                                {activity.recommendation && (
+                                  <div className="border-t pt-2 border-dashed">
+                                    <span className="text-[9px] font-black uppercase tracking-wider text-emerald-600 block mb-0.5">Stručne preporuke:</span>
+                                    <p className="text-xs text-emerald-900 font-bold leading-relaxed whitespace-pre-wrap italic">
+                                      "{activity.recommendation}"
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 

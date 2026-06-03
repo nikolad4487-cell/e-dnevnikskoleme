@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
+import { logSystemAction } from '../../utils/auditLogger';
 import { 
   FileText, Plus, Trash2, Calendar, User, 
   AlertCircle, CheckCircle2, History, XCircle, Ban
@@ -49,6 +50,8 @@ export default function FinalThesisPage() {
   const [mentorId, setMentorId] = useState('');
   const [examTerm, setExamTerm] = useState('Ljetni');
   const [studentNote, setStudentNote] = useState('');
+  const [uploadNote, setUploadNote] = useState('');
+  const [isSpeciallySubmittingPdf, setIsSpeciallySubmittingPdf] = useState(false);
 
   // Deregistration State
   const [showDeregisterModal, setShowDeregisterModal] = useState(false);
@@ -313,6 +316,171 @@ export default function FinalThesisPage() {
                     </div>
                   </div>
                 )}
+
+                {/* PDF Work Upload & Revision Control System */}
+                <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-4">
+                  <div className="flex items-center gap-2 border-b pb-2">
+                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider">📁 Dokumentacija završnog rada (PDF)</span>
+                  </div>
+
+                  {/* Versions history list */}
+                  {activeApp.versions && activeApp.versions.length > 0 ? (
+                    <div className="space-y-2">
+                      <span className="text-[10px] font-black text-slate-400 uppercase block">Predane verzije rada:</span>
+                      {activeApp.versions.map((v: any, vIdx: number) => (
+                        <div key={vIdx} className="flex justify-between items-center text-xs p-3 bg-white border rounded">
+                          <div className="space-y-0.5">
+                            <span className="font-black text-slate-900">Verzija v{v.version_num}</span>
+                            <span className="text-slate-500 font-medium block">Datoteka: {v.filename}</span>
+                            {v.notes && <p className="text-[10px] text-slate-400 italic">" {v.notes} "</p>}
+                          </div>
+                          <span className="text-[9px] text-[#005c8d] bg-[#005c8d]/5 px-2 py-1 font-bold rounded">
+                            Predano: {new Date(v.uploaded_at).toLocaleDateString('hr-HR')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 italic">Još niste priložili niti jednu verziju rada u PDF formatu.</p>
+                  )}
+
+                  {/* Upload Form */}
+                  {(!activeApp.submission_confirmed) && (
+                    <div className="pt-2 border-t border-dashed space-y-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase block">Priloži rad (PDF format)</label>
+                          <input 
+                            type="file" 
+                            accept=".pdf"
+                            onChange={async (e) => {
+                              const files = e.target.files;
+                              if (!files || files.length === 0) return;
+                              const file = files[0];
+                              
+                              try {
+                                setIsSpeciallySubmittingPdf(true);
+                                const currentVersions = activeApp.versions || [];
+                                const newVerNum = currentVersions.length + 1;
+                                
+                                const nextVer = {
+                                  version_num: newVerNum,
+                                  filename: file.name,
+                                  uploaded_at: new Date().toISOString(),
+                                  notes: uploadNote || 'Inicijalna predaja rada.'
+                                };
+
+                                const updatedVersions = [...currentVersions, nextVer];
+
+                                const response = await fetch(`/api/final-thesis/${activeApp.id}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    versions: updatedVersions,
+                                    pdf_url: file.name,
+                                    submitted_at: new Date().toISOString()
+                                  })
+                                });
+
+                                if (response.ok) {
+                                  toast.success(`Uspješno učitana verzija v${newVerNum} rada!`);
+                                  setUploadNote('');
+                                  
+                                  // Log audit action
+                                  await logSystemAction({
+                                    executor_id: studentId,
+                                    school_id: activeApp.school_id || 'N/A',
+                                    action_type: 'UPLOAD_THESIS_VERSION',
+                                    entity_type: 'FINAL_THESIS',
+                                    entity_id: activeApp.id,
+                                    new_value: { filename: file.name, version: newVerNum }
+                                  });
+
+                                  fetchAppData();
+                                }
+                              } catch (uploadErr) {
+                                toast.error('Nije moguće učitati PDF.');
+                              } finally {
+                                setIsSpeciallySubmittingPdf(false);
+                              }
+                            }}
+                            className="bg-white text-xs border rounded p-1 animate-pulse"
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-slate-400 uppercase block">Popratna bilješka uz verziju</label>
+                          <input 
+                            type="text" 
+                            placeholder="npr. Ispravljena poglavlja..."
+                            value={uploadNote}
+                            onChange={(e) => setUploadNote(e.target.value)}
+                            className="w-full bg-white border rounded p-1.5 text-xs text-slate-800 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Submission Confirmation Toggle */}
+                  {activeApp.versions && activeApp.versions.length > 0 && (
+                    <div className="pt-4 border-t border-slate-200">
+                      {activeApp.submission_confirmed ? (
+                        <div className="bg-emerald-50 border border-emerald-200 p-3 rounded text-emerald-800 text-xs font-bold uppercase tracking-tight flex items-center justify-between">
+                          <span>✅ Predaja završnog rada konačno potvrđena!</span>
+                          <span className="text-[10px] text-emerald-600 font-extrabold font-mono uppercase">
+                            Status: Zaključano
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="bg-amber-50 border border-amber-200 p-4 rounded space-y-3">
+                          <div className="text-amber-905 text-xs font-bold leading-relaxed">
+                            ⚠️ Pažnja: Nakon konačne potvrde predaje rada, dokumenti i verzije će biti zaključani te poslani mentoru i ispitnom povjerenstvu na procjenu.
+                          </div>
+                          <button 
+                            type="button"
+                            onClick={async () => {
+                              if (!window.confirm('Potvrđujem da je predana verzija rada konačna i ispravna. Želite li nastaviti s konačnim zaključivanjem predaje?')) return;
+                              
+                              try {
+                                const response = await fetch(`/api/final-thesis/${activeApp.id}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    submission_confirmed: true,
+                                    submission_confirmed_at: new Date().toISOString(),
+                                    status: 'COMPLETED' // Elevate status to complete pending defense
+                                  })
+                                });
+
+                                if (response.ok) {
+                                  toast.success('Konačna predaja rada uspješno zaključana i potvrđena!');
+                                  
+                                  // Log audit action
+                                  await logSystemAction({
+                                    executor_id: studentId,
+                                    school_id: activeApp.school_id || 'N/A',
+                                    action_type: 'CONFIRM_THESIS_SUBMISSION',
+                                    entity_type: 'FINAL_THESIS',
+                                    entity_id: activeApp.id,
+                                    new_value: { confirmed_at: new Date().toISOString() }
+                                  });
+
+                                  fetchAppData();
+                                }
+                              } catch (err) {
+                                console.error(err);
+                              }
+                            }}
+                            className="bg-slate-900 hover:bg-slate-850 text-white text-[10px] font-black uppercase tracking-wider px-4 py-2 rounded shadow-sm inline-flex items-center gap-1.5"
+                          >
+                            🔒 Konačno potvrdi predaju rada
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
 
                 <div className="pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
                   <span>Datum podnošenja: {new Date(activeApp.submitted_at).toLocaleDateString('hr-HR')}</span>

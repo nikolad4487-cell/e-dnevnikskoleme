@@ -23,6 +23,9 @@ const STUDENT_NAV: NavItem[] = [
   { label: 'Ispiti', path: '/student/ispiti' },
   { label: 'Izostanci', path: '/student/izostanci' },
   { label: 'Raspored', path: '/student/raspored' },
+  { label: 'Digitalni dosje', path: '/student/dosje' },
+  { label: 'Kalendar škole', path: '/student/kalendar' },
+  { label: 'Dokumenti škole', path: '/student/dokumenti' },
   { label: 'Informativka', path: '/student/informativka' },
   { label: 'Završni rad', path: '/student/zavrsni-rad' },
 ];
@@ -112,13 +115,19 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/izostanci`, icon: <Clock size={14} /> },
     { id: 'zapisnici', label: 'Zapisnici', path: `${classPathPrefix}/zapisnici`, icon: <FileText size={14} /> },
     { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: `${classPathPrefix}/pedagoska-dokumentacija`, icon: <FileText size={14} /> },
+    { id: 'student-dosje', label: 'Digitalni Dosje', path: '/teacher/student-dosje', icon: <FileText size={14} /> },
     { id: 'zavrsni-rad', label: 'Završni radovi', path: '/teacher/zavrsni-radovi', icon: <FileSpreadsheet size={14} /> },
+    { id: 'kalendar-skole', label: 'Kalendar škole', path: '/teacher/kalendar', icon: <Calendar size={14} /> },
+    { id: 'dokumenti-skole', label: 'Dokumenti škole', path: '/teacher/dokumenti', icon: <FileText size={14} /> },
     { id: 'raspored', label: 'Raspored', path: `${classPathPrefix}/raspored`, icon: <Calendar size={14} /> },
     { id: 'admin', label: 'Admin razreda', path: `${classPathPrefix}/admin`, icon: <Settings size={14} /> },
     ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : [])
   ] : [
     { label: 'Pretraživanje', path: '/teacher/pretrazivanje' },
+    { id: 'student-dosje', label: 'Digitalni Dosje', path: '/teacher/dosje', icon: <FileText size={14} /> },
     { id: 'zavrsni-rad', label: 'Završni radovi', path: '/teacher/zavrsni-radovi', icon: <FileSpreadsheet size={14} /> },
+    { id: 'kalendar-skole', label: 'Kalendar škole', path: '/teacher/kalendar', icon: <Calendar size={14} /> },
+    { id: 'dokumenti-skole', label: 'Dokumenti škole', path: '/teacher/dokumenti', icon: <FileText size={14} /> },
     ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : [])
   ];
 
@@ -146,6 +155,9 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     }
     if (tabId === 'pedagoska-dokumentacija') {
       return path.includes('/pedagoska-dokumentacija') || path.includes('/pedagogical');
+    }
+    if (tabId === 'student-dosje') {
+      return path.includes('dosje');
     }
     if (tabId === 'zavrsni-rad') {
       return path.includes('zavrsni-radovi');

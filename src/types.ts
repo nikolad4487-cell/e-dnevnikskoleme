@@ -534,5 +534,5 @@ export interface StudentParentLink {
   parent_id: string;
   student_id: string;
   created_at: string;
-  student?: UserProfile;
+  student?: User;
 }

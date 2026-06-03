@@ -84,8 +84,12 @@ export default function SchoolAdminDashboard() {
     { id: 'ucenici', name: 'Učenici u školi', icon: Users, color: 'bg-teal-500', link: '/admin-skole/ucenici' },
     { id: 'predmeti', name: 'Globalni predmeti', icon: BookOpen, color: 'bg-amber-500', link: '/admin-skole/predmeti' },
     { id: 'smjerovi', name: 'Smjerovi / programi', icon: BookOpen, color: 'bg-orange-500', link: '/admin-skole/programi' },
+    { id: 'ravnatelj-dashboard', name: 'Dashboard Ravnatelja', icon: BarChart3, color: 'bg-indigo-600', link: '/admin-skole/ravnatelj-dashboard' },
+    { id: 'maticna-knjiga', name: 'Matična knjiga', icon: FileText, color: 'bg-teal-600', link: '/admin-skole/maticna-knjiga' },
     { id: 'prijenos', name: 'Prijenos / rollover', icon: FileText, color: 'bg-red-500', link: '/admin-skole/rollover' },
     { id: 'informativka', name: 'Informativka', icon: MessageSquare, color: 'bg-emerald-500', link: '/admin-skole/informativka' },
+    { id: 'system-check', name: 'Provjera Sustava', icon: BarChart3, color: 'bg-red-700', link: '/admin-skole/system-check' },
+    { id: 'system-health', name: 'Zdravlje Sustava', icon: BarChart3, color: 'bg-indigo-600', link: '/admin-skole/system-health' },
     { id: 'postavke', name: 'Postavke škole', icon: Settings, color: 'bg-slate-700', link: '/admin-skole/postavke' },
   ];
 

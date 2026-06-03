@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
+import { logSystemAction } from '../../utils/auditLogger';
 import { 
   FileText, Check, X, FileEdit, UserCheck, 
   Search, ShieldAlert, GraduationCap, Filter, ClipboardList
@@ -50,6 +51,14 @@ export default function FinalThesisTeacherPage() {
   // Grading modal
   const [showGradingModal, setShowGradingModal] = useState(false);
   const [gradingApp, setGradingApp] = useState<ThesisApplication | null>(null);
+
+  // Defense schedule schedule state
+  const [showDefenseModal, setShowDefenseModal] = useState(false);
+  const [defensingApp, setDefensingApp] = useState<any | null>(null);
+  const [defDate, setDefDate] = useState('');
+  const [defTime, setDefTime] = useState('09:00');
+  const [defClassroom, setDefClassroom] = useState('');
+  const [defCommittee, setDefCommittee] = useState('');
 
   const [canAccessClass, setCanAccessClass] = useState(true);
 
@@ -203,6 +212,50 @@ export default function FinalThesisTeacherPage() {
     } catch (err: any) {
       console.error("[STATUS_UPDATE] Failed to grade application:", err);
       toast.error('Spremanje ocjena nije uspjelo.');
+    }
+  };
+
+  const handleDefenseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!defensingApp) return;
+
+    try {
+      const response = await fetch(`/api/final-thesis/${defensingApp.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          defense_date: defDate,
+          defense_time: defTime,
+          defense_classroom: defClassroom,
+          defense_committee: defCommittee
+        })
+      });
+
+      if (response.ok) {
+        toast.success('Termin obrane rada uspješno raspoređen!');
+        setShowDefenseModal(false);
+        setDefensingApp(null);
+        
+        // Log action
+        if (user?.id) {
+          // Import dynamic logger
+          const { logSystemAction } = await import('../../utils/auditLogger');
+          await logSystemAction({
+            executor_id: user.id,
+            school_id: selectedSchoolId || 'N/A',
+            action_type: 'SCHEDULE_THESIS_DEFENSE',
+            entity_type: 'FINAL_THESIS',
+            entity_id: defensingApp.id,
+            new_value: { date: defDate, classroom: defClassroom }
+          });
+        }
+        
+        fetchTeacherData();
+      } else {
+        throw new Error('Failed to update defense');
+      }
+    } catch (err) {
+      toast.error('Nije moguće spremiti termin obrane.');
     }
   };
 
@@ -426,6 +479,17 @@ export default function FinalThesisTeacherPage() {
               Sve prijave škole ({applications.length})
             </button>
           )}
+
+          <button
+            onClick={() => setActiveTab('archive')}
+            className={`px-4 py-2 rounded text-xs font-black uppercase tracking-wider transition-all border ${
+              activeTab === 'archive' 
+                ? 'bg-slate-900 text-white border-slate-900 shadow-sm' 
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            📂 Arhiva završnih radova ({applications.filter(app => app.status === 'COMPLETED' || app.final_grade || app.defense_grade).length})
+          </button>
         </div>
       </div>
 
@@ -448,8 +512,94 @@ export default function FinalThesisTeacherPage() {
         </div>
       </div>
 
-      {/* Main Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+      {/* Tab Conditional Rendering */}
+      {activeTab === 'archive' ? (
+        <div className="bg-white rounded-lg border border-slate-205 overflow-hidden shadow-sm p-6 space-y-4">
+          <div className="border-b pb-2 flex justify-between items-center bg-slate-50 p-4 -m-6 mb-4">
+            <div>
+              <h3 className="text-xs font-black text-slate-900 uppercase">Službeni arhiv dovršenih obrana</h3>
+              <p className="text-[9px] text-slate-400 font-bold uppercase">Pretraživanje, kontrola svjedodžbi i povijesni upis</p>
+            </div>
+            <span className="text-[10px] bg-slate-200 text-slate-800 font-black uppercase px-2 py-1 rounded">
+              Zatvorene Klase
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50 text-gray-400 uppercase font-black">
+                  <th className="p-4">Učenik</th>
+                  <th className="p-4">Tema završnog rada</th>
+                  <th className="p-4">Mentor i povjerenstvo</th>
+                  <th className="p-4 text-center">Ocjena izradbe</th>
+                  <th className="p-4 text-center">Ocjena usmene obrane</th>
+                  <th className="p-4 text-center">Konačna ocjena (Završna svjedodžba)</th>
+                  <th className="p-4 text-right">Zapisnik</th>
+                </tr>
+              </thead>
+              <tbody>
+                {applications.filter(app => app.status === 'COMPLETED' || app.final_grade || app.defense_grade).length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="p-10 text-center text-slate-430 italic font-semibold">
+                      Još nema unesenih završenih niti ocijenjenih radova u arhivu.
+                    </td>
+                  </tr>
+                ) : (
+                  applications
+                    .filter(app => app.status === 'COMPLETED' || app.final_grade || app.defense_grade)
+                    .map((app) => {
+                      const student = students.find(s => s.id === app.student_id);
+                      const schoolClass = classes.find(c => c.id === app.class_id);
+                      const mentor = mentors.find(m => m.id === app.mentor_id);
+
+                      return (
+                        <tr key={app.id} className="border-b border-gray-100 hover:bg-slate-50/40">
+                          <td className="p-4">
+                            <div className="font-extrabold text-slate-950 text-sm leading-none">{student?.name || 'Nepoznat učenik'}</div>
+                            <div className="text-[9.5px] uppercase font-bold text-slate-400 mt-1">Razred: {schoolClass?.name || '—'}</div>
+                          </td>
+                          <td className="p-4 font-semibold text-slate-800">
+                            {app.thesis_title}
+                          </td>
+                          <td className="p-4 font-medium text-slate-700">
+                            <div className="font-bold text-xs">Mentor: {mentor?.name || '—'}</div>
+                            {app.defense_committee && (
+                              <div className="text-[10px] text-slate-400 font-bold uppercase mt-1">Povjerenstvo: {app.defense_committee}</div>
+                            )}
+                          </td>
+                          <td className="p-4 text-center font-extrabold text-slate-850 text-sm">
+                            {app.creation_grade || '—'}
+                          </td>
+                          <td className="p-4 text-center font-extrabold text-slate-850 text-sm">
+                            {app.defense_grade || '—'}
+                          </td>
+                          <td className="p-4 text-center">
+                            <span className="text-xs font-black uppercase px-2.5 py-1 rounded inline-block bg-slate-900 text-white">
+                              Ocjena: {app.final_grade || 'Nije ocijenjeno'}
+                            </span>
+                          </td>
+                          <td className="p-4 text-right">
+                            <button
+                              onClick={() => {
+                                toast.success(`Službena svjedodžba za učenika ${student?.name} pripremljena za ispis.`);
+                              }}
+                              className="bg-slate-100 text-slate-800 px-3 py-1.5 rounded hover:bg-slate-205 text-[10px] uppercase font-black tracking-wide inline-flex items-center gap-1 w-fit"
+                            >
+                              🖨️ Svjedodžba
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        /* Main Table */
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
         {filtered.length === 0 ? (
           <div className="p-8 text-center text-gray-400 italic font-semibold text-xs py-14">
             Nema prijavljenih završnih radova za odabrani filter.
@@ -488,6 +638,35 @@ export default function FinalThesisTeacherPage() {
                             Napomena: {app.student_note}
                           </div>
                         )}
+                        {/* Student-uploaded versions list with digital download hooks */}
+                        {app.versions && app.versions.length > 0 && (
+                          <div className="mt-2 space-y-1 bg-slate-50 border border-dashed rounded p-3 text-[10px]">
+                            <span className="font-extrabold uppercase text-slate-400 block mb-1">📂 Predane verzije rada:</span>
+                            {app.versions.map((ver: any, verIdx: number) => (
+                              <div key={verIdx} className="flex items-center justify-between gap-2 border-b border-slate-100 last:border-b-0 py-1">
+                                <span className="font-bold text-slate-800">v{ver.version_num}: {ver.filename} {app.submission_confirmed && ver.version_num === app.versions.length ? '🔒(Konačna)' : ''}</span>
+                                <button 
+                                  onClick={async () => {
+                                    if (user?.id) {
+                                      await logSystemAction({
+                                        executor_id: user.id,
+                                        school_id: selectedSchoolId || 'N/A',
+                                        action_type: 'DOWNLOAD_STUDENT_THESIS_PDF',
+                                        entity_type: 'FINAL_THESIS',
+                                        entity_id: app.id,
+                                        new_value: { version: ver.version_num, filename: ver.filename, student: student?.name }
+                                      });
+                                    }
+                                    toast.success(`Preuzimanje datoteke ${ver.filename}...`);
+                                  }}
+                                  className="text-[#005c8d] hover:underline font-extrabold cursor-pointer"
+                                >
+                                  Preuzmi PDF
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </td>
                       <td className="p-4 font-semibold text-gray-600">
                         {mentor?.name || '—'}
@@ -522,6 +701,24 @@ export default function FinalThesisTeacherPage() {
                       </td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          {/* Defense calendaring schedule button */}
+                          {app.status === 'ACCEPTED' && (
+                            <button
+                              onClick={() => {
+                                setDefensingApp(app);
+                                setDefDate(app.defense_date || '');
+                                setDefTime(app.defense_time || '09:00');
+                                setDefClassroom(app.defense_classroom || '');
+                                setDefCommittee(app.defense_committee || '');
+                                setShowDefenseModal(true);
+                              }}
+                              className="p-1 px-2.5 bg-slate-900 border border-slate-900 hover:bg-slate-800 text-white rounded font-black uppercase text-[9px] flex items-center gap-0.5 transition-colors"
+                              title="Rasporedi obranu"
+                            >
+                              🗓️ Rasporedi obranu
+                            </button>
+                          )}
+
                           {/* Mentor can approve or reject newly submitted ones */}
                           {app.status === 'CREATED' && (app.mentor_id === user?.id || isSchoolAdmin) && (
                             <>
@@ -597,6 +794,7 @@ export default function FinalThesisTeacherPage() {
           </div>
         )}
       </div>
+    )}
 
       {/* Classify application modal */}
       {showClassifyModal && classifyingApp && (
@@ -773,6 +971,87 @@ export default function FinalThesisTeacherPage() {
           }}
           onSubmit={handleGradingSubmit}
         />
+      )}
+
+      {/* Raspored obrane modal */}
+      {showDefenseModal && defensingApp && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
+            <h3 className="text-base font-black text-gray-800 uppercase tracking-tight mb-2">🗓️ Rasporedi termin obrane završnog rada</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Učenik: <strong>{students.find(s => s.id === defensingApp.student_id)?.name}</strong> <br />
+              Tema: <em>"{defensingApp.thesis_title}"</em>
+            </p>
+
+            <form onSubmit={handleDefenseSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Datum obrane</label>
+                  <input
+                    type="date"
+                    required
+                    value={defDate}
+                    onChange={(e) => setDefDate(e.target.value)}
+                    className="w-full text-xs p-2.5 border border-gray-300 rounded focus:outline-[#005c8d]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Vrijeme obrane</label>
+                  <input
+                    type="time"
+                    required
+                    value={defTime}
+                    onChange={(e) => setDefTime(e.target.value)}
+                    className="w-full text-xs p-2.5 border border-gray-300 rounded focus:outline-[#005c8d]"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Učionica / Dvorana</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Npr. Učionica kemije 105, amfiteatar..."
+                  value={defClassroom}
+                  onChange={(e) => setDefClassroom(e.target.value)}
+                  className="w-full text-xs p-2.5 border border-gray-300 rounded focus:outline-[#005c8d]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase text-gray-400 mb-1">Ispitno Povjerenstvo (Imena članova)</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Npr. Ivana Horvat (predsj.), Marko Kovač (član)..."
+                  value={defCommittee}
+                  onChange={(e) => setDefCommittee(e.target.value)}
+                  className="w-full text-xs p-2.5 border border-gray-300 rounded focus:outline-[#005c8d]"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t mt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowDefenseModal(false);
+                    setDefensingApp(null);
+                  }}
+                  className="px-4 py-2 border border-gray-300 text-gray-600 rounded text-xs font-black uppercase tracking-wider"
+                >
+                  Odustani
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded text-xs font-black uppercase tracking-wider"
+                >
+                  Spremi Raspored
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
