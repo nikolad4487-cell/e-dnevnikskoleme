@@ -174,6 +174,7 @@ export default function ImenikPage() {
   const { selectedSchoolId, selectedClassId: contextClassId, isArchived } = useSelection();
   
   const effectiveClassId = contextClassId || routeClassId;
+  console.log("[IMENIK] effectiveClassId:", effectiveClassId, "loading:", loading, "viewMode:", viewMode);
 
   usePageTitle("Imenik");
 
@@ -421,24 +422,30 @@ export default function ImenikPage() {
 
   const fetchStudentsData = async () => {
     if (!effectiveClassId) return;
-    console.log("IMENIK fetchStudents classId", effectiveClassId);
-    console.log("FETCHING DATA FOR CLASS", effectiveClassId);
+    console.log("[IMENIK] classId", effectiveClassId);
     setLoading(true);
     setStudents([]); // Force clear old data
     try {
       const { data, error } = await supabase
         .from('student_class_enrollments')
         .select('*, student:user_profiles(*)')
-        .eq('class_id', effectiveClassId)
-        .eq('status', 'ACTIVE');
+        .eq('class_id', effectiveClassId);
+
+      console.log("[IMENIK] enrollments raw data:", data);
       if (error) throw error;
       const mappedStudents = (data || []).map(row => {
+        console.log("[IMENIK] row student data:", row.student);
         const u = mappers.user(row.student);
+        console.log("[IMENIK] mapped user:", u);
         return { ...u };
       }) as User[];
       
+      console.log("[IMENIK] mappedStudents:", mappedStudents);
+
       setStudentEnrollments(data || []);
       const uniqueStudents = Array.from(new Map(mappedStudents.map(s => [s.id, s])).values());
+      
+      console.log("[IMENIK] students after filtering", uniqueStudents);
       setStudents(uniqueStudents);
     } catch (error) {
       console.error(error);
@@ -1531,7 +1538,11 @@ export default function ImenikPage() {
   };
 
   const renderStudents = () => {
-    if (students.length === 0) {
+    console.log("[IMENIK] renderStudents called, students state:", students, "loading:", loading);
+    
+    if (!students) return <div className="p-10 text-center">Učitavanje...</div>;
+
+    if (students.length === 0 && !loading) {
       return (
         <div className="p-10 text-center flex flex-col items-center justify-center">
           <Users className="w-12 h-12 text-gray-300 mb-4" />
@@ -1541,6 +1552,10 @@ export default function ImenikPage() {
       );
     }
     
+    if (loading) {
+        return <div className="p-10 text-center">Učitavanje učenika...</div>;
+    }
+
     return (
     <div className="p-4 space-y-4">
       <div className="flex items-center justify-between border-b pb-4 border-gray-200">
@@ -2172,6 +2187,10 @@ export default function ImenikPage() {
       </div>
 
       <div className="flex-1 overflow-auto">
+        <div style={{color:'red',fontSize:'24px', padding: '20px'}}>
+           TEST CONTENT viewMode: {viewMode}
+        </div>
+        {console.log('[IMENIK] component rendered, viewMode:', viewMode)}
         {viewMode === 'STUDENTS' && renderStudents()}
         {viewMode === 'SUBJECTS' && renderSubjectSelector()}
         {viewMode === 'GRADES' && renderGrades()}
