@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
-import { CheckCircle2, AlertTriangle, RefreshCw, XCircle, ShieldCheck } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { CheckCircle2, AlertTriangle, RefreshCw, XCircle, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export default function SystemCheckPage() {
+  const navigate = useNavigate();
   const { selectedSchoolId } = useSelection();
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<any>(null);
@@ -68,19 +70,26 @@ export default function SystemCheckPage() {
   };
 
   return (
-    <div className="p-6 bg-slate-50 min-h-screen">
-      <div className="flex border-b pb-4 items-center justify-between shadow-sm bg-white p-4 rounded-md">
-        <div>
-          <h1 className="text-xl font-black text-slate-900 uppercase">Status i Provjera Sustava</h1>
-          <p className="text-xs text-slate-500 font-bold uppercase mt-1">Nadzor stabilnosti produkcijske okoline (Prioritet 11)</p>
+    <div className="p-6 font-sans bg-[#f8f9fa] min-h-screen">
+      <div className="max-w-7xl mx-auto">
+        {/* Navigation & Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-[#dee2e6] pb-6">
+          <div>
+            <div className="flex items-center gap-2 text-[#005c8d] text-xs font-black uppercase tracking-widest mb-2 cursor-pointer hover:underline" onClick={() => navigate('/admin-skole')}>
+              <ArrowLeft size={14} /> Natrag u administraciju
+            </div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none mb-2">Provjera sustava</h1>
+            <p className="text-slate-500 font-medium text-sm">Nadzor stabilnosti produkcijske okoline (Prioritet 11)</p>
+          </div>
+          <div>
+            <button 
+              onClick={runChecks} disabled={loading}
+              className="bg-[#005c8d] text-white px-5 py-3 rounded-sm font-black uppercase tracking-wider text-[10px] flex items-center gap-2 hover:bg-[#004a71] transition-all cursor-pointer shadow-sm active:scale-95"
+            >
+              <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Pokreni Provjeru
+            </button>
+          </div>
         </div>
-        <button 
-          onClick={runChecks} disabled={loading}
-          className="flex items-center gap-2 bg-[#005c8d] text-white px-4 py-2 font-black text-xs uppercase px-5 tracking-wider rounded transition-colors hover:bg-[#00476b]"
-        >
-          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Pokreni Provjeru
-        </button>
-      </div>
 
       {report && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
@@ -126,6 +135,7 @@ export default function SystemCheckPage() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

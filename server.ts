@@ -537,7 +537,12 @@ async function startServer() {
         .select()
         .single();
         
-      if (error) throw error;
+      if (error) {
+        if (error?.code === '23505') {
+          return res.status(409).json({ error: "Lektira s ovim naslovom i datumom već postoji za ovaj razred." });
+        }
+        throw error;
+      }
       res.json(data);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -564,7 +569,12 @@ async function startServer() {
         .select()
         .single();
       
-      if (error) throw error;
+      if (error) {
+        if (error?.code === '23505') {
+          return res.status(409).json({ error: "Lektira s ovim naslovom i datumom već postoji za ovaj razred." });
+        }
+        throw error;
+      }
       res.json(data);
     } catch (err: any) {
       res.status(500).json({ error: err.message });

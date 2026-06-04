@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
-import { Activity, Users, BookOpen, Calendar, Server, ShieldCheck, HardDrive, Wifi, Bell, Bot, Smartphone } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Activity, Users, BookOpen, Calendar, Server, ShieldCheck, HardDrive, Wifi, Bell, Bot, Smartphone, ArrowLeft } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export default function SystemHealthPage() {
+  const navigate = useNavigate();
+  // ... rest of state
   const [stats, setStats] = useState({
     users: 0,
     students: 0,
@@ -79,19 +82,26 @@ export default function SystemHealthPage() {
   };
 
   return (
-    <div className="p-6 bg-slate-50 min-h-screen">
-      <div className="flex border-b pb-4 items-center justify-between shadow-sm bg-white p-4 rounded-md mb-6">
-        <div>
-           <h1 className="text-xl font-black text-slate-900 uppercase">System Health Dashboard</h1>
-           <p className="text-xs text-slate-500 font-bold uppercase mt-1">Nadgledanje glavnih servisa i ukupne telemetrije</p>
+    <div className="p-6 font-sans bg-[#f8f9fa] min-h-screen">
+      <div className="max-w-7xl mx-auto">
+        {/* Navigation & Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-[#dee2e6] pb-6">
+          <div>
+            <div className="flex items-center gap-2 text-[#005c8d] text-xs font-black uppercase tracking-widest mb-2 cursor-pointer hover:underline" onClick={() => navigate('/admin-skole')}>
+              <ArrowLeft size={14} /> Natrag u administraciju
+            </div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none mb-2">Zdravlje sustava</h1>
+            <p className="text-slate-500 font-medium text-sm">Nadgledanje glavnih servisa i ukupne telemetrije</p>
+          </div>
+          <div>
+            <button 
+              onClick={loadHealthStats} disabled={loading}
+              className="bg-[#005c8d] text-white px-5 py-3 rounded-sm font-black uppercase tracking-wider text-[10px] flex items-center gap-2 hover:bg-[#004a71] transition-all cursor-pointer shadow-sm active:scale-95"
+            >
+              <Activity size={14} className={loading ? 'animate-pulse' : ''} /> Osvježi
+            </button>
+          </div>
         </div>
-        <button 
-          onClick={loadHealthStats} disabled={loading}
-          className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 font-black text-xs uppercase px-5 tracking-wider rounded transition-colors hover:bg-slate-700"
-        >
-          <Activity size={14} className={loading ? 'animate-pulse' : ''} /> Osvježi
-        </button>
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
          <div className="col-span-1 lg:col-span-2 space-y-6">
@@ -187,6 +197,7 @@ export default function SystemHealthPage() {
                  </div>
              </div>
          </div>
+      </div>
       </div>
     </div>
   );

@@ -6,20 +6,21 @@ import { logSystemAction } from '../../utils/auditLogger';
 import { jsPDF } from 'jspdf';
 import { 
   FileText, Search, Plus, Trash2, Download, Filter,
-  BookOpen, Calendar, RefreshCw, PenTool, ShieldCheck, Link2
+  BookOpen, Calendar, RefreshCw, PenTool, ShieldCheck, Link2, Archive
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 interface SchoolDocument {
   id: string;
   school_id: string;
+  school_year_id?: string;
   title: string;
-  content: string;
-  type: string;
+  description: string;
   category: string;
+  document_type: string;
+  visibility: string;
   status: string;
-  access_level: string;
-  author_id: string;
+  uploaded_by: string;
   created_at: string;
   updated_at: string;
 }
@@ -36,8 +37,9 @@ export default function InterniDokumentiPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState<string>('SVE');
 
-  // New Doc Form
+  // New / Edit Doc Form
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingDocId, setEditingDocId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [newType, setNewType] = useState('PRAVILNIK');
   const [newCat, setNewCat] = useState('Opći akti');
@@ -52,6 +54,7 @@ export default function InterniDokumentiPage() {
   const loadDocuments = async () => {
     try {
       setLoading(true);
+      console.log("[DOKUMENTI] Loading documents");
       const { data, error } = await supabase
         .from('school_documents')
         .select('*')
@@ -59,11 +62,12 @@ export default function InterniDokumentiPage() {
         .order('created_at', { ascending: false });
         
       if (error) throw error;
+      console.log("[DOKUMENTI] Query result", data);
       setDocs(data || []);
       setFilteredDocs(data || []);
-    } catch (err) {
-      console.error(err);
-      toast.error('Neuspješno učitavanje dokumenata.');
+    } catch (err: any) {
+      console.error("[DOKUMENTI] Error", err);
+      toast.error(`Neuspješno učitavanje dokumenata: ${err.message || 'Nepoznata greška'}`);
     } finally {
       setLoading(false);
     }
@@ -75,12 +79,12 @@ export default function InterniDokumentiPage() {
       const s = searchTerm.toLowerCase();
       res = res.filter(d => 
         (d.title || '').toLowerCase().includes(s) || 
-        (d.content || '').toLowerCase().includes(s) ||
+        (d.description || '').toLowerCase().includes(s) ||
         (d.category || '').toLowerCase().includes(s)
       );
     }
     if (selectedType !== 'SVE') {
-      res = res.filter(d => d.type === selectedType);
+      res = res.filter(d => d.document_type === selectedType);
     }
     setFilteredDocs(res);
   }, [searchTerm, selectedType, docs]);
@@ -96,37 +100,75 @@ export default function InterniDokumentiPage() {
       const payload = {
         school_id: selectedSchoolId,
         title: newTitle,
-        type: newType,
+        document_type: newType,
         category: newCat,
-        content: newContent,
-        access_level: newAccess,
-        status: 'ODOBREN',
-        author_id: user?.id
+        description: newContent,
+        visibility: newAccess,
+        status: editingDocId ? undefined : 'ODOBREN',
+        uploaded_by: user?.id
       };
 
-      const { data, error } = await supabase.from('school_documents').insert([payload]).select().single();
-      if (error) throw error;
-
-      toast.success('Novi dokument je pohranjen.');
-      setShowAddModal(false);
-
-      if (user?.id && data) {
-        await logSystemAction({
-          executor_id: user.id,
-          school_id: selectedSchoolId || '',
-          action_type: 'PUBLISH_DOCUMENT',
-          entity_type: 'INTERNAL_DOCUMENT',
-          entity_id: data.id,
-          new_value: { title: newTitle, type: newType }
-        });
+      if (editingDocId) {
+        const { error } = await supabase.from('school_documents').update(payload).eq('id', editingDocId);
+        if (error) throw error;
+        toast.success('Dokument je ažuriran.');
+      } else {
+        const { data, error } = await supabase.from('school_documents').insert([payload]).select().single();
+        if (error) throw error;
+        toast.success('Novi dokument je pohranjen.');
+        if (user?.id && data) {
+          await logSystemAction({
+            executor_id: user.id,
+            school_id: selectedSchoolId || '',
+            action_type: 'PUBLISH_DOCUMENT',
+            entity_type: 'INTERNAL_DOCUMENT',
+            entity_id: data.id,
+            new_value: { title: newTitle, document_type: newType }
+          });
+        }
       }
 
+      setShowAddModal(false);
+      setEditingDocId(null);
       setNewTitle('');
       setNewContent('');
       loadDocuments();
     } catch (err) {
       console.error(err);
       toast.error('Spremanje dokumenta nije uspjelo.');
+    }
+  };
+
+  const openAddModal = () => {
+    setEditingDocId(null);
+    setNewTitle('');
+    setNewType('PRAVILNIK');
+    setNewCat('Opći akti');
+    setNewAccess('INTERNAL');
+    setNewContent('');
+    setShowAddModal(true);
+  };
+
+  const openEditModal = (doc: SchoolDocument) => {
+    setEditingDocId(doc.id);
+    setNewTitle(doc.title);
+    setNewType(doc.document_type || 'PRAVILNIK');
+    setNewCat(doc.category || 'Opći akti');
+    setNewAccess(doc.visibility || 'INTERNAL');
+    setNewContent(doc.description || '');
+    setShowAddModal(true);
+  };
+
+  const handleArchiveDoc = async (doc: SchoolDocument) => {
+    if (!window.confirm(`Arhivirati dokument "${doc.title}"?`)) return;
+    try {
+      const { error } = await supabase.from('school_documents').update({ status: 'ARHIVIRAN' }).eq('id', doc.id);
+      if (error) throw error;
+      toast.success('Dokument arhiviran.');
+      loadDocuments();
+    } catch (e) {
+      console.error(e);
+      toast.error('Greška pri arhiviranju.');
     }
   };
 
@@ -173,7 +215,7 @@ export default function InterniDokumentiPage() {
       pdf.setFontSize(10);
       pdf.setTextColor(100);
       pdf.text(`KLASA: ${doc.id.substring(0,8)}`, 20, 20);
-      pdf.text(`RAZINA POSJETA: ${doc.access_level}`, 20, 25);
+      pdf.text(`RAZINA POSJETA: ${doc.visibility}`, 20, 25);
       pdf.text(`STATUS: ${doc.status}`, 20, 30);
 
       pdf.setFontSize(16);
@@ -181,7 +223,7 @@ export default function InterniDokumentiPage() {
       pdf.text(doc.title || '', 105, 50, { align: 'center' });
 
       pdf.setFontSize(11);
-      const splitBody = pdf.splitTextToSize(doc.content || '', 170);
+      const splitBody = pdf.splitTextToSize(doc.description || '', 170);
       pdf.text(splitBody, 20, 70);
 
       pdf.save(`${(doc.title || '').replace(/\s+/g, '_')}.pdf`);
@@ -206,7 +248,7 @@ export default function InterniDokumentiPage() {
         <div className="mt-4 md:mt-0 flex gap-2">
           {isStaff && (
             <button
-              onClick={() => setShowAddModal(true)}
+              onClick={openAddModal}
               className="bg-[#005c8d] text-white px-4 py-2 rounded-md font-bold text-xs uppercase tracking-wider flex items-center gap-2 hover:bg-[#00476b] transition-colors shadow-sm"
             >
               <Plus size={16} /> Novi dokument
@@ -241,8 +283,7 @@ export default function InterniDokumentiPage() {
               <option value="PLAN">Nastavni planovi</option>
               <option value="ZAPISNIK">Zapisnici</option>
               <option value="INTERNI">Interni dokumenti</option>
-              <option value="STRUCNI">Stručna služba</option>
-              <option value="ZAVRSNI">Završni radovi</option>
+              <option value="OSTALO">Ostalo</option>
             </select>
          </div>
       </div>
@@ -252,7 +293,7 @@ export default function InterniDokumentiPage() {
       ) : filteredDocs.length === 0 ? (
         <div className="bg-white border-2 border-dashed border-slate-200 rounded-xl p-12 text-center text-slate-400">
           <BookOpen size={48} className="mx-auto text-slate-300 mb-4" />
-          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Nema pronađenih dokumenata</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-slate-500">Nema dokumenata škole.</h2>
           <p className="text-xs mt-2">Pokušajte primijeniti drugačije filtere.</p>
         </div>
       ) : (
@@ -261,15 +302,15 @@ export default function InterniDokumentiPage() {
             <div key={doc.id} className="bg-white rounded-md border border-slate-200 shadow-sm p-5 hover:shadow-md transition-shadow relative group flex flex-col">
               <div className="flex justify-between items-start mb-3">
                 <span className="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-black uppercase tracking-wider inline-flex gap-1 items-center">
-                  <FileText size={10} /> {doc.type}
+                  <FileText size={10} /> {doc.document_type}
                 </span>
                 <span className="text-[9px] text-[#005c8d] font-bold uppercase tracking-wider bg-[#005c8d]/10 px-2 py-0.5 rounded border border-[#005c8d]/20">
-                  {doc.access_level}
+                  {doc.visibility}
                 </span>
               </div>
               <h3 className="font-bold text-slate-800 leading-snug mb-2 line-clamp-2">{doc.title}</h3>
               <p className="text-xs text-slate-500 font-medium mb-4 bg-slate-50 p-2 rounded border border-slate-100 line-clamp-4 leading-relaxed flex-1">
-                {doc.content || 'Nema sažetka dokumenta.'}
+                {doc.description || 'Nema sažetka dokumenta.'}
               </p>
               <div className="flex justify-between items-end mt-auto pt-4 border-t border-slate-100">
                 <div className="flex flex-col gap-1">
@@ -284,12 +325,26 @@ export default function InterniDokumentiPage() {
                     <Download size={16} />
                   </button>
                   {isStaff && (
-                    <button 
-                      onClick={() => handleDeleteDoc(doc)}
-                      className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors" title="Obriši dokument"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <>
+                      <button 
+                        onClick={() => openEditModal(doc)}
+                        className="p-1.5 text-orange-500 hover:bg-orange-50 rounded transition-colors" title="Uredi dokument"
+                      >
+                        <PenTool size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleArchiveDoc(doc)}
+                        className="p-1.5 text-gray-500 hover:bg-gray-100 rounded transition-colors" title="Arhiviraj dokument"
+                      >
+                        <Archive size={16} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteDoc(doc)}
+                        className="p-1.5 text-red-500 hover:bg-red-50 rounded transition-colors" title="Obriši dokument"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -302,8 +357,18 @@ export default function InterniDokumentiPage() {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
-              <h2 className="text-sm font-black uppercase tracking-wider text-slate-800 border-l-4 border-[#005c8d] pl-3">Upload Novog Dokumenta</h2>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1">✕</button>
+              <h2 className="text-sm font-black uppercase tracking-wider text-slate-800 border-l-4 border-[#005c8d] pl-3">
+                {editingDocId ? 'Uredi Dokument' : 'Upload Novog Dokumenta'}
+              </h2>
+              <button 
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingDocId(null);
+                }} 
+                className="text-slate-400 hover:text-slate-600 font-bold px-2 py-1"
+              >
+                ✕
+              </button>
             </div>
             <div className="p-6 space-y-4 overflow-y-auto">
               <div>
@@ -327,15 +392,14 @@ export default function InterniDokumentiPage() {
                     value={newType} onChange={e => setNewType(e.target.value)}
                     className="w-full border border-slate-200 rounded p-2 text-sm focus:border-[#005c8d] outline-none bg-white"
                   >
-                    <option value="PRAVILNIK">Pravilnik</option>
-                    <option value="ODLUKA">Odluka</option>
-                    <option value="OBRAZAC">Obrazac</option>
-                    <option value="KURIKULUM">Kurikulum</option>
-                    <option value="PLAN">Nastavni plan</option>
-                    <option value="ZAPISNIK">Zapisnik</option>
-                    <option value="INTERNI">Interni dokument</option>
-                    <option value="STRUCNI">Stručna služba</option>
-                    <option value="ZAVRSNI">Završni rad</option>
+                    <option value="PRAVILNIK">Pravilnici</option>
+                    <option value="ODLUKA">Odluke</option>
+                    <option value="OBRAZAC">Obrasci</option>
+                    <option value="KURIKULUM">Kurikuli</option>
+                    <option value="PLAN">Nastavni planovi</option>
+                    <option value="ZAPISNIK">Zapisnici</option>
+                    <option value="INTERNI">Interni dokumenti</option>
+                    <option value="OSTALO">Ostalo</option>
                   </select>
                 </div>
               </div>
@@ -360,7 +424,10 @@ export default function InterniDokumentiPage() {
             </div>
             <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end gap-3">
               <button 
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingDocId(null);
+                }}
                 className="px-4 py-2 text-xs font-bold uppercase tracking-wider text-slate-500 hover:text-slate-800 transition-colors"
               >
                 Odustani
@@ -369,7 +436,7 @@ export default function InterniDokumentiPage() {
                 onClick={handleAddDoc}
                 className="px-5 py-2 text-xs font-black uppercase tracking-wider text-white bg-[#005c8d] rounded shadow hover:bg-[#00476b] transition-all"
               >
-                Pohrani Dokument
+                {editingDocId ? 'Spremi izmjene' : 'Pohrani Dokument'}
               </button>
             </div>
           </div>

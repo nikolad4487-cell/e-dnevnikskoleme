@@ -11,11 +11,13 @@ import {
 } from 'recharts';
 import { 
   Users, Award, Clipboard, GraduationCap, Calendar, Clock, BookOpen, AlertTriangle, 
-  ChevronRight, Building2, Download, TrendingUp, Sparkles, FolderOpen, Heart, ShieldAlert
+  ChevronRight, Building2, Download, TrendingUp, Sparkles, FolderOpen, Heart, ShieldAlert, ArrowLeft
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { useNavigate } from 'react-router-dom';
 
 export default function RavnateljDashboardPage() {
+  const navigate = useNavigate();
   const { selectedSchoolId } = useSelection();
   const { user } = useAuth();
   
@@ -298,23 +300,26 @@ export default function RavnateljDashboardPage() {
   };
 
   return (
-    <div className="p-6 bg-slate-50/50 min-h-screen font-sans space-y-6">
-      {/* Title Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between border-b pb-4 gap-4">
-        <div>
-          <span className="text-[10px] bg-[#005c8d]/10 text-[#005c8d] font-black uppercase tracking-widest px-2 py-0.5 rounded border border-[#005c8d]/20 inline-flex items-center gap-1.5 mb-1">
-            <ShieldAlert size={10} /> Službeni Ured Ravnatelja
-          </span>
-          <h1 className="text-xl md:text-2xl font-black text-slate-950 uppercase tracking-tight">Upravljačka ploča ravnatelja</h1>
-          <p className="text-xs text-slate-500 font-bold uppercase tracking-tight mt-0.5">Strateški i operativni pregled uspjeha, izostanaka i pedagoškog rada škole</p>
+    <div className="p-6 font-sans bg-[#f8f9fa] min-h-screen">
+      <div className="max-w-7xl mx-auto space-y-6">
+        {/* Navigation & Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-[#dee2e6] pb-6">
+          <div>
+            <div className="flex items-center gap-2 text-[#005c8d] text-xs font-black uppercase tracking-widest mb-2 cursor-pointer hover:underline" onClick={() => navigate('/admin-skole')}>
+              <ArrowLeft size={14} /> Natrag u administraciju
+            </div>
+            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none mb-2">Upravljačka ploča ravnatelja</h1>
+            <p className="text-slate-500 font-medium text-sm">Strateški i operativni pregled uspjeha, izostanaka i pedagoškog rada škole</p>
+          </div>
+          <div>
+            <button 
+              onClick={loadDashboardData}
+              className="bg-[#005c8d] text-white px-5 py-3 rounded-sm font-black uppercase tracking-wider text-[10px] flex items-center gap-2 hover:bg-[#004a71] transition-all cursor-pointer shadow-sm active:scale-95"
+            >
+              🔄 Osvježi podatke
+            </button>
+          </div>
         </div>
-        <button 
-          onClick={loadDashboardData}
-          className="bg-white border border-slate-300 text-slate-800 text-[10px] font-black px-4 py-2 uppercase rounded-md shadow-sm hover:bg-slate-50 hover:border-slate-400 transition-all inline-flex items-center gap-2 w-fit"
-        >
-          🔄 Osvježi podatke
-        </button>
-      </div>
 
       {/* Metrics Row (10 boxes) */}
       <motion.div 
@@ -465,6 +470,7 @@ export default function RavnateljDashboardPage() {
             )}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

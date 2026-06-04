@@ -263,6 +263,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [lektire, setLektire] = useState<any[]>([]);
   const [showLektiraModal, setShowLektiraModal] = useState(false);
   const [editingLektira, setEditingLektira] = useState<any | null>(null);
+  const [isSavingLektira, setIsSavingLektira] = useState(false);
   const [lektiraForm, setLektiraForm] = useState({
     subjectId: '',
     completedDate: new Date().toISOString().split('T')[0],
@@ -292,6 +293,8 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
 
   const handleCreateOrUpdateLektira = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSavingLektira) return;
+
     const targetSubjectId = getHrvatskiJezikSubjectId();
     
     if (!targetSubjectId) {
@@ -305,6 +308,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     }
 
     try {
+      setIsSavingLektira(true);
       const isNew = !editingLektira;
       const url = isNew ? `/api/lektire` : `/api/lektire/${editingLektira.id}`;
       const method = isNew ? 'POST' : 'PUT';
@@ -366,6 +370,8 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
       }
     } catch (err: any) {
       toast.error(err.message || 'Greška pri spremanju lektire');
+    } finally {
+      setIsSavingLektira(false);
     }
   };
 
@@ -2040,9 +2046,10 @@ setStudents(uniqueStudents);
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-[#005c8d] text-white hover:bg-[#004a71] text-[10px] font-bold uppercase tracking-wider rounded transition-all cursor-pointer shadow-md"
+                    disabled={isSavingLektira}
+                    className={`px-5 py-2 bg-[#005c8d] text-white hover:bg-[#004a71] text-[10px] font-bold uppercase tracking-wider rounded transition-all cursor-pointer shadow-md ${isSavingLektira ? 'opacity-50 cursor-not-allowed' : ''}`}
                   >
-                    Spremi
+                    {isSavingLektira ? 'Spremanje...' : 'Spremi'}
                   </button>
                 </div>
               </form>
