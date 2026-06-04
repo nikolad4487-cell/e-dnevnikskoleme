@@ -61,7 +61,15 @@ export default function InterniDokumentiPage() {
         .eq('school_id', selectedSchoolId)
         .order('created_at', { ascending: false });
         
-      if (error) throw error;
+      if (error) {
+         if (error.code === '42P01') {
+            console.log("[DOKUMENTI] Table does not exist. Treating as empty.");
+            setDocs([]);
+            setFilteredDocs([]);
+            return;
+         }
+         throw error;
+      }
       console.log("[DOKUMENTI] Query result", data);
       setDocs(data || []);
       setFilteredDocs(data || []);

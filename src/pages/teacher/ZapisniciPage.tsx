@@ -12,7 +12,7 @@ import { formatPersonName } from '../../lib/utils';
 
 export default function ZapisniciPage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
-  const { user } = useAuth();
+  const { user, isMainAdmin, highestRole } = useAuth();
   const { selectedSchoolId, selectedClassId: contextClassId } = useSelection();
   
   const effectiveClassId = contextClassId || routeClassId;
@@ -88,7 +88,8 @@ export default function ZapisniciPage() {
     const zapisnik = zapisnici.find(z => z.id === id);
     if (!zapisnik) return;
 
-    if (user?.role !== Role.ADMIN && zapisnik.author_id !== user?.id) {
+    const isAdmin = isMainAdmin || highestRole === Role.ADMIN || highestRole === Role.SCHOOL_ADMIN;
+    if (!isAdmin && zapisnik.author_id !== user?.id) {
       toast.error('Niste ovlašteni za brisanje ovog zapisnika.');
       return;
     }

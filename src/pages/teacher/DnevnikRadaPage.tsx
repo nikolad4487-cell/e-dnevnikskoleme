@@ -11,10 +11,10 @@ import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
 import { usePageTitle } from '../../hooks/usePageTitle';
 
-export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' }) {
+export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA' }) {
   usePageTitle("Dnevnik rada");
   const { classId: routeClassId } = useParams<{ classId: string }>();
-  const { user, isMainAdmin } = useAuth();
+  const { user, isMainAdmin, highestRole } = useAuth();
   const { selectedSchoolId, selectedClassId: contextClassId, selectedYearId } = useSelection();
   
   const effectiveClassId = contextClassId || routeClassId;
@@ -25,7 +25,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [teachers, setTeachers] = useState<User[]>([]);
   
   const [weeks, setWeeks] = useState<WorkWeek[]>([]);
-  const [view, setView] = useState<'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE'>(initialView || 'WEEKS');
+  const [view, setView] = useState<'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA'>(initialView || 'WEEKS');
   const [selectedWeek, setSelectedWeek] = useState<WorkWeek | null>(null);
   
   useEffect(() => {
@@ -110,7 +110,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
 
   const canManageWeeks = useMemo(() => {
     if (!user || !effectiveClassId) return false;
-    if (isMainAdmin || user.role === Role.ADMIN) return true;
+    if (isMainAdmin || highestRole === Role.ADMIN) return true;
     
     const isHomeroom = selectedClass ? selectedClass.homeroomTeacherId === user.id : false;
     const isDeputy = selectedClass ? selectedClass.deputyTeacherId === user.id : false;
@@ -281,7 +281,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
       if (res.ok) {
         const data = await res.json();
         console.log("[LEKTIRA] Loaded records:", data ? data.length : 0);
-        console.log("[LEKTIRA] User role:", user?.role);
+        console.log("[LEKTIRA] User role:", highestRole);
         console.log("[LEKTIRA] Class:", effectiveClassId);
         console.log("[LEKTIRA] Query result:", data);
         setLektire(data || []);
@@ -1034,13 +1034,13 @@ setStudents(uniqueStudents);
     if (!lesson) return;
 
     // Time-based check
-    const createdAt = new Date(lesson.createdAt || lesson.updatedAt || Date.now());
+    const createdAt = new Date((lesson as any).createdAt || (lesson as any).updatedAt || (lesson as any).created_at || Date.now());
     const now = new Date();
     const isOver24Hours = (now.getTime() - createdAt.getTime()) > (24 * 60 * 60 * 1000);
 
     // RBAC: Admins or Razrednik can bypass time check
     const isRazrednik = selectedClass && (selectedClass.homeroomTeacherId === user?.id || selectedClass.deputyTeacherId === user?.id);
-    const canBypassTime = isMainAdmin || user?.role === Role.ADMIN || isRazrednik;
+    const canBypassTime = isMainAdmin || highestRole === Role.ADMIN || isRazrednik;
 
     if (!canBypassTime && lesson.teacherId !== user?.id) {
        toast.error('Niste ovlašteni za brisanje ovog sata.');
@@ -1061,7 +1061,7 @@ setStudents(uniqueStudents);
     // Check if TOTP is required for this deletion type and user
     const lesson = deleteDialog.type === 'LESSON' ? dailyLessons.find(l => l.id === deleteDialog.id) : null;
     const isRazrednik = selectedClass && (selectedClass.homeroomTeacherId === user?.id || selectedClass.deputyTeacherId === user?.id);
-    const requiresTotp = (deleteDialog.type === 'LESSON' && (isMainAdmin || user?.role === Role.ADMIN || isRazrednik)) || deleteDialog.type === 'ABSENCE'; // Assuming we handle absence deletion confirmation too
+    const requiresTotp = (deleteDialog.type === 'LESSON' && (isMainAdmin || highestRole === Role.ADMIN || isRazrednik)) || deleteDialog.type === 'ABSENCE'; // Assuming we handle absence deletion confirmation too
 
     if (requiresTotp) {
       if (!totpCode) {
@@ -1110,7 +1110,7 @@ setStudents(uniqueStudents);
                 actionType: 'DELETE_LESSON',
                 recordId: lessonId,
                 userId: user?.id,
-                userRole: user?.role,
+                userRole: highestRole,
                 details: `Deleted lesson ${lessonId}`
             })
         });
@@ -1906,7 +1906,10 @@ setStudents(uniqueStudents);
                     subjectId: getHrvatskiJezikSubjectId(),
                     completedDate: new Date().toISOString().split('T')[0],
                     title: '',
-                    description: ''
+                    description: '',
+                    author: '',
+                    processingMethod: '',
+                    processingDetails: ''
                   });
                   setShowLektiraModal(true);
                 }}
@@ -1952,7 +1955,10 @@ setStudents(uniqueStudents);
                                 subjectId: lek.subjectId || lek.subject_id || '',
                                 completedDate: lek.completedDate || lek.completed_date || '',
                                 title: lek.title,
-                                description: lek.description || ''
+                                description: lek.description || '',
+                                author: lek.author || '',
+                                processingMethod: lek.processingMethod || lek.processing_method || '',
+                                processingDetails: lek.processingDetails || lek.processing_details || ''
                               });
                               setShowLektiraModal(true);
                             }}
@@ -3060,7 +3066,7 @@ setStudents(uniqueStudents);
         onClose={() => setDeleteDialog({ ...deleteDialog, isOpen: false })}
         onConfirm={confirmDelete}
         loading={deleteDialog.loading}
-        showTotp={deleteDialog.type === 'LESSON' && (isMainAdmin || user?.role === Role.ADMIN || (selectedClass && (selectedClass.homeroomTeacherId === user?.id || selectedClass.deputyTeacherId === user?.id)))}
+        showTotp={deleteDialog.type === 'LESSON' && (isMainAdmin || highestRole === Role.ADMIN || (selectedClass && (selectedClass.homeroomTeacherId === user?.id || selectedClass.deputyTeacherId === user?.id)))}
       />
     </div>
   );

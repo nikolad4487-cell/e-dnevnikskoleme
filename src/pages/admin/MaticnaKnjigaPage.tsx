@@ -11,6 +11,7 @@ import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { registerUnicodeFont } from '../../lib/pdfGenerator';
 
 interface StudentRegistryItem {
   id: string;
@@ -47,6 +48,25 @@ export default function MaticnaKnjigaPage() {
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
 
+  const [filteredClasses, setFilteredClasses] = useState<any[]>([]);
+
+  useEffect(() => {
+    let newFilteredClasses = classes;
+    if (selectedYear) {
+      newFilteredClasses = classes.filter(c => c.school_year === selectedYear);
+    }
+    setFilteredClasses(newFilteredClasses);
+    
+    console.log("[MATICNA] selectedSchoolYear", selectedYear);
+    console.log("[MATICNA] availableClasses", newFilteredClasses);
+    console.log("[MATICNA] selectedClass", selectedClass);
+
+    // If selected class is no longer in the list, reset it
+    if (selectedClass && !newFilteredClasses.some(c => c.name === selectedClass)) {
+      setSelectedClass('');
+    }
+  }, [selectedYear, classes]);
+
   const [editingStudent, setEditingStudent] = useState<StudentRegistryItem | null>(null);
   const [editForm, setEditForm] = useState({
     name: '',
@@ -57,7 +77,8 @@ export default function MaticnaKnjigaPage() {
     country_of_birth: '',
     address: '',
     program_id: '',
-    class_id: ''
+    class_id: '',
+    status: ''
   });
 
   useEffect(() => {
@@ -118,10 +139,8 @@ export default function MaticnaKnjigaPage() {
 
       // 6. Fetch Parents
       const { data: parentsData } = await supabase
-        .from('user_school_roles')
-        .select('user_id, related_student_id, user:user_profiles (name, surname)')
-        .eq('school_id', selectedSchoolId)
-        .eq('role', 'PARENT');
+        .from('student_parent_contacts')
+        .select('student_id, parent_name');
 
       // Map everything together
       const list: StudentRegistryItem[] = [];
@@ -138,11 +157,8 @@ export default function MaticnaKnjigaPage() {
         const enrollClass = activeEnr ? (classList || []).find(c => c.id === activeEnr.class_id) : null;
         const enrollProgram = enrollClass ? (programsData || []).find(p => p.id === enrollClass.program_id) : null;
 
-        const pData = (parentsData || []).filter(p => p.related_student_id === profile.id);
-        const parentNames = pData.map(p => {
-            const u = p.user as any;
-            return u ? `${u.name} ${u.surname}`.trim() : '';
-        }).filter(n => n.length > 0).join(', ');
+        const pData = (parentsData || []).filter(p => p.student_id === profile.id);
+        const parentNames = pData.map(p => p.parent_name).filter(n => n && n.length > 0).join(', ');
 
         list.push({
           id: profile.id,
@@ -229,10 +245,14 @@ export default function MaticnaKnjigaPage() {
 
       console.log("[MATIČNA] Generating report");
       const doc = new jsPDF('landscape');
+      await registerUnicodeFont(doc);
+      doc.setFont('NotoSans', 'normal');
       
       doc.setFontSize(16);
+      doc.setFont('NotoSans', 'bold');
       doc.text(`MATIČNA KNJIGA UČENIKA`, 14, 20);
       doc.setFontSize(12);
+      doc.setFont('NotoSans', 'normal');
       doc.text(`Škola: ${schoolName}`, 14, 28);
       
       let startY = 34;
@@ -262,8 +282,8 @@ export default function MaticnaKnjigaPage() {
         head: [['R.br.', 'Prezime i Ime', 'OIB', 'Datum r.', 'Mjesto r.', 'Roditelji/Skrbnici', 'Adresa', 'Program', 'Razred']],
         body: bodyData,
         theme: 'grid',
-        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold' },
-        styles: { fontSize: 8, cellPadding: 2 }
+        headStyles: { fillColor: [241, 245, 249], textColor: [15, 23, 42], fontStyle: 'bold', font: 'NotoSans' },
+        styles: { fontSize: 8, cellPadding: 2, font: 'NotoSans' }
       });
 
       doc.save(`MaticnaKnjiga_${new Date().toISOString().split('T')[0]}.pdf`);
@@ -283,14 +303,20 @@ export default function MaticnaKnjigaPage() {
       
       console.log("[MATIČNA] Generating report");
       const doc = new jsPDF('portrait');
+      await registerUnicodeFont(doc);
+      doc.setFont('NotoSans', 'normal');
       
       doc.setFontSize(16);
+      doc.setFont('NotoSans', 'bold');
       doc.text(`IZVADAK IZ MATIČNE KNJIGE UČENIKA`, 14, 20);
       doc.setFontSize(12);
+      doc.setFont('NotoSans', 'normal');
       doc.text(`Škola: ${schoolName}`, 14, 28);
       
       let startY = 40;
+      doc.setFont('NotoSans', 'bold');
       doc.text(`Podaci o učeniku:`, 14, startY);
+      doc.setFont('NotoSans', 'normal');
       startY += 10;
       doc.setFontSize(10);
       doc.text(`Ime i prezime: ${student.name} ${student.surname || ''}`, 14, startY); startY += 6;
@@ -301,7 +327,10 @@ export default function MaticnaKnjigaPage() {
       doc.text(`Roditelji/skrbnici: ${student.parent_names || ''}`, 14, startY); startY += 12;
       
       doc.setFontSize(12);
-      doc.text(`Podaci o obrazovanju:`, 14, startY); startY += 10;
+      doc.setFont('NotoSans', 'bold');
+      doc.text(`Podaci o obrazovanju:`, 14, startY);
+      doc.setFont('NotoSans', 'normal');
+      startY += 10;
       doc.setFontSize(10);
       doc.text(`Program: ${student.program_name}`, 14, startY); startY += 6;
       doc.text(`Razred: ${student.class_name}`, 14, startY); startY += 6;
@@ -328,7 +357,8 @@ export default function MaticnaKnjigaPage() {
       country_of_birth: st.country_of_birth || 'HR',
       address: st.address === 'Nepoznata adresa' ? '' : st.address || '',
       program_id: st.program_id || '',
-      class_id: st.class_id || ''
+      class_id: st.class_id || '',
+      status: st.status || 'ACTIVE'
     });
   };
 
@@ -350,11 +380,19 @@ export default function MaticnaKnjigaPage() {
       if (profileError) throw profileError;
 
       // Update enrollment if changed
-      if (editForm.class_id !== editingStudent.class_id) {
-         const { error: enrError } = await supabase.from('student_class_enrollments')
-            .update({ class_id: editForm.class_id, program_id: editForm.program_id || null })
+      if (editForm.class_id !== editingStudent.class_id || editForm.status !== editingStudent.status) {
+         console.log("[MATICNA] UPDATING ENROLLMENT", { student_id: editingStudent.id, editForm });
+         const { data, error: enrError } = await supabase.from('student_class_enrollments')
+            .update({ 
+               class_id: editForm.class_id, 
+               program_id: editForm.program_id || null,
+               status: editForm.status
+            })
             .eq('student_id', editingStudent.id)
-            .eq('status', 'ACTIVE');
+            .eq('status', editingStudent.status); // Target the old status to ensure we find the record
+         
+         console.log("[MATICNA] SAVE ENROLLMENT RESULT", { data, error: enrError });
+            
          if (enrError) throw enrError;
       }
 
@@ -362,8 +400,8 @@ export default function MaticnaKnjigaPage() {
       setEditingStudent(null);
       loadRegistryData();
     } catch (e: any) {
-      console.error(e);
-      toast.error('Greška pri spremanju učenika.');
+      console.error("[MATICNA] SAVE STUDENT ERROR", e);
+      toast.error('Greška pri spremanju učenika: ' + (e.message || 'Nepoznata greška'));
       setLoading(false);
     }
   };
@@ -435,7 +473,10 @@ export default function MaticnaKnjigaPage() {
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-1">Školska godina</label>
           <select 
             value={selectedYear}
-            onChange={(e) => setSelectedYear(e.target.value)}
+            onChange={(e) => {
+              setSelectedYear(e.target.value);
+              setSelectedClass('');
+            }}
             className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold focus:outline-none"
           >
             <option value="">SVE GODINE</option>
@@ -454,7 +495,7 @@ export default function MaticnaKnjigaPage() {
             className="w-full bg-white border border-slate-300 rounded px-2.5 py-1.5 text-xs font-semibold focus:outline-none"
           >
             <option value="">SVI RAZREDI</option>
-            {classes.map(c => (
+            {filteredClasses.map(c => (
               <option key={c.id} value={c.name}>{c.name}</option>
             ))}
           </select>
@@ -618,7 +659,12 @@ export default function MaticnaKnjigaPage() {
                     <input type="text" disabled value={editingStudent.school_year} className="w-full border border-slate-200 rounded p-2 text-xs bg-slate-50" />
                   </div>
                   <div>
-                     {/* Placeholder for future if needed */}
+                      <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Status u školi</label>
+                      <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})} className="w-full border border-slate-200 rounded p-2 text-xs">
+                        <option value="ACTIVE">Aktivan</option>
+                        <option value="TRANSFERRED">Preseljen</option>
+                        <option value="GRADUATED">Maturirao/Završio</option>
+                    </select>
                   </div>
                   <div>
                     <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Program</label>
@@ -631,7 +677,7 @@ export default function MaticnaKnjigaPage() {
                     <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Razred</label>
                     <select value={editForm.class_id} onChange={e => setEditForm({...editForm, class_id: e.target.value})} className="w-full border border-slate-200 rounded p-2 text-xs">
                       <option value="">-- Bez razreda --</option>
-                      {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      {classes.filter(c => c.school_year === editingStudent.school_year).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                   </div>
                 </div>

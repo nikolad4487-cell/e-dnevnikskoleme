@@ -209,7 +209,7 @@ export default function ImenikPage() {
   
   const [currentGrades, setCurrentGrades] = useState<Grade[]>([]);
   const [currentNotes, setCurrentNotes] = useState<StudentNote[]>([]);
-  const [finalGrades, setFinalGrades] = useState<FinalGrade[]>([]);
+  const [finalGrades, setFinalGrades] = useState<Grade[]>([]);
   const [specialExams, setSpecialExams] = useState<Exam[]>([]);
   const [studentOverallNotes, setStudentOverallNotes] = useState<StudentNotes | null>(null);
   const [classOverallNotes, setClassOverallNotes] = useState<ClassNotes | null>(null);
@@ -766,9 +766,20 @@ export default function ImenikPage() {
     return assignment?.teacherId === user?.id;
   };
 
-  const isStudentActive = (studentId: string, subjectId: string) => {
-    const enrollment = enrollments.find(e => e.studentId === studentId && e.subjectId === subjectId);
+  const isStudentActiveGlobal = (studentId: string) => {
+    const enrollment = studentEnrollments.find(e => e.student_id === studentId);
     return enrollment?.status === 'ACTIVE';
+  };
+
+  const getStudentStatusLabel = (status: string) => {
+    if (status === 'TRANSFERRED' || status === 'PRESELJEN' || status === 'ISPISAN') return 'Ispisan';
+    if (status === 'GRADUATED') return 'Završio';
+    return '';
+  };
+
+  const isStudentInactive = (studentId: string) => {
+    const enrollment = studentEnrollments.find(e => e.student_id === studentId);
+    return enrollment?.status !== 'ACTIVE';
   };
 
   const handleSaveStudentNotes = async () => {
@@ -981,15 +992,12 @@ export default function ImenikPage() {
   const handleAddGrade = async () => {
     if (!activeStudent || !activeSubject || !user) return;
     
-    if (!canEditGrades(activeSubject.id)) {
-      toast.error('Niste zaduženi za ovaj predmet u ovom razredu.');
+    if (!isStudentActiveGlobal(activeStudent.id)) {
+      toast.error('Nije moguće unositi podatke za ispisanog učenika.');
       return;
     }
 
-    if (!isStudentActive(activeStudent.id, activeSubject.id)) {
-      toast.error('Učenik je oslobođen ovog predmeta.');
-      return;
-    }
+    if (!canEditGrades(activeSubject.id)) {
 
     try {
       const { error } = await supabase.from('grades').insert([{
@@ -1098,6 +1106,10 @@ export default function ImenikPage() {
     if (isArchived) {
       toast.error('Nije moguće uređivati arhivirane podatke.');
       return;
+    }
+    if (!isStudentActiveGlobal(activeStudent.id)) {
+        toast.error('Nije moguće unositi podatke za ispisanog učenika.');
+        return;
     }
     try {
       const { error } = await supabase.from('student_notes').insert([{
@@ -1573,8 +1585,8 @@ export default function ImenikPage() {
                   )}
                 >
                   <td className="px-3 py-2 text-center font-bold text-gray-500 border-r border-gray-200">{idx + 1}.</td>
-                  <td className="px-4 py-2 font-bold text-[#005c8d] border-r border-gray-200 group-hover:underline">
-                    {s.name}
+                  <td className={cn("px-4 py-2 font-bold border-r border-gray-200 group-hover:underline", isStudentInactive(s.id) ? "text-gray-500" : "text-[#005c8d]")}>
+                    {s.name} {isStudentInactive(s.id) && <span className="text-[10px] ml-1 font-normal">({getStudentStatusLabel(studentEnrollments.find(e => e.student_id === s.id)?.status || '')})</span>}
                     {s.programAdjustment === 'REGULAR_WITH_ADAPTATION' && (
                       <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200" title="Redovni program uz prilagodbu">P</span>
                     )}
@@ -1588,7 +1600,7 @@ export default function ImenikPage() {
                       const progId = enrollment?.program_id || classes.find(c => c.id === effectiveClassId)?.programId;
                       const prog = programs.find(p => p.id === progId);
                       return (
-                        <div className="text-[10px] font-bold text-gray-600 uppercase italic opacity-70">{prog ? prog.name : "Nije dodijeljen program"}</div>
+                        <div className={cn("text-[10px] font-bold uppercase italic opacity-70", isStudentInactive(s.id) ? "text-gray-400" : "text-gray-600")}>{prog ? prog.name : "Nije dodijeljen program"}</div>
                       );
                     })()}
                   </td>
@@ -2853,4 +2865,5 @@ function GradingElementsModal({ isOpen, onClose, subject, classId, schoolId, tea
       </div>
     </div>
   );
+}
 }

@@ -14,7 +14,7 @@ import { usePageTitle } from '../../hooks/usePageTitle';
 export default function TeacherIzostanciPage() {
   usePageTitle("Izostanci");
   const { classId: routeClassId } = useParams<{ classId: string }>();
-  const { user, isMainAdmin } = useAuth();
+  const { user, isMainAdmin, highestRole } = useAuth();
   const { selectedClassId: contextClassId } = useSelection();
   
   const effectiveClassId = contextClassId || routeClassId;
@@ -78,7 +78,7 @@ export default function TeacherIzostanciPage() {
     if (!deleteDialog.id) return;
     
     // TOTP check
-    if (isMainAdmin || user?.role === Role.ADMIN) {
+    if (isMainAdmin || highestRole === Role.ADMIN) {
       if (!totpCode) {
         toast.error('Potreban je autentifikator kod.');
         return;
@@ -110,7 +110,7 @@ export default function TeacherIzostanciPage() {
                 actionType: 'DELETE_ABSENCE',
                 recordId: deleteDialog.id,
                 userId: user?.id,
-                userRole: user?.role,
+                userRole: highestRole,
                 details: `Deleted absence ${deleteDialog.id}`
             })
         });
@@ -206,7 +206,7 @@ export default function TeacherIzostanciPage() {
             lessons={lessons} 
             onJustify={(date: string) => setJustifyingDate(date)}
             onDelete={(id: string) => setDeleteDialog({ isOpen: true, id, loading: false })}
-            showDeleteButton={isMainAdmin || user?.role === Role.ADMIN}
+            showDeleteButton={isMainAdmin || highestRole === Role.ADMIN}
           />
         )}
       </div>
@@ -216,7 +216,7 @@ export default function TeacherIzostanciPage() {
           onClose={() => setDeleteDialog({ ...deleteDialog, isOpen: false })}
           onConfirm={confirmDeleteAbsence}
           loading={deleteDialog.loading}
-          showTotp={isMainAdmin || user?.role === Role.ADMIN}
+          showTotp={isMainAdmin || highestRole === Role.ADMIN}
           title="Potvrda brisanja izostanka"
           message="Za brisanje izostanka potrebno je potvrditi radnju kodom iz autentifikatora."
       />

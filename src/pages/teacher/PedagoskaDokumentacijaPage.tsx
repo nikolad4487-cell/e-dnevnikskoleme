@@ -734,10 +734,10 @@ export default function PedagoskaDokumentacijaPage() {
              rec.recordType?.includes('pedagog') || 
              rec.recordType?.includes('psiholog') || 
              rec.recordType?.includes('defektolog') ||
-             rec.recordType === 'BILJESKE';
+              (rec.recordType as string) === 'BILJESKE';
     }
-    if (activeSubTab === 'UCENIK') return rec.recordType === 'UCENIK' || rec.recordType?.includes('učenik') || rec.recordType?.includes('učenikom');
-    if (activeSubTab === 'RODITELJI') return rec.recordType === 'RODITELJI' || rec.recordType?.includes('roditelj') || rec.recordType?.includes('roditeljima');
+    if (activeSubTab === 'UCENIK') return (rec.recordType as string) === 'UCENIK' || rec.recordType?.includes('učenik') || rec.recordType?.includes('učenikom');
+    if (activeSubTab === 'RODITELJI') return (rec.recordType as string) === 'RODITELJI' || rec.recordType?.includes('roditelj') || rec.recordType?.includes('roditeljima');
     return false;
   }) || [];
 

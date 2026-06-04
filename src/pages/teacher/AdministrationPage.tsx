@@ -16,7 +16,7 @@ export default function AdministrationPage() {
   const navigate = useNavigate();
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const [searchParams] = useSearchParams();
-  const { user, isMainAdmin, signOut, userSchoolRoles } = useAuth();
+  const { user, isMainAdmin, signOut, userSchoolRoles, highestRole } = useAuth();
   const { selectedSchoolId, selectedClassId: contextClassId, isArchived, setSelectedSchoolId, setSelectedClassId: setContextClassId } = useSelection();
 
   const isAnyAdmin = React.useMemo(() => {
@@ -3833,7 +3833,7 @@ setAllSubjects(uniqueSub2);
                                             student_id: s.id,
                                             subject_id: showEnrollmentModal.subjectId,
                                             class_id: selectedClassId,
-                                            school_year: selectedClassData?.school_year || '2025/2026',
+                                            school_year: (selectedClassData as any)?.schoolYear || (selectedClassData as any)?.school_year || '2025/2026',
                                             status: 'ACTIVE',
                                             created_at: new Date().toISOString(),
                                             updated_at: new Date().toISOString()
@@ -3872,7 +3872,7 @@ setAllSubjects(uniqueSub2);
                   <button onClick={() => setActiveTab('CLASS_DETAIL')} className="text-gray-400 hover:text-gray-600 transition-colors"><ChevronLeft size={20}/></button>
                   <h1 className="text-xl font-black text-gray-700 uppercase tracking-tighter">Opći prosjek i vladanje - {selectedClassData?.name}</h1>
                 </div>
-                {(isMainAdmin || isSchoolAdmin || selectedClassData?.homeroom_teacher_id === user?.id) && (
+                {(isMainAdmin || isSchoolAdmin || selectedClassData?.homeroomTeacherId === user?.id) && (
                   <button 
                     onClick={() => handleCalculateAndLockClassOverall(effectiveClassId)}
                     disabled={loading}
@@ -4298,8 +4298,9 @@ setAllSubjects(uniqueSub2);
                       onClick={() => {
                         setEditingStudentId(null);
                         setStudentForm({
-                          name: '', surname: '', email: '', classId: '', schoolId: selectedSchoolId || '', programId: '',
-                          oib: '', dob: '', address: '', status: 'ACTIVE', isContinuation: false, continuationType: null
+                          name: '', email: '', classId: '', schoolId: selectedSchoolId || '', programId: '',
+                          oib: '', dob: '', pob: '', address: '', mobile: '', status: 'ACTIVE', isContinuation: false, continuationType: null,
+                          parentName: '', parentPhone: '', parentEmail: '', parentNotes: '', enrollSubjects: true
                         });
                       }}
                       className="text-red-600 hover:underline normal-case font-bold"
@@ -4313,7 +4314,7 @@ setAllSubjects(uniqueSub2);
                       {isClassAdminMode ? (
                         <div className="bg-blue-50 p-3 border border-blue-200 text-blue-800 text-xs font-bold rounded">
                            <div>Razred: {selectedClassData?.name || 'Nepoznat razred'}</div>
-                           <div>Program: {selectedClassData?.program?.name || (selectedClassData?.programId ? `Program ID: ${selectedClassData.programId}` : <span className="text-red-600">Razred nema dodijeljen program. Prvo dodijelite program u postavkama razreda.</span>)}</div>
+                           <div>Program: {programs.find(p => p.id === selectedClassData?.programId)?.name || (selectedClassData?.programId ? `Program ID: ${selectedClassData.programId}` : <span className="text-red-600">Razred nema dodijeljen program. Prvo dodijelite program u postavkama razreda.</span>)}</div>
                         </div>
                       ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -4602,7 +4603,7 @@ setAllSubjects(uniqueSub2);
                    <button 
                      onClick={() => {
                         setEditingAssignmentId(null);
-                        setAssignmentForm({ subjectId: '', teacherId: '', classId: '' });
+                        setAssignmentForm({ subjectId: '', teacherId: '', classId: '', groupName: '', subjectType: 'redovni', isForeignLanguage: false, subjectPeriod: 'FULL_YEAR', plannedHoursSemester1: '', plannedHoursTotal: '', addToAllStudents: true });
                      }}
                      className="bg-[#005c8d] text-white px-4 py-1 border border-[#004a70] font-black text-[10px] uppercase hover:bg-[#004a70] flex items-center gap-2"
                    >
@@ -4611,7 +4612,7 @@ setAllSubjects(uniqueSub2);
                 )}
               </div>
 
-              {user?.role === Role.ADMIN && (
+              {highestRole === Role.ADMIN && (
                 <div className="bg-white border border-gray-300 p-4">
                   <div className="text-[10px] font-black text-gray-400 uppercase mb-4 border-b pb-1">
                     {editingAssignmentId ? 'Uredi zaduženje' : 'Dodaj novu dodjelu nastavnika predmetu'}
@@ -4692,7 +4693,7 @@ setAllSubjects(uniqueSub2);
                       <th className="px-4 py-3 border-r border-gray-200 w-24">Razred</th>
                       <th className="px-4 py-3 border-r border-gray-200">Predmet</th>
                       <th className="px-4 py-3 border-r border-gray-200">Nastavnik</th>
-                      {user?.role === Role.ADMIN && <th className="px-4 py-3 text-center w-32">Akcije</th>}
+                      {highestRole === Role.ADMIN && <th className="px-4 py-3 text-center w-32">Akcije</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -4712,7 +4713,7 @@ setAllSubjects(uniqueSub2);
                             {formatPersonName(tea)}
                             {a.groupName && <span className="ml-2 text-[9px] text-[#005c8d] font-black">[{a.groupName}]</span>}
                           </td>
-                          {user?.role === Role.ADMIN && (
+                          {highestRole === Role.ADMIN && (
                             <td className="px-4 py-3 text-center flex items-center justify-center gap-4">
                                <button 
                                  onClick={() => {
@@ -4721,7 +4722,13 @@ setAllSubjects(uniqueSub2);
                                      subjectId: a.subjectId, 
                                      classId: a.classId, 
                                      teacherId: a.teacherId,
-                                     groupName: a.groupName || ''
+                                     groupName: a.groupName || '',
+                                     subjectType: 'redovni',
+                                     isForeignLanguage: false,
+                                     subjectPeriod: 'FULL_YEAR',
+                                     plannedHoursSemester1: '',
+                                     plannedHoursTotal: '',
+                                     addToAllStudents: true
                                    });
                                  }}
                                  className="text-[#005c8d] font-black uppercase text-[10px] hover:underline"
@@ -4754,7 +4761,7 @@ setAllSubjects(uniqueSub2);
             <div className="w-full space-y-6">
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Nastavni planovi (Kurikulum)</h3>
-                {user?.role === Role.ADMIN && (
+                {highestRole === Role.ADMIN && (
                    <button 
                      onClick={() => {
                         setEditingCurriculumId(null);
@@ -4767,7 +4774,7 @@ setAllSubjects(uniqueSub2);
                 )}
               </div>
 
-              {user?.role === Role.ADMIN && (
+              {highestRole === Role.ADMIN && (
                 <div className="bg-white border border-gray-300 p-4">
                   <div className="text-[10px] font-black text-gray-400 uppercase mb-4 border-b pb-1">
                     {editingCurriculumId ? 'Uredi plan' : 'Definiraj tjednu satnicu predmeta'}
@@ -4838,7 +4845,7 @@ setAllSubjects(uniqueSub2);
                       <th className="px-4 py-3 border-r border-gray-200">Predmet</th>
                       <th className="px-4 py-3 border-r border-gray-200 w-24">Razred</th>
                       <th className="px-4 py-3 border-r border-gray-200 w-40">Broj sati tjedno</th>
-                      {user?.role === Role.ADMIN && <th className="px-4 py-3 text-center w-32">Akcije</th>}
+                      {highestRole === Role.ADMIN && <th className="px-4 py-3 text-center w-32">Akcije</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -4864,7 +4871,7 @@ setAllSubjects(uniqueSub2);
                                <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest ml-1">Sati / tjedno</span>
                              </div>
                           </td>
-                          {user?.role === Role.ADMIN && (
+                          {highestRole === Role.ADMIN && (
                             <td className="px-4 py-3 text-center flex items-center justify-center gap-4">
                                <button 
                                  onClick={() => {
@@ -5966,7 +5973,7 @@ setAllSubjects(uniqueSub2);
                               </td>
                               <td className="px-3 py-2 border-r">
                                 <div className="flex flex-col gap-0.5">
-                                   <div className="text-[8px] text-gray-400 font-bold uppercase">Global: {u.globalRole || '—'}</div>
+                                   <div className="text-[8px] text-gray-400 font-bold uppercase">Global: {(u as any).globalRole || '—'}</div>
                                    <div className="flex flex-wrap gap-1">
                                       {allUserSchoolRolesState.filter(r => r.userId === u.id && (!selectedSchoolId || r.schoolId === selectedSchoolId)).map(r => (
                                         <span key={r.id} className="text-[7px] bg-blue-100 text-[#005c8d] px-1 rounded-sm font-black uppercase tracking-tighter">
@@ -5989,7 +5996,7 @@ setAllSubjects(uniqueSub2);
                                   </button>
                                   <button 
                                     onClick={async () => {
-                                      const isStaff = [Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.HOMEROOM].includes(u.globalRole);
+                                      const isStaff = [Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.HOMEROOM].includes((u as any).globalRole);
                                       const newPass = generatePassword(isStaff ? 12 : 8);
                                       
                                       await supabase.from('user_profiles').update({ 
@@ -6015,7 +6022,7 @@ setAllSubjects(uniqueSub2);
                                   >
                                     Reset lozinke
                                   </button>
-                                  {([Role.TEACHER, Role.SCHOOL_ADMIN, Role.ADMIN].includes(u.globalRole)) && (
+                                  {([Role.TEACHER, Role.SCHOOL_ADMIN, Role.ADMIN].includes((u as any).globalRole)) && (
                                     <button 
                                       onClick={() => handleResetStaffAuthenticator(u.id, u.name, u.surname, u.email)}
                                       className="text-[8px] font-bold uppercase text-red-400 hover:text-red-600 mt-1 flex items-center justify-center gap-1"
@@ -6177,7 +6184,7 @@ setAllSubjects(uniqueSub2);
                     {formatPersonName(resetModal.user)}
                   </div>
                   <div className="text-[11px] font-bold text-[#005c8d]">
-                    {resetModal.user.username || resetModal.user.email}
+                    {(resetModal.user as any).username || resetModal.user.email}
                   </div>
                 </div>
 

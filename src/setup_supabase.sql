@@ -991,3 +991,36 @@ CREATE TRIGGER trg_audit_parent_arrivals
 
 -- RELOAD SCHEMA
 NOTIFY pgrst, 'reload schema';
+
+-- --------------------------------------------------------
+-- SCHOOL DOCUMENTS TABLE
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.school_documents (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    school_id uuid REFERENCES public.schools(id) ON DELETE CASCADE,
+    title text NOT NULL,
+    document_type text NOT NULL,
+    category text,
+    description text,
+    visibility text DEFAULT 'INTERNAL',
+    status text DEFAULT 'ODOBREN',
+    uploaded_by uuid REFERENCES auth.users(id),
+    file_path text,
+    created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.school_documents ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_policies WHERE tablename = 'school_documents' AND policyname = 'Enable all for everyone'
+    ) THEN
+        CREATE POLICY "Enable all for everyone" ON public.school_documents
+            FOR ALL
+            USING (true)
+            WITH CHECK (true);
+    END IF;
+END
+$$;

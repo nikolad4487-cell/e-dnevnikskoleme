@@ -202,23 +202,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, 35000);
     
     try {
-      // 1. Fetch Profile
-      console.log(`[AUTH] Fetching profile for ${authUserId}...`);
-      const { data: profileRaw, error: profileError } = await withTimeout(
-        supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('auth_user_id', authUserId)
-          .maybeSingle(),
-        10000,
-        "Dohvaćanje profila je vremenski isteklo (Baza podataka nije dostupna)."
-      ) as any;
+      // 1. Fetch Profile with retry
+      let profileRaw = null;
+      let profileError = null;
+      let attempt = 0;
+      const maxAttempts = 3;
+
+      while (attempt < maxAttempts) {
+        attempt++;
+        console.log(`[AUTH] Fetching profile for ${authUserId}... (Attempt ${attempt}/${maxAttempts})`);
+        try {
+          const res = await withTimeout(
+            supabase
+              .from('user_profiles')
+              .select('*')
+              .eq('auth_user_id', authUserId)
+              .maybeSingle(),
+            15000,
+            `Dohvaćanje profila je vremenski isteklo (Baza podataka nije dostupna, pokušaj ${attempt}).`
+          ) as any;
+          
+          profileRaw = res.data;
+          profileError = res.error;
+          
+          if (!profileError) {
+             break; // Success
+          }
+        } catch (e: any) {
+          console.error(`[AUTH] Profile fetch attempt ${attempt} failed:`, e);
+          if (attempt === maxAttempts) {
+             throw new Error("Povezivanje s bazom podataka nije uspjelo nakon više pokušaja. Provjerite internetsku vezu i pokušajte ponovno.");
+          }
+          await new Promise(r => setTimeout(r, 1500)); // wait before retry
+        }
+      }
 
       console.log(`[AUTH] Profile Result for ${authUserId}:`, { hasData: !!profileRaw, error: profileError });
 
       if (profileError) {
         console.error('[AUTH] Profile fetch error:', profileError);
-        throw new Error(`Greška pri dohvaćanju profila: ${profileError.message}`);
+        throw new Error(`Greška pri dohvaćanju profila: ${profileError.message || 'Nepoznata greška'}`);
       }
 
       if (!profileRaw) {
@@ -229,16 +252,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const profile = mappers.user(profileRaw);
       console.log(`[AUTH] Profile loaded: ${profile.email} (${profile.id})`);
 
-      // 2. Fetch Roles
-      console.log(`[AUTH] Fetching roles for profile ${profile.id}...`);
-      const { data: rolesRawResult, error: rolesError } = await withTimeout(
-        supabase
-          .from('user_school_roles')
-          .select('*')
-          .eq('user_id', profile.id),
-        10000,
-        "Dohvaćanje uloga je vremenski isteklo."
-      ) as any;
+      // 2. Fetch Roles with retry
+      let rolesRawResult = null;
+      let rolesError = null;
+      let roleAttempt = 0;
+
+      while (roleAttempt < maxAttempts) {
+        roleAttempt++;
+        console.log(`[AUTH] Fetching roles for profile ${profile.id}... (Attempt ${roleAttempt}/${maxAttempts})`);
+        try {
+          const res = await withTimeout(
+            supabase
+              .from('user_school_roles')
+              .select('*')
+              .eq('user_id', profile.id),
+            15000,
+            `Dohvaćanje uloga je vremenski isteklo (pokušaj ${roleAttempt}).`
+          ) as any;
+          
+          rolesRawResult = res.data;
+          rolesError = res.error;
+          
+          if (!rolesError) {
+             break; // Success
+          }
+        } catch (e: any) {
+          console.error(`[AUTH] Roles fetch attempt ${roleAttempt} failed:`, e);
+          if (roleAttempt === maxAttempts) {
+             throw new Error("Dohvaćanje uloga nije uspjelo nakon više pokušaja. Pokušajte ponovno.");
+          }
+          await new Promise(r => setTimeout(r, 1500));
+        }
+      }
 
       console.log(`[AUTH] Roles Result for ${profile.id}:`, { count: rolesRawResult?.length, error: rolesError });
 

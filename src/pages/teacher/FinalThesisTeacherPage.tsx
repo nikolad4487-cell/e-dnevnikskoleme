@@ -26,7 +26,7 @@ export default function FinalThesisTeacherPage() {
   const [loading, setLoading] = useState(true);
 
   // Filter tab options
-  const [activeTab, setActiveTab] = useState<'mentorship' | 'class' | 'all'>('mentorship');
+  const [activeTab, setActiveTab] = useState<'mentorship' | 'class' | 'all' | 'archive'>('mentorship');
 
   // search term filter
   const [searchTerm, setSearchTerm] = useState('');
@@ -564,8 +564,8 @@ export default function FinalThesisTeacherPage() {
                           </td>
                           <td className="p-4 font-medium text-slate-700">
                             <div className="font-bold text-xs">Mentor: {mentor?.name || '—'}</div>
-                            {app.defense_committee && (
-                              <div className="text-[10px] text-slate-400 font-bold uppercase mt-1">Povjerenstvo: {app.defense_committee}</div>
+                            {(app as any).defense_committee && (
+                              <div className="text-[10px] text-slate-400 font-bold uppercase mt-1">Povjerenstvo: {(app as any).defense_committee}</div>
                             )}
                           </td>
                           <td className="p-4 text-center font-extrabold text-slate-850 text-sm">
@@ -639,12 +639,12 @@ export default function FinalThesisTeacherPage() {
                           </div>
                         )}
                         {/* Student-uploaded versions list with digital download hooks */}
-                        {app.versions && app.versions.length > 0 && (
+                        {(app as any).versions && (app as any).versions.length > 0 && (
                           <div className="mt-2 space-y-1 bg-slate-50 border border-dashed rounded p-3 text-[10px]">
                             <span className="font-extrabold uppercase text-slate-400 block mb-1">📂 Predane verzije rada:</span>
-                            {app.versions.map((ver: any, verIdx: number) => (
+                            {(app as any).versions.map((ver: any, verIdx: number) => (
                               <div key={verIdx} className="flex items-center justify-between gap-2 border-b border-slate-100 last:border-b-0 py-1">
-                                <span className="font-bold text-slate-800">v{ver.version_num}: {ver.filename} {app.submission_confirmed && ver.version_num === app.versions.length ? '🔒(Konačna)' : ''}</span>
+                                <span className="font-bold text-slate-800">v{ver.version_num}: {ver.filename} {((app as any).submission_confirmed && ver.version_num === (app as any).versions.length) ? '🔒(Konačna)' : ''}</span>
                                 <button 
                                   onClick={async () => {
                                     if (user?.id) {
@@ -707,9 +707,9 @@ export default function FinalThesisTeacherPage() {
                               onClick={() => {
                                 setDefensingApp(app);
                                 setDefDate(app.defense_date || '');
-                                setDefTime(app.defense_time || '09:00');
-                                setDefClassroom(app.defense_classroom || '');
-                                setDefCommittee(app.defense_committee || '');
+                                setDefTime((app as any).defense_time || '09:00');
+                                setDefClassroom((app as any).defense_classroom || '');
+                                setDefCommittee((app as any).defense_committee || '');
                                 setShowDefenseModal(true);
                               }}
                               className="p-1 px-2.5 bg-slate-900 border border-slate-900 hover:bg-slate-800 text-white rounded font-black uppercase text-[9px] flex items-center gap-0.5 transition-colors"
