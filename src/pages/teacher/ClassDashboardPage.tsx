@@ -7,6 +7,7 @@ import { Class, Role } from '../../types';
 import { Loader2, ShieldAlert, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Settings, Search, Menu, Clock, Bookmark, HelpCircle, ChevronDown, Calendar } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { mappers } from '../../lib/mappers';
+import { ImenikTable } from '../../components/ImenikTable';
 
 const TeacherIzostanciPage = lazy(() => import('./IzostanciPage'));
 const BiljeskePage = lazy(() => import('./BiljeskePage'));
@@ -233,33 +234,12 @@ export default function ClassDashboardPage() {
   };
 
   const renderStudentsTable = () => (
-    students.length > 0 ? (
-      <div className="p-6 bg-white w-full">
-        <h1 className="text-2xl font-bold mb-4">Imenik</h1>
-        <table className="w-full border-collapse border border-gray-300">
-          <thead>
-            <tr className="bg-gray-100">
-              <th className="border p-2 text-center w-12">R.BR.</th>
-              <th className="border p-2 text-left">PREZIME I IME</th>
-              <th className="border p-2 text-center">UPOZORENJA</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[...students].sort((a,b) => (a.student?.full_name || a.student?.name || '').localeCompare(b.student?.full_name || b.student?.name || '')).map((s, i) => (
-              <tr key={s.id} className="cursor-pointer hover:bg-gray-100" onClick={() => navigate(`/class/${classId}/student/${s.student?.id}`)}>
-                <td className="border p-2 text-center">{i + 1}.</td>
-                <td className="border p-2">{s.student?.full_name || s.student?.name}</td>
-                <td className="border p-2 text-center">
-                  {/* UPOZORENJA */}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    ) : (
-      <div className="p-10 text-center">Nema učenika u ovom razredu.</div>
-    )
+    <ImenikTable 
+      students={students} 
+      studentEnrollments={students} 
+      onStudentClick={(student) => navigate(`/class/${classId}/student/${student.student?.id}`)}
+      classWarnings={{ failingGrades: {}, pendingAbsences: {} }}
+    />
   );
 
   const activeSidebarLinks = sidebarLinks[currentTab] || [];
