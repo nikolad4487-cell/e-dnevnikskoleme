@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -11,6 +11,7 @@ import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { SpecialExamReGradeModal } from '../../components/SpecialExamReGradeModal';
 import { toast } from 'react-hot-toast';
 import { usePageTitle } from '../../hooks/usePageTitle';
+import { ImenikTable } from '../../components/ImenikTable';
 
 type ViewMode = 'STUDENTS' | 'SUBJECTS' | 'GRADES' | 'NOTES';
 
@@ -168,13 +169,13 @@ function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effect
   );
 }
 
-export default function ImenikPage() {
+export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' | 'SUBJECTS' | 'GRADES' | 'NOTES' }) {
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { user, isMainAdmin } = useAuth();
   const { selectedSchoolId, selectedClassId: contextClassId, isArchived } = useSelection();
   
   const effectiveClassId = contextClassId || routeClassId;
-  console.log("[IMENIK] effectiveClassId:", effectiveClassId, "loading:", loading, "viewMode:", viewMode);
+  console.log("[IMENIK] effectiveClassId:", effectiveClassId);
 
   usePageTitle("Imenik");
 
@@ -197,9 +198,17 @@ export default function ImenikPage() {
   const [enrollments, setEnrollments] = useState<StudentSubjectEnrollment[]>([]);
   const [loading, setLoading] = useState(false);
   
-  const [viewMode, setViewMode] = useState<ViewMode>('STUDENTS');
+  const [viewMode, setViewMode] = useState<ViewMode>(initialView || 'STUDENTS');
   const [activeStudent, setActiveStudent] = useState<User | null>(null);
   const [activeSubject, setActiveSubject] = useState<Subject | null>(null);
+
+  useEffect(() => {
+    if (initialView) {
+      setViewMode(initialView);
+    }
+  }, [initialView]);
+
+  // Debug logs removed
 
   const [gradingElements, setGradingElements] = useState<any[]>([]);
 
@@ -431,7 +440,8 @@ export default function ImenikPage() {
         .select('*, student:user_profiles(*)')
         .eq('class_id', effectiveClassId);
 
-      console.log("[IMENIK] enrollments raw data:", data);
+      console.log("[IMENIK] fetchStudentsData data:", data);
+      console.log("[IMENIK] fetchStudentsData error:", error);
       if (error) throw error;
       const mappedStudents = (data || []).map(row => {
         console.log("[IMENIK] row student data:", row.student);
@@ -1537,112 +1547,21 @@ export default function ImenikPage() {
     }
   };
 
+  const navigate = useNavigate();
+
   const renderStudents = () => {
-    console.log("[IMENIK] renderStudents called, students state:", students, "loading:", loading);
-    
+    console.log("[IMENIK] renderStudents called");
     if (!students) return <div className="p-10 text-center">Učitavanje...</div>;
 
-    if (students.length === 0 && !loading) {
-      return (
-        <div className="p-10 text-center flex flex-col items-center justify-center">
-          <Users className="w-12 h-12 text-gray-300 mb-4" />
-          <h2 className="text-sm font-bold text-gray-500 uppercase">Nema učenika u ovom razredu</h2>
-          <p className="text-xs text-gray-400 mt-2">U administraciji škole možete dodati učenike u ovaj razredni odjel.</p>
-        </div>
-      );
-    }
-    
-    if (loading) {
-        return <div className="p-10 text-center">Učitavanje učenika...</div>;
-    }
-
     return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between border-b pb-4 border-gray-200">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Imenik</h1>
-        </div>
-        <button 
-          onClick={handleRandomStudent}
-          className="bg-[#005c8d] text-white px-4 py-2 rounded-lg font-black uppercase tracking-widest text-[10px] hover:bg-[#004a71] transition-all shadow-md active:scale-95 flex items-center gap-2"
-        >
-          <Users size={16} />
-          Slučajan odabir
-        </button>
-      </div>
-
-      <div className="bg-white border border-gray-300">
-        <table className="w-full text-left border-collapse text-xs">
-          <thead>
-            <tr className="bg-gray-100 border-b border-gray-300">
-              <th className="px-3 py-2 font-black uppercase text-gray-500 w-12 text-center border-r border-gray-300">R.br.</th>
-              <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Prezime i ime</th>
-              <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Program</th>
-              <th className="px-4 py-2 font-black uppercase text-gray-500">Upozorenja</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {sortStudentsBySurname(students).map((s, idx) => {
-              const failingCount = classWarnings.failingGrades[s.id] || 0;
-              const hasPending = classWarnings.pendingAbsences[s.id];
-
-              return (
-                <tr 
-                  key={s.id} 
-                  onClick={() => { 
-                    setActiveStudent(s); 
-                    setViewMode('SUBJECTS'); 
-                    setRandomSelectedStudentId(null);
-                  }} 
-                  className={cn(
-                    "group cursor-pointer transition-colors",
-                    s.id === randomSelectedStudentId ? "bg-blue-100 border-l-4 border-l-[#005c8d]" : "hover:bg-[#eff6ff]"
-                  )}
-                >
-                  <td className="px-3 py-2 text-center font-bold text-gray-500 border-r border-gray-200">{idx + 1}.</td>
-                  <td className={cn("px-4 py-2 font-bold border-r border-gray-200 group-hover:underline", isStudentInactive(s.id) ? "text-gray-500" : "text-[#005c8d]")}>
-                    {s.name} {isStudentInactive(s.id) && <span className="text-[10px] ml-1 font-normal">({getStudentStatusLabel(studentEnrollments.find(e => e.student_id === s.id)?.status || '')})</span>}
-                    {s.programAdjustment === 'REGULAR_WITH_ADAPTATION' && (
-                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-200" title="Redovni program uz prilagodbu">P</span>
-                    )}
-                    {s.programAdjustment === 'REGULAR_WITH_INDIVIDUALIZATION' && (
-                      <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black bg-purple-100 text-purple-800 border border-purple-200" title="Redovni program uz individualizaciju">I</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 border-r border-gray-200">
-                    {(() => {
-                      const enrollment = studentEnrollments.find(e => e.student_id === s.id);
-                      const progId = enrollment?.program_id || classes.find(c => c.id === effectiveClassId)?.programId;
-                      const prog = programs.find(p => p.id === progId);
-                      return (
-                        <div className={cn("text-[10px] font-bold uppercase italic opacity-70", isStudentInactive(s.id) ? "text-gray-400" : "text-gray-600")}>{prog ? prog.name : "Nije dodijeljen program"}</div>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-4 py-2">
-                    <div className="flex items-center gap-3">
-                      {failingCount > 0 && (
-                        <div className="flex items-center gap-1 text-red-600 font-black px-1.5 py-0.5 rounded bg-red-50 border border-red-100" title={`Učenik ima ${failingCount} negativnih ocjena`}>
-                          <span className="text-[14px]">⚠</span>
-                          <span className="text-[11px]">{failingCount}</span>
-                        </div>
-                      )}
-                      {hasPending && (
-                        <div className="text-red-500" title="Učenik ima neažurirane izostanke">
-                          <span className="text-[16px] animate-pulse">🕒</span>
-                        </div>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
+      <ImenikTable 
+        students={students.map(s => ({ ...s, student_id: s.id }))} 
+        studentEnrollments={studentEnrollments} 
+        classWarnings={classWarnings}
+        onStudentClick={(s) => navigate(`/class/${effectiveClassId}/student/${s.id}`)}
+      />
+    );
+  };
 
   const sortedStudents = sortStudentsBySurname(students);
   const studentIndex = sortedStudents.findIndex(s => s.id === activeStudent?.id);
@@ -2102,7 +2021,7 @@ export default function ImenikPage() {
   };
 
   return (
-    <div className="flex sm:flex-row flex-col flex-1 bg-white min-h-0 overflow-hidden font-sans">
+    <div className="flex flex-col h-full bg-white">
       {loading && (<div className="fixed inset-0 bg-white/50 backdrop-blur-sm z-[200] flex flex-col items-center justify-center"><div className="w-10 h-10 border-4 border-[#005c8d] border-t-transparent rounded-full animate-spin mb-2" /><span className="font-black text-[10px] uppercase text-[#005c8d]">Učitavanje...</span></div>)}
 
       {/* Sidebar - Izbornik */}
@@ -2186,12 +2105,38 @@ export default function ImenikPage() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto">
-        <div style={{color:'red',fontSize:'24px', padding: '20px'}}>
-           TEST CONTENT viewMode: {viewMode}
-        </div>
-        {console.log('[IMENIK] component rendered, viewMode:', viewMode)}
-        {viewMode === 'STUDENTS' && renderStudents()}
+      <div className="flex-1 h-full overflow-auto">
+        {/* TEST CONTENT REMOVED */}
+        {viewMode === 'STUDENTS' && (
+          students.length > 0 ? (
+            <div className="p-6 bg-white w-full">
+              <h1 className="text-2xl font-bold mb-4">Imenik</h1>
+              <table className="w-full border-collapse border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border p-2 text-center w-12">R.BR.</th>
+                    <th className="border p-2 text-left">PREZIME I IME</th>
+                    <th className="border p-2 text-center">UPOZORENJA</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...students].sort((a,b) => (a.full_name || a.name || '').localeCompare(b.full_name || b.name || '')).map((s, i) => (
+                    <tr key={s.id} className="cursor-pointer hover:bg-gray-100" onClick={() => navigate(`/class/${effectiveClassId}/student/${s.id}`)}>
+                      <td className="border p-2 text-center">{i + 1}.</td>
+                      <td className="border p-2">{s.full_name || s.name}</td>
+                      <td className="border p-2 text-center">
+                        {classWarnings.failingGrades[s.id] > 0 && <span className="text-red-600 font-bold">⚠️ {classWarnings.failingGrades[s.id]}</span>}
+                        {classWarnings.pendingAbsences[s.id] && <span className="text-red-500 font-bold ml-2">🕒</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="p-10 text-center">Nema učenika u ovom razredu.</div>
+          )
+        )}
         {viewMode === 'SUBJECTS' && renderSubjectSelector()}
         {viewMode === 'GRADES' && renderGrades()}
         {viewMode === 'NOTES' && (

@@ -72,12 +72,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loading) {
       const timer = setTimeout(() => {
-        console.error('[AUTH] CRITICAL: Loading timeout (10s) triggered. Force-failing loading state.');
+        console.error('[AUTH] CRITICAL: Loading timeout (30s) triggered. Force-failing loading state.');
         setLoading(false);
         if (!user && !error) {
           setError('Učitavanje podataka nije uspjelo u razumnom vremenu. Provjerite internetsku vezu.');
         }
-      }, 10000);
+      }, 30000);
       return () => clearTimeout(timer);
     }
   }, [loading, user, error]);

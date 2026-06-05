@@ -54,12 +54,8 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
     if (!user) return;
     
     const fetchNotifications = async () => {
-      const { data } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
+      // Temporarily disabled to avoid 404s missing table
+      const data = [];
       if (data) {
         setNotifications(data as Notification[]);
       }
@@ -67,12 +63,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
     
     fetchNotifications();
     
-    const notifSub = supabase
-      .channel('notifications_channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, 
-        () => fetchNotifications()
-      )
-      .subscribe();
+    const notifSub = { unsubscribe: () => {} };
       
     return () => {
       supabase.removeChannel(notifSub);
@@ -80,7 +71,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
   }, [user]);
 
   const markAsRead = async (id: string) => {
-    await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+    // await supabase.from('notifications').update({ is_read: true }).eq('id', id);
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
   };
 

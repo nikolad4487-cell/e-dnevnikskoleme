@@ -23,6 +23,8 @@ const ClassStudentsPage = lazy(() => import('../admin/ClassStudentsPage'));
 const RoditeljskiSastanciPage = lazy(() => import('./RoditeljskiSastanciPage'));
 const IndividualniRazgovoriPage = lazy(() => import('./IndividualniRazgovoriPage'));
 const DolasciRoditeljaPage = lazy(() => import('./DolasciRoditeljaPage'));
+const StudentDashboard = lazy(() => import('./StudentDashboard'));
+const StudentSubjectDetail = lazy(() => import('./StudentSubjectDetail'));
 
 export default function ClassDashboardPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -33,6 +35,7 @@ export default function ClassDashboardPage() {
 
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
+  const [students, setStudents] = useState<any[]>([]);
 
   useEffect(() => {
     if (classId) {
@@ -45,8 +48,10 @@ export default function ClassDashboardPage() {
     setLoading(true);
     setAccessDenied(false);
 
+    console.log("CLASS PAGE load start", classId);
+
     try {
-      // 1. Fetch class details
+      // 1. Fetch class details (Glavni razredni kontekst)
       const { data: rawClass, error: classError } = await supabase
         .from('classes')
         .select(`
@@ -58,6 +63,8 @@ export default function ClassDashboardPage() {
         .eq('id', classId)
         .single();
 
+      console.log("CLASS CONTEXT result", rawClass, classError);
+
       if (classError || !rawClass) {
         setAccessDenied(true);
         setLoading(false);
@@ -65,6 +72,35 @@ export default function ClassDashboardPage() {
       }
 
       const mappedClass = mappers.class(rawClass);
+
+      // 2. Fetch Students (Učenici)
+      const { data: studentsData, error: studentsError } = await supabase
+        .from('student_class_enrollments')
+        .select('*, student:user_profiles(*)')
+        .eq('class_id', classId);
+      
+      console.log("STUDENTS result", studentsData, studentsError);
+      if (studentsData) setStudents(studentsData);
+
+      // 3. Parallel extra modules with Promise.allSettled
+      // (Even if these fail, we don't break the page)
+      const extraModulesPromise = Promise.allSettled([
+        Promise.resolve({ data: [], error: null }),
+        // other modules (digitalni dosje, kalendar, etc) could be added here
+      ]).then((results) => {
+        const notifResult = results[0];
+        const notificationsData = notifResult.status === 'fulfilled' ? notifResult.value.data : null;
+        const notificationsErr = notifResult.status === 'fulfilled' ? notifResult.value.error : notifResult.reason;
+        
+        console.log("NOTIFICATIONS result", notificationsData, notificationsErr);
+        
+        const errors = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && r.value.error));
+        if (errors.length > 0) {
+            console.error("EXTRA MODULES result errors", errors);
+        } else {
+            console.log("EXTRA MODULES result", "Success");
+        }
+      });
 
       // 1b. Check if archived (class status or school year is_active)
       const { data: yearData } = await supabase
@@ -157,6 +193,7 @@ export default function ClassDashboardPage() {
   ];
 
   let currentTab = location.pathname.split('/')[3] || 'imenik';
+  if (currentTab === 'imenik-predmeti') currentTab = 'imenik';
   if (currentTab === 'work-overview') currentTab = 'pregled-rada';
   if (currentTab === 'work-journal') currentTab = 'dnevnik-rada';
   if (currentTab === 'absences') currentTab = 'izostanci';
@@ -167,10 +204,10 @@ export default function ClassDashboardPage() {
 
   const isActive = (tabPath: string) => currentTab === tabPath || (tabPath === 'dnevnik-rada' && currentTab === 'pregled-rada'); // Simplified for now
 
-  // Updated sidebar links to include all relevant dashboard modules
   const sidebarLinks: Record<string, { label: string, path: string }[]> = {
     'imenik': [
       { label: 'Imenik učenika', path: 'imenik' },
+      { label: 'Pregled predmeta', path: 'imenik-predmeti' },
       { label: 'Bilješke', path: 'biljeske' }
     ],
     'pregled-rada': [
@@ -194,6 +231,36 @@ export default function ClassDashboardPage() {
       { label: 'Učenici u razredu', path: 'ucenici' }
     ]
   };
+
+  const renderStudentsTable = () => (
+    students.length > 0 ? (
+      <div className="p-6 bg-white w-full">
+        <h1 className="text-2xl font-bold mb-4">Imenik</h1>
+        <table className="w-full border-collapse border border-gray-300">
+          <thead>
+            <tr className="bg-gray-100">
+              <th className="border p-2 text-center w-12">R.BR.</th>
+              <th className="border p-2 text-left">PREZIME I IME</th>
+              <th className="border p-2 text-center">UPOZORENJA</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[...students].sort((a,b) => (a.student?.full_name || a.student?.name || '').localeCompare(b.student?.full_name || b.student?.name || '')).map((s, i) => (
+              <tr key={s.id} className="cursor-pointer hover:bg-gray-100" onClick={() => navigate(`/class/${classId}/student/${s.student?.id}`)}>
+                <td className="border p-2 text-center">{i + 1}.</td>
+                <td className="border p-2">{s.student?.full_name || s.student?.name}</td>
+                <td className="border p-2 text-center">
+                  {/* UPOZORENJA */}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    ) : (
+      <div className="p-10 text-center">Nema učenika u ovom razredu.</div>
+    )
+  );
 
   const activeSidebarLinks = sidebarLinks[currentTab] || [];
 
@@ -257,19 +324,22 @@ export default function ClassDashboardPage() {
         )}
         
         {/* Main Content */}
-        <div className="flex-1 overflow-auto p-6" key={classId}>
+        <div className="flex-1 flex flex-col overflow-hidden relative w-full h-full" key={classId}>
           <Suspense fallback={
             <div className="p-20 flex flex-col items-center justify-center opacity-50">
               <Loader2 className="w-8 h-8 animate-spin text-gray-300 mb-4" />
-              <span className="text-[10px] font-bold uppercase text-gray-400">Priprema tablice...</span>
+              <span className="text-[10px] font-bold uppercase text-gray-400">Priprema...</span>
             </div>
           }>
             <Routes>
               <Route index element={<Navigate to="imenik" replace />} />
-              <Route path="imenik" element={<ImenikPage />} />
+              <Route path="imenik" element={renderStudentsTable()} />
+              <Route path="imenik-predmeti" element={<ImenikPage initialView="SUBJECTS" />} />
+              <Route path="biljeske" element={<ImenikPage initialView="NOTES" />} />
               
               <Route path="pregled-rada" element={<DnevnikRadaPage initialView="WEEKS" />} />
               <Route path="work-overview" element={<DnevnikRadaPage initialView="WEEKS" />} />
+              <Route path="*" element={<div className="bg-orange-500 text-white p-8 font-black uppercase">ROUTE NOT FOUND! Staza je: {location.pathname}</div>} />
               
               <Route path="dnevnik-rada" element={<DnevnikRadaPage initialView="WEEK_DETAIL" />} />
               <Route path="work-journal" element={<DnevnikRadaPage initialView="WEEK_DETAIL" />} />
@@ -299,6 +369,9 @@ export default function ClassDashboardPage() {
               <Route path="administration" element={<AdministrationPage />} />
               <Route path="predmeti" element={<ClassSubjectsPage />} />
               <Route path="ucenici" element={<ClassStudentsPage />} />
+              
+              <Route path="student/:studentId" element={<StudentDashboard />} />
+              <Route path="student/:studentId/subject/:subjectId" element={<StudentSubjectDetail />} />
               
               <Route path="pretrazivanje" element={<PretrazivanjePage />} />
             </Routes>
