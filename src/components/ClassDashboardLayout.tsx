@@ -23,9 +23,7 @@ const STUDENT_NAV: NavItem[] = [
   { label: 'Ispiti', path: '/student/ispiti' },
   { label: 'Izostanci', path: '/student/izostanci' },
   { label: 'Raspored', path: '/student/raspored' },
-  { label: 'Digitalni dosje', path: '/student/dosje' },
   { label: 'Kalendar škole', path: '/student/kalendar' },
-  { label: 'Dokumenti škole', path: '/student/dokumenti' },
   { label: 'Informativka', path: '/student/informativka' },
   { label: 'Završni rad', path: '/student/zavrsni-rad' },
 ];

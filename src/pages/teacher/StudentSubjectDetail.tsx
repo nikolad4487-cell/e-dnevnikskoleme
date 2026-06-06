@@ -5,6 +5,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { sortStudentsBySurname } from '../../lib/utils';
 import { toast } from 'react-hot-toast';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
+import GroupGradesModal from '../../components/GroupGradesModal';
+import GroupNotesModal from '../../components/GroupNotesModal';
+import GroupFinalGradesModal from '../../components/GroupFinalGradesModal';
 import { 
   Loader2, 
   ChevronLeft, 
@@ -149,6 +152,10 @@ export default function StudentSubjectDetail() {
   const [newElementName, setNewElementName] = useState('');
   const [editingElementOriginalName, setEditingElementOriginalName] = useState<string>('');
   const [editingElementName, setEditingElementName] = useState<string>('');
+
+  const [showGroupGradesModal, setShowGroupGradesModal] = useState(false);
+  const [showGroupNotesModal, setShowGroupNotesModal] = useState(false);
+  const [showGroupFinalGradesModal, setShowGroupFinalGradesModal] = useState(false);
 
   // Clock updating
   useEffect(() => {
@@ -640,8 +647,10 @@ export default function StudentSubjectDetail() {
 
   const handleDeleteExam = async (id: string) => {
     if (!window.confirm('Jeste li sigurni da želite obrisati ovaj ispit?')) return;
+    console.log("DELETE SPECIAL EXAM CLICKED", id);
     try {
-      const { error } = await supabase.from('exams').delete().eq('id', id);
+      const { data, error } = await supabase.from('special_exams').delete().eq('id', id);
+      console.log("DELETE SPECIAL EXAM RESULT", { data, error });
       if (error) throw error;
       loadAllData();
       toast.success('Ispit uspješno obrisan.');
@@ -860,25 +869,19 @@ export default function StudentSubjectDetail() {
             </div>
             <div className="border border-t-0 border-gray-200 bg-white p-3 flex flex-col gap-2 rounded-b">
               <button 
-                onClick={() => {
-                  navigate(`/class/${classId}/imenik?mode=GRADES&subjectId=${subjectId}&action=groupGrades`);
-                }} 
+                onClick={() => setShowGroupGradesModal(true)}
                 className="flex items-center justify-center gap-1.5 w-full py-2 border border-[#005c8d] hover:bg-sky-50 text-[#005c8d] font-extrabold text-[10px] uppercase rounded shadow-xs select-none transition-all"
               >
                 Grupni unos ocjena
               </button>
               <button 
-                onClick={() => {
-                  navigate(`/class/${classId}/imenik?mode=NOTES&subjectId=${subjectId}&action=groupNotes`);
-                }} 
+                onClick={() => setShowGroupNotesModal(true)}
                 className="flex items-center justify-center gap-1.5 w-full py-2 border border-[#005c8d] hover:bg-sky-50 text-[#005c8d] font-extrabold text-[10px] uppercase rounded shadow-xs select-none transition-all"
               >
                 Grupni unos bilješki
               </button>
               <button 
-                onClick={() => {
-                  navigate(`/class/${classId}/imenik?mode=GRADES&subjectId=${subjectId}&action=groupConclude`);
-                }} 
+                onClick={() => setShowGroupFinalGradesModal(true)}
                 className="flex items-center justify-center gap-1.5 w-full py-2 border border-slate-300 hover:bg-slate-50 text-slate-800 font-extrabold text-[10px] uppercase rounded shadow-xs select-none transition-all"
               >
                 Grupno zaključivanje ocjena
@@ -1827,6 +1830,10 @@ export default function StudentSubjectDetail() {
         showTotp={false}
         loading={deleteDialog.loading}
       />
+      
+      <GroupGradesModal isOpen={showGroupGradesModal} onClose={() => setShowGroupGradesModal(false)} classId={classId} subjectId={subjectId} />
+      <GroupNotesModal isOpen={showGroupNotesModal} onClose={() => setShowGroupNotesModal(false)} classId={classId} subjectId={subjectId} />
+      <GroupFinalGradesModal isOpen={showGroupFinalGradesModal} onClose={() => setShowGroupFinalGradesModal(false)} classId={classId} subjectId={subjectId} />
 
     </div>
   );
