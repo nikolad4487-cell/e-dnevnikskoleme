@@ -89,9 +89,15 @@ export default function TeacherIzostanciPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ authUserId: user?.id, totpCode })
       });
-      const { success } = await res.json();
       
-      if (!success) {
+      const contentType = res.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        toast.error("API ruta za provjeru autentifikatora nije dostupna.");
+        return;
+      }
+
+      const data = await res.json();
+      if (!data || !data.success) {
         toast.error('Neispravan autentifikator kod.');
         return;
       }

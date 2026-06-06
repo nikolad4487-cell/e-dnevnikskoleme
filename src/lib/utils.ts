@@ -14,8 +14,19 @@ export const getSurname = (fullName?: string) => {
 export function sortStudentsBySurname(students: any[]): any[] {
   if (!students) return [];
   return [...students].sort((a, b) => {
-    const aName = a.name ? String(a.name) : "";
-    const bName = b.name ? String(b.name) : "";
+    const profileA = a.student ? (Array.isArray(a.student) ? a.student[0] : a.student) : a;
+    const profileB = b.student ? (Array.isArray(b.student) ? b.student[0] : b.student) : b;
+
+    const surnameA = String(profileA?.surname || '').trim();
+    const surnameB = String(profileB?.surname || '').trim();
+    const nameA = String(profileA?.name || '').trim();
+    const nameB = String(profileB?.name || '').trim();
+
+    if (surnameA || surnameB) {
+      const surnameCompare = surnameA.localeCompare(surnameB, "hr", { sensitivity: "base" });
+      if (surnameCompare !== 0) return surnameCompare;
+      return nameA.localeCompare(nameB, "hr", { sensitivity: "base" });
+    }
 
     const splitName = (fullName: string) => {
       const parts = fullName.trim().split(/\s+/);
@@ -24,8 +35,8 @@ export function sortStudentsBySurname(students: any[]): any[] {
       return { firstName, lastName };
     };
 
-    const aParsed = splitName(aName);
-    const bParsed = splitName(bName);
+    const aParsed = splitName(nameA);
+    const bParsed = splitName(nameB);
 
     return (
       aParsed.lastName.localeCompare(bParsed.lastName, "hr", { sensitivity: "base" }) ||

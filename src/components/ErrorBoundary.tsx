@@ -31,6 +31,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   private async logErrorToDatabase(error: Error, errorInfo: ErrorInfo) {
     try {
+      if (!supabase || !supabase.auth) return;
+      
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id;
       

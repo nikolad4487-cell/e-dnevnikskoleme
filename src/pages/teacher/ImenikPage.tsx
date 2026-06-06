@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -173,6 +173,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { user, isMainAdmin } = useAuth();
   const { selectedSchoolId, selectedClassId: contextClassId, isArchived } = useSelection();
+  const location = useLocation();
   
   const effectiveClassId = contextClassId || routeClassId;
   console.log("[IMENIK] effectiveClassId:", effectiveClassId);
@@ -480,6 +481,57 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
       fetchWarningData();
     }
   }, [viewMode, effectiveClassId, activeStudent?.id, activeSubject?.id]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const modeParam = params.get('mode');
+    const subjectIdParam = params.get('subjectId');
+    const actionParam = params.get('action');
+
+    if (allSubjects.length > 0 && students.length > 0) {
+      if (subjectIdParam) {
+        const foundSubject = allSubjects.find(s => s.id === subjectIdParam);
+        if (foundSubject) {
+          setActiveSubject(foundSubject);
+          
+          if (modeParam) {
+            setViewMode(modeParam as any);
+          }
+          
+          if (actionParam === 'groupGrades') {
+            setGroupGradeForm(prev => ({
+              ...prev,
+              studentGrades: students.reduce((acc, s) => ({ ...acc, [s.id]: { value: null, note: '' } }), {})
+            }));
+            setShowGroupGradeModal(true);
+            
+            // Clean up query param
+            const url = new URL(window.location.href);
+            url.searchParams.delete('action');
+            window.history.replaceState({}, '', url.toString());
+          } else if (actionParam === 'groupNotes') {
+            setGroupNoteForm(prev => ({
+              ...prev,
+              studentNotes: students.reduce((acc, s) => ({ ...acc, [s.id]: '' }), {})
+            }));
+            setShowGroupNoteModal(true);
+            
+            // Clean up query param
+            const url = new URL(window.location.href);
+            url.searchParams.delete('action');
+            window.history.replaceState({}, '', url.toString());
+          } else if (actionParam === 'groupConclude') {
+            setShowGroupFinalGradeModal(true);
+            
+            // Clean up query param
+            const url = new URL(window.location.href);
+            url.searchParams.delete('action');
+            window.history.replaceState({}, '', url.toString());
+          }
+        }
+      }
+    }
+  }, [allSubjects, students, location.search]);
 
   useEffect(() => {
     // Real-time listener for enrollments (DISABLED)
@@ -2120,10 +2172,10 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                   </tr>
                 </thead>
                 <tbody>
-                  {[...students].sort((a,b) => (a.full_name || a.name || '').localeCompare(b.full_name || b.name || '')).map((s, i) => (
+                  {sortStudentsBySurname(students).map((s, i) => (
                     <tr key={s.id} className="cursor-pointer hover:bg-gray-100" onClick={() => navigate(`/class/${effectiveClassId}/student/${s.id}`)}>
                       <td className="border p-2 text-center">{i + 1}.</td>
-                      <td className="border p-2">{s.full_name || s.name}</td>
+                      <td className="border p-2">{s.surname ? `${s.surname} ${s.name}` : s.name}</td>
                       <td className="border p-2 text-center">
                         {classWarnings.failingGrades[s.id] > 0 && <span className="text-red-600 font-bold">⚠️ {classWarnings.failingGrades[s.id]}</span>}
                         {classWarnings.pendingAbsences[s.id] && <span className="text-red-500 font-bold ml-2">🕒</span>}
