@@ -192,7 +192,13 @@ export default function OcjenePage() {
     if (!selectedClassId || !selectedSubject) return;
     const fetchLektire = async () => {
       try {
-        const res = await fetch(`/api/lektire?classId=${selectedClassId}&subjectId=${selectedSubject}`);
+        const url = new URL('/api/lektire', window.location.origin);
+        url.searchParams.append('classId', selectedClassId);
+        url.searchParams.append('subjectId', selectedSubject);
+        if (selectedSchoolId) url.searchParams.append('schoolId', selectedSchoolId);
+        if (currentClass?.school_year_id) url.searchParams.append('schoolYearId', currentClass.school_year_id);
+
+        const res = await fetch(url.toString());
         if (res.ok) {
           const data = await res.json();
           setSubjectLektire(data || []);
@@ -202,7 +208,7 @@ export default function OcjenePage() {
       }
     };
     fetchLektire();
-  }, [selectedClassId, selectedSubject]);
+  }, [selectedClassId, selectedSubject, selectedSchoolId, currentClass?.school_year_id]);
 
   const MONTHS_ORDER = ['IX', 'X', 'XI', 'XII', 'I', 'II', 'III', 'IV', 'V', 'VI'];
   const MONTH_MAP = { 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII', 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI' };
@@ -398,12 +404,14 @@ export default function OcjenePage() {
                   <td className="p-4 border-r border-slate-300 text-center text-[#005c8d] text-xs font-bold" colSpan={4}>
                     {(() => {
                       const fg = activeFinalGrades.find(f => f.period === 'FIRST_SEMESTER');
+                      if (fg?.status) return fg.status === 'NEOCIJENJEN' ? 'Neocijenjen' : fg.status === 'OSLOBODEN' ? 'Oslobođen' : fg.status === 'ODRADENO' ? 'Odrađeno' : 'Neodrađeno';
                       return fg ? (finalGradeLabels[fg.value] || fg.value) : '';
                     })()}
                   </td>
                   <td className="p-4 border-r border-slate-300 text-center text-[#005c8d] text-xs font-bold" colSpan={6}>
                     {(() => {
                       const fg = activeFinalGrades.find(f => f.period === 'SECOND_SEMESTER');
+                      if (fg?.status) return fg.status === 'NEOCIJENJEN' ? 'Neocijenjen' : fg.status === 'OSLOBODEN' ? 'Oslobođen' : fg.status === 'ODRADENO' ? 'Odrađeno' : 'Neodrađeno';
                       return fg ? (finalGradeLabels[fg.value] || fg.value) : '';
                     })()}
                   </td>

@@ -277,7 +277,12 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const fetchLektire = async () => {
     if (!effectiveClassId) return;
     try {
-      const res = await fetch(`/api/lektire?classId=${effectiveClassId}`);
+      const url = new URL('/api/lektire', window.location.origin);
+      url.searchParams.append('classId', effectiveClassId);
+      if (selectedSchoolId) url.searchParams.append('schoolId', selectedSchoolId);
+      if (selectedYearId) url.searchParams.append('schoolYearId', selectedYearId);
+      
+      const res = await fetch(url.toString());
       if (res.ok) {
         const data = await res.json();
         console.log("[LEKTIRA] Loaded records:", data ? data.length : 0);

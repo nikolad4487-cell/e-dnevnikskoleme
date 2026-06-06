@@ -500,22 +500,37 @@ async function startServer() {
   // 1. Lektire APIs
   app.get("/api/lektire", async (req, res) => {
     try {
-      const { classId, subjectId } = req.query;
+      const { classId, subjectId, schoolId, schoolYearId } = req.query;
       if (!classId) return res.status(400).json({ error: "classId is required" });
       
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
 
       let query = supabaseAdmin.from("reading_assignments").select("*").eq("class_id", classId);
+      
       if (subjectId) {
         query = query.eq("subject_id", subjectId);
       }
+      
+      if (schoolId) {
+        query = query.eq("school_id", schoolId);
+      }
+      
+      if (schoolYearId) {
+        query = query.eq("school_year_id", schoolYearId);
+      }
+      
       const { data, error } = await query;
       if (error) throw error;
       
       // Console logs requested by user
-      console.log("[LEKTIRA] Loaded records:", data ? data.length : 0);
-      // For user role and class context, I'd need session access, but this log is 
-      // fine to show what was returned
+      console.log("READING ASSIGNMENTS QUERY FILTERS", {
+        class_id: classId,
+        subject_id: subjectId,
+        school_id: schoolId,
+        school_year_id: schoolYearId
+      });
+
+      console.log("READING ASSIGNMENTS RESULT", { data, error });
       
       res.json(data || []);
     } catch (err: any) {

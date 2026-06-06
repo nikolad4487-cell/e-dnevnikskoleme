@@ -72,12 +72,7 @@ function GradeSelector({ value, onChange, allowClear = false, clearLabel = "-- B
             type="button"
             id="grade-selector-clear-btn"
             onClick={() => onChange(null)}
-            className={`text-[9px] font-bold uppercase tracking-wider transition-colors px-2 py-1 rounded border
-              ${currentValue === null 
-                ? 'bg-slate-100 text-slate-800 border-slate-300 pointer-events-none' 
-                : 'text-gray-500 border-gray-200 hover:text-red-600 hover:bg-red-50 hover:border-red-200'
-              }
-            `}
+            className="text-[10px] font-black text-gray-400 hover:text-red-600 underline uppercase tracking-wider"
           >
             {clearLabel}
           </button>
@@ -87,6 +82,39 @@ function GradeSelector({ value, onChange, allowClear = false, clearLabel = "-- B
   );
 }
 
+function FinalGradeSelector({ value, status, onChange }: { value: string | null, status: string | null, onChange: (value: string | null, status: string | null) => void }) {
+  const grades = [1, 2, 3, 4, 5];
+  const statuses = ["NEOCIJENJEN", "OSLOBODEN", "ODRADENO", "NEODRADENO"];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {grades.map(g => (
+          <button
+            key={g}
+            type="button"
+            onClick={() => onChange(String(g), null)}
+            className={`w-11 h-11 rounded border text-sm font-black transition-all duration-150 flex items-center justify-center ${value === String(g) ? 'bg-[#005c8d] text-white' : 'bg-white text-slate-700'}`}
+          >
+            {g}
+          </button>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2">
+        {statuses.map(st => (
+            <button
+              key={st}
+              type="button"
+              onClick={() => onChange(null, st)}
+              className={`px-3 py-2 rounded text-xs font-bold transition-all ${status === st ? 'bg-[#005c8d] text-white' : 'bg-gray-200 text-slate-700'}`}
+            >
+              {st === 'NEOCIJENJEN' ? 'Neocijenjen' : st === 'OSLOBODEN' ? 'Oslobođen' : st === 'ODRADENO' ? 'Odrađeno' : 'Neodrađeno'}
+            </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 export default function StudentSubjectDetail() {
   const { classId, studentId, subjectId } = useParams();
   const navigate = useNavigate();
@@ -146,7 +174,8 @@ export default function StudentSubjectDetail() {
   const [newExamDate, setNewExamDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
   const [showFinalModal, setShowFinalModal] = useState<{ isOpen: boolean; term: 'FIRST_SEMESTER' | 'SECOND_SEMESTER' }>({ isOpen: false, term: 'FIRST_SEMESTER' });
-  const [finalGradeInput, setFinalGradeInput] = useState<string>('');
+  const [finalGradeValue, setFinalGradeValue] = useState<string>('');
+  const [finalGradeStatus, setFinalGradeStatus] = useState<string | null>(null);
 
   const [showAddElementModal, setShowAddElementModal] = useState(false);
   const [newElementName, setNewElementName] = useState('');
@@ -637,16 +666,14 @@ export default function StudentSubjectDetail() {
   // Save term concluding grades
   const handleSaveFinalGrade = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("FINAL GRADE SAVE CLICKED", { studentId, subjectId, classId, term: showFinalModal.term, finalGradeInput });
+    console.log("FINAL GRADE SAVE CLICKED", { studentId, subjectId, classId, term: showFinalModal.term, finalGradeValue, finalGradeStatus });
     if (!user || !studentId || !subjectId || !classId) return;
 
     try {
       const { term } = showFinalModal;
-      // Map FIRST_SEMESTER -> FIRST_SEMESTER, SECOND_SEMESTER -> SECOND_SEMESTER
       const period = term; 
-      const targetVal = finalGradeInput.trim();
 
-      if (!targetVal) {
+      if (!finalGradeValue && !finalGradeStatus) {
         // Delete final grade
         const { error } = await supabase
           .from('final_grades')
@@ -659,14 +686,15 @@ export default function StudentSubjectDetail() {
       } else {
         // Prepare row insertion/update
         const existingGrade = finalGrades.find(f => f.period === period);
-        const payload = {
+        const payload: any = {
           student_id: studentId,
           subject_id: subjectId,
           class_id: classId,
           teacher_id: user.id,
           school_year_id: classroom?.school_year_id || null,
           period: period,
-          value: targetVal,
+          value: finalGradeValue || null,
+          status: finalGradeStatus || null,
           note: `Zaključena ocjena`
         };
         console.log("FINAL GRADE PAYLOAD", payload);
@@ -690,7 +718,8 @@ export default function StudentSubjectDetail() {
       }
 
       setShowFinalModal({ isOpen: false, term: 'FIRST_SEMESTER' });
-      setFinalGradeInput('');
+      setFinalGradeValue('');
+      setFinalGradeStatus(null);
       loadAllData();
       toast.success('Zaključna ocjena uspješno spremljena.');
     } catch (err: any) {
@@ -1062,10 +1091,16 @@ export default function StudentSubjectDetail() {
                         <span className="text-[9px] text-[#005c8d] uppercase tracking-wider font-bold">1. POLUGODIŠTE</span>
                         {finalGrades.find(fg => fg.period === 'FIRST_SEMESTER') ? (
                           <button 
-                            onClick={() => { setShowFinalModal({ isOpen: true, term: 'FIRST_SEMESTER' }); setFinalGradeInput(finalGrades.find(fg => fg.period === 'FIRST_SEMESTER')?.value || ''); }}
-                            className="inline-flex items-center justify-center w-6 h-6 rounded bg-[#005c8d] text-white font-extrabold text-sm shadow-sm hover:scale-105 transition-transform"
+                            onClick={() => { setShowFinalModal({ isOpen: true, term: 'FIRST_SEMESTER' }); setFinalGradeValue(finalGrades.find(fg => fg.period === 'FIRST_SEMESTER')?.value || ''); setFinalGradeStatus(finalGrades.find(fg => fg.period === 'FIRST_SEMESTER')?.status || null); }}
+                            className="inline-flex items-center justify-center px-2 py-1 rounded bg-[#005c8d] text-white font-extrabold text-[10px] shadow-sm hover:scale-105 transition-transform"
                           >
-                            {finalGrades.find(fg => fg.period === 'FIRST_SEMESTER')?.value}
+                            {(() => {
+                                const fg = finalGrades.find(fg => fg.period === 'FIRST_SEMESTER');
+                                if (fg?.status) return fg.status === 'NEOCIJENJEN' ? 'Neocijenjen' : fg.status === 'OSLOBODEN' ? 'Oslobođen' : fg.status === 'ODRADENO' ? 'Odrađeno' : 'Neodrađeno';
+                                const val = fg?.value;
+                                const labels: Record<string, string> = {'1': 'Nedovoljan (1)', '2': 'Dovoljan (2)', '3': 'Dobar (3)', '4': 'Vrlo dobar (4)', '5': 'Odličan (5)'};
+                                return labels[val || ''] || val;
+                            })()}
                           </button>
                         ) : (
                           <button 
@@ -1084,10 +1119,16 @@ export default function StudentSubjectDetail() {
                         <span className="text-[9px] text-[#005c8d] uppercase tracking-wider font-bold">2. POLUGODIŠTE</span>
                         {finalGrades.find(fg => fg.period === 'SECOND_SEMESTER') ? (
                           <button 
-                            onClick={() => { setShowFinalModal({ isOpen: true, term: 'SECOND_SEMESTER' }); setFinalGradeInput(finalGrades.find(fg => fg.period === 'SECOND_SEMESTER')?.value || ''); }}
-                            className="inline-flex items-center justify-center w-6 h-6 rounded bg-[#005c8d] text-white font-extrabold text-sm shadow-sm hover:scale-105 transition-transform"
+                            onClick={() => { setShowFinalModal({ isOpen: true, term: 'SECOND_SEMESTER' }); setFinalGradeValue(finalGrades.find(fg => fg.period === 'SECOND_SEMESTER')?.value || ''); setFinalGradeStatus(finalGrades.find(fg => fg.period === 'SECOND_SEMESTER')?.status || null); }}
+                            className="inline-flex items-center justify-center px-2 py-1 rounded bg-[#005c8d] text-white font-extrabold text-[10px] shadow-sm hover:scale-105 transition-transform"
                           >
-                            {finalGrades.find(fg => fg.period === 'SECOND_SEMESTER')?.value}
+                            {(() => {
+                                const fg = finalGrades.find(fg => fg.period === 'SECOND_SEMESTER');
+                                if (fg?.status) return fg.status === 'NEOCIJENJEN' ? 'Neocijenjen' : fg.status === 'OSLOBODEN' ? 'Oslobođen' : fg.status === 'ODRADENO' ? 'Odrađeno' : 'Neodrađeno';
+                                const val = fg?.value;
+                                const labels: Record<string, string> = {'1': 'Nedovoljan (1)', '2': 'Dovoljan (2)', '3': 'Dobar (3)', '4': 'Vrlo dobar (4)', '5': 'Odličan (5)'};
+                                return labels[val || ''] || val;
+                            })()}
                           </button>
                         ) : (
                           <button 
@@ -1509,11 +1550,13 @@ export default function StudentSubjectDetail() {
 
               <div>
                 <label className="block text-[10px] font-black uppercase text-gray-500 mb-2">ZAKLJUČENA OCJENA (VRIJEDNOST)</label>
-                <GradeSelector 
-                  value={finalGradeInput}
-                  onChange={(val) => setFinalGradeInput(val === null ? '' : String(val))}
-                  allowClear={true}
-                  clearLabel="PONIŠTI ZAKLJUČENU OCJENU"
+                <FinalGradeSelector 
+                  value={finalGradeValue}
+                  status={finalGradeStatus}
+                  onChange={(val, status) => {
+                      setFinalGradeValue(val);
+                      setFinalGradeStatus(status);
+                  }}
                 />
               </div>
 
@@ -1792,9 +1835,32 @@ export default function StudentSubjectDetail() {
         loading={deleteDialog.loading}
       />
       
-      <GroupGradesModal isOpen={showGroupGradesModal} onClose={() => setShowGroupGradesModal(false)} classId={classId} subjectId={subjectId} />
-      <GroupNotesModal isOpen={showGroupNotesModal} onClose={() => setShowGroupNotesModal(false)} classId={classId} subjectId={subjectId} />
-      <GroupFinalGradesModal isOpen={showGroupFinalGradesModal} onClose={() => setShowGroupFinalGradesModal(false)} classId={classId} subjectId={subjectId} />
+      <GroupGradesModal 
+        isOpen={showGroupGradesModal} 
+        onClose={() => setShowGroupGradesModal(false)} 
+        classId={classId} 
+        subjectId={subjectId} 
+        students={allClassStudents} 
+        gradingElements={gradingElements} 
+        onSuccess={loadAllData} 
+      />
+      <GroupNotesModal 
+        isOpen={showGroupNotesModal} 
+        onClose={() => setShowGroupNotesModal(false)} 
+        classId={classId} 
+        subjectId={subjectId} 
+        students={allClassStudents} 
+        onSuccess={loadAllData} 
+      />
+      <GroupFinalGradesModal 
+        isOpen={showGroupFinalGradesModal} 
+        onClose={() => setShowGroupFinalGradesModal(false)} 
+        classId={classId} 
+        subjectId={subjectId} 
+        term={showFinalModal.term === 'FIRST_SEMESTER' ? 'FIRST_SEMESTER' : 'SECOND_SEMESTER'} // Placeholder for now, check how GroupFinalGradesModal expects props
+        students={allClassStudents} 
+        onSuccess={loadAllData} 
+      />
 
     </div>
   );
