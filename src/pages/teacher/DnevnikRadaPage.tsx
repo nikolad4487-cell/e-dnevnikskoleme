@@ -285,10 +285,12 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
       const res = await fetch(url.toString());
       if (res.ok) {
         const data = await res.json();
-        console.log("[LEKTIRA] Loaded records:", data ? data.length : 0);
-        console.log("[LEKTIRA] User role:", highestRole);
-        console.log("[LEKTIRA] Class:", effectiveClassId);
-        console.log("[LEKTIRA] Query result:", data);
+        console.log("LOAD READINGS FILTERS", {
+          class_id: effectiveClassId,
+          school_id: selectedSchoolId,
+          school_year_id: selectedYearId
+        });
+        console.log("LOAD READINGS RESULT", { data, error: !res.ok ? data : null });
         setLektire(data || []);
       }
     } catch (e) {
@@ -332,17 +334,14 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
         subjectId: targetSubjectId,
         completedDate: lektiraForm.completedDate,
         title: lektiraForm.title,
-        description: lektiraForm.description,
         createdBy: user?.id,
         schoolId: schoolId,
         schoolYearId: schoolYearId,
         teacherId: user?.id,
-        author: lektiraForm.author || '',
-        processingMethod: lektiraForm.processingMethod || '',
         processingDetails: lektiraForm.processingDetails || ''
       };
 
-      console.log("[LEKTIRA] SAVE PAYLOAD", payload);
+      console.log("SAVE READING PAYLOAD", payload);
 
       const res = await fetch(url, {
         method,
@@ -353,7 +352,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
       });
       
       const responseData = await res.json();
-      console.log("[LEKTIRA] SAVE RESPONSE", responseData);
+      console.log("SAVE READING RESULT", { data: responseData, error: !res.ok ? responseData : null });
 
       if (res.ok) {
         toast.success(isNew ? 'Lektira uspješno dodana!' : 'Lektira uspješno spremljena!');
@@ -1959,7 +1958,7 @@ setStudents(uniqueStudents);
                           {lek.title}
                         </td>
                         <td className="p-3 border-r border-gray-200 text-slate-600 whitespace-pre-wrap">
-                          {lek.description || '--'}
+                          {lek.processingDetails || lek.processing_details || '—'}
                         </td>
                         <td className="p-3 text-center flex items-center justify-center gap-2">
                           <button

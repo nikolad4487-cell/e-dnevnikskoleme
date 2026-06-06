@@ -201,6 +201,14 @@ export default function OcjenePage() {
         const res = await fetch(url.toString());
         if (res.ok) {
           const data = await res.json();
+          console.log("LOAD READINGS FILTERS", {
+            class_id: selectedClassId,
+            subject_id: selectedSubject,
+            school_id: selectedSchoolId,
+            school_year_id: currentClass?.school_year_id
+          });
+
+          console.log("LOAD READINGS RESULT", { data, error: !res.ok ? data : null });
           setSubjectLektire(data || []);
         }
       } catch (err) {
@@ -489,7 +497,7 @@ export default function OcjenePage() {
                         {lek.title}
                       </td>
                       <td className="p-4 text-xs text-slate-600 italic whitespace-pre-wrap leading-relaxed">
-                        {lek.description || 'Nema dodatnih napomena o obradi.'}
+                        {lek.processingDetails || lek.processing_details || '—'}
                       </td>
                     </tr>
                   ))}
