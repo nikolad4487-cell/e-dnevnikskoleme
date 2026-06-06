@@ -145,7 +145,7 @@ export default function StudentSubjectDetail() {
   const [newExamGrade, setNewExamGrade] = useState<number | ''>('');
   const [newExamDate, setNewExamDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  const [showFinalModal, setShowFinalModal] = useState<{ isOpen: boolean; term: 'FIRST_SEMESTER' | 'FINAL' }>({ isOpen: false, term: 'FIRST_SEMESTER' });
+  const [showFinalModal, setShowFinalModal] = useState<{ isOpen: boolean; term: 'FIRST_SEMESTER' | 'SECOND_SEMESTER' }>({ isOpen: false, term: 'FIRST_SEMESTER' });
   const [finalGradeInput, setFinalGradeInput] = useState<string>('');
 
   const [showAddElementModal, setShowAddElementModal] = useState(false);
@@ -175,36 +175,47 @@ export default function StudentSubjectDetail() {
     if (!studentId || !classId || !subjectId) return;
     setLoading(true);
 
+    console.log("LOAD DATA START");
+
     try {
-      // 1. Fetch Student Profile
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', studentId)
-        .single();
+      // Critical Loads: Must succeed for the page to function
+      console.log("LOAD CRITICAL START");
+      const [
+        { data: profile, error: profileError },
+        { data: subData, error: subError },
+        { data: classData, error: classError },
+        { data: enrollments, error: enrollError },
+        { data: gemData, error: gemError },
+        { data: grData, error: grError },
+        { data: finGrData, error: finGrError },
+        { data: nData, error: nError },
+        { data: examData, error: examError }
+      ] = await Promise.all([
+        supabase.from('user_profiles').select('*').eq('id', studentId).single(),
+        supabase.from('subjects').select('*').eq('id', subjectId).single(),
+        supabase.from('classes').select('*').eq('id', classId).single(),
+        supabase.from('student_class_enrollments').select('student_id, student:user_profiles(*)').eq('class_id', classId),
+        supabase.from('grading_elements').select('name').eq('class_id', classId).eq('subject_id', subjectId),
+        supabase.from('grades').select('*').eq('student_id', studentId).eq('subject_id', subjectId).eq('class_id', classId),
+        supabase.from('final_grades').select('*').eq('student_id', studentId).eq('subject_id', subjectId).eq('class_id', classId),
+        supabase.from('student_notes').select('*').eq('student_id', studentId).eq('subject_id', subjectId).eq('class_id', classId),
+        supabase.from('exams').select('*').eq('student_id', studentId).eq('subject_id', subjectId).eq('class_id', classId),
+      ]);
+
+      console.log("QUERY RESULTS", { profile, subData, classData, enrollments, gemData, grData, finGrData, nData, examData });
+      if (profileError) console.error("Profile Error", profileError);
+      if (subError) console.error("Subject Error", subError);
+      if (classError) console.error("Class Error", classError);
+      if (enrollError) console.error("Enroll Error", enrollError);
+      if (gemError) console.error("Gem Error", gemError);
+      if (grError) console.error("Grades Error", grError);
+      if (finGrError) console.error("Final Grades Error", finGrError);
+      if (nError) console.error("Notes Error", nError);
+      if (examError) console.error("Exams Error", examError);
+
       if (profile) setStudent(profile);
-
-      // 2. Fetch Subject details
-      const { data: subData } = await supabase
-        .from('subjects')
-        .select('*')
-        .eq('id', subjectId)
-        .single();
       if (subData) setSubject(subData);
-
-      // 3. Fetch Class details
-      const { data: classData } = await supabase
-        .from('classes')
-        .select('*')
-        .eq('id', classId)
-        .single();
       if (classData) setClassroom(classData);
-
-      // 4. Fetch sorted classroom student profiles to match Croatian Index & Navigation
-      const { data: enrollments } = await supabase
-        .from('student_class_enrollments')
-        .select('student_id, student:user_profiles(*)')
-        .eq('class_id', classId);
 
       if (enrollments && enrollments.length > 0) {
         const sorted = sortStudentsBySurname(enrollments);
@@ -215,58 +226,21 @@ export default function StudentSubjectDetail() {
         }
       }
 
-      // 5. Fetch grading elements for classroom & subject
-      const { data: gemData } = await supabase
-        .from('grading_elements')
-        .select('name')
-        .eq('class_id', classId)
-        .eq('subject_id', subjectId);
-
       const elementNames = gemData?.map(g => g.name) || [];
       setGradingElements(elementNames);
       if (elementNames.length > 0 && !newGradeElement) {
         setNewGradeElement(elementNames[0]);
       }
 
-      // 6. Fetch actual Student Grades
-      const { data: grData } = await supabase
-        .from('grades')
-        .select('*')
-        .eq('student_id', studentId)
-        .eq('subject_id', subjectId)
-        .eq('class_id', classId);
-      
       setGrades(grData || []);
-
-      // 7. Fetch final grades
-      const { data: finGrData } = await supabase
-        .from('final_grades')
-        .select('*')
-        .eq('student_id', studentId)
-        .eq('subject_id', subjectId)
-        .eq('class_id', classId);
       setFinalGrades(finGrData || []);
-
-      // 8. Fetch student notes for this subject
-      const { data: nData } = await supabase
-        .from('student_notes')
-        .select('*')
-        .eq('student_id', studentId)
-        .eq('subject_id', subjectId)
-        .eq('class_id', classId);
       setNotes(nData || []);
-
-      // 9. Fetch Exams
-      const { data: examData } = await supabase
-        .from('exams')
-        .select('*')
-        .eq('student_id', studentId)
-        .eq('subject_id', subjectId)
-        .eq('class_id', classId);
       setExams(examData || []);
+      console.log("LOAD CRITICAL COMPLETED");
 
     } catch (error) {
-      console.error('Error fetching subject details:', error);
+      console.error('Error fetching critical data:', error);
+      toast.error('Greska pri učitavanju bitnih podataka.');
     } finally {
       setLoading(false);
     }
@@ -663,10 +637,13 @@ export default function StudentSubjectDetail() {
   // Save term concluding grades
   const handleSaveFinalGrade = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log("FINAL GRADE SAVE CLICKED", { studentId, subjectId, classId, term: showFinalModal.term, finalGradeInput });
     if (!user || !studentId || !subjectId || !classId) return;
 
     try {
       const { term } = showFinalModal;
+      // Map FIRST_SEMESTER -> FIRST_SEMESTER, SECOND_SEMESTER -> SECOND_SEMESTER
+      const period = term; 
       const targetVal = finalGradeInput.trim();
 
       if (!targetVal) {
@@ -676,33 +653,38 @@ export default function StudentSubjectDetail() {
           .delete()
           .eq('student_id', studentId)
           .eq('subject_id', subjectId)
-          .eq('term', term)
+          .eq('period', period)
           .eq('class_id', classId);
         if (error) throw error;
       } else {
         // Prepare row insertion/update
-        const existingGrade = finalGrades.find(f => f.term === term);
+        const existingGrade = finalGrades.find(f => f.period === period);
         const payload = {
           student_id: studentId,
           subject_id: subjectId,
           class_id: classId,
           teacher_id: user.id,
           school_year_id: classroom?.school_year_id || null,
-          term,
+          period: period,
           value: targetVal,
           note: `Zaključena ocjena`
         };
+        console.log("FINAL GRADE PAYLOAD", payload);
 
         if (existingGrade) {
-          const { error } = await supabase
+          const { data, error } = await supabase
             .from('final_grades')
             .update(payload)
-            .eq('id', existingGrade.id);
+            .eq('id', existingGrade.id)
+            .select();
+          console.log("FINAL GRADE SAVE RESULT", { data, error });
           if (error) throw error;
         } else {
-          const { error } = await supabase
+          const { data, error } = await supabase
             .from('final_grades')
-            .insert([payload]);
+            .insert([payload])
+            .select();
+          console.log("FINAL GRADE SAVE RESULT", { data, error });
           if (error) throw error;
         }
       }
@@ -710,8 +692,10 @@ export default function StudentSubjectDetail() {
       setShowFinalModal({ isOpen: false, term: 'FIRST_SEMESTER' });
       setFinalGradeInput('');
       loadAllData();
-    } catch (err) {
+      toast.success('Zaključna ocjena uspješno spremljena.');
+    } catch (err: any) {
       console.error('Error saving final grade:', err);
+      toast.error(err.message || 'Dogodila se pogreška prilikom spremanja zaključne ocjene.');
     }
   };
 
@@ -1068,78 +1052,55 @@ export default function StudentSubjectDetail() {
 
                   {/* Concluded Grades Row */}
                   <tr className="bg-sky-50/50 font-black">
-                    <td className="p-3 border-r border-gray-300 text-left text-[#005c8d] uppercase text-[10px] tracking-wider">
+                    <td colSpan={2} className="p-3 border-r border-gray-300 text-left text-[#005c8d] uppercase text-[10px] tracking-wider">
                       ZAKLJUČENA OCJENA
                     </td>
-                    <td colSpan={5} className="p-2 border-r border-gray-200 text-center">
+                    
+                    {/* 1. POLUGODIŠTE (IX-XII) */}
+                    <td colSpan={4} className="p-2 border-r border-gray-200 text-center">
                       <div className="flex flex-col items-center justify-center gap-1">
-                        {finalGrades.some(fg => fg.term === 'FIRST_SEMESTER') ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-500 text-[10px] uppercase font-semibold">1. Polugodište:</span>
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-[#005c8d] text-white font-extrabold text-sm shadow-sm">
-                              {finalGrades.find(fg => fg.term === 'FIRST_SEMESTER')?.value}
-                            </span>
-                            <button 
-                              onClick={() => {
-                                setFinalGradeInput(finalGrades.find(fg => fg.term === 'FIRST_SEMESTER')?.value || '');
-                                setShowFinalModal({ isOpen: true, term: 'FIRST_SEMESTER' });
-                              }}
-                              className="text-gray-400 hover:text-blue-600 text-[10px] underline ml-1"
-                            >
-                              Uredi
-                            </button>
-                          </div>
+                        <span className="text-[9px] text-[#005c8d] uppercase tracking-wider font-bold">1. POLUGODIŠTE</span>
+                        {finalGrades.find(fg => fg.period === 'FIRST_SEMESTER') ? (
+                          <button 
+                            onClick={() => { setShowFinalModal({ isOpen: true, term: 'FIRST_SEMESTER' }); setFinalGradeInput(finalGrades.find(fg => fg.period === 'FIRST_SEMESTER')?.value || ''); }}
+                            className="inline-flex items-center justify-center w-6 h-6 rounded bg-[#005c8d] text-white font-extrabold text-sm shadow-sm hover:scale-105 transition-transform"
+                          >
+                            {finalGrades.find(fg => fg.period === 'FIRST_SEMESTER')?.value}
+                          </button>
                         ) : (
-                          <div className="text-gray-500 text-[9px] font-semibold italic text-center">
-                            ZAKLJUČNA OCJENA NIJE UNESENA (1. POL)
-                            <button 
-                              onClick={() => {
-                                setFinalGradeInput('');
-                                setShowFinalModal({ isOpen: true, term: 'FIRST_SEMESTER' });
-                              }}
-                              className="block mx-auto mt-0.5 text-xs text-[#005c8d] hover:underline font-extrabold uppercase"
-                            >
-                              UNESI OCJENU
-                            </button>
-                          </div>
+                          <button 
+                            onClick={() => { setShowFinalModal({ isOpen: true, term: 'FIRST_SEMESTER' }); setFinalGradeInput(''); }}
+                            className="text-[9px] text-gray-400 border border-dashed border-gray-300 px-2 py-0.5 rounded hover:border-[#005c8d] hover:text-[#005c8d]"
+                          >
+                            UNESI
+                          </button>
                         )}
                       </div>
                     </td>
-                    <td colSpan={5} className="p-2 border-r border-gray-200 text-center">
+
+                    {/* 2. POLUGODIŠTE (I-VI) */}
+                    <td colSpan={6} className="p-2 text-center">
                       <div className="flex flex-col items-center justify-center gap-1">
-                        {finalGrades.some(fg => fg.term === 'FINAL') ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-gray-500 text-[10px] uppercase font-semibold">Kraj Godine:</span>
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded bg-[#005c8d] text-white font-extrabold text-sm shadow-sm">
-                              {finalGrades.find(fg => fg.term === 'FINAL')?.value}
-                            </span>
-                            <button 
-                              onClick={() => {
-                                setFinalGradeInput(finalGrades.find(fg => fg.term === 'FINAL')?.value || '');
-                                setShowFinalModal({ isOpen: true, term: 'FINAL' });
-                              }}
-                              className="text-gray-400 hover:text-blue-600 text-[10px] underline ml-1"
-                            >
-                              Uredi
-                            </button>
-                          </div>
+                        <span className="text-[9px] text-[#005c8d] uppercase tracking-wider font-bold">2. POLUGODIŠTE</span>
+                        {finalGrades.find(fg => fg.period === 'SECOND_SEMESTER') ? (
+                          <button 
+                            onClick={() => { setShowFinalModal({ isOpen: true, term: 'SECOND_SEMESTER' }); setFinalGradeInput(finalGrades.find(fg => fg.period === 'SECOND_SEMESTER')?.value || ''); }}
+                            className="inline-flex items-center justify-center w-6 h-6 rounded bg-[#005c8d] text-white font-extrabold text-sm shadow-sm hover:scale-105 transition-transform"
+                          >
+                            {finalGrades.find(fg => fg.period === 'SECOND_SEMESTER')?.value}
+                          </button>
                         ) : (
-                          <div className="text-gray-500 text-[9px] font-semibold italic text-center">
-                            ZAKLJUČNA OCJENA NIJE UNESENA (2. POL)
-                            <button 
-                              onClick={() => {
-                                setFinalGradeInput('');
-                                setShowFinalModal({ isOpen: true, term: 'FINAL' });
-                              }}
-                              className="block mx-auto mt-0.5 text-xs text-[#005c8d] hover:underline font-extrabold uppercase"
-                            >
-                              UNESI OCJENU
-                            </button>
-                          </div>
+                          <button 
+                            onClick={() => { setShowFinalModal({ isOpen: true, term: 'SECOND_SEMESTER' }); setFinalGradeInput(''); }}
+                            className="text-[9px] text-gray-400 border border-dashed border-gray-300 px-2 py-0.5 rounded hover:border-[#005c8d] hover:text-[#005c8d]"
+                          >
+                            UNESI
+                          </button>
                         )}
                       </div>
                     </td>
                   </tr>
+
                 </tbody>
               </table>
             </div>
