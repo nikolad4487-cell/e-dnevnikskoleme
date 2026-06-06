@@ -72,7 +72,7 @@ export default function StudentDashboard() {
 
         const { data: teachers } = await supabase
           .from('user_profiles')
-          .select('id, name, surname');
+          .select('id, name');
 
         // Map assignments to a teacher map
         const teacherMap: Record<string, string[]> = {};
@@ -80,7 +80,7 @@ export default function StudentDashboard() {
           assignments.forEach((asg: any) => {
             const tProfile = teachers.find(t => t.id === asg.teacher_id);
             if (tProfile) {
-              const fullName = `${tProfile.name || ''} ${tProfile.surname || ''}`.trim();
+              const fullName = (tProfile.name || '').trim();
               if (fullName) {
                 if (!teacherMap[asg.subject_id]) {
                   teacherMap[asg.subject_id] = [];

@@ -349,13 +349,12 @@ export default function StudentSubjectDetail() {
   };
 
   const triggerDeleteGrade = (id: string) => {
-    const requiresCode = isMainAdmin;
     setDeleteDialog({
       isOpen: true,
       id,
       type: 'GRADE',
       loading: false,
-      message: 'Jeste li sigurni da želite obrisati ovu ocjenu?' + (requiresCode ? ' Za brisanje morate upisati kod iz autentifikatora.' : '')
+      message: 'Jeste li sigurni da želite obrisati ovu ocjenu i bilješku?'
     });
   };
 
@@ -365,44 +364,12 @@ export default function StudentSubjectDetail() {
       id,
       type: 'NOTE',
       loading: false,
-      message: 'Jeste li sigurni da želite obrisati ovu bilješku?'
+      message: 'Jeste li sigurni da želite obrisati bilješku?'
     });
   };
 
-  const confirmDelete = async (totpCode?: string) => {
+  const confirmDelete = async () => {
     if (!deleteDialog.id || !deleteDialog.type) return;
-
-    const requiresTotp = deleteDialog.type === 'GRADE' && isMainAdmin;
-
-    if (requiresTotp) {
-      if (!totpCode) {
-        toast.error('Potreban je kod iz autentifikatora.');
-        return;
-      }
-      try {
-        const res = await fetch('/api/verify-totp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ authUserId: user?.id, totpCode })
-        });
-        
-        const contentType = res.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          toast.error("API ruta za provjeru autentifikatora nije dostupna.");
-          return;
-        }
-
-        const data = await res.json();
-        if (!data || !data.success) {
-          toast.error('Neispravan autentifikator kod.');
-          return;
-        }
-      } catch (err) {
-        console.error('Error verifying TOTP:', err);
-        toast.error('Pogreška pri provjeri koda.');
-        return;
-      }
-    }
 
     setDeleteDialog(prev => ({ ...prev, loading: true }));
     try {
@@ -410,7 +377,7 @@ export default function StudentSubjectDetail() {
       const { error } = await supabase.from(tableName).delete().eq('id', deleteDialog.id);
       if (error) throw error;
       
-      toast.success(deleteDialog.type === 'GRADE' ? 'Ocjena uspješno obrisana.' : 'Bilješka uspješno obrisana.');
+      toast.success(deleteDialog.type === 'GRADE' ? 'Ocjena i bilješka uspješno obrisane.' : 'Bilješka uspješno obrisana.');
       loadAllData();
     } catch (err) {
       console.error('Error deleting record:', err);
@@ -421,6 +388,11 @@ export default function StudentSubjectDetail() {
   };
 
   const handleDeleteGrade = async (id: string) => {
+    const gObj = grades.find(g => g.id === id);
+    if (gObj && !canDeleteGrade(gObj)) {
+      toast.error('Nemate pravo brisanja ove ocjene jer je rok od 45 minuta istekao.');
+      return;
+    }
     triggerDeleteGrade(id);
   };
 
@@ -1056,6 +1028,7 @@ export default function StudentSubjectDetail() {
                                 <div className="flex flex-wrap items-center justify-center gap-1 min-h-[22px]">
                                   {matchingGrades.map((gObj) => {
                                     const isNegative = gObj.value === 1;
+                                    const isDeletable = canDeleteGrade(gObj);
                                     return (
                                       <div 
                                         key={gObj.id} 
@@ -1070,13 +1043,13 @@ export default function StudentSubjectDetail() {
                                           e.stopPropagation(); // Stop clicking cell
                                           handleDeleteGrade(gObj.id);
                                         }}
-                                        title={`${gObj.date}: ${gObj.note || 'Nema opisa'}. Kliknite za brisanje.`}
+                                        title={`${gObj.date}: ${gObj.note || 'Nema opisa'}. ${isDeletable ? 'Kliknite za brisanje.' : 'Brisanje onemogućeno (rok od 45 min je istekao).'}`}
                                       >
                                         {gObj.value}
                                         
                                         {/* Micro tooltip on hover */}
                                         <span className="invisible group-hover:visible absolute bottom-7 bg-slate-900 text-white text-[9px] py-1 px-1.5 rounded whitespace-nowrap z-30 shadow font-normal normal-case">
-                                          {gObj.date} - {gObj.note || 'Nema opisa'}
+                                          {gObj.date} - {gObj.note || 'Nema opisa'} {isDeletable ? '' : '(Rok istekao)'}
                                         </span>
                                       </div>
                                     );
@@ -1178,7 +1151,7 @@ export default function StudentSubjectDetail() {
           </div>
 
           {/* TWO DIVISION COLUMNS AT BOTTOM OF CARD */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="flex flex-col gap-6">
             
             {/* COLUMN LEFT: SPECIAL EXAMS */}
             <div className="bg-white border border-gray-200 rounded-sm shadow-xs overflow-hidden">
@@ -1213,7 +1186,7 @@ export default function StudentSubjectDetail() {
                         {exams.map(ex => (
                           <tr key={ex.id} className="hover:bg-slate-50/50">
                             <td className="py-2.5 font-bold text-[#005c8d]">{ex.exam_type || ex.type || 'Ispit'}</td>
-                            <td className="py-2.5 text-gray-600 max-w-[120px] truncate" title={ex.description || ex.note}>{ex.description || ex.note || '-'}</td>
+                            <td className="py-2.5 text-gray-600 whitespace-normal break-words">{ex.description || ex.note || '-'}</td>
                             <td className="py-2.5 text-center font-extrabold">{ex.grade_value || ex.value || '-'}</td>
                             <td className="py-2.5 text-gray-500 text-[11px]">{ex.exam_date || ex.date}</td>
                             <td className="py-2.5 text-right whitespace-nowrap">
@@ -1263,25 +1236,25 @@ export default function StudentSubjectDetail() {
                 {combinedLog.length === 0 ? (
                   <div className="text-center p-8 text-gray-400 text-xs italic">Nema unesenih podataka</div>
                 ) : (
-                  <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
-                    <table className="w-full text-left text-xs border-collapse">
+                  <div className="overflow-x-auto">
+                    <table className="w-full table-fixed text-left text-xs border-collapse">
                       <thead>
                         <tr className="border-b border-gray-200 bg-slate-50 text-[10px] font-extrabold text-gray-500 uppercase sticky top-0 bg-white">
-                          <th className="pb-2 pt-1 font-bold">DATUM</th>
-                          <th className="pb-2 pt-1 font-bold text-center">OCJ.</th>
-                          <th className="pb-2 pt-1 font-bold">ELEMENT</th>
-                          <th className="pb-2 pt-1 font-bold">BILJEŠKA</th>
-                          <th className="pb-2 pt-1 font-bold text-right">AKCIJE</th>
+                          <th className="pb-2 pt-1 font-bold w-[10%]">DATUM</th>
+                          <th className="pb-2 pt-1 font-bold text-center w-[5%]">OCJ.</th>
+                          <th className="pb-2 pt-1 font-bold w-[15%]">ELEMENT</th>
+                          <th className="pb-2 pt-1 font-bold w-[60%]">BILJEŠKA</th>
+                          <th className="pb-2 pt-1 font-bold text-right w-[10%]">AKCIJE</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {combinedLog.map(item => (
                           <tr key={item.id} className="hover:bg-slate-50/50">
-                            <td className="py-2.5 text-gray-500 text-[11px] whitespace-nowrap">{item.date}</td>
-                            <td className="py-2.5 text-center font-extrabold text-slate-900">{item.value}</td>
-                            <td className="py-2.5 font-bold uppercase text-[9px] text-gray-500">{item.element}</td>
-                            <td className="py-2.5 text-slate-700 italic max-w-[150px] truncate" title={item.note}>{item.note || '-'}</td>
-                             <td className="py-2.5 text-right whitespace-nowrap">
+                            <td className="py-2.5 text-gray-500 text-[11px] whitespace-nowrap w-[10%]">{item.date}</td>
+                            <td className="py-2.5 text-center font-extrabold text-slate-900 w-[5%]">{item.value}</td>
+                            <td className="py-2.5 font-bold uppercase text-[9px] text-gray-500 w-[15%] break-words">{item.element}</td>
+                            <td className="py-2.5 text-slate-700 italic w-[60%] whitespace-normal break-words">{item.note || '-'}</td>
+                             <td className="py-2.5 text-right whitespace-nowrap w-[10%]">
                               <div className="flex items-center justify-end gap-1.5">
                                 <button 
                                   onClick={() => {
@@ -1851,7 +1824,7 @@ export default function StudentSubjectDetail() {
         onConfirm={confirmDelete}
         title="POTVRDA BRISANJA"
         message={deleteDialog.message || ''}
-        showTotp={deleteDialog.type === 'GRADE' && isMainAdmin}
+        showTotp={false}
         loading={deleteDialog.loading}
       />
 

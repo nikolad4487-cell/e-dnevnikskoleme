@@ -120,6 +120,14 @@ async function startServer() {
     }
   });
 
+  // Test route for TOTP endpoint availability check
+  app.get("/api/verify-totp-test", (req, res) => {
+    res.json({
+      success: true,
+      message: "verify-totp api works"
+    });
+  });
+
   // Audit Log
   app.post("/api/audit-log", async (req, res) => {
       try {

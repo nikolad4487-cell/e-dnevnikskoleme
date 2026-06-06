@@ -1075,6 +1075,9 @@ setStudents(uniqueStudents);
         body: JSON.stringify({ authUserId: user?.id, totpCode })
       });
       
+      console.log("VERIFY RESPONSE STATUS", res.status);
+      console.log("VERIFY RESPONSE URL", res.url);
+      
       const contentType = res.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         toast.error("API ruta za provjeru autentifikatora nije dostupna.");
