@@ -395,15 +395,15 @@ export default function OcjenePage() {
                 )}
                 <tr className="border-b border-slate-300 bg-slate-50 font-black">
                   <td className="p-4 border-r border-slate-300 uppercase text-[10px] tracking-widest text-slate-400">ZAKLJUČENO</td>
-                  <td className="p-4 border-r border-slate-300 text-center text-red-600 text-xs font-bold" colSpan={5}>
+                  <td className="p-4 border-r border-slate-300 text-center text-[#005c8d] text-xs font-bold" colSpan={4}>
                     {(() => {
-                      const fg = activeFinalGrades.find(f => f.period === 'FIRST_TERM' || f.term === 'FIRST_SEMESTER');
+                      const fg = activeFinalGrades.find(f => f.period === 'FIRST_SEMESTER');
                       return fg ? (finalGradeLabels[fg.value] || fg.value) : '';
                     })()}
                   </td>
-                  <td className="p-4 border-r border-slate-300 text-center text-red-600 text-xs font-bold" colSpan={5}>
+                  <td className="p-4 border-r border-slate-300 text-center text-[#005c8d] text-xs font-bold" colSpan={6}>
                     {(() => {
-                      const fg = activeFinalGrades.find(f => f.period === 'SECOND_TERM' || f.term === 'FINAL');
+                      const fg = activeFinalGrades.find(f => f.period === 'SECOND_SEMESTER');
                       return fg ? (finalGradeLabels[fg.value] || fg.value) : '';
                     })()}
                   </td>
