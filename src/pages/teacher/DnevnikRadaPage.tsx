@@ -163,7 +163,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
     id: string;
-    type: 'LESSON' | 'EXAM' | 'WEEK' | null;
+    type: 'LESSON' | 'EXAM' | 'WEEK' | 'ABSENCE' | null;
     loading: boolean;
   }>({
     isOpen: false,
@@ -268,9 +268,6 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     subjectId: '',
     completedDate: new Date().toISOString().split('T')[0],
     title: '',
-    description: '',
-    author: '',
-    processingMethod: '',
     processingDetails: ''
   });
 
@@ -279,16 +276,69 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     try {
       const url = new URL('/api/lektire', window.location.origin);
       url.searchParams.append('classId', effectiveClassId);
-      if (selectedSchoolId) url.searchParams.append('schoolId', selectedSchoolId);
-      if (selectedYearId) url.searchParams.append('schoolYearId', selectedYearId);
+      
+      let schoolId = selectedSchoolId || selectedClass?.schoolId || null;
+      let yrId = selectedYearId || selectedClass?.school_year_id || null;
+
+      if (!schoolId || !yrId) {
+        const { data: clsData } = await supabase
+          .from('classes')
+          .select('school_id, school_year_id')
+          .eq('id', effectiveClassId)
+          .maybeSingle();
+        if (clsData) {
+          schoolId = schoolId || clsData.school_id || null;
+          yrId = yrId || clsData.school_year_id || null;
+        }
+      }
+
+      let hrSubjectId = getHrvatskiJezikSubjectId();
+      if (!hrSubjectId && schoolId) {
+        const { data: classSubjs } = await supabase
+          .from('class_subject_teachers')
+          .select('subject_id')
+          .eq('class_id', effectiveClassId);
+        const subIds = (classSubjs || []).map(cs => cs.subject_id);
+        if (subIds.length > 0) {
+          const { data: subjs } = await supabase
+            .from('subjects')
+            .select('id, name')
+            .in('id', subIds);
+          const hrSub = (subjs || []).find(s => s.name?.toLowerCase().includes('hrvatski'));
+          if (hrSub) {
+            hrSubjectId = hrSub.id;
+          }
+        }
+        if (!hrSubjectId) {
+          const { data: globalSubjs } = await supabase
+            .from('subjects')
+            .select('id, name')
+            .eq('school_id', schoolId);
+          const hrSub = (globalSubjs || []).find(s => s.name?.toLowerCase().includes('hrvatski'));
+          if (hrSub) {
+            hrSubjectId = hrSub.id;
+          }
+        }
+      }
+
+      if (hrSubjectId) {
+        url.searchParams.append('subjectId', hrSubjectId);
+      }
+      if (schoolId) {
+        url.searchParams.append('schoolId', schoolId);
+      }
+      if (yrId) {
+        url.searchParams.append('schoolYearId', yrId);
+      }
       
       const res = await fetch(url.toString());
       if (res.ok) {
         const data = await res.json();
         console.log("LOAD READINGS FILTERS", {
+          school_id: schoolId,
+          school_year_id: yrId,
           class_id: effectiveClassId,
-          school_id: selectedSchoolId,
-          school_year_id: selectedYearId
+          subject_id: hrSubjectId
         });
         console.log("LOAD READINGS RESULT", { data, error: !res.ok ? data : null });
         setLektire(data || []);
@@ -302,8 +352,61 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     e.preventDefault();
     if (isSavingLektira) return;
 
-    const targetSubjectId = getHrvatskiJezikSubjectId();
-    
+    let schoolId = selectedSchoolId || selectedClass?.schoolId || null;
+    let schoolYearId = selectedYearId || selectedClass?.school_year_id || null;
+    const classIdForLektira = effectiveClassId || null;
+
+    if (!classIdForLektira) {
+      toast.error('Nije moguće odrediti razred.');
+      return;
+    }
+
+    if (!schoolId || !schoolYearId) {
+      const { data: clsData } = await supabase
+        .from('classes')
+        .select('school_id, school_year_id')
+        .eq('id', classIdForLektira)
+        .maybeSingle();
+      if (clsData) {
+        schoolId = schoolId || clsData.school_id || null;
+        schoolYearId = schoolYearId || clsData.school_year_id || null;
+      }
+    }
+
+    if (!schoolId) {
+      toast.error('Nije moguće odrediti školu.');
+      return;
+    }
+
+    let targetSubjectId = getHrvatskiJezikSubjectId();
+    if (!targetSubjectId) {
+      const { data: classSubjs } = await supabase
+        .from('class_subject_teachers')
+        .select('subject_id')
+        .eq('class_id', classIdForLektira);
+      const subIds = (classSubjs || []).map(cs => cs.subject_id);
+      if (subIds.length > 0) {
+        const { data: subjs } = await supabase
+          .from('subjects')
+          .select('id, name')
+          .in('id', subIds);
+        const hrSub = (subjs || []).find(s => s.name?.toLowerCase().includes('hrvatski'));
+        if (hrSub) {
+          targetSubjectId = hrSub.id;
+        }
+      }
+      if (!targetSubjectId) {
+        const { data: globalSubjs } = await supabase
+          .from('subjects')
+          .select('id, name')
+          .eq('school_id', schoolId);
+        const hrSub = (globalSubjs || []).find(s => s.name?.toLowerCase().includes('hrvatski'));
+        if (hrSub) {
+          targetSubjectId = hrSub.id;
+        }
+      }
+    }
+
     if (!targetSubjectId) {
       toast.error('Nije pronađen predmet Hrvatski jezik za ovaj razred.');
       return;
@@ -320,15 +423,6 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
       const url = isNew ? `/api/lektire` : `/api/lektire/${editingLektira.id}`;
       const method = isNew ? 'POST' : 'PUT';
       
-      const schoolYearId = selectedYearId || selectedClass?.school_year_id || null;
-      const schoolId = selectedSchoolId || selectedClass?.school_id || user?.school_id || null;
-      const classIdForLektira = effectiveClassId || null;
-
-      if (!classIdForLektira || !schoolId) {
-        toast.error('Nije moguće odrediti razred ili školu.');
-        return;
-      }
-
       const payload = {
         classId: classIdForLektira,
         subjectId: targetSubjectId,
@@ -360,9 +454,6 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
           subjectId: '',
           completedDate: new Date().toISOString().split('T')[0],
           title: '',
-          description: '',
-          author: '',
-          processingMethod: '',
           processingDetails: ''
         });
         setEditingLektira(null);
@@ -379,19 +470,36 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     }
   };
 
-  const handleDeleteLektira = async (id: string) => {
+  const handleDeleteLektira = async (reading: any) => {
+    if (!reading) return;
+    console.log("DELETE READING CLICKED", reading);
+    console.log("READING ID", reading.id);
+
     if (!window.confirm('Sigurno želite izbrisati ovu lektiru?')) return;
     try {
-      const res = await fetch(`/api/lektire/${id}`, {
-        method: 'DELETE'
-      });
-      if (res.ok) {
-        toast.success('Lektira uspješno izbrisana!');
-        fetchLektire();
-      } else {
-        throw new Error();
+      const { data, error, count } = await supabase
+        .from("reading_assignments")
+        .delete({ count: "exact" })
+        .eq("id", reading.id)
+        .select();
+
+      console.log("DELETE READING RESULT", { data, error, count });
+
+      if (error) {
+        console.error("DELETE READING ERROR", error);
+        toast.error(error.message);
+        return;
       }
-    } catch (e) {
+
+      if (count === 0) {
+        toast.error("Nijedan zapis nije obrisan.");
+        return;
+      }
+
+      toast.success("Lektira je obrisana.");
+      fetchLektire();
+    } catch (e: any) {
+      console.error("DELETE READING ERROR", e);
       toast.error('Problem s brisanjem lektire.');
     }
   };
@@ -973,6 +1081,8 @@ setStudents(uniqueStudents);
         onDutyStudentIds: [],
         shift: 'Ujutro', 
         isTeachingWeek: true,
+        non_teaching_reason: '',
+        non_teaching_reason_note: '',
         dailyTeachingStatus: { 1: true, 2: true, 3: true, 4: true, 5: true, 6: false, 0: false }
       });
     } catch (err: any) {
@@ -1919,9 +2029,6 @@ setStudents(uniqueStudents);
                     subjectId: getHrvatskiJezikSubjectId(),
                     completedDate: new Date().toISOString().split('T')[0],
                     title: '',
-                    description: '',
-                    author: '',
-                    processingMethod: '',
                     processingDetails: ''
                   });
                   setShowLektiraModal(true);
@@ -1936,9 +2043,10 @@ setStudents(uniqueStudents);
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-300 text-gray-500 text-[10px] uppercase font-bold tracking-wider">
-                    <th className="p-3 w-48 border-r border-gray-200">Predmet</th>
-                    <th className="p-3 w-36 border-r border-gray-200">Datum obrade</th>
-                    <th className="p-3 w-72 border-r border-gray-200">Naslov djela / članka</th>
+                    <th className="p-3 border-r border-gray-200">Predmet</th>
+                    <th className="p-3 border-r border-gray-200">Datum unosa / uređenja</th>
+                    <th className="p-3 border-r border-gray-200">Datum obrade</th>
+                    <th className="p-3 border-r border-gray-200">Naslov djela / članka</th>
                     <th className="p-3 border-r border-gray-200">Način obrade / detalji</th>
                     <th className="p-3 w-20 text-center">Akcije</th>
                   </tr>
@@ -1951,27 +2059,32 @@ setStudents(uniqueStudents);
                         <td className="p-3 border-r border-gray-200 font-bold uppercase text-[#005c8d]">
                           {subject?.name || 'Hrvatski jezik'}
                         </td>
+                        <td className="p-3 border-r border-gray-200 text-slate-500">
+                          {lek.updated_at 
+                            ? new Date(lek.updated_at).toLocaleDateString('hr-HR') 
+                            : lek.created_at 
+                            ? new Date(lek.created_at).toLocaleDateString('hr-HR') 
+                            : '—'}
+                        </td>
                         <td className="p-3 border-r border-gray-200">
-                          {new Date(lek.completedDate || lek.completed_date).toLocaleDateString('hr-HR')}
+                          {lek.processed_at ? new Date(lek.processed_at).toLocaleDateString('hr-HR') : '—'}
                         </td>
                         <td className="p-3 border-r border-gray-200 font-semibold text-slate-800">
                           {lek.title}
                         </td>
                         <td className="p-3 border-r border-gray-200 text-slate-600 whitespace-pre-wrap">
-                          {lek.processingDetails || lek.processing_details || '—'}
+                          {lek.processing_details || '—'}
                         </td>
                         <td className="p-3 text-center flex items-center justify-center gap-2">
                           <button
                             onClick={() => {
                               setEditingLektira(lek);
+                              const processedDateString = lek.processed_at ? new Date(lek.processed_at).toISOString().split('T')[0] : '';
                               setLektiraForm({
-                                subjectId: lek.subjectId || lek.subject_id || '',
-                                completedDate: lek.completedDate || lek.completed_date || '',
+                                subjectId: lek.subject_id || lek.subjectId || '',
+                                completedDate: processedDateString,
                                 title: lek.title,
-                                description: lek.description || '',
-                                author: lek.author || '',
-                                processingMethod: lek.processingMethod || lek.processing_method || '',
-                                processingDetails: lek.processingDetails || lek.processing_details || ''
+                                processingDetails: lek.processing_details || ''
                               });
                               setShowLektiraModal(true);
                             }}
@@ -1981,7 +2094,7 @@ setStudents(uniqueStudents);
                             <Edit2 size={13} />
                           </button>
                           <button
-                            onClick={() => handleDeleteLektira(lek.id)}
+                            onClick={() => handleDeleteLektira(lek)}
                             className="text-slate-400 hover:text-red-500"
                             title="Obriši"
                           >
@@ -1993,7 +2106,7 @@ setStudents(uniqueStudents);
                   })}
                   {lektire.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="p-12 text-center text-gray-400 italic">
+                      <td colSpan={6} className="p-12 text-center text-gray-400 italic">
                         Nema unesenih lektira za ovaj razred.
                       </td>
                     </tr>
@@ -2048,8 +2161,8 @@ setStudents(uniqueStudents);
                   <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Kako je obrađeno / Detalji</label>
                   <textarea
                     rows={3}
-                    value={lektiraForm.description}
-                    onChange={(e) => setLektiraForm({...lektiraForm, description: e.target.value})}
+                    value={lektiraForm.processingDetails}
+                    onChange={(e) => setLektiraForm({...lektiraForm, processingDetails: e.target.value})}
                     className="w-full border border-gray-300 p-2.5 rounded font-medium text-slate-800"
                     placeholder="Npr. Interpretacija likova, okrugli stol, rasprava..."
                   />

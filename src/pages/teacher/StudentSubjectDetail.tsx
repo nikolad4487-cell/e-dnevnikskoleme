@@ -652,14 +652,14 @@ export default function StudentSubjectDetail() {
     if (!window.confirm('Jeste li sigurni da želite obrisati ovaj ispit?')) return;
     console.log("DELETE SPECIAL EXAM CLICKED", id);
     try {
-      const { data, error } = await supabase.from('special_exams').delete().eq('id', id);
+      const { data, error } = await supabase.from('exams').delete().eq('id', id);
       console.log("DELETE SPECIAL EXAM RESULT", { data, error });
       if (error) throw error;
       loadAllData();
       toast.success('Ispit uspješno obrisan.');
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deleting exam:', err);
-      toast.error('Brisanje ispita nije uspjelo.');
+      toast.error(err.message || 'Brisanje ispita nije uspjelo.');
     }
   };
 
@@ -1104,7 +1104,7 @@ export default function StudentSubjectDetail() {
                           </button>
                         ) : (
                           <button 
-                            onClick={() => { setShowFinalModal({ isOpen: true, term: 'FIRST_SEMESTER' }); setFinalGradeInput(''); }}
+                            onClick={() => { setShowFinalModal({ isOpen: true, term: 'FIRST_SEMESTER' }); setFinalGradeValue(''); setFinalGradeStatus(null); }}
                             className="text-[9px] text-gray-400 border border-dashed border-gray-300 px-2 py-0.5 rounded hover:border-[#005c8d] hover:text-[#005c8d]"
                           >
                             UNESI
@@ -1132,7 +1132,7 @@ export default function StudentSubjectDetail() {
                           </button>
                         ) : (
                           <button 
-                            onClick={() => { setShowFinalModal({ isOpen: true, term: 'SECOND_SEMESTER' }); setFinalGradeInput(''); }}
+                            onClick={() => { setShowFinalModal({ isOpen: true, term: 'SECOND_SEMESTER' }); setFinalGradeValue(''); setFinalGradeStatus(null); }}
                             className="text-[9px] text-gray-400 border border-dashed border-gray-300 px-2 py-0.5 rounded hover:border-[#005c8d] hover:text-[#005c8d]"
                           >
                             UNESI

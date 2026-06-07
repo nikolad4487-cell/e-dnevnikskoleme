@@ -542,30 +542,36 @@ async function startServer() {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       
-      const { classId, subjectId, completedDate, title, description, author, processingMethod, processingDetails, createdBy, schoolId, schoolYearId, teacherId } = req.body;
+      const { classId, subjectId, completedDate, title, processingDetails, createdBy, schoolId, schoolYearId, teacherId } = req.body;
       
       if (!classId || !subjectId || !title) {
         return res.status(400).json({ error: "Missing required fields" });
       }
       
+      const payload = {
+        class_id: classId,
+        subject_id: subjectId,
+        title,
+        author: null,
+        processing_method: null,
+        processing_details: processingDetails || null,
+        processed_at: completedDate || new Date().toISOString(),
+        created_by: createdBy || null,
+        teacher_id: teacherId || null,
+        school_id: schoolId || null,
+        school_year_id: schoolYearId || null
+      };
+
+      console.log("SAVE READING PAYLOAD", payload);
+
       const { data, error } = await supabaseAdmin
         .from("reading_assignments")
-        .insert({
-          class_id: classId,
-          subject_id: subjectId,
-          title,
-          author: author || null,
-          processing_method: processingMethod || null,
-          processing_details: processingDetails || null,
-          processed_at: completedDate || new Date().toISOString(),
-          created_by: createdBy || null,
-          teacher_id: teacherId || null,
-          school_id: schoolId || null,
-          school_year_id: schoolYearId || null
-        })
+        .insert(payload)
         .select()
         .single();
         
+      console.log("SAVE READING RESULT", { data, error });
+
       if (error) {
         if (error?.code === '23505') {
           return res.status(409).json({ error: "Lektira s ovim naslovom i datumom već postoji za ovaj razred." });
@@ -583,21 +589,26 @@ async function startServer() {
       const { id } = req.params;
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       
-      const { title, author, description, processingMethod, processingDetails, completedDate } = req.body;
+      const { title, completedDate, processingDetails } = req.body;
       
+      const payload = {
+        title,
+        processing_details: processingDetails || null,
+        processed_at: completedDate,
+        updated_at: new Date().toISOString()
+      };
+
+      console.log("SAVE READING PAYLOAD", payload);
+
       const { data, error } = await supabaseAdmin
         .from("reading_assignments")
-        .update({
-          title,
-          author,
-          processing_method: processingMethod,
-          processing_details: processingDetails,
-          processed_at: completedDate
-        })
+        .update(payload)
         .eq("id", id)
         .select()
         .single();
       
+      console.log("SAVE READING RESULT", { data, error });
+
       if (error) {
         if (error?.code === '23505') {
           return res.status(409).json({ error: "Lektira s ovim naslovom i datumom već postoji za ovaj razred." });
@@ -2836,8 +2847,53 @@ Generiraj JSON objekt sa sljedećom strukturom:
       return app;
   }
 
+  const fixNullSchoolYears = async () => {
+    if (!supabaseAdmin) return;
+    try {
+      const { data: assignments, error } = await supabaseAdmin
+        .from("reading_assignments")
+        .select("id, class_id")
+        .is("school_year_id", null);
+
+      if (error) throw error;
+
+      if (assignments && assignments.length > 0) {
+        console.log(`[LEKTIRA FIX] Found ${assignments.length} assignments with null school_year_id. Repairing...`);
+        for (const item of assignments) {
+          if (!item.class_id) continue;
+          const { data: classData, error: classErr } = await supabaseAdmin
+            .from("classes")
+            .select("school_year_id")
+            .eq("id", item.class_id)
+            .maybeSingle();
+
+          if (classErr) {
+            console.error(`[LEKTIRA FIX] Error fetching class ${item.class_id}:`, classErr.message);
+            continue;
+          }
+
+          if (classData && classData.school_year_id) {
+            const { error: updateErr } = await supabaseAdmin
+              .from("reading_assignments")
+              .update({ school_year_id: classData.school_year_id })
+              .eq("id", item.id);
+
+            if (updateErr) {
+              console.error(`[LEKTIRA FIX] Error updating assignment ${item.id}:`, updateErr.message);
+            } else {
+              console.log(`[LEKTIRA FIX] Assignment ${item.id} successfully updated with school_year_id: ${classData.school_year_id}`);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error("[LEKTIRA FIX] Error running fallback check/fix:", err.message);
+    }
+  };
+
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    fixNullSchoolYears();
   });
   } catch (err) {
     console.error("CRITICAL: Failed to start server:", err);

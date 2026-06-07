@@ -23,6 +23,7 @@ export default function StudentIspitiPage() {
   const { selectedClassId, selectedChildId } = useSelection();
   const [loading, setLoading] = useState(true);
   const [exams, setExams] = useState<ExamWithDetails[]>([]);
+  const [specialExams, setSpecialExams] = useState<ExamWithDetails[]>([]);
 
   useEffect(() => {
     if (!user || !selectedClassId) return;
@@ -50,6 +51,7 @@ export default function StudentIspitiPage() {
 
         if (activeSubjectIds.length === 0) {
           setExams([]);
+          setSpecialExams([]);
           setLoading(false);
           return;
         }
@@ -96,10 +98,27 @@ export default function StudentIspitiPage() {
 
         if (examsError) throw examsError;
 
-        const mappedExams: ExamWithDetails[] = (examsData || []).filter(raw => {
-          const typeStr = raw.exam_type || raw.type;
-          return !specialExamTypes.includes(typeStr);
-        }).map(raw => {
+        const regularRaw = (examsData || []).filter(raw => {
+          const typeStr = (raw.exam_type || raw.type || '').toLowerCase();
+          const isSpecial = specialExamTypes.includes(raw.exam_type || raw.type) ||
+                            typeStr.includes('dopunsk') ||
+                            typeStr.includes('popravn') ||
+                            typeStr.includes('razlikovn') ||
+                            raw.student_id !== null;
+          return !isSpecial;
+        });
+
+        const specialRaw = (examsData || []).filter(raw => {
+          const typeStr = (raw.exam_type || raw.type || '').toLowerCase();
+          const isSpecial = specialExamTypes.includes(raw.exam_type || raw.type) ||
+                            typeStr.includes('dopunsk') ||
+                            typeStr.includes('popravn') ||
+                            typeStr.includes('razlikovn') ||
+                            raw.student_id !== null;
+          return isSpecial;
+        });
+
+        const mapHelper = (raw: any) => {
           const exam = mappers.exam(raw);
           const examSubject = subjectsMap.get(exam.subjectId) || null;
           
@@ -121,17 +140,21 @@ export default function StudentIspitiPage() {
 
           return {
             id: exam.id,
-            date: exam.date,
-            type: exam.type,
-            description: exam.description,
-            value: exam.value,
+            date: exam.date || raw.exam_date,
+            type: exam.type || raw.exam_type,
+            description: exam.description || raw.description || raw.note || '',
+            value: exam.value || raw.grade_value || '',
             note: exam.note,
             subject: examSubject,
             teachers: matchedTeachers,
           };
-        });
+        };
+
+        const mappedExams: ExamWithDetails[] = regularRaw.map(mapHelper);
+        const mappedSpecialExams: ExamWithDetails[] = specialRaw.map(mapHelper);
 
         setExams(mappedExams);
+        setSpecialExams(mappedSpecialExams);
       } catch (err) {
         console.error('Error fetching student exams:', err);
       } finally {
@@ -265,6 +288,26 @@ export default function StudentIspitiPage() {
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-85">
               {pastExams.map(exam => (
+                <div key={exam.id}>
+                  <ExamCard exam={exam} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Special Exams (Dopunski / Razlikovni / Popravni) */}
+        <div className="space-y-4 pt-6">
+          <h3 className="text-xs font-black uppercase text-[#005c8d] tracking-wider border-b-2 border-[#005c8d]/20 pb-2 flex items-center gap-2">
+            <AlertCircle size={15} className="text-[#005c8d]" /> DOPUNSKI / RAZLIKOVNI / POPRAVNI ISPITI
+          </h3>
+          {specialExams.length === 0 ? (
+            <div className="bg-white border border-gray-200 p-8 text-center text-gray-400 italic text-xs shadow-sm">
+              Nema upisanih dopunskih, razlikovnih ili popravnih ispita za ovog učenika.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {specialExams.map(exam => (
                 <div key={exam.id}>
                   <ExamCard exam={exam} />
                 </div>
