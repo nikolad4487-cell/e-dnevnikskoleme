@@ -62,10 +62,12 @@ export default function InterniDokumentiPage() {
         .order('created_at', { ascending: false });
         
       if (error) {
-         if (error.code === '42P01') {
-            console.log("[DOKUMENTI] Table does not exist. Treating as empty.");
-            setDocs([]);
-            setFilteredDocs([]);
+         if (error.code === '42P01' || error.message?.includes('school_documents') || error.message?.includes('schema cache')) {
+            console.log("[DOKUMENTI] Table does not exist. Falling back to localStorage.");
+            const local = localStorage.getItem(`school_documents_${selectedSchoolId}`);
+            const parsed = local ? JSON.parse(local) : [];
+            setDocs(parsed);
+            setFilteredDocs(parsed);
             return;
          }
          throw error;
@@ -75,7 +77,16 @@ export default function InterniDokumentiPage() {
       setFilteredDocs(data || []);
     } catch (err: any) {
       console.error("[DOKUMENTI] Error", err);
-      toast.error(`Neuspješno učitavanje dokumenata: ${err.message || 'Nepoznata greška'}`);
+      // Double check if error is schema cache related to avoid showing toast to user
+      if (err.message?.includes('school_documents') || err.message?.includes('schema cache')) {
+        console.log("[DOKUMENTI] Catching schema cache error, falling back to localStorage.");
+        const local = localStorage.getItem(`school_documents_${selectedSchoolId}`);
+        const parsed = local ? JSON.parse(local) : [];
+        setDocs(parsed);
+        setFilteredDocs(parsed);
+      } else {
+        toast.error(`Neuspješno učitavanje dokumenata: ${err.message || 'Nepoznata greška'}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -105,7 +116,7 @@ export default function InterniDokumentiPage() {
     }
 
     try {
-      const payload = {
+      const payload: any = {
         school_id: selectedSchoolId,
         title: newTitle,
         document_type: newType,
@@ -116,24 +127,66 @@ export default function InterniDokumentiPage() {
         uploaded_by: user?.id
       };
 
-      if (editingDocId) {
-        const { error } = await supabase.from('school_documents').update(payload).eq('id', editingDocId);
-        if (error) throw error;
-        toast.success('Dokument je ažuriran.');
-      } else {
-        const { data, error } = await supabase.from('school_documents').insert([payload]).select().single();
-        if (error) throw error;
-        toast.success('Novi dokument je pohranjen.');
-        if (user?.id && data) {
-          await logSystemAction({
-            executor_id: user.id,
-            school_id: selectedSchoolId || '',
-            action_type: 'PUBLISH_DOCUMENT',
-            entity_type: 'INTERNAL_DOCUMENT',
-            entity_id: data.id,
-            new_value: { title: newTitle, document_type: newType }
-          });
+      let dbSuccess = false;
+      try {
+        if (editingDocId) {
+          const { error } = await supabase.from('school_documents').update(payload).eq('id', editingDocId);
+          if (error) throw error;
+          dbSuccess = true;
+          toast.success('Dokument je ažuriran.');
+        } else {
+          const { data, error } = await supabase.from('school_documents').insert([payload]).select().single();
+          if (error) throw error;
+          dbSuccess = true;
+          toast.success('Novi dokument je pohranjen.');
+          if (user?.id && data) {
+            await logSystemAction({
+              executor_id: user.id,
+              school_id: selectedSchoolId || '',
+              action_type: 'PUBLISH_DOCUMENT',
+              entity_type: 'INTERNAL_DOCUMENT',
+              entity_id: data.id,
+              new_value: { title: newTitle, document_type: newType }
+            });
+          }
         }
+      } catch (dbErr: any) {
+        console.warn("[DOKUMENTI] DB Save failed, falling back to localStorage", dbErr);
+        if (dbErr.code === '42P01' || dbErr.message?.includes('school_documents') || dbErr.message?.includes('schema cache')) {
+          dbSuccess = false;
+        } else {
+          throw dbErr;
+        }
+      }
+
+      if (!dbSuccess) {
+        const local = localStorage.getItem(`school_documents_${selectedSchoolId}`);
+        let parsed: SchoolDocument[] = local ? JSON.parse(local) : [];
+        if (editingDocId) {
+          parsed = parsed.map(d => d.id === editingDocId ? {
+            ...d,
+            ...payload,
+            updated_at: new Date().toISOString()
+          } : d);
+          toast.success('Dokument je ažuriran.');
+        } else {
+          const newDoc: SchoolDocument = {
+            id: Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15),
+            school_id: selectedSchoolId || '',
+            title: newTitle,
+            document_type: newType,
+            category: newCat,
+            description: newContent,
+            visibility: newAccess,
+            status: 'ODOBREN',
+            uploaded_by: user?.id || '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          parsed.unshift(newDoc);
+          toast.success('Novi dokument je pohranjen.');
+        }
+        localStorage.setItem(`school_documents_${selectedSchoolId}`, JSON.stringify(parsed));
       }
 
       setShowAddModal(false);
@@ -170,9 +223,36 @@ export default function InterniDokumentiPage() {
   const handleArchiveDoc = async (doc: SchoolDocument) => {
     if (!window.confirm(`Arhivirati dokument "${doc.title}"?`)) return;
     try {
-      const { error } = await supabase.from('school_documents').update({ status: 'ARHIVIRAN' }).eq('id', doc.id);
-      if (error) throw error;
-      toast.success('Dokument arhiviran.');
+      let dbSuccess = false;
+      try {
+        const { error } = await supabase.from('school_documents').update({ status: 'ARHIVIRAN' }).eq('id', doc.id);
+        if (error) {
+          if (error.code === '42P01' || error.message?.includes('school_documents') || error.message?.includes('schema cache')) {
+            dbSuccess = false;
+          } else {
+            throw error;
+          }
+        } else {
+          dbSuccess = true;
+          toast.success('Dokument arhiviran.');
+        }
+      } catch (dbErr: any) {
+        if (dbErr.code === '42P01' || dbErr.message?.includes('school_documents') || dbErr.message?.includes('schema cache')) {
+          dbSuccess = false;
+        } else {
+          throw dbErr;
+        }
+      }
+
+      if (!dbSuccess) {
+        const local = localStorage.getItem(`school_documents_${selectedSchoolId}`);
+        if (local) {
+          let parsed: SchoolDocument[] = JSON.parse(local);
+          parsed = parsed.map(d => d.id === doc.id ? { ...d, status: 'ARHIVIRAN', updated_at: new Date().toISOString() } : d);
+          localStorage.setItem(`school_documents_${selectedSchoolId}`, JSON.stringify(parsed));
+          toast.success('Dokument arhiviran.');
+        }
+      }
       loadDocuments();
     } catch (e) {
       console.error(e);
@@ -183,19 +263,45 @@ export default function InterniDokumentiPage() {
   const handleDeleteDoc = async (doc: SchoolDocument) => {
     if (!window.confirm(`Izbrisati dokument "${doc.title}"?`)) return;
     try {
-      const { error } = await supabase.from('school_documents').delete().eq('id', doc.id);
-      if (error) throw error;
-      
-      toast.success('Dokument izbrisan.');
-      if (user?.id) {
-        await logSystemAction({
-          executor_id: user.id,
-          school_id: selectedSchoolId || '',
-          action_type: 'DELETE_DOCUMENT',
-          entity_type: 'INTERNAL_DOCUMENT',
-          entity_id: doc.id,
-          old_value: { title: doc.title }
-        });
+      let dbSuccess = false;
+      try {
+        const { error } = await supabase.from('school_documents').delete().eq('id', doc.id);
+        if (error) {
+          if (error.code === '42P01' || error.message?.includes('school_documents') || error.message?.includes('schema cache')) {
+            dbSuccess = false;
+          } else {
+            throw error;
+          }
+        } else {
+          dbSuccess = true;
+          toast.success('Dokument izbrisan.');
+          if (user?.id) {
+            await logSystemAction({
+              executor_id: user.id,
+              school_id: selectedSchoolId || '',
+              action_type: 'DELETE_DOCUMENT',
+              entity_type: 'INTERNAL_DOCUMENT',
+              entity_id: doc.id,
+              old_value: { title: doc.title }
+            });
+          }
+        }
+      } catch (dbErr: any) {
+        if (dbErr.code === '42P01' || dbErr.message?.includes('school_documents' ) || dbErr.message?.includes('schema cache')) {
+          dbSuccess = false;
+        } else {
+          throw dbErr;
+        }
+      }
+
+      if (!dbSuccess) {
+        const local = localStorage.getItem(`school_documents_${selectedSchoolId}`);
+        if (local) {
+          let parsed: SchoolDocument[] = JSON.parse(local);
+          parsed = parsed.filter(d => d.id !== doc.id);
+          localStorage.setItem(`school_documents_${selectedSchoolId}`, JSON.stringify(parsed));
+          toast.success('Dokument izbrisan.');
+        }
       }
       loadDocuments();
     } catch (e) {

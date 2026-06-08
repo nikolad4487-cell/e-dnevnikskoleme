@@ -26,6 +26,7 @@ const IndividualniRazgovoriPage = lazy(() => import('./IndividualniRazgovoriPage
 const DolasciRoditeljaPage = lazy(() => import('./DolasciRoditeljaPage'));
 const StudentDashboard = lazy(() => import('./StudentDashboard'));
 const StudentSubjectDetail = lazy(() => import('./StudentSubjectDetail'));
+const DigitalniDosjePage = lazy(() => import('../shared/DigitalniDosjePage'));
 const ClassNotesPage = BiljeskePage;
 
 export default function ClassDashboardPage() {
@@ -329,6 +330,7 @@ export default function ClassDashboardPage() {
               
               <Route path="pedagoska-dokumentacija" element={<PedagoskaDokumentacijaPage />} />
               <Route path="pedagogical" element={<PedagoskaDokumentacijaPage />} />
+              <Route path="dosje" element={<DigitalniDosjePage />} />
               
               <Route path="raspored" element={<DnevnikRadaPage initialView="SCHEDULE" />} />
               <Route path="schedule" element={<DnevnikRadaPage initialView="SCHEDULE" />} />

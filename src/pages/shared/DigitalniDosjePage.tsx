@@ -11,7 +11,7 @@ import { DossierRegistrationsTab } from './dossier/DossierRegistrationsTab';
 import { 
   User, Mail, Phone, MapPin, Hash, Calendar, GraduationCap, 
   TrendingUp, Activity, ShieldCheck, AlertCircle, Award, 
-  DollarSign, FileText, Plus, Trash2, Brain 
+  DollarSign, FileText, Plus, Trash2, Brain, Search 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -68,10 +68,8 @@ export default function DigitalniDosjePage() {
     if (urlId) {
       setStudentId(urlId);
     } else if (isStaff) {
-      // Teachers can pick or default to classId URL parameter
-      if (classId) {
-        // We will default to first student in class inside loaded search
-      }
+      // Teachers can pick, initially unset so they can select from sidebar directory
+      setStudentId('');
     } else {
       // Student or parent -> lock to logged in user ID or child ID
       if (user?.role === Role.PARENT && (window as any).selectedChildId) {
@@ -80,30 +78,55 @@ export default function DigitalniDosjePage() {
         setStudentId(user.id);
       }
     }
-  }, [classId, searchParams, user]);
+  }, [classId, searchParams, user, isStaff]);
 
   // Load students for staff dropdown selection
   useEffect(() => {
     if (!isStaff) return;
     const loadAllStudents = async () => {
-      let q = supabase.from('user_profiles').select('*').eq('role', Role.STUDENT);
-      if (selectedClassId) {
-        q = q.eq('class_id', selectedClassId);
+      const activeClassId = classId || selectedClassId;
+      console.log("DOSJE: Loading students for class:", activeClassId);
+      if (!activeClassId) return;
+
+      const { data: enrollData, error } = await supabase
+        .from('student_class_enrollments')
+        .select('student:user_profiles(*)')
+        .eq('class_id', activeClassId)
+        .eq('status', 'ACTIVE');
+
+      if (error) {
+        console.error("DOSJE: Error loading student enrollments", error);
+        return;
       }
-      const { data } = await q;
-      if (data) {
-        setAllStudents(data);
-        if (data.length > 0 && !studentId) {
-          setStudentId(data[0].id);
+
+      if (enrollData) {
+        const studentProfiles = enrollData
+          .map((e: any) => e.student)
+          .filter(Boolean);
+
+        const sorted = [...studentProfiles].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'hr'));
+        
+        // Debug output as requested by user
+        console.log("DOSJE STUDENTS", sorted);
+        
+        setAllStudents(sorted);
+        
+        // If a studentId is provided in url, make sure to set it
+        const urlId = searchParams.get('studentId');
+        if (urlId) {
+          setStudentId(urlId);
         }
       }
     };
     loadAllStudents();
-  }, [isStaff, selectedClassId]);
+  }, [isStaff, classId, selectedClassId, searchParams]);
 
   // Load detailed student dossier attributes upon studentId adjustment
   useEffect(() => {
-    if (!studentId) return;
+    if (!studentId) {
+      setStudentProfile(null);
+      return;
+    }
 
     const loadDossierDetails = async () => {
       setLoading(true);
@@ -280,11 +303,15 @@ export default function DigitalniDosjePage() {
     { justified: 0, unjustified: 0, pending: 0 }
   );
 
+  const filteredStudents = allStudents.filter(s => 
+    s.name.toLowerCase().includes(studentFilter.toLowerCase())
+  );
+
   return (
     <div className="flex flex-col h-full bg-[#f8fafc] font-sans no-print text-gray-800">
       
       {/* HEADER BAR */}
-      <div className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div className="bg-white border-b border-gray-200 px-6 py-3 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shrink-0">
         <div>
           <h2 className="text-sm font-black text-[#005c8d] uppercase tracking-widest flex items-center gap-1.5 leading-none">
             <GraduationCap size={18} />
@@ -292,31 +319,72 @@ export default function DigitalniDosjePage() {
           </h2>
           <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">E-karton, praksa, natjecanja, pedagoška podrška i analitika</p>
         </div>
-
-        {isStaff && allStudents.length > 0 && (
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase text-gray-400 tracking-wide">Prebaci učenika:</span>
-            <select 
-              id="student-id-select-dossier"
-              className="bg-slate-100 border border-gray-300 text-xs font-black uppercase px-3 py-1.5 rounded outline-none focus:border-[#005c8d] text-[#005c8d]"
-              value={studentId}
-              onChange={e => setStudentId(e.target.value)}
-            >
-              {allStudents.map(s => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
 
-      {loading ? (
-        <div className="flex flex-col items-center justify-center py-32 flex-1">
-          <div className="w-12 h-12 border-4 border-slate-100 border-t-[#005c8d] rounded-full animate-spin mb-4" />
-          <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest animate-pulse">Učitavanje cjelokupnog matičnog dosjea...</div>
-        </div>
-      ) : studentProfile ? (
-        <div className="p-6 overflow-auto space-y-6 flex-1">
+      <div className="flex-1 flex flex-col lg:flex-row min-h-0 min-w-0 bg-[#f8fafc]">
+        {/* LEFT/TOP SIDEBAR DIRECTORY (visible only for school staff) */}
+        {isStaff && (
+          <div className="w-full lg:w-80 border-b lg:border-b-0 lg:border-r border-gray-200 bg-white flex flex-col shrink-0 lg:h-full h-72">
+            <div className="p-3 bg-slate-50 border-b border-gray-200">
+              <span className="block text-[9px] font-black uppercase text-gray-400 tracking-wider mb-1.5">Popis i pretraga učenika:</span>
+              <div className="relative">
+                <input
+                  id="student-search-dosje"
+                  type="text"
+                  placeholder="Pretraži učenike po imenu..."
+                  value={studentFilter}
+                  onChange={e => setStudentFilter(e.target.value)}
+                  className="w-full bg-white border border-gray-300 text-xs px-3 py-1.5 pl-8 rounded focus:outline-none focus:border-[#005c8d]"
+                />
+                <Search size={12} className="absolute left-2.5 top-2.5 text-gray-400" />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+              {allStudents.length === 0 ? (
+                <div className="p-4 text-center text-xs text-gray-400 font-bold uppercase italic">Nema učenika u ovom razredu.</div>
+              ) : filteredStudents.length > 0 ? (
+                filteredStudents.map(s => {
+                  const isSelected = studentId === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => setStudentId(s.id)}
+                      className={`w-full text-left px-4 py-2.5 text-xs font-black uppercase tracking-tight transition-colors flex items-center gap-3 ${
+                        isSelected
+                          ? "bg-sky-50 text-[#005c8d] border-l-4 border-[#005c8d]"
+                          : "text-gray-650 hover:bg-slate-50 border-l-4 border-transparent"
+                      }`}
+                    >
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-[10px] font-black ${
+                        isSelected ? "bg-[#005c8d] text-white" : "bg-slate-100 text-slate-400"
+                      }`}>
+                        {s.name?.slice(0, 2)}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-gray-900 truncate font-semibold">{s.name}</div>
+                        <div className="text-[9px] text-gray-400 normal-case font-bold mt-0.5 tracking-wider font-mono">OIB: {s.oib || 'N/A'}</div>
+                      </div>
+                    </button>
+                  );
+                })
+              ) : (
+                <div className="p-4 text-center text-xs text-gray-400 uppercase italic">Nema rezultata.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* DETAIL PANEL & TABS */}
+        <div className="flex-1 overflow-y-auto min-w-0 h-full">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-32 h-full">
+              <div className="w-12 h-12 border-4 border-slate-100 border-t-[#005c8d] rounded-full animate-spin mb-4" />
+              <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest animate-pulse">Učitavanje cjelokupnog matičnog dosjea...</div>
+            </div>
+          ) : studentProfile ? (
+            <div className="p-6 space-y-6">
           
           {/* PROFILE SUMMARY HERO BANNER (Džoker karton) */}
           <div className="bg-white border rounded-lg p-6 shadow-sm grid grid-cols-1 md:grid-cols-4 gap-6 items-center">
@@ -857,12 +925,15 @@ export default function DigitalniDosjePage() {
 
         </div>
       ) : (
-        <div className="text-center py-32 bg-white flex flex-col items-center flex-1 font-sans justify-center">
+        <div className="text-center py-32 bg-white flex flex-col items-center flex-1 font-sans justify-center h-full">
           <GraduationCap className="text-gray-300 mb-4" size={56} />
           <h4 className="text-base font-black text-gray-800 uppercase tracking-wide">Digitalni dosje učenika</h4>
-          <p className="text-xs text-gray-400 max-w-sm mt-1 leading-normal">Upišite, preuzmite ili odaberite aktivnog učenika iz gornjeg razrednog izbornika kako biste pregledavali digitalni e-karton.</p>
+          <p className="text-xs text-gray-400 max-w-sm mt-1 leading-normal">Odaberite učenika za prikaz digitalnog dosjea.</p>
         </div>
       )}
+
+        </div>
+      </div>
 
     </div>
   );

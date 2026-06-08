@@ -235,10 +235,8 @@ export default function App() {
                         <Route path="izostanci" element={<IzostanciPage />} />
                         <Route path="raspored" element={<RasporedPage />} />
                         <Route path="osobni-podaci" element={<OsobniPodaciPage />} />
-                        <Route path="dosje" element={<DigitalniDosjePage />} />
                         <Route path="zavrsni-rad" element={<FinalThesisPage />} />
                         <Route path="kalendar" element={<SkolskiKalendarPage />} />
-                        <Route path="dokumenti" element={<InterniDokumentiPage />} />
                         <Route path="informativka" element={<InformativkaPage />} />
                         <Route path="informatika" element={<Navigate to="/student/informativka" replace />} />
                         <Route path="postavke" element={<SettingsPage />} />
