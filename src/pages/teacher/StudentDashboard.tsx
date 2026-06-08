@@ -263,7 +263,7 @@ export default function StudentDashboard() {
               Pregled predmeta
             </button>
             <button 
-              onClick={() => navigate(`/class/${classId}/biljeske`)} 
+              onClick={() => navigate(`/class/${classId}/biljeske`, { state: { studentId } })} 
               className="flex items-center gap-2.5 w-full text-left p-2.5 text-xs font-semibold text-gray-700 hover:bg-white hover:text-[#005c8d] border border-transparent hover:border-gray-100 rounded transition-all duration-150"
             >
               <FileText className="w-4 h-4 text-gray-400 shrink-0" />

@@ -209,6 +209,16 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     }
   }, [initialView]);
 
+  useEffect(() => {
+    if (location.state?.studentId && students.length > 0) {
+      const found = students.find(s => s.id === location.state.studentId);
+      if (found) {
+        console.log("SETTING ACTIVE STUDENT FROM ROUTER STATE", found);
+        setActiveStudent(found);
+      }
+    }
+  }, [location.state, students]);
+
   // Debug logs removed
 
   const [gradingElements, setGradingElements] = useState<any[]>([]);
@@ -646,35 +656,13 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
   }, [viewMode, activeStudent, activeSubject, effectiveClassId]);
 
   useEffect(() => {
-    const snChannel: any = null;
-    const cnChannel: any = null;
-
-    if (viewMode === 'NOTES' && activeStudent && effectiveClassId) {
+    if (viewMode === 'NOTES' && effectiveClassId) {
       const selectedClass = classes.find(c => c.id === effectiveClassId);
       const schoolYear = selectedClass?.schoolYear || '2025/2026';
 
-      const fetchSN = async () => {
-        const { data } = await supabase
-          .from('student_overall_notes')
-          .select('*')
-          .eq('student_id', activeStudent.id)
-          .eq('class_id', effectiveClassId)
-          .limit(1)
-          .maybeSingle();
-        
-        if (data) {
-          const formatted = mappers.studentOverallNotes(data);
-          setStudentOverallNotes(formatted);
-          if (!isEditingOverallNotes) setOverallNotesForm(formatted);
-        } else {
-          setStudentOverallNotes(null);
-          if (!isEditingOverallNotes) setOverallNotesForm({});
-        }
-      };
-
       const fetchCN = async () => {
         const { data } = await supabase
-        .from('class_overall_notes')
+          .from('class_overall_notes')
           .select('*')
           .eq('class_id', effectiveClassId)
           .eq('school_year', schoolYear)
@@ -690,35 +678,52 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         }
       };
 
-      const fetchSummary = async () => {
-        const { data } = await supabase
-          .from('student_year_summaries')
-          .select('*')
-          .eq('student_id', activeStudent.id)
-          .eq('class_id', effectiveClassId)
-          .limit(1)
-          .maybeSingle();
-        if (data) {
-          setStudentYearSummary(mappers.studentYearSummary(data));
-        } else {
-          setStudentYearSummary(null);
-        }
-      };
-
-      fetchSN();
       fetchCN();
-      fetchSummary();
 
-      /* Realtime disabled
-      snChannel = supabase.channel('sn_changes')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'student_overall_notes', filter: `student_id=eq.${activeStudent.id}` }, fetchSN)
-        .subscribe();
-      */
+      if (activeStudent) {
+        const fetchSN = async () => {
+          const { data } = await supabase
+            .from('student_overall_notes')
+            .select('*')
+            .eq('student_id', activeStudent.id)
+            .eq('class_id', effectiveClassId)
+            .limit(1)
+            .maybeSingle();
+          
+          if (data) {
+            const formatted = mappers.studentOverallNotes(data);
+            setStudentOverallNotes(formatted);
+            if (!isEditingOverallNotes) setOverallNotesForm(formatted);
+          } else {
+            setStudentOverallNotes(null);
+            if (!isEditingOverallNotes) setOverallNotesForm({});
+          }
+        };
+
+        const fetchSummary = async () => {
+          const { data } = await supabase
+            .from('student_year_summaries')
+            .select('*')
+            .eq('student_id', activeStudent.id)
+            .eq('class_id', effectiveClassId)
+            .limit(1)
+            .maybeSingle();
+          if (data) {
+            setStudentYearSummary(mappers.studentYearSummary(data));
+          } else {
+            setStudentYearSummary(null);
+          }
+        };
+
+        fetchSN();
+        fetchSummary();
+      } else {
+        setStudentOverallNotes(null);
+        setOverallNotesForm({});
+        setStudentYearSummary(null);
+      }
     }
-    return () => { 
-      // if (snChannel) supabase.removeChannel(snChannel); 
-    };
-  }, [viewMode, activeStudent, effectiveClassId, isEditingOverallNotes]);
+  }, [viewMode, activeStudent, effectiveClassId, isEditingOverallNotes, isEditingClassNotes]);
 
   const fetchSpecialExams = async () => {
     if (!activeStudent?.id || !activeSubject?.id || !effectiveClassId) return;
@@ -916,7 +921,8 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
   };
 
   const renderNotesTab = () => {
-    if (!activeStudent || !effectiveClassId) return null;
+    console.log("IMENIK BILJESKE TAB RENDERED");
+    if (!effectiveClassId) return null;
     const selectedClass = classes.find(c => c.id === effectiveClassId);
     const homeroomTeacher = teachers.find(t => t.id === selectedClass?.homeroomTeacherId);
     const deputyTeacher = teachers.find(t => t.id === selectedClass?.deputyTeacherId);
@@ -949,22 +955,26 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
             />
           ) : (
             <div className="text-gray-700 whitespace-pre-wrap leading-normal">
-              {content || <span className="text-gray-300 italic">Nema unosa</span>}
+              {content || <span className="text-gray-300 italic">Bilješke nisu unesene.</span>}
             </div>
           )}
         </div>
       </div>
     );
 
-    const isFinalized = !!studentYearSummary?.finalizedAt;
+    const isFinalized = activeStudent ? !!studentYearSummary?.finalizedAt : false;
 
     return (
       <div className="w-full space-y-4">
         <div className="flex items-center justify-between border-b border-gray-200 pb-2 mb-4">
           <div className="flex items-center gap-3">
               <div>
-                <h2 className="text-lg font-bold text-[#005c8d] uppercase tracking-tight leading-none">{activeStudent ? formatName(activeStudent) : ''}</h2>
-                <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5 tracking-tight">Bilješke i podaci</p>
+                <h2 className="text-lg font-bold text-[#005c8d] uppercase tracking-tight leading-none">
+                  {activeStudent ? formatName(activeStudent) : 'Službene bilješke i podaci razreda'}
+                </h2>
+                <p className="text-[10px] text-gray-400 font-bold uppercase mt-0.5 tracking-tight">
+                  {activeStudent ? 'Učeničke bilješke i podaci' : 'Opći podaci i bilješke razreda'}
+                </p>
               </div>
           </div>
           {(isEditingOverallNotes || isEditingClassNotes) && (
@@ -989,12 +999,12 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         </div>
 
         <div className="bg-white border border-gray-300 p-4 space-y-4">
-          <div className="bg-[#f8f9fa] p-2 border border-gray-200 mb-4">
-            <h4 className="text-[10px] font-bold text-gray-500 uppercase">Opće bilješke razreda</h4>
+          <div className="bg-[#f8f9fa] p-2 border border-gray-200 mb-4 font-bold text-gray-700 uppercase text-xs">
+            Službene bilješke razreda
           </div>
           
           <Section 
-            title="Razrednik" 
+            title="O RAZREDNIKU" 
             content={classOverallNotes?.homeroomInfo || (homeroomTeacher ? formatName(homeroomTeacher) : '')}
             field="homeroomInfo"
             canEdit={isHomeroom}
@@ -1002,57 +1012,67 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
           />
 
           <Section 
-            title="Zamjenik razrednika" 
+            title="O ZAMJENIKU RAZREDNIKA" 
             content={classOverallNotes?.deputyInfo || (deputyTeacher ? formatName(deputyTeacher) : '')}
             field="deputyInfo"
             canEdit={isDeputy || isHomeroom}
             isClassLevel
           />
 
-          <div className="bg-[#f8f9fa] p-2 border border-gray-200 mb-4 mt-6">
-            <h4 className="text-[10px] font-bold text-gray-500 uppercase">Bilješke za učenika</h4>
+          <div className="bg-[#f8f9fa] p-2 border border-gray-200 mb-4 mt-6 font-bold text-gray-700 uppercase text-xs">
+            Bilješke za učenika
           </div>
 
           <Section 
-            title="Bilješka razrednika" 
-            content={studentOverallNotes?.homeroomNote}
-            field="homeroomNote"
-            canEdit={isHomeroom}
-          />
-
-          <Section 
-            title="Izvanškolske aktivnosti" 
-            content={studentOverallNotes?.extracurricularActivities}
-            field="extracurricularActivities"
-            canEdit={isHomeroom}
-          />
-
-          <Section 
-            title="Izvannastavne aktivnosti" 
-            content={studentOverallNotes?.schoolActivities}
+            title="IZVANNASTAVNE AKTIVNOSTI" 
+            content={activeStudent ? studentOverallNotes?.schoolActivities : undefined}
             field="schoolActivities"
-            canEdit={isHomeroom}
+            canEdit={isHomeroom && !!activeStudent}
           />
 
           <Section 
-            title="Pedagoške mjere" 
-            content={studentOverallNotes?.disciplinaryActions}
-            field="disciplinaryActions"
-            canEdit={isHomeroom}
+            title="OSTALE BILJEŠKE" 
+            content={activeStudent ? studentOverallNotes?.homeroomNote : undefined}
+            field="homeroomNote"
+            canEdit={isHomeroom && !!activeStudent}
           />
 
-          <div className="space-y-1">
-            <h3 className="text-[11px] font-bold uppercase text-gray-500">Vladanje</h3>
-            <div className="bg-white border border-gray-300 p-2 text-[12px] min-h-[30px]">
-              {isFinalized ? (
-                <div className="text-gray-700 font-bold uppercase">
-                  {studentYearSummary?.behavior || 'Uzorno'}
+          {activeStudent && (
+            <>
+              <Section 
+                title="Izvanškolske aktivnosti" 
+                content={studentOverallNotes?.extracurricularActivities}
+                field="extracurricularActivities"
+                canEdit={isHomeroom}
+              />
+
+              <Section 
+                title="Pedagoške mjere" 
+                content={studentOverallNotes?.disciplinaryActions}
+                field="disciplinaryActions"
+                canEdit={isHomeroom}
+              />
+
+              <div className="space-y-1">
+                <h3 className="text-[11px] font-bold uppercase text-gray-500">Vladanje</h3>
+                <div className="bg-white border border-gray-300 p-2 text-[12px] min-h-[30px]">
+                  {isFinalized ? (
+                    <div className="text-gray-700 font-bold uppercase">
+                      {studentYearSummary?.behavior || 'Uzorno'}
+                    </div>
+                  ) : (
+                    <div className="text-gray-400 italic">Vladanje se prikazuje nakon zaključenja općeg prosjeka.</div>
+                  )}
                 </div>
-              ) : (
-                <div className="text-gray-400 italic">Vladanje se prikazuje nakon zaključenja općeg prosjeka.</div>
-              )}
+              </div>
+            </>
+          )}
+
+          {!activeStudent && (
+            <div className="text-[11px] text-[#005c8d] font-bold bg-sky-50 border border-sky-100 p-3 mt-4">
+              ⓘ Savjet: Za pregled i unos pojedinačnih učeničkih podataka poput "Izvannastavnih aktivnosti" ili "Ostalih bilješki" za pojedini subjekt, kliknite na željenog učenika iz popisa na lijevoj strani.
             </div>
-          </div>
+          )}
         </div>
       </div>
     );
@@ -2103,11 +2123,10 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                 <BookOpen size={14} /> Pregled predmeta
               </button>
               <button 
-                disabled={!activeStudent} 
                 onClick={() => { setViewMode('NOTES'); setActiveSubject(null); }} 
                 className={cn(
                   "w-full flex items-center gap-3 px-4 py-2 text-[11px] font-bold uppercase transition-all border-l-4",
-                  viewMode === 'NOTES' ? "bg-white border-[#005c8d] text-[#005c8d]" : "border-transparent text-gray-500 hover:bg-gray-100 disabled:opacity-30"
+                  viewMode === 'NOTES' ? "bg-white border-[#005c8d] text-[#005c8d]" : "border-transparent text-gray-500 hover:bg-gray-100 placeholder:hover:bg-gray-100"
                 )}
               >
                 <ClipboardList size={14} /> Bilješke

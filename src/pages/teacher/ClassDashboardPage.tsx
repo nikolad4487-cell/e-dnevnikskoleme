@@ -26,6 +26,7 @@ const IndividualniRazgovoriPage = lazy(() => import('./IndividualniRazgovoriPage
 const DolasciRoditeljaPage = lazy(() => import('./DolasciRoditeljaPage'));
 const StudentDashboard = lazy(() => import('./StudentDashboard'));
 const StudentSubjectDetail = lazy(() => import('./StudentSubjectDetail'));
+const ClassNotesPage = BiljeskePage;
 
 export default function ClassDashboardPage() {
   const { classId } = useParams<{ classId: string }>();
@@ -194,7 +195,7 @@ export default function ClassDashboardPage() {
   ];
 
   let currentTab = location.pathname.split('/')[3] || 'imenik';
-  if (currentTab === 'imenik-predmeti') currentTab = 'imenik';
+  if (currentTab === 'imenik-predmeti' || currentTab === 'biljeske') currentTab = 'imenik';
   if (currentTab === 'work-overview') currentTab = 'pregled-rada';
   if (currentTab === 'work-journal') currentTab = 'dnevnik-rada';
   if (currentTab === 'absences') currentTab = 'izostanci';
@@ -315,16 +316,13 @@ export default function ClassDashboardPage() {
               <Route index element={<Navigate to="imenik" replace />} />
               <Route path="imenik" element={renderStudentsTable()} />
               <Route path="imenik-predmeti" element={<ImenikPage initialView="SUBJECTS" />} />
-              <Route path="biljeske" element={<ImenikPage initialView="NOTES" />} />
+              <Route path="biljeske" element={<ClassNotesPage />} />
               
               <Route path="pregled-rada" element={<DnevnikRadaPage initialView="WEEKS" />} />
               <Route path="work-overview" element={<DnevnikRadaPage initialView="WEEKS" />} />
-              <Route path="*" element={<div className="bg-orange-500 text-white p-8 font-black uppercase">ROUTE NOT FOUND! Staza je: {location.pathname}</div>} />
               
               <Route path="dnevnik-rada" element={<DnevnikRadaPage initialView="WEEK_DETAIL" />} />
               <Route path="work-journal" element={<DnevnikRadaPage initialView="WEEK_DETAIL" />} />
-              
-              <Route path="biljeske" element={<BiljeskePage />} />
               
               <Route path="izostanci" element={<TeacherIzostanciPage />} />
               <Route path="absences" element={<TeacherIzostanciPage />} />
@@ -354,6 +352,7 @@ export default function ClassDashboardPage() {
               <Route path="student/:studentId/subject/:subjectId" element={<StudentSubjectDetail />} />
               
               <Route path="pretrazivanje" element={<PretrazivanjePage />} />
+              <Route path="*" element={<div className="bg-orange-500 text-white p-8 font-black uppercase">ROUTE NOT FOUND! Staza je: {location.pathname}</div>} />
             </Routes>
           </Suspense>
         </div>

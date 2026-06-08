@@ -29,6 +29,7 @@ const NotesModal = ({ isOpen, onClose, title, content, onSave, loading }: { isOp
 };
 
 export default function BiljeskePage() {
+  console.log("CLASS BILJESKE PAGE RENDERED");
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { user } = useAuth();
   const { selectedClassId: contextClassId } = useSelection();
@@ -177,6 +178,15 @@ export default function BiljeskePage() {
     return (
       <div className="flex items-center justify-center h-full p-20 text-gray-400 font-bold uppercase text-[10px] tracking-widest animate-pulse">
         Učitavanje podataka...
+      </div>
+    );
+  }
+
+  if (students.length === 0 && (!classNotes || (!classNotes.homeroomInfo && !classNotes.deputyInfo))) {
+    return (
+      <div className="p-8 font-sans">
+        <h1 className="text-xl font-bold mb-2">Bilješke</h1>
+        <p className="text-gray-500">Bilješke nisu unesene.</p>
       </div>
     );
   }
