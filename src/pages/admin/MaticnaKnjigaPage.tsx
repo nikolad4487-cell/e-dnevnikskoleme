@@ -364,6 +364,10 @@ export default function MaticnaKnjigaPage() {
 
   const saveEditedStudent = async () => {
     if (!editingStudent) return;
+    if (!editForm.oib || editForm.oib.length !== 11) {
+      toast.error('OIB mora sadržavati točno 11 znamenki.');
+      return;
+    }
     try {
       setLoading(true);
       // Updates user_profiles table with core info
@@ -626,7 +630,16 @@ export default function MaticnaKnjigaPage() {
                 </div>
                 <div>
                   <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">OIB</label>
-                  <input type="text" value={editForm.oib} onChange={e => setEditForm({...editForm, oib: e.target.value})} className="w-full border border-slate-200 rounded p-2 text-xs font-mono" />
+                  <input 
+                    type="text" 
+                    maxLength={11}
+                    value={editForm.oib} 
+                    onChange={e => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      setEditForm({...editForm, oib: value.slice(0, 11)});
+                    }} 
+                    className="w-full border border-slate-200 rounded p-2 text-xs font-mono" 
+                  />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Datum rođenja</label>

@@ -149,6 +149,10 @@ export default function SchoolsManagementPage() {
       toast.error('Nemate ovlasti za uređivanje škola.');
       return;
     }
+    if (!oib || oib.length !== 11) {
+      toast.error('OIB mora sadržavati točno 11 znamenki.');
+      return;
+    }
     
     try {
       const serializedAddress = JSON.stringify({
@@ -444,8 +448,12 @@ export default function SchoolsManagementPage() {
                   <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">OIB škole</label>
                   <input 
                     type="text" 
+                    maxLength={11}
                     value={oib}
-                    onChange={e => setOib(e.target.value)}
+                    onChange={e => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      setOib(value.slice(0, 11));
+                    }}
                     className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                     placeholder="11-znamenkasti broj"
                   />

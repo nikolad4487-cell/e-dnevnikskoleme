@@ -1,5 +1,5 @@
 import React from 'react';
-import { cn } from '../../lib/utils';
+import { cn, sortStudentsBySurname } from '../lib/utils';
 
 export function ImenikTable({ students, studentEnrollments, onStudentClick, classWarnings }: { 
   students: any[], 
@@ -7,11 +7,7 @@ export function ImenikTable({ students, studentEnrollments, onStudentClick, clas
   onStudentClick: (student: any) => void,
   classWarnings: { failingGrades: Record<string, number>, pendingAbsences: Record<string, boolean> }
 }) {
-  const sortedStudents = [...students].sort((a, b) => {
-    const nameA = (a.student?.full_name || a.student?.name || '').split(' ').pop() || '';
-    const nameB = (b.student?.full_name || b.student?.name || '').split(' ').pop() || '';
-    return nameA.localeCompare(nameB);
-  });
+  const sortedStudents = sortStudentsBySurname(students);
 
   return (
     <div className="bg-white p-6">

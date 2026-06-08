@@ -171,6 +171,10 @@ export default function UserManagementPage() {
       console.warn("Attempted user create/update without admin permissions");
       return;
     }
+    if (!oib || oib.length !== 11) {
+      toast.error('OIB mora sadržavati točno 11 znamenki.');
+      return;
+    }
     if (selectedRoles.length === 0) {
       toast.error('Odaberite barem jednu ulogu');
       return;
@@ -655,8 +659,12 @@ export default function UserManagementPage() {
                   <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">OIB</label>
                   <input 
                     type="text" 
+                    maxLength={11}
                     value={oib}
-                    onChange={e => setOib(e.target.value)}
+                    onChange={e => {
+                      const value = e.target.value.replace(/\D/g, '');
+                      setOib(value.slice(0, 11));
+                    }}
                     className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-3 font-bold text-slate-900 focus:border-[#005c8d] outline-none"
                   />
                 </div>

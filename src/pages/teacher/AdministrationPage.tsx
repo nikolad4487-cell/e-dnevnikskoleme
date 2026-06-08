@@ -7,7 +7,7 @@ import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, Cu
 import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info, FileText } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
-import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType } from '../../lib/utils';
+import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortStudentsBySurname } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import CertificateManagementPage from './certificates/CertificateManagementPage';
 import InformativkaAdminPage from '../admin/InformativkaAdminPage';
@@ -403,6 +403,10 @@ export default function AdministrationPage() {
       toast.error('Popunite osnovna polja (Ime, Prezime)');
       return;
     }
+    if (newUserForm.globalRole === Role.STUDENT && (!newUserForm.oib || newUserForm.oib.length !== 11)) {
+      toast.error('OIB mora sadržavati točno 11 znamenki.');
+      return;
+    }
 
     console.log("CREATE UNIFIED USER CLICKED", newUserForm);
 
@@ -415,7 +419,7 @@ export default function AdministrationPage() {
           email: newUserForm.email?.toLowerCase() || '',
           name: `${newUserForm.name} ${newUserForm.surname}`,
           globalRole: newUserForm.globalRole,
-          schoolId: selectedSchoolId || (newUserForm.classId ? classes.find(c => c.id === newUserForm.classId)?.school_id : null),
+          schoolId: selectedSchoolId || (newUserForm.classId ? classes.find(c => c.id === newUserForm.classId)?.schoolId : null),
           studentData: newUserForm.globalRole === Role.STUDENT ? {
             oib: newUserForm.oib,
             dob: newUserForm.dob,
@@ -2113,6 +2117,10 @@ setStudents(uniqueMapped as any);
       toast.error('Ime i prezime i škola su obavezni');
       return;
     }
+    if (!studentForm.oib || studentForm.oib.length !== 11) {
+      toast.error('OIB mora sadržavati točno 11 znamenki.');
+      return;
+    }
     setLoading(true);
     try {
       if (editingStudentId) {
@@ -2232,7 +2240,7 @@ setStudents(uniqueMapped as any);
           email: studentEmail || undefined,
           name: originalFullName,
           globalRole: 'STUDENT',
-          schoolId: classToUse.school_id || selectedSchoolId,
+          schoolId: classToUse.schoolId || selectedSchoolId,
           classId: classIdToUse,
           authOnly: false,
           studentData: {
@@ -2244,7 +2252,7 @@ setStudents(uniqueMapped as any);
             classId: classIdToUse,
             programId: programIdToUse,
             schoolYearId: classToUse.school_year_id || null,
-            schoolId: classToUse.school_id || selectedSchoolId
+            schoolId: classToUse.schoolId || selectedSchoolId
           }
         };
 
@@ -3420,7 +3428,7 @@ setAllSubjects(uniqueSub2);
                    <div className="bg-white border border-gray-300 p-4">
                       <div className="text-[10px] font-black text-gray-400 uppercase mb-4 border-b pb-1">Učenici ({students.filter(s => s.classId === selectedClassId).length})</div>
                       <div className="space-y-1 max-h-[400px] overflow-auto">
-                        {students.filter(s => s.classId === selectedClassId).sort((a,b) => (a.name || '').localeCompare(b.name || '')).map((s, idx) => (
+                        {sortStudentsBySurname(students.filter(s => s.classId === selectedClassId)).map((s, idx) => (
                            <div key={s.id} className="flex items-center justify-between p-2 border border-gray-100 hover:bg-gray-50">
                               <span className="text-[11px] font-bold text-gray-600">{idx+1}. {s.name}</span>
                               <button onClick={() => openStudentDetail(s)} className="text-[#005c8d] hover:underline text-[9px] font-black uppercase">Prikaz</button>
@@ -3929,7 +3937,7 @@ setAllSubjects(uniqueSub2);
                            </td>
                         </tr>
                       )}
-                      {students.filter(s => s.classId === effectiveClassId).sort((a,b) => (a.name || '').localeCompare(b.name || '')).map((student, idx) => {
+                      {sortStudentsBySurname(students.filter(s => s.classId === effectiveClassId)).map((student, idx) => {
                          const studentClassEnrollments = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
                          const studentTotalEnrollCount = classEnrollments.filter(e => e.studentId === student.id).length;
                          
@@ -4119,8 +4127,13 @@ setAllSubjects(uniqueSub2);
                       <div className="space-y-1">
                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">OIB</label>
                         <input 
+                          type="text"
+                          maxLength={11}
                           value={studentForm.oib}
-                          onChange={e => setStudentForm({...studentForm, oib: e.target.value})}
+                          onChange={e => {
+                            const val = e.target.value.replace(/\D/g, '');
+                            setStudentForm({...studentForm, oib: val.slice(0, 11)});
+                          }}
                           className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                         />
                       </div>
@@ -4384,8 +4397,12 @@ setAllSubjects(uniqueSub2);
                   />
                   <input 
                     type="text"
+                    maxLength={11}
                     value={studentForm.oib}
-                    onChange={e => setStudentForm({...studentForm, oib: e.target.value})}
+                    onChange={e => {
+                      const val = e.target.value.replace(/\D/g, '');
+                      setStudentForm({...studentForm, oib: val.slice(0, 11)});
+                    }}
                     placeholder="OIB"
                     className="border border-gray-300 p-2 outline-none focus:border-[#005c8d]" 
                   />
@@ -4492,10 +4509,7 @@ setAllSubjects(uniqueSub2);
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {students
-                      .filter(s => !effectiveClassId || s.classId === effectiveClassId)
-                      .sort((a,b) => (a.name || '').localeCompare(b.name || ''))
-                      .map(s => {
+                    {sortStudentsBySurname(students.filter(s => !effectiveClassId || s.classId === effectiveClassId)).map(s => {
                         const razred = classes.find(c => c.id === s.classId);
                       return (
                         <tr key={s.id} className="hover:bg-gray-50">
@@ -5907,9 +5921,14 @@ setAllSubjects(uniqueSub2);
                         <div className="space-y-3 bg-gray-50 p-3 border border-gray-200 animate-in slide-in-from-top-2">
                            <div className="grid grid-cols-2 gap-3">
                               <input 
-                                type="text" placeholder="OIB"
+                                type="text" 
+                                placeholder="OIB"
+                                maxLength={11}
                                 value={newUserForm.oib}
-                                onChange={e => setNewUserForm({...newUserForm, oib: e.target.value})}
+                                onChange={e => {
+                                  const val = e.target.value.replace(/\D/g, '');
+                                  setNewUserForm({...newUserForm, oib: val.slice(0, 11)});
+                                }}
                                 className="border border-gray-300 p-2 text-[10px] outline-none"
                               />
                               <input 

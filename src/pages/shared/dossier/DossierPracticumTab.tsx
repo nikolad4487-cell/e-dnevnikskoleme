@@ -101,6 +101,10 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
       toast.error('Naziv tvrtke je obavezan.');
       return;
     }
+    if (!companyOib || companyOib.length !== 11) {
+      toast.error('OIB mora sadržavati točno 11 znamenki.');
+      return;
+    }
 
     try {
       const res = await fetch('/api/practicum-placements', {
@@ -273,7 +277,18 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
             </div>
             <div>
               <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">OIB tvrtke</label>
-              <input id="p-company-oib" type="text" placeholder="11 znamenki" className="w-full px-3 py-1.5 border border-gray-300 rounded text-xs" value={companyOib} onChange={e => setCompanyOib(e.target.value)} />
+              <input 
+                id="p-company-oib" 
+                type="text" 
+                placeholder="11 znamenki" 
+                maxLength={11}
+                className="w-full px-3 py-1.5 border border-gray-300 rounded text-xs" 
+                value={companyOib} 
+                onChange={e => {
+                  const value = e.target.value.replace(/\D/g, '');
+                  setCompanyOib(value.slice(0, 11));
+                }} 
+              />
             </div>
             <div>
               <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Adresa tvrtke</label>

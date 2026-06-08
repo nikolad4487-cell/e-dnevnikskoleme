@@ -13,17 +13,19 @@ import {
   TrendingUp, Activity, ShieldCheck, AlertCircle, Award, 
   DollarSign, FileText, Plus, Trash2, Brain, Search 
 } from 'lucide-react';
+import { sortStudentsBySurname } from '../../lib/utils';
 import toast from 'react-hot-toast';
 
 export default function DigitalniDosjePage() {
   const { classId } = useParams();
   const [searchParams] = useSearchParams();
-  const { user } = useAuth();
+  const { user, isStaff, isParent } = useAuth();
   const { selectedSchoolId, selectedClassId } = useSelection();
 
   // Selected student
   const [studentId, setStudentId] = useState<string>('');
   const [studentProfile, setStudentProfile] = useState<any>(null);
+  const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [guardians, setGuardians] = useState<any[]>([]);
   const [summaries, setSummaries] = useState<any[]>([]);
   const [grades, setGrades] = useState<any[]>([]);
@@ -59,9 +61,6 @@ export default function DigitalniDosjePage() {
   // Active Tab
   const [activeTab, setActiveTab] = useState<'OSOBNI' | 'OCJENE' | 'IZOSTANCI' | 'MJERE' | 'SLUŽBA' | 'TRAINING' | 'FINANCE' | 'REGISTRATIONS' | 'AI'>('OSOBNI');
 
-  // Role permissions checks
-  const isStaff = user?.role === Role.TEACHER || user?.role === Role.ADMIN || user?.role === Role.MAIN_ADMIN || user?.role === Role.SCHOOL_ADMIN || user?.role === Role.HOMEROOM || user?.role === Role.DEPUTY;
-
   // Initial determination of studentId target
   useEffect(() => {
     const urlId = searchParams.get('studentId');
@@ -72,13 +71,13 @@ export default function DigitalniDosjePage() {
       setStudentId('');
     } else {
       // Student or parent -> lock to logged in user ID or child ID
-      if (user?.role === Role.PARENT && (window as any).selectedChildId) {
+      if (isParent && (window as any).selectedChildId) {
         setStudentId((window as any).selectedChildId);
       } else if (user?.id) {
         setStudentId(user.id);
       }
     }
-  }, [classId, searchParams, user, isStaff]);
+  }, [classId, searchParams, user, isStaff, isParent]);
 
   // Load students for staff dropdown selection
   useEffect(() => {
@@ -90,7 +89,7 @@ export default function DigitalniDosjePage() {
 
       const { data: enrollData, error } = await supabase
         .from('student_class_enrollments')
-        .select('student:user_profiles(*)')
+        .select('*, student:user_profiles(*)')
         .eq('class_id', activeClassId)
         .eq('status', 'ACTIVE');
 
@@ -104,7 +103,7 @@ export default function DigitalniDosjePage() {
           .map((e: any) => e.student)
           .filter(Boolean);
 
-        const sorted = [...studentProfiles].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'hr'));
+        const sorted = sortStudentsBySurname(studentProfiles);
         
         // Debug output as requested by user
         console.log("DOSJE STUDENTS", sorted);
@@ -123,8 +122,17 @@ export default function DigitalniDosjePage() {
 
   // Load detailed student dossier attributes upon studentId adjustment
   useEffect(() => {
+    console.log("SELECTED STUDENT ID CHANGED", studentId);
+  }, [studentId]);
+
+  useEffect(() => {
+    console.log("SELECTED STUDENT CHANGED", selectedStudent);
+  }, [selectedStudent]);
+
+  useEffect(() => {
     if (!studentId) {
       setStudentProfile(null);
+      setSelectedStudent(null);
       return;
     }
 
@@ -132,8 +140,21 @@ export default function DigitalniDosjePage() {
       setLoading(true);
       try {
         // 1. Profile information
-        const { data: pData } = await supabase.from('user_profiles').select('*, classes(name)').eq('id', studentId).maybeSingle();
-        if (pData) setStudentProfile(pData);
+        const { data: pData, error: profileErr } = await supabase.from('user_profiles').select('*').eq('id', studentId).maybeSingle();
+        if (profileErr) {
+          console.error("DOSJE: error loading user profile", profileErr);
+        }
+        if (pData) {
+          if (pData.class_id) {
+            const { data: cData } = await supabase.from('classes').select('name').eq('id', pData.class_id).maybeSingle();
+            pData.classes = cData || null;
+          }
+          setStudentProfile(pData);
+          setSelectedStudent(pData);
+        } else {
+          setStudentProfile(null);
+          setSelectedStudent(null);
+        }
 
         // 2. Guardians details
         const { data: gData } = await supabase.from('student_guardians').select('*').eq('student_id', studentId);
@@ -345,12 +366,16 @@ export default function DigitalniDosjePage() {
                 <div className="p-4 text-center text-xs text-gray-400 font-bold uppercase italic">Nema učenika u ovom razredu.</div>
               ) : filteredStudents.length > 0 ? (
                 filteredStudents.map(s => {
-                  const isSelected = studentId === s.id;
+                  const isSelected = selectedStudent?.id === s.id;
                   return (
                     <button
                       key={s.id}
                       type="button"
-                      onClick={() => setStudentId(s.id)}
+                      onClick={() => {
+                        console.log("STUDENT CLICKED", s);
+                        setSelectedStudent(s);
+                        setStudentId(s.id);
+                      }}
                       className={`w-full text-left px-4 py-2.5 text-xs font-black uppercase tracking-tight transition-colors flex items-center gap-3 ${
                         isSelected
                           ? "bg-sky-50 text-[#005c8d] border-l-4 border-[#005c8d]"
@@ -383,7 +408,7 @@ export default function DigitalniDosjePage() {
               <div className="w-12 h-12 border-4 border-slate-100 border-t-[#005c8d] rounded-full animate-spin mb-4" />
               <div className="text-[10px] font-black text-gray-500 uppercase tracking-widest animate-pulse">Učitavanje cjelokupnog matičnog dosjea...</div>
             </div>
-          ) : studentProfile ? (
+          ) : selectedStudent && studentProfile ? (
             <div className="p-6 space-y-6">
           
           {/* PROFILE SUMMARY HERO BANNER (Džoker karton) */}
@@ -395,6 +420,7 @@ export default function DigitalniDosjePage() {
               </div>
               <div>
                 <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">{studentProfile.name}</h3>
+                <div className="text-xs font-bold text-[#005c8d] uppercase tracking-wider mb-2">Digitalni dosje</div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 align-middle mt-1.5">
                   <span className="text-[10px] bg-sky-50 text-[#005c8d] px-2.5 py-0.5 rounded-full font-black uppercase tracking-wider border border-sky-100">
                     Razred: {studentProfile.classes?.name || 'N/A'}
@@ -427,6 +453,64 @@ export default function DigitalniDosjePage() {
               </div>
             </div>
 
+          </div>
+
+          {/* CARDS GRID: E-karton, Praksa, Natjecanja, Pedagoška podrška, Analitika */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <button
+              onClick={() => setActiveTab('OSOBNI')}
+              className={`flex flex-col p-4 bg-white border rounded-xl hover:border-[#005c8d] cursor-pointer hover:shadow-md transition-all text-left group ${activeTab === 'OSOBNI' ? 'border-[#005c8d] ring-1 ring-[#005c8d]/30 shadow-sm' : 'border-gray-200'}`}
+            >
+              <div className="p-2 bg-sky-50 text-[#005c8d] rounded-lg w-fit group-hover:bg-sky-100 transition-colors">
+                <FileText size={18} />
+              </div>
+              <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight mt-3">E-karton</h4>
+              <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Osobni podaci djeteta i skrbnika</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('TRAINING')}
+              className={`flex flex-col p-4 bg-white border rounded-xl hover:border-[#005c8d] cursor-pointer hover:shadow-md transition-all text-left group ${activeTab === 'TRAINING' ? 'border-[#005c8d] ring-1 ring-[#005c8d]/30 shadow-sm' : 'border-gray-200'}`}
+            >
+              <div className="p-2 bg-amber-50 text-amber-700 rounded-lg w-fit group-hover:bg-amber-100 transition-colors">
+                <Plus size={18} />
+              </div>
+              <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight mt-3">Praksa</h4>
+              <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Evidencija stručne prakse po ugovorima</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('REGISTRATIONS')}
+              className={`flex flex-col p-4 bg-white border rounded-xl hover:border-[#005c8d] cursor-pointer hover:shadow-md transition-all text-left group ${activeTab === 'REGISTRATIONS' ? 'border-[#005c8d] ring-1 ring-[#005c8d]/30 shadow-sm' : 'border-gray-200'}`}
+            >
+              <div className="p-2 bg-emerald-50 text-emerald-700 rounded-lg w-fit group-hover:bg-emerald-100 transition-colors">
+                <Award size={18} />
+              </div>
+              <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight mt-3">Natjecanja</h4>
+              <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Uspjesi i školski prijelazi s drugih ustanova</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('SLUŽBA')}
+              className={`flex flex-col p-4 bg-white border rounded-xl hover:border-[#005c8d] cursor-pointer hover:shadow-md transition-all text-left group ${['SLUŽBA', 'MJERE'].includes(activeTab) ? 'border-[#005c8d] ring-1 ring-[#005c8d]/30 shadow-sm' : 'border-gray-200'}`}
+            >
+              <div className="p-2 bg-rose-50 text-rose-700 rounded-lg w-fit group-hover:bg-rose-100 transition-colors">
+                <ShieldCheck size={18} />
+              </div>
+              <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight mt-3">Pedagoška podrška</h4>
+              <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Zapisnici stručne službe i propisane mjere</p>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('AI')}
+              className={`flex flex-col p-4 bg-white border rounded-xl hover:border-[#005c8d] cursor-pointer hover:shadow-md transition-all text-left group ${activeTab === 'AI' ? 'border-[#005c8d] ring-1 ring-[#005c8d]/30 shadow-sm' : 'border-gray-200'}`}
+            >
+              <div className="p-2 bg-indigo-50 text-indigo-700 rounded-lg w-fit group-hover:bg-indigo-100 transition-colors">
+                <Brain size={18} />
+              </div>
+              <h4 className="text-xs font-black text-slate-800 uppercase tracking-tight mt-3">Analitika</h4>
+              <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">AI predviđanja uspjeha i prevencija gubitka godine</p>
+            </button>
           </div>
 
           {/* TAB SYSTEM CHANGER */}
