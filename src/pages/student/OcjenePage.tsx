@@ -192,31 +192,37 @@ export default function OcjenePage() {
     if (!selectedClassId || !selectedSubject) return;
     const fetchLektire = async () => {
       try {
-        const url = new URL('/api/lektire', window.location.origin);
-        url.searchParams.append('classId', selectedClassId);
-        url.searchParams.append('subjectId', selectedSubject);
-        if (selectedSchoolId) url.searchParams.append('schoolId', selectedSchoolId);
-        if (currentClass?.school_year_id) url.searchParams.append('schoolYearId', currentClass.school_year_id);
+        const class_id = selectedClassId;
+        const subject_id = selectedSubject;
+        const school_year_id = currentClass?.school_year_id || null;
 
-        const res = await fetch(url.toString());
-        if (res.ok) {
-          const data = await res.json();
-          console.log("LOAD READINGS FILTERS", {
-            class_id: selectedClassId,
-            subject_id: selectedSubject,
-            school_id: selectedSchoolId,
-            school_year_id: currentClass?.school_year_id
-          });
+        console.log("STUDENT LOAD READINGS FILTERS", {
+          class_id,
+          subject_id,
+          school_year_id
+        });
 
-          console.log("LOAD READINGS RESULT", { data, error: !res.ok ? data : null });
-          setSubjectLektire(data || []);
+        let query = supabase
+          .from('reading_assignments')
+          .select('*')
+          .eq('class_id', class_id)
+          .eq('subject_id', subject_id);
+
+        if (school_year_id) {
+          query = query.eq('school_year_id', school_year_id);
         }
+
+        const { data, error } = await query;
+        console.log("STUDENT LOAD READINGS RESULT", { data, error });
+
+        if (error) throw error;
+        setSubjectLektire(data || []);
       } catch (err) {
         console.error("Error loading subject lektire:", err);
       }
     };
     fetchLektire();
-  }, [selectedClassId, selectedSubject, selectedSchoolId, currentClass?.school_year_id]);
+  }, [selectedClassId, selectedSubject, currentClass?.school_year_id]);
 
   const MONTHS_ORDER = ['IX', 'X', 'XI', 'XII', 'I', 'II', 'III', 'IV', 'V', 'VI'];
   const MONTH_MAP = { 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII', 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI' };
@@ -471,24 +477,24 @@ export default function OcjenePage() {
         </div>
 
         {/* Lektire za predmet */}
-        {subjectLektire && subjectLektire.length > 0 && (
-          <div className="space-y-6 pt-6">
-            <div className="flex items-center gap-2 border-b-2 border-slate-100 pb-2">
-              <BookOpen size={16} className="text-[#005c8d]" />
-              <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest">Lektire / Obrađena djela</h2>
-            </div>
+        <div className="space-y-6 pt-6">
+          <div className="flex items-center gap-2 border-b-2 border-slate-100 pb-2">
+            <BookOpen size={16} className="text-[#005c8d]" />
+            <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest">Lektire / Obrađena djela</h2>
+          </div>
 
-            <div className="bg-white border border-slate-300 overflow-hidden shadow-sm">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-300 text-slate-400">
-                    <th className="p-4 text-[9px] font-black uppercase tracking-widest text-center w-32 border-r border-slate-200">Datum obrade</th>
-                    <th className="p-4 text-[9px] font-black uppercase tracking-widest border-r border-slate-200 w-1/3 text-left">Naslov djela</th>
-                    <th className="p-4 text-[9px] font-black uppercase tracking-widest text-left">Način obrade / Detalji</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 font-medium">
-                  {subjectLektire.map(lek => (
+          <div className="bg-white border border-slate-300 overflow-hidden shadow-sm">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-300 text-slate-400">
+                  <th className="p-4 text-[9px] font-black uppercase tracking-widest text-center w-32 border-r border-slate-200">Datum obrade</th>
+                  <th className="p-4 text-[9px] font-black uppercase tracking-widest border-r border-slate-200 w-1/3 text-left">Naslov djela</th>
+                  <th className="p-4 text-[9px] font-black uppercase tracking-widest text-left">Način obrade / Detalji</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 font-medium">
+                {subjectLektire && subjectLektire.length > 0 ? (
+                  subjectLektire.map(lek => (
                     <tr key={lek.id} className="hover:bg-slate-50 transition-colors">
                       <td className="p-4 text-center text-xs font-bold text-slate-400 border-r border-slate-200">
                         {lek.processed_at ? new Date(lek.processed_at).toLocaleDateString('hr-HR') : '—'}
@@ -500,12 +506,18 @@ export default function OcjenePage() {
                         {lek.processing_details || '—'}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={3} className="p-12 text-center text-slate-300 font-black uppercase tracking-widest text-[10px]">
+                      Nema unesenih lektira za ovaj predmet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
+        </div>
 
         {/* Special exams section */}
         {specialExams.filter(se => se.subjectId === activeSubject.id).length > 0 && (

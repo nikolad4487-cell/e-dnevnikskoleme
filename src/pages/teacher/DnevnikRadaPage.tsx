@@ -330,6 +330,8 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
       if (yrId) {
         url.searchParams.append('schoolYearId', yrId);
       }
+      // Add cache-busting timestamp parameter
+      url.searchParams.append('_t', Date.now().toString());
       
       const res = await fetch(url.toString());
       if (res.ok) {
@@ -341,6 +343,9 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
           subject_id: hrSubjectId
         });
         console.log("LOAD READINGS RESULT", { data, error: !res.ok ? data : null });
+        console.log("FETCH AFTER DELETE RESULT", data);
+        console.log("STATE BEFORE SET", lektire);
+        console.log("FETCH RESULT", data);
         setLektire(data || []);
       }
     } catch (e) {
@@ -420,49 +425,55 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     try {
       setIsSavingLektira(true);
       const isNew = !editingLektira;
-      const url = isNew ? `/api/lektire` : `/api/lektire/${editingLektira.id}`;
-      const method = isNew ? 'POST' : 'PUT';
       
       const payload = {
-        classId: classIdForLektira,
-        subjectId: targetSubjectId,
-        completedDate: lektiraForm.completedDate,
+        class_id: classIdForLektira,
+        subject_id: targetSubjectId,
+        processed_at: lektiraForm.completedDate,
         title: lektiraForm.title,
-        createdBy: user?.id,
-        schoolId: schoolId,
-        schoolYearId: schoolYearId,
-        teacherId: user?.id,
-        processingDetails: lektiraForm.processingDetails || ''
+        created_by: user?.id,
+        school_id: schoolId,
+        school_year_id: schoolYearId,
+        teacher_id: user?.id,
+        processing_details: lektiraForm.processingDetails || ''
       };
 
-      console.log("SAVE READING PAYLOAD", payload);
-
-      const res = await fetch(url, {
-        method,
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-      
-      const responseData = await res.json();
-      console.log("SAVE READING RESULT", { data: responseData, error: !res.ok ? responseData : null });
-
-      if (res.ok) {
-        toast.success(isNew ? 'Lektira uspješno dodana!' : 'Lektira uspješno spremljena!');
-        setLektiraForm({
-          subjectId: '',
-          completedDate: new Date().toISOString().split('T')[0],
-          title: '',
-          processingDetails: ''
-        });
-        setEditingLektira(null);
-        setShowLektiraModal(false);
-        fetchLektire();
+      if (isNew) {
+        const { data, error } = await supabase
+          .from("reading_assignments")
+          .insert(payload)
+          .select();
+        
+        if (error) throw error;
+        if (!data || data.length === 0) throw new Error("Lektira nije dodana.");
+        toast.success("Lektira uspješno dodana!");
       } else {
-        console.error("[LEKTIRA] SAVE ERROR", responseData);
-        throw new Error(responseData.error || 'Greška pri spremanju lektire');
+        const { data, error } = await supabase
+          .from("reading_assignments")
+          .update({
+            title: lektiraForm.title,
+            processed_at: lektiraForm.completedDate,
+            processing_details: lektiraForm.processingDetails,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", editingLektira.id)
+          .select();
+        
+        console.log("UPDATE READING RESULT", { data, error });
+        if (error) throw error;
+        if (!data || data.length === 0) throw new Error("Lektira nije ažurirana. Provjeri RLS UPDATE policy.");
+        toast.success("Lektira ažurirana.");
       }
+
+      setLektiraForm({
+        subjectId: '',
+        completedDate: new Date().toISOString().split('T')[0],
+        title: '',
+        processingDetails: ''
+      });
+      setEditingLektira(null);
+      setShowLektiraModal(false);
+      await fetchLektire();
     } catch (err: any) {
       toast.error(err.message || 'Greška pri spremanju lektire');
     } finally {
@@ -470,38 +481,40 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     }
   };
 
-  const handleDeleteLektira = async (reading: any) => {
-    if (!reading) return;
+  const handleDeleteReading = async (reading: any) => {
     console.log("DELETE READING CLICKED", reading);
-    console.log("READING ID", reading.id);
+    console.log("READING ID", reading?.id);
 
-    if (!window.confirm('Sigurno želite izbrisati ovu lektiru?')) return;
-    try {
-      const { data, error, count } = await supabase
-        .from("reading_assignments")
-        .delete({ count: "exact" })
-        .eq("id", reading.id)
-        .select();
-
-      console.log("DELETE READING RESULT", { data, error, count });
-
-      if (error) {
-        console.error("DELETE READING ERROR", error);
-        toast.error(error.message);
-        return;
-      }
-
-      if (count === 0) {
-        toast.error("Nijedan zapis nije obrisan.");
-        return;
-      }
-
-      toast.success("Lektira je obrisana.");
-      fetchLektire();
-    } catch (e: any) {
-      console.error("DELETE READING ERROR", e);
-      toast.error('Problem s brisanjem lektire.');
+    if (!reading?.id) {
+      toast.error("Nedostaje ID lektire.");
+      return;
     }
+
+    console.log("BEFORE DELETE", reading.id);
+
+    const { data, error } = await supabase
+      .from("reading_assignments")
+      .delete()
+      .eq("id", reading.id)
+      .select();
+
+    console.log("DELETE READING RESULT", { data, error });
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      toast("Lektira je već obrisana ili više ne postoji.", { icon: "ℹ️" });
+      setLektire(prev => prev.filter(r => r.id !== reading.id));
+      await fetchLektire();
+      return;
+    }
+
+    toast.success("Lektira obrisana.");
+    setLektire((prev) => prev.filter((r) => r.id !== reading.id));
+    await fetchLektire();
   };
 
   useEffect(() => {
@@ -2018,6 +2031,10 @@ setStudents(uniqueStudents);
         {/* LEKTIRA VIEW */}
         {view === 'LEKTIRA' && selectedClass && (
           <div className="w-full space-y-4">
+            {(() => {
+              console.log("RENDER LEKTIRE", lektire);
+              return null;
+            })()}
             <div className="flex justify-between items-center bg-white p-3 border border-gray-300 shadow-sm">
               <span className="text-xs font-bold text-gray-500 uppercase">
                 Evidencija lektira ({lektire.length})
@@ -2067,7 +2084,15 @@ setStudents(uniqueStudents);
                             : '—'}
                         </td>
                         <td className="p-3 border-r border-gray-200">
-                          {lek.processed_at ? new Date(lek.processed_at).toLocaleDateString('hr-HR') : '—'}
+                          {(() => {
+                            if (!lek.processed_at) return '—';
+                            try {
+                              const d = new Date(lek.processed_at);
+                              return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('hr-HR');
+                            } catch {
+                              return '—';
+                            }
+                          })()}
                         </td>
                         <td className="p-3 border-r border-gray-200 font-semibold text-slate-800">
                           {lek.title}
@@ -2079,7 +2104,17 @@ setStudents(uniqueStudents);
                           <button
                             onClick={() => {
                               setEditingLektira(lek);
-                              const processedDateString = lek.processed_at ? new Date(lek.processed_at).toISOString().split('T')[0] : '';
+                              let processedDateString = '';
+                              if (lek.processed_at) {
+                                try {
+                                  const d = new Date(lek.processed_at);
+                                  if (!isNaN(d.getTime())) {
+                                    processedDateString = d.toISOString().split('T')[0];
+                                  }
+                                } catch (e) {
+                                  console.error('Error parsing processed_at date:', e);
+                                }
+                              }
                               setLektiraForm({
                                 subjectId: lek.subject_id || lek.subjectId || '',
                                 completedDate: processedDateString,
@@ -2094,11 +2129,18 @@ setStudents(uniqueStudents);
                             <Edit2 size={13} />
                           </button>
                           <button
-                            onClick={() => handleDeleteLektira(lek)}
-                            className="text-slate-400 hover:text-red-500"
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              console.log("DELETE BUTTON CLICKED", lek.id);
+                              handleDeleteReading(lek);
+                            }}
+                            className="bg-red-50 hover:bg-red-100 text-red-700 font-bold px-2.5 py-1 rounded-sm text-[10px] tracking-wide uppercase transition-all flex items-center gap-1.5 cursor-pointer active:scale-95 border border-red-200 shadow-sm"
                             title="Obriši"
                           >
-                            <Trash2 size={13} />
+                            <Trash2 size={12} className="pointer-events-none" />
+                            <span>Obriši</span>
                           </button>
                         </td>
                       </tr>

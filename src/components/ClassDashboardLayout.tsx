@@ -56,46 +56,63 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     if (isAdminPath || !user) return;
     
     const checkAccess = async () => {
-        if (!isStaff) {
-            const { data: enrollment } = await supabase
-                .from('student_class_enrollments')
-                .select('class_id, student_id, classes:class_id(grade_level, program_id, programs:program_id(duration_years))')
-                .eq('student_id', user.id)
-                .eq('status', 'ACTIVE')
-                .maybeSingle();
+        try {
+            if (!isStaff) {
+                const { data: enrollment, error } = await supabase
+                    .from('student_class_enrollments')
+                    .select('class_id, student_id, classes:class_id(grade_level, program_id, programs:program_id(duration_years))')
+                    .eq('student_id', user.id)
+                    .eq('status', 'ACTIVE')
+                    .maybeSingle();
 
-            if (enrollment && enrollment.classes) {
-                const clazz = enrollment.classes as any;
-                const program = clazz.programs as any;
-                if (program && clazz.grade_level) {
-                   setCanAccessThesis(clazz.grade_level === program.duration_years);
+                if (error) {
+                    console.error('[ClassDashboardLayout] Error checking access:', error.message);
+                    setCanAccessThesis(false);
+                    return;
+                }
+
+                if (enrollment && enrollment.classes) {
+                    const clazz = enrollment.classes as any;
+                    const program = clazz.programs as any;
+                    if (program && clazz.grade_level) {
+                       setCanAccessThesis(clazz.grade_level === program.duration_years);
+                    } else {
+                       setCanAccessThesis(false);
+                    }
                 } else {
                    setCanAccessThesis(false);
                 }
             } else {
-               setCanAccessThesis(false);
-            }
-        } else {
-            if (selectedClassId) {
-                const { data: clazz } = await supabase
-                    .from('classes')
-                    .select('grade_level, program_id, programs:program_id(duration_years)')
-                    .eq('id', selectedClassId)
-                    .maybeSingle();
-                
-                if (clazz) {
-                    const program = clazz.programs as any;
-                    if (program && clazz.grade_level) {
-                        setCanAccessThesis(clazz.grade_level === program.duration_years);
+                if (selectedClassId) {
+                    const { data: clazz, error } = await supabase
+                        .from('classes')
+                        .select('grade_level, program_id, programs:program_id(duration_years)')
+                        .eq('id', selectedClassId)
+                        .maybeSingle();
+                    
+                    if (error) {
+                        console.error('[ClassDashboardLayout] Error checking class thesis access:', error.message);
+                        setCanAccessThesis(false);
+                        return;
+                    }
+
+                    if (clazz) {
+                        const program = clazz.programs as any;
+                        if (program && clazz.grade_level) {
+                            setCanAccessThesis(clazz.grade_level === program.duration_years);
+                        } else {
+                            setCanAccessThesis(false);
+                        }
                     } else {
                         setCanAccessThesis(false);
                     }
                 } else {
-                    setCanAccessThesis(false);
+                    setCanAccessThesis(true);
                 }
-            } else {
-                setCanAccessThesis(true);
             }
+        } catch (e) {
+            console.error('[ClassDashboardLayout] Critical checkAccess error:', e);
+            setCanAccessThesis(false); // fallback to false safely
         }
     };
     checkAccess();
