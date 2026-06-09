@@ -373,32 +373,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
+  const isStudentPortal = portalType === 'student';
+
+  const effectiveSchoolRoles = React.useMemo(() => {
+    if (isStudentPortal) {
+      return userSchoolRoles.filter(r => r.role === Role.STUDENT || r.role === Role.PARENT);
+    }
+    return userSchoolRoles;
+  }, [userSchoolRoles, isStudentPortal]);
+
   const isMainAdmin = React.useMemo(() => 
-    userSchoolRoles.some(r => r.role === Role.MAIN_ADMIN || r.role === Role.ADMIN)
-  , [userSchoolRoles]);
+    effectiveSchoolRoles.some(r => r.role === Role.MAIN_ADMIN || r.role === Role.ADMIN)
+  , [effectiveSchoolRoles]);
 
   const isStaff = React.useMemo(() => 
     isMainAdmin || 
-    userSchoolRoles.some(r => [Role.TEACHER, Role.SCHOOL_ADMIN, Role.HOMEROOM, Role.DEPUTY].includes(r.role))
-  , [isMainAdmin, userSchoolRoles]);
+    effectiveSchoolRoles.some(r => [Role.TEACHER, Role.SCHOOL_ADMIN, Role.HOMEROOM, Role.DEPUTY].includes(r.role))
+  , [isMainAdmin, effectiveSchoolRoles]);
 
   const isTeacher = React.useMemo(() => 
-    userSchoolRoles.some(r => [Role.TEACHER, Role.HOMEROOM, Role.DEPUTY].includes(r.role))
-  , [userSchoolRoles]);
+    effectiveSchoolRoles.some(r => [Role.TEACHER, Role.HOMEROOM, Role.DEPUTY].includes(r.role))
+  , [effectiveSchoolRoles]);
 
   const isStudent = React.useMemo(() => 
-    userSchoolRoles.some(r => r.role === Role.STUDENT) && !isMainAdmin
-  , [isMainAdmin, userSchoolRoles]);
+    effectiveSchoolRoles.some(r => r.role === Role.STUDENT) && !isMainAdmin
+  , [isMainAdmin, effectiveSchoolRoles]);
 
   const isParent = React.useMemo(() => 
-    userSchoolRoles.some(r => r.role === Role.PARENT)
-  , [userSchoolRoles]);
+    effectiveSchoolRoles.some(r => r.role === Role.PARENT)
+  , [effectiveSchoolRoles]);
 
   const allRoles = React.useMemo(() => {
     const rolesSet = new Set<Role>();
-    userSchoolRoles.forEach(r => rolesSet.add(r.role));
+    effectiveSchoolRoles.forEach(r => rolesSet.add(r.role));
     return Array.from(rolesSet);
-  }, [userSchoolRoles]);
+  }, [effectiveSchoolRoles]);
 
   const highestRole = React.useMemo(() => {
     if (allRoles.length === 0) return null;
@@ -427,7 +437,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     supabaseUser,
     session,
-    userSchoolRoles,
+    userSchoolRoles: effectiveSchoolRoles,
     loading,
     error,
     signOut,
@@ -439,7 +449,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isParent,
     highestRole,
     formattedRoles
-  }), [user, supabaseUser, session, userSchoolRoles, loading, error, isMainAdmin, isStaff, isTeacher, isStudent, isParent, highestRole, formattedRoles]);
+  }), [user, supabaseUser, session, effectiveSchoolRoles, loading, error, isMainAdmin, isStaff, isTeacher, isStudent, isParent, highestRole, formattedRoles]);
 
   return (
     <AuthContext.Provider value={value}>

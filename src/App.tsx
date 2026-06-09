@@ -93,8 +93,11 @@ export default function App() {
     }
   }
 
+  const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
+  const isStudentPortal = portalType === 'student';
+
   useEffect(() => {
-    console.log('[APP] Mounted');
+    console.log(`[APP] Mounted | Portal Type: ${portalType}`);
   }, []);
 
   return (
@@ -114,19 +117,19 @@ export default function App() {
               } />
               
               <Route path="/select-school" element={
-                <ProtectedRoute allowedRoles={[Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.STUDENT, Role.PARENT]}>
+                <ProtectedRoute allowedRoles={isStudentPortal ? [Role.STUDENT, Role.PARENT] : [Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.STUDENT, Role.PARENT]}>
                   <SchoolSelectionPage />
                 </ProtectedRoute>
               } />
 
               <Route path="/select-class" element={
-                <ProtectedRoute allowedRoles={[Role.STUDENT, Role.PARENT, Role.MAIN_ADMIN, Role.TEACHER, Role.ADMIN, Role.SCHOOL_ADMIN, Role.HOMEROOM, Role.DEPUTY]}>
+                <ProtectedRoute allowedRoles={isStudentPortal ? [Role.STUDENT, Role.PARENT] : [Role.STUDENT, Role.PARENT, Role.MAIN_ADMIN, Role.TEACHER, Role.ADMIN, Role.SCHOOL_ADMIN, Role.HOMEROOM, Role.DEPUTY]}>
                   <ClassSelectionPage />
                 </ProtectedRoute>
               } />
 
               <Route path="/select-child" element={
-                <ProtectedRoute allowedRoles={[Role.PARENT, Role.MAIN_ADMIN]}>
+                <ProtectedRoute allowedRoles={isStudentPortal ? [Role.PARENT] : [Role.PARENT, Role.MAIN_ADMIN]}>
                   <ChildSelectionPage />
                 </ProtectedRoute>
               } />
@@ -137,115 +140,122 @@ export default function App() {
                 </ProtectedRoute>
               } />
 
-              <Route path="/admin/schools" element={
-                <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.ADMIN]}>
-                  <BasicLayout>
-                    <SchoolsManagementPage />
-                  </BasicLayout>
-                </ProtectedRoute>
-              } />
+              {/* Only register admin and teacher routes if not on the student portal */}
+              {!isStudentPortal && (
+                <>
+                  <Route path="/admin/schools" element={
+                    <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.ADMIN]}>
+                      <BasicLayout>
+                        <SchoolsManagementPage />
+                      </BasicLayout>
+                    </ProtectedRoute>
+                  } />
 
-              {/* Admin Routes */}
-              <Route path="/admin-skole/*" element={
-                <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.ADMIN]}>
-                  <BasicLayout>
-                    <Routes>
-                      <Route path="" element={<SchoolAdminDashboard />} />
-                      <Route path="school-dashboard" element={<Navigate to="/admin-skole" replace />} />
-                      <Route path="schools" element={<SchoolsManagementPage />} />
-                      <Route path="skolske-godine" element={<SchoolYearsPage />} />
-                      <Route path="razredi" element={<ClassManagementPage />} />
-                      <Route path="zamjene" element={<ZamjenePage />} />
-                      <Route path="korisnici" element={<UserManagementPage />} />
-                      <Route path="ucenici" element={<StudentsPage />} />
-                      <Route path="predmeti" element={<SubjectManagementPage />} />
-                      <Route path="programi" element={<ProgramsPage />} />
-                      <Route path="rollover" element={<RolloverPage />} />
-                      <Route path="postavke" element={<AdminSettingsPage />} />
-                      <Route path="system-check" element={<SystemCheckPage />} />
-                      <Route path="system-health" element={<SystemHealthPage />} />
-                      <Route path="raspored" element={<ScheduleManagementPage />} />
-                      <Route path="informativka" element={<InformativkaAdminPage />} />
-                      <Route path="ravnatelj-dashboard" element={<RavnateljDashboardPage />} />
-                      <Route path="maticna-knjiga" element={<MaticnaKnjigaPage />} />
-                      <Route path="*" element={<Navigate to="/admin-skole" replace />} />
-                    </Routes>
-                  </BasicLayout>
-                </ProtectedRoute>
-              } />
+                  {/* Admin Routes */}
+                  <Route path="/admin-skole/*" element={
+                    <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.ADMIN]}>
+                      <BasicLayout>
+                        <Routes>
+                          <Route path="" element={<SchoolAdminDashboard />} />
+                          <Route path="school-dashboard" element={<Navigate to="/admin-skole" replace />} />
+                          <Route path="schools" element={<SchoolsManagementPage />} />
+                          <Route path="skolske-godine" element={<SchoolYearsPage />} />
+                          <Route path="razredi" element={<ClassManagementPage />} />
+                          <Route path="zamjene" element={<ZamjenePage />} />
+                          <Route path="korisnici" element={<UserManagementPage />} />
+                          <Route path="ucenici" element={<StudentsPage />} />
+                          <Route path="predmeti" element={<SubjectManagementPage />} />
+                          <Route path="programi" element={<ProgramsPage />} />
+                          <Route path="rollover" element={<RolloverPage />} />
+                          <Route path="postavke" element={<AdminSettingsPage />} />
+                          <Route path="system-check" element={<SystemCheckPage />} />
+                          <Route path="system-health" element={<SystemHealthPage />} />
+                          <Route path="raspored" element={<ScheduleManagementPage />} />
+                          <Route path="informativka" element={<InformativkaAdminPage />} />
+                          <Route path="ravnatelj-dashboard" element={<RavnateljDashboardPage />} />
+                          <Route path="maticna-knjiga" element={<MaticnaKnjigaPage />} />
+                          <Route path="*" element={<Navigate to="/admin-skole" replace />} />
+                        </Routes>
+                      </BasicLayout>
+                    </ProtectedRoute>
+                  } />
 
-              <Route path="/class/:classId/*" element={
-                <ProtectedRoute allowedRoles={[Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN]}>
-                  <ClassDashboardLayout>
-                    <ClassDashboardPage />
-                  </ClassDashboardLayout>
-                </ProtectedRoute>
-              } />
+                  <Route path="/class/:classId/*" element={
+                    <ProtectedRoute allowedRoles={[Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN]}>
+                      <ClassDashboardLayout>
+                        <ClassDashboardPage />
+                      </ClassDashboardLayout>
+                    </ProtectedRoute>
+                  } />
 
-              {/* Teacher/Admin Routes - Contextless/Global */}
-              <Route path="/teacher/*" element={
-                <ProtectedRoute allowedRoles={[Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN]}>
-                    <ClassDashboardLayout>
-                      <Routes>
-                        <Route path="pretrazivanje" element={<PretrazivanjePage />} />
-                        <Route path="informativka" element={<InformativkaPage />} />
-                        <Route path="svjedodzbe" element={<CertificateManagementPage />} />
-                        <Route path="zavrsni-radovi" element={<FinalThesisTeacherPage />} />
-                        <Route path="kalendar" element={<SkolskiKalendarPage />} />
-                        <Route path="dokumenti" element={<InterniDokumentiPage />} />
-                        <Route path="postavke" element={<SettingsPage />} />
-                        <Route path="dosje" element={<DigitalniDosjePage />} />
-                        
-                        {/* Core class shortcuts / redirects */}
-                        <Route path="imenik" element={<TeacherRedirectToClass subPath="imenik" />} />
-                        <Route path="pregled-rada" element={<TeacherRedirectToClass subPath="pregled-rada" />} />
-                        <Route path="work-overview" element={<TeacherRedirectToClass subPath="work-overview" />} />
-                        <Route path="dnevnik-rada" element={<TeacherRedirectToClass subPath="dnevnik-rada" />} />
-                        <Route path="work-journal" element={<TeacherRedirectToClass subPath="work-journal" />} />
-                        <Route path="izostanci" element={<TeacherRedirectToClass subPath="izostanci" />} />
-                        <Route path="absences" element={<TeacherRedirectToClass subPath="absences" />} />
-                        <Route path="zapisnici" element={<TeacherRedirectToClass subPath="zapisnici" />} />
-                        <Route path="minutes" element={<TeacherRedirectToClass subPath="minutes" />} />
-                        <Route path="student-dosje" element={<TeacherRedirectToClass subPath="dosje" />} />
-                        <Route path="roditeljski-sastanci" element={<TeacherRedirectToClass subPath="roditeljski-sastanci" />} />
-                        <Route path="individualni-razgovori" element={<TeacherRedirectToClass subPath="individualni-razgovori" />} />
-                        <Route path="dolasci-roditelja" element={<TeacherRedirectToClass subPath="dolasci-roditelja" />} />
-                        <Route path="pedagoska-dokumentacija" element={<TeacherRedirectToClass subPath="pedagoska-dokumentacija" />} />
-                        <Route path="pedagogical" element={<TeacherRedirectToClass subPath="pedagogical" />} />
-                        <Route path="raspored" element={<TeacherRedirectToClass subPath="raspored" />} />
-                        <Route path="schedule" element={<TeacherRedirectToClass subPath="schedule" />} />
-                        <Route path="admin-razreda" element={<TeacherRedirectToClass subPath="admin" />} />
-                        <Route path="administration" element={<TeacherRedirectToClass subPath="administration" />} />
+                  {/* Teacher/Admin Routes - Contextless/Global */}
+                  <Route path="/teacher/*" element={
+                    <ProtectedRoute allowedRoles={[Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN]}>
+                        <ClassDashboardLayout>
+                          <Routes>
+                            <Route path="pretrazivanje" element={<PretrazivanjePage />} />
+                            <Route path="informativka" element={<InformativkaPage />} />
+                            <Route path="svjedodzbe" element={<CertificateManagementPage />} />
+                            <Route path="zavrsni-radovi" element={<FinalThesisTeacherPage />} />
+                            <Route path="kalendar" element={<SkolskiKalendarPage />} />
+                            <Route path="dokumenti" element={<InterniDokumentiPage />} />
+                            <Route path="postavke" element={<SettingsPage />} />
+                            <Route path="dosje" element={<DigitalniDosjePage />} />
+                            
+                            {/* Core class shortcuts / redirects */}
+                            <Route path="imenik" element={<TeacherRedirectToClass subPath="imenik" />} />
+                            <Route path="pregled-rada" element={<TeacherRedirectToClass subPath="pregled-rada" />} />
+                            <Route path="work-overview" element={<TeacherRedirectToClass subPath="work-overview" />} />
+                            <Route path="dnevnik-rada" element={<TeacherRedirectToClass subPath="dnevnik-rada" />} />
+                            <Route path="work-journal" element={<TeacherRedirectToClass subPath="work-journal" />} />
+                            <Route path="izostanci" element={<TeacherRedirectToClass subPath="izostanci" />} />
+                            <Route path="absences" element={<TeacherRedirectToClass subPath="absences" />} />
+                            <Route path="zapisnici" element={<TeacherRedirectToClass subPath="zapisnici" />} />
+                            <Route path="minutes" element={<TeacherRedirectToClass subPath="minutes" />} />
+                            <Route path="student-dosje" element={<TeacherRedirectToClass subPath="dosje" />} />
+                            <Route path="roditeljski-sastanci" element={<TeacherRedirectToClass subPath="roditeljski-sastanci" />} />
+                            <Route path="individualni-razgovori" element={<TeacherRedirectToClass subPath="individualni-razgovori" />} />
+                            <Route path="dolasci-roditelja" element={<TeacherRedirectToClass subPath="dolasci-roditelja" />} />
+                            <Route path="pedagoska-dokumentacija" element={<TeacherRedirectToClass subPath="pedagoska-dokumentacija" />} />
+                            <Route path="pedagogical" element={<TeacherRedirectToClass subPath="pedagogical" />} />
+                            <Route path="raspored" element={<TeacherRedirectToClass subPath="raspored" />} />
+                            <Route path="schedule" element={<TeacherRedirectToClass subPath="schedule" />} />
+                            <Route path="admin-razreda" element={<TeacherRedirectToClass subPath="admin" />} />
+                            <Route path="administration" element={<TeacherRedirectToClass subPath="administration" />} />
 
-                        <Route path="*" element={<Navigate to="/" replace />} />
-                      </Routes>
-                    </ClassDashboardLayout>
-                </ProtectedRoute>
-              } />
+                            <Route path="*" element={<Navigate to="/" replace />} />
+                          </Routes>
+                        </ClassDashboardLayout>
+                    </ProtectedRoute>
+                  } />
+                </>
+              )}
 
               {/* Student/Parent Routes */}
-              <Route path="/student/*" element={
-                <ProtectedRoute allowedRoles={[Role.STUDENT, Role.PARENT]}>
-                  <SelectionGuard role="STUDENT">
-                    <ClassDashboardLayout>
-                      <Routes>
-                        <Route path="ocjene" element={<OcjenePage />} />
-                        <Route path="biljeske" element={<BiljeskePage />} />
-                        <Route path="ispiti" element={<StudentIspitiPage />} />
-                        <Route path="izostanci" element={<IzostanciPage />} />
-                        <Route path="raspored" element={<RasporedPage />} />
-                        <Route path="osobni-podaci" element={<OsobniPodaciPage />} />
-                        <Route path="zavrsni-rad" element={<FinalThesisPage />} />
-                        <Route path="kalendar" element={<SkolskiKalendarPage />} />
-                        <Route path="informativka" element={<InformativkaPage />} />
-                        <Route path="informatika" element={<Navigate to="/student/informativka" replace />} />
-                        <Route path="postavke" element={<SettingsPage />} />
-                        <Route path="*" element={<Navigate to="/student/ocjene" replace />} />
-                      </Routes>
-                    </ClassDashboardLayout>
-                  </SelectionGuard>
-                </ProtectedRoute>
-              } />
+              {(isStudentPortal || portalType === 'staff') && (
+                <Route path="/student/*" element={
+                  <ProtectedRoute allowedRoles={[Role.STUDENT, Role.PARENT]}>
+                    <SelectionGuard role="STUDENT">
+                      <ClassDashboardLayout>
+                        <Routes>
+                          <Route path="ocjene" element={<OcjenePage />} />
+                          <Route path="biljeske" element={<BiljeskePage />} />
+                          <Route path="ispiti" element={<StudentIspitiPage />} />
+                          <Route path="izostanci" element={<IzostanciPage />} />
+                          <Route path="raspored" element={<RasporedPage />} />
+                          <Route path="osobni-podaci" element={<OsobniPodaciPage />} />
+                          <Route path="zavrsni-rad" element={<FinalThesisPage />} />
+                          <Route path="kalendar" element={<SkolskiKalendarPage />} />
+                          <Route path="informativka" element={<InformativkaPage />} />
+                          <Route path="informatika" element={<Navigate to="/student/informativka" replace />} />
+                          <Route path="postavke" element={<SettingsPage />} />
+                          <Route path="*" element={<Navigate to="/student/ocjene" replace />} />
+                        </Routes>
+                      </ClassDashboardLayout>
+                    </SelectionGuard>
+                  </ProtectedRoute>
+                } />
+              )}
 
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>

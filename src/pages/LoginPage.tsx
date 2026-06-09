@@ -8,8 +8,16 @@ import { Shield, User, Lock, Mail, Info, ChevronRight } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export default function LoginPage() {
+  const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
+  const isStudentPortal = portalType === 'student';
   const { user, supabaseUser, loading: authLoading, error: authContextError, signOut } = useAuth();
   const [loginType, setLoginType] = useState<'STAFF' | 'USER'>('USER');
+
+  useEffect(() => {
+    if (isStudentPortal) {
+      setLoginType('USER');
+    }
+  }, [isStudentPortal]);
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -140,11 +148,13 @@ export default function LoginPage() {
               <Info size={14} className="text-yellow-600" />
               <span className="text-[10px] font-bold uppercase tracking-widest text-yellow-700">Podaci za prijavu</span>
             </div>
-            <div className="grid grid-cols-2 gap-x-6 gap-y-2">
-              <div>
-                <p className="text-[9px] font-bold text-gray-400 uppercase leading-none mb-1">Zaposlenici (STAFF)</p>
-                <code className="text-[10px] block text-gray-800">Lozinka: 1234 + OTP (6 znamenki)</code>
-              </div>
+            <div className={cn("grid gap-x-6 gap-y-2", isStudentPortal ? "grid-cols-1" : "grid-cols-2")}>
+              {!isStudentPortal && (
+                <div>
+                  <p className="text-[9px] font-bold text-gray-400 uppercase leading-none mb-1">Zaposlenici (STAFF)</p>
+                  <code className="text-[10px] block text-gray-800">Lozinka: 1234 + OTP (6 znamenki)</code>
+                </div>
+              )}
               <div>
                 <p className="text-[9px] font-bold text-gray-400 uppercase leading-none mb-1">Učenici (USER)</p>
                 <code className="text-[10px] block text-gray-800">Lozinka: yupu8Ev4</code>
@@ -152,26 +162,28 @@ export default function LoginPage() {
             </div>
           </div>
 
-          <div className="flex border-b border-gray-300 bg-gray-50 uppercase tracking-tight font-bold text-[11px]">
-            <button
-              onClick={() => setLoginType('USER')}
-              className={cn(
-                "flex-1 py-3 text-center transition-all h-14",
-                loginType === 'USER' ? "bg-white text-[#005c8d] border-t-4 border-[#005c8d]" : "text-gray-400 hover:text-gray-600 border-t-4 border-transparent"
-              )}
-            >
-              Učenici i Roditelji
-            </button>
-            <button
-              onClick={() => setLoginType('STAFF')}
-              className={cn(
-                "flex-1 py-3 text-center transition-all h-14",
-                loginType === 'STAFF' ? "bg-white text-[#005c8d] border-t-4 border-[#005c8d]" : "text-gray-400 hover:text-gray-600 border-t-4 border-transparent"
-              )}
-            >
-              Zaposlenici
-            </button>
-          </div>
+          {!isStudentPortal && (
+            <div className="flex border-b border-gray-300 bg-gray-50 uppercase tracking-tight font-bold text-[11px]">
+              <button
+                onClick={() => setLoginType('USER')}
+                className={cn(
+                  "flex-1 py-3 text-center transition-all h-14",
+                  loginType === 'USER' ? "bg-white text-[#005c8d] border-t-4 border-[#005c8d]" : "text-gray-400 hover:text-gray-600 border-t-4 border-transparent"
+                )}
+              >
+                Učenici i Roditelji
+              </button>
+              <button
+                onClick={() => setLoginType('STAFF')}
+                className={cn(
+                  "flex-1 py-3 text-center transition-all h-14",
+                  loginType === 'STAFF' ? "bg-white text-[#005c8d] border-t-4 border-[#005c8d]" : "text-gray-400 hover:text-gray-600 border-t-4 border-transparent"
+                )}
+              >
+                Zaposlenici
+              </button>
+            </div>
+          )}
 
           <form onSubmit={handleLogin} className="p-8 space-y-5">
             {isSeeding && (
