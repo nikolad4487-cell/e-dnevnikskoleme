@@ -11,13 +11,25 @@ export default function LoginPage() {
   const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
   const isStudentPortal = portalType === 'student';
   const { user, supabaseUser, loading: authLoading, error: authContextError, signOut } = useAuth();
-  const [loginType, setLoginType] = useState<'STAFF' | 'USER'>('USER');
+  
+  const hostname = window.location.hostname;
+  const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz";
+  const isStudentDomain = hostname === "ocjene.skolehr.xyz";
+
+  const [loginType, setLoginType] = useState<'STAFF' | 'USER'>(() => {
+    if (isTeacherDomain) return 'STAFF';
+    if (isStudentDomain || isStudentPortal) return 'USER';
+    return 'USER';
+  });
 
   useEffect(() => {
-    if (isStudentPortal) {
+    if (isTeacherDomain) {
+      setLoginType('STAFF');
+    } else if (isStudentDomain || isStudentPortal) {
       setLoginType('USER');
     }
-  }, [isStudentPortal]);
+  }, [isTeacherDomain, isStudentDomain, isStudentPortal]);
+
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -98,6 +110,56 @@ export default function LoginPage() {
 
       console.log('[LOGIN] API Result:', { result });
 
+      const roles: string[] = result.roles || [];
+
+      // Enforce domain/portal-based role checks
+      if (isTeacherDomain) {
+        const hasStaffRole = roles.some(role => 
+          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY'].includes(role)
+        );
+        if (!hasStaffRole) {
+          throw new Error("Ovaj portal je samo za zaposlenike škole.");
+        }
+      }
+
+      if (isStudentDomain) {
+        const hasStudentOrParentRole = roles.some(role => 
+          ['STUDENT', 'PARENT'].includes(role)
+        );
+        if (!hasStudentOrParentRole) {
+          throw new Error("Ovaj portal je samo za učenike i roditelje.");
+        }
+      }
+
+      // If neither is production domain but isStudentPortal:
+      if (!isTeacherDomain && !isStudentDomain) {
+        if (isStudentPortal) {
+          const hasStudentOrParentRole = roles.some(role => 
+            ['STUDENT', 'PARENT'].includes(role)
+          );
+          if (!hasStudentOrParentRole) {
+            throw new Error("Ovaj portal je samo za učenike i roditelje.");
+          }
+        } else {
+          // Dev staff mode, enforce tab-specific selection
+          if (loginType === 'STAFF') {
+            const hasStaffRole = roles.some(role => 
+              ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY'].includes(role)
+            );
+            if (!hasStaffRole) {
+              throw new Error("Ovaj portal je samo za zaposlenike škole.");
+            }
+          } else {
+            const hasStudentOrParentRole = roles.some(role => 
+              ['STUDENT', 'PARENT'].includes(role)
+            );
+            if (!hasStudentOrParentRole) {
+              throw new Error("Ovaj portal je samo za učenike i roditelje.");
+            }
+          }
+        }
+      }
+
       // Set the session locally using the session from server
       const { error: sessionError } = await supabase.auth.setSession({
         access_token: result.session.access_token,
@@ -142,29 +204,12 @@ export default function LoginPage() {
         </div>
 
         <div className="bg-white border border-gray-300">
-          {/* Demo Login Info */}
-          <div className="bg-yellow-50 border-b border-gray-300 p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Info size={14} className="text-yellow-600" />
-              <span className="text-[10px] font-bold uppercase tracking-widest text-yellow-700">Podaci za prijavu</span>
-            </div>
-            <div className={cn("grid gap-x-6 gap-y-2", isStudentPortal ? "grid-cols-1" : "grid-cols-2")}>
-              {!isStudentPortal && (
-                <div>
-                  <p className="text-[9px] font-bold text-gray-400 uppercase leading-none mb-1">Zaposlenici (STAFF)</p>
-                  <code className="text-[10px] block text-gray-800">Lozinka: 1234 + OTP (6 znamenki)</code>
-                </div>
-              )}
-              <div>
-                <p className="text-[9px] font-bold text-gray-400 uppercase leading-none mb-1">Učenici (USER)</p>
-                <code className="text-[10px] block text-gray-800">Lozinka: yupu8Ev4</code>
-              </div>
-            </div>
-          </div>
+          {/* Note: Demoinfo banner "Podaci za prijavu" is completely removed per user instructions */}
 
-          {!isStudentPortal && (
+          {(!isTeacherDomain && !isStudentDomain && !isStudentPortal) && (
             <div className="flex border-b border-gray-300 bg-gray-50 uppercase tracking-tight font-bold text-[11px]">
               <button
+                type="button"
                 onClick={() => setLoginType('USER')}
                 className={cn(
                   "flex-1 py-3 text-center transition-all h-14",
@@ -174,6 +219,7 @@ export default function LoginPage() {
                 Učenici i Roditelji
               </button>
               <button
+                type="button"
                 onClick={() => setLoginType('STAFF')}
                 className={cn(
                   "flex-1 py-3 text-center transition-all h-14",

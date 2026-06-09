@@ -1971,14 +1971,16 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       }
 
       // 3. Verify TOTP if staff
+      const { data: dbRoles } = await supabaseAdmin
+        .from('user_school_roles')
+        .select('role')
+        .eq('user_id', profile.id);
+
+      const userSchoolRoles = dbRoles?.map((r: any) => r.role) || [];
+
       if (loginType === 'STAFF') {
-        const { data: roles } = await supabaseAdmin
-          .from('user_school_roles')
-          .select('role')
-          .eq('user_id', profile.id);
-        
-        const isActuallyStaff = roles?.some((r: any) => 
-          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY'].includes(r.role)
+        const isActuallyStaff = userSchoolRoles.some((role: string) => 
+          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY'].includes(role)
         );
 
         if (isActuallyStaff) {
@@ -2015,7 +2017,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         }
       }
 
-      res.json({ session, user: profile });
+      res.json({ session, user: profile, roles: userSchoolRoles });
     } catch (err: any) {
       console.error("[LOGIN_API] Error:", err);
       res.status(500).json({ error: err.message });
