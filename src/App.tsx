@@ -93,12 +93,18 @@ export default function App() {
     }
   }
 
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  console.log("HOSTNAME", hostname);
+
+  const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz";
+  const isStudentDomain = hostname === "ocjene.skolehr.xyz";
+
   const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
-  const isStudentPortal = portalType === 'student';
+  const isStudentPortal = isStudentDomain || (!isTeacherDomain && (portalType === 'student'));
 
   useEffect(() => {
-    console.log(`[APP] Mounted | Portal Type: ${portalType}`);
-  }, []);
+    console.log(`[APP] Mounted | Hostname: ${hostname} | Portal Type: ${portalType} | Is Student Portal: ${isStudentPortal}`);
+  }, [hostname, portalType, isStudentPortal]);
 
   return (
     <AuthProvider>

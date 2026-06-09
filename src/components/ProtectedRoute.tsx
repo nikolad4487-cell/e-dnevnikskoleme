@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, loading, error, userSchoolRoles, isMainAdmin, isStaff, isStudent, isParent, signOut } = useAuth();
+  const { user, loading, error, userSchoolRoles, isMainAdmin, isStaff, isStudent, isParent, signOut, isStudentPortal } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -72,25 +72,29 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     );
 
     if (!isAllowed) {
-      if (location.pathname === '/') {
-        // We are at home and not allowed anywhere specifically?
-        // This is a weird state, probably roles not loaded or user has no roles.
-        return (
-          <div className="flex flex-col items-center justify-center h-screen bg-slate-50 p-6 text-center">
-             <h1 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tighter">Pristup ograničen</h1>
-             <p className="text-[12px] text-slate-500 font-bold uppercase tracking-widest max-w-xs mx-auto">
-               Vaš korisnički profil trenutno nema dodijeljene uloge za ovaj dio sustava.
-             </p>
-             <button 
-               onClick={() => window.location.href = '/login'}
-               className="mt-8 bg-[#005c8d] text-white px-8 py-3 font-black uppercase text-[10px] tracking-widest"
-             >
-               Povratak na prijavu
-             </button>
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-6 text-center font-sans">
+          <div className="bg-white p-12 border border-gray-300 max-w-md shadow-sm">
+            <div className="w-12 h-12 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-6">
+              <ShieldAlert size={24} strokeWidth={3} />
+            </div>
+            <h1 className="text-xl font-black text-slate-900 mb-2 tracking-tighter uppercase leading-none">Pristup ograničen</h1>
+            <p className="text-[12px] text-slate-600 mb-8 leading-relaxed font-bold bg-red-50 p-4 border border-red-100 uppercase tracking-wide">
+              {isStudentPortal 
+                ? "Ovaj portal je samo za učenike i roditelje." 
+                : "Ovaj portal je samo za zaposlenike škole."}
+            </p>
+            <div className="flex flex-col gap-2">
+              <button 
+                onClick={() => signOut()} 
+                className="w-full bg-[#005c8d] text-white py-3 border border-[#004a71] font-black uppercase tracking-widest text-[10px] hover:bg-[#004a71] transition-all"
+              >
+                Odjava i povratak na prijavu
+              </button>
+            </div>
           </div>
-        );
-      }
-      return <Navigate to="/" replace />;
+        </div>
+      );
     }
   }
 

@@ -8,13 +8,22 @@ import { Shield, User, Lock, Mail, Info, ChevronRight } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export default function LoginPage() {
-  const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
-  const isStudentPortal = portalType === 'student';
   const { user, supabaseUser, loading: authLoading, error: authContextError, signOut } = useAuth();
   
   const hostname = window.location.hostname;
+  console.log("HOSTNAME", hostname);
+
   const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz";
   const isStudentDomain = hostname === "ocjene.skolehr.xyz";
+
+  useEffect(() => {
+    if (hostname && !isTeacherDomain && !isStudentDomain && !hostname.includes('localhost') && !hostname.includes('run.app') && !hostname.includes('vercel.app') && !hostname.includes('127.0.0.1')) {
+      console.warn("[LOGIN] Unrecognized hostname:", hostname);
+    }
+  }, [hostname, isTeacherDomain, isStudentDomain]);
+
+  const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
+  const isStudentPortal = isStudentDomain || (!isTeacherDomain && (portalType === 'student'));
 
   const [loginType, setLoginType] = useState<'STAFF' | 'USER'>(() => {
     if (isTeacherDomain) return 'STAFF';
