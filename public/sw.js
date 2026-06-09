@@ -34,6 +34,18 @@ self.addEventListener('fetch', (event) => {
   // Only handle GET requests or skip if not matching standard http/https
   if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) return;
 
+  // Bypass cache for document loads to avoid stale pages, fall back to cache only when offline
+  if (event.request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return caches.match('/index.html').then((res) => {
+          return res || caches.match('/');
+        });
+      })
+    );
+    return;
+  }
+
   // Network-First strategy
   event.respondWith(
     fetch(event.request)
@@ -47,14 +59,11 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => {
+      .catch((err) => {
         // Fallback to cache if network fails
         return caches.match(event.request).then((cachedResponse) => {
           if (cachedResponse) return cachedResponse;
-          // Offline fallback for html
-          if (event.request.headers.get('accept')?.includes('text/html')) {
-            return caches.match('/');
-          }
+          throw err; // Re-throw original network error to avoid TypeError in event.respondWith
         });
       })
   );

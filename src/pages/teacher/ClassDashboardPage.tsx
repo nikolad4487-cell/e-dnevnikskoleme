@@ -41,6 +41,14 @@ export default function ClassDashboardPage() {
   const [students, setStudents] = useState<any[]>([]);
 
   useEffect(() => {
+    const profile = user;
+    const roles = userSchoolRoles;
+    console.log("CLASS ID", classId);
+    console.log("PROFILE", profile);
+    console.log("ROLES", roles);
+  }, [classId, user, userSchoolRoles]);
+
+  useEffect(() => {
     if (classId) {
       checkAccessAndLoad();
     }
@@ -75,6 +83,8 @@ export default function ClassDashboardPage() {
       }
 
       const mappedClass = mappers.class(rawClass);
+      const selectedClass = mappedClass;
+      console.log("SELECTED CLASS", selectedClass);
 
       // 2. Fetch Students (Učenici)
       const { data: studentsData, error: studentsError } = await supabase
@@ -116,8 +126,8 @@ export default function ClassDashboardPage() {
       setIsArchived(!!archived);
 
       // 2. Check access
-      const isSchoolAdmin = userSchoolRoles.some(r => 
-        r.schoolId === mappedClass.schoolId && 
+      const isSchoolAdmin = (userSchoolRoles || []).some(r => 
+        r && r.schoolId === mappedClass.schoolId && 
         [Role.ADMIN, Role.SCHOOL_ADMIN].includes(r.role as Role)
       );
 

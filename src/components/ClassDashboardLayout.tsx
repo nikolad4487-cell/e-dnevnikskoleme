@@ -47,7 +47,9 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
   const isAdminPath = location.pathname.startsWith('/admin/') && !location.pathname.startsWith('/admin-skole');
 
   // Current roles in selected school
-  const currentSchoolRoles = userSchoolRoles.filter(r => r.schoolId === selectedSchoolId).map(r => r.role);
+  const currentSchoolRoles = (userSchoolRoles || [])
+    .filter(r => r && r.schoolId === selectedSchoolId)
+    .map(r => r.role);
   const isSchoolAdmin = isMainAdmin || currentSchoolRoles.includes(Role.SCHOOL_ADMIN) || currentSchoolRoles.includes(Role.ADMIN);
   
   // Thesis visibility logic
@@ -72,19 +74,27 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                 }
 
                 if (enrollment && enrollment.classes) {
-                    const clazz = enrollment.classes as any;
-                    const program = clazz.programs as any;
-                    if (program && clazz.grade_level) {
-                       setCanAccessThesis(clazz.grade_level === program.duration_years);
+                    const rawClazz = enrollment.classes as any;
+                    const clazz = Array.isArray(rawClazz) ? rawClazz[0] : rawClazz;
+                    if (clazz) {
+                        const rawProgram = clazz.programs;
+                        const program = Array.isArray(rawProgram) ? rawProgram[0] : rawProgram;
+                        const gradeLevel = clazz.grade_level;
+                        const durationYears = program?.duration_years;
+                        if (gradeLevel && durationYears) {
+                           setCanAccessThesis(gradeLevel === durationYears);
+                        } else {
+                           setCanAccessThesis(false);
+                        }
                     } else {
-                       setCanAccessThesis(false);
+                        setCanAccessThesis(false);
                     }
                 } else {
                    setCanAccessThesis(false);
                 }
             } else {
                 if (selectedClassId) {
-                    const { data: clazz, error } = await supabase
+                    const { data: rawClazz, error } = await supabase
                         .from('classes')
                         .select('grade_level, program_id, programs:program_id(duration_years)')
                         .eq('id', selectedClassId)
@@ -96,10 +106,14 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                         return;
                     }
 
-                    if (clazz) {
-                        const program = clazz.programs as any;
-                        if (program && clazz.grade_level) {
-                            setCanAccessThesis(clazz.grade_level === program.duration_years);
+                    if (rawClazz) {
+                        const clazz = Array.isArray(rawClazz) ? rawClazz[0] : rawClazz;
+                        const rawProgram = clazz.programs;
+                        const program = Array.isArray(rawProgram) ? rawProgram[0] : rawProgram;
+                        const gradeLevel = clazz.grade_level;
+                        const durationYears = program?.duration_years;
+                        if (gradeLevel && durationYears) {
+                            setCanAccessThesis(gradeLevel === durationYears);
                         } else {
                             setCanAccessThesis(false);
                         }

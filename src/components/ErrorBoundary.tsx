@@ -24,6 +24,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error:', error, errorInfo);
+    console.error("CLASS DASHBOARD ERROR", error);
+    console.error("ERROR INFO", errorInfo);
     
     // Log error to Supabase
     this.logErrorToDatabase(error, errorInfo);
@@ -69,9 +71,16 @@ export class ErrorBoundary extends React.Component<Props, State> {
               </svg>
             </div>
             <h1 className="text-xl font-black uppercase tracking-tight text-slate-900 mb-2">Došlo je do neočekivane greške</h1>
-            <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+            <p className="text-sm text-slate-500 mb-4 leading-relaxed">
               Sustav je zabilježio problem tijekom učitavanja stranice. Naši tehničari će pregledati detalje o grešci.
             </p>
+            {this.state.errorMessage && (
+              <div className="mb-6 p-3 bg-red-50 border border-red-200 text-left rounded-lg overflow-x-auto max-h-40">
+                <p className="text-[10px] font-mono text-red-700 whitespace-pre-wrap">
+                  {this.state.errorMessage}
+                </p>
+              </div>
+            )}
             <button
               className="bg-[#005c8d] text-white px-6 py-2 rounded font-bold text-xs uppercase tracking-wider hover:bg-[#00476b] transition-all w-full"
               onClick={this.handleReset}
