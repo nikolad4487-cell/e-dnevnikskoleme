@@ -1980,7 +1980,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       if (loginType === 'STAFF') {
         const isActuallyStaff = userSchoolRoles.some((role: string) => 
-          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY'].includes(role)
+          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
         );
 
         if (isActuallyStaff) {
