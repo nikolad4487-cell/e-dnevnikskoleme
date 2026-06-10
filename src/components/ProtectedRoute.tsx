@@ -72,6 +72,25 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     );
 
     if (!isAllowed) {
+      if (location.pathname.startsWith('/ematica')) {
+        return (
+          <div className="flex min-h-screen items-center justify-center bg-slate-50 p-6 text-center">
+            <div className="max-w-md border border-slate-200 bg-white p-8 shadow-sm">
+              <h1 className="text-xl font-black uppercase tracking-tight text-slate-900">Pristup e-Matici nije dopušten</h1>
+              <p className="mt-3 text-sm leading-6 text-slate-600">
+                e-Matica je dostupna samo administratorima škole, razrednicima i zamjenicima razrednika.
+              </p>
+              <button
+                onClick={() => window.location.href = '/'}
+                className="mt-6 bg-[#005c8d] px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white"
+              >
+                Povratak u sustav
+              </button>
+            </div>
+          </div>
+        );
+      }
+
       if (location.pathname === '/') {
         // We are at home and not allowed anywhere specifically?
         // This is a weird state, probably roles not loaded or user has no roles.
