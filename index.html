@@ -18,6 +18,7 @@
         window.location.hostname === '127.0.0.1';
 
       if ('serviceWorker' in navigator) {
+<<<<<<< HEAD
         window.addEventListener('load', async () => {
           if (isLocalhost) {
             try {
@@ -37,10 +38,43 @@
           }
 
           navigator.serviceWorker.register('/sw.js').catch((err) => {
+=======
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(reg => {
+            reg.addEventListener('updatefound', () => {
+              const newWorker = reg.installing;
+              if (newWorker) {
+                newWorker.addEventListener('statechange', () => {
+                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                    console.log('[SW] New version loaded. Reloading...');
+                    window.location.reload();
+                  }
+                });
+              }
+            });
+          }).catch(err => {
+>>>>>>> 8de1249d395a0deb1bd3c00fe828e744d30d66f5
             console.log('SW registration failed: ', err);
           });
         });
+
+        // Ensure pages reload when service worker gains control
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!refreshing) {
+            refreshing = true;
+            window.location.reload();
+          }
+        });
       }
+
+      // Detect dynamic import chunk failures and auto-reload to get new index.html with fresh hashes
+      window.addEventListener('error', (e) => {
+        if (e && e.message && (e.message.indexOf('Failed to fetch dynamically imported module') > -1 || e.message.indexOf('chunk') > -1)) {
+          console.warn('[PWA] Dynamic import/chunk load failed. Force reloading client to fetch latest index...');
+          window.location.reload();
+        }
+      }, true);
     </script>
   </body>
 </html>

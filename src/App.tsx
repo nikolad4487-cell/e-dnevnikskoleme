@@ -107,6 +107,7 @@ export default function App() {
     }
   }
 
+<<<<<<< HEAD
   const portal = getPortalConfig();
   const isStudentPortal = portal.audience === 'student';
   const isEmaticaPortal = portal.kind === 'ematica';
@@ -115,6 +116,20 @@ export default function App() {
   useEffect(() => {
     console.log(`[APP] Mounted | Portal Type: ${portal.kind}`);
   }, []);
+=======
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  console.log("HOSTNAME", hostname);
+
+  const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz";
+  const isStudentDomain = hostname === "ocjene.skolehr.xyz";
+
+  const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
+  const isStudentPortal = isStudentDomain || (!isTeacherDomain && (portalType === 'student'));
+
+  useEffect(() => {
+    console.log(`[APP] Mounted | Hostname: ${hostname} | Portal Type: ${portalType} | Is Student Portal: ${isStudentPortal}`);
+  }, [hostname, portalType, isStudentPortal]);
+>>>>>>> 8de1249d395a0deb1bd3c00fe828e744d30d66f5
 
   return (
     <AuthProvider>

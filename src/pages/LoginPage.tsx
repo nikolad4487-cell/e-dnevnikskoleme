@@ -9,12 +9,31 @@ import { toast } from 'react-hot-toast';
 import { getPortalConfig } from '../lib/portal';
 
 export default function LoginPage() {
+<<<<<<< HEAD
   const portal = getPortalConfig();
   const isStudentPortal = portal.audience === 'student';
   const { user, supabaseUser, loading: authLoading, error: authContextError, signOut } = useAuth();
   
   const isTeacherDomain = portal.kind === 'ednevnik' || portal.kind === 'ematica';
   const isStudentDomain = portal.kind === 'ocjene' || portal.kind === 'srednja' || portal.kind === 'fakulteti';
+=======
+  const { user, supabaseUser, loading: authLoading, error: authContextError, signOut } = useAuth();
+  
+  const hostname = window.location.hostname;
+  console.log("HOSTNAME", hostname);
+
+  const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz";
+  const isStudentDomain = hostname === "ocjene.skolehr.xyz";
+>>>>>>> 8de1249d395a0deb1bd3c00fe828e744d30d66f5
+
+  useEffect(() => {
+    if (hostname && !isTeacherDomain && !isStudentDomain && !hostname.includes('localhost') && !hostname.includes('run.app') && !hostname.includes('vercel.app') && !hostname.includes('127.0.0.1')) {
+      console.warn("[LOGIN] Unrecognized hostname:", hostname);
+    }
+  }, [hostname, isTeacherDomain, isStudentDomain]);
+
+  const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
+  const isStudentPortal = isStudentDomain || (!isTeacherDomain && (portalType === 'student'));
 
   const [loginType, setLoginType] = useState<'STAFF' | 'USER'>(() => {
     if (isTeacherDomain) return 'STAFF';
@@ -126,19 +145,19 @@ export default function LoginPage() {
       const roles: string[] = result.roles || [];
 
       // Enforce domain/portal-based role checks
+      console.log("[LOGIN] Enforcing domain role check with roles:", roles);
+      const staffRoles = ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'];
+      const studentRoles = ['STUDENT', 'PARENT'];
+
       if (isTeacherDomain) {
-        const hasStaffRole = roles.some(role => 
-          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY'].includes(role)
-        );
+        const hasStaffRole = roles.some(role => staffRoles.includes(role));
         if (!hasStaffRole) {
           throw new Error("Ovaj portal je samo za zaposlenike škole.");
         }
       }
 
       if (isStudentDomain) {
-        const hasStudentOrParentRole = roles.some(role => 
-          ['STUDENT', 'PARENT'].includes(role)
-        );
+        const hasStudentOrParentRole = roles.some(role => studentRoles.includes(role));
         if (!hasStudentOrParentRole) {
           throw new Error("Ovaj portal je samo za učenike i roditelje.");
         }
@@ -147,25 +166,19 @@ export default function LoginPage() {
       // If neither is production domain but isStudentPortal:
       if (!isTeacherDomain && !isStudentDomain) {
         if (isStudentPortal) {
-          const hasStudentOrParentRole = roles.some(role => 
-            ['STUDENT', 'PARENT'].includes(role)
-          );
+          const hasStudentOrParentRole = roles.some(role => studentRoles.includes(role));
           if (!hasStudentOrParentRole) {
             throw new Error("Ovaj portal je samo za učenike i roditelje.");
           }
         } else {
           // Dev staff mode, enforce tab-specific selection
           if (loginType === 'STAFF') {
-            const hasStaffRole = roles.some(role => 
-              ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY'].includes(role)
-            );
+            const hasStaffRole = roles.some(role => staffRoles.includes(role));
             if (!hasStaffRole) {
               throw new Error("Ovaj portal je samo za zaposlenike škole.");
             }
           } else {
-            const hasStudentOrParentRole = roles.some(role => 
-              ['STUDENT', 'PARENT'].includes(role)
-            );
+            const hasStudentOrParentRole = roles.some(role => studentRoles.includes(role));
             if (!hasStudentOrParentRole) {
               throw new Error("Ovaj portal je samo za učenike i roditelje.");
             }

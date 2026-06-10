@@ -21,6 +21,9 @@ interface AuthContextType {
   isParent: boolean;
   highestRole: Role | null;
   formattedRoles: string;
+  isStudentPortal: boolean;
+  isTeacherDomain: boolean;
+  isStudentDomain: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -374,8 +377,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+<<<<<<< HEAD
   const portal = getPortalConfig();
   const isStudentPortal = portal.audience === 'student';
+=======
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+  console.log("HOSTNAME", hostname);
+
+  const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz";
+  const isStudentDomain = hostname === "ocjene.skolehr.xyz";
+
+  if (typeof window !== 'undefined' && hostname && !isTeacherDomain && !isStudentDomain && !hostname.includes('localhost') && !hostname.includes('run.app') && !hostname.includes('vercel.app') && !hostname.includes('127.0.0.1')) {
+    console.warn("[AUTH] Unrecognized hostname:", hostname);
+  }
+
+  const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
+  const isStudentPortal = isStudentDomain || (!isTeacherDomain && (portalType === 'student'));
+>>>>>>> 8de1249d395a0deb1bd3c00fe828e744d30d66f5
 
   const effectiveSchoolRoles = React.useMemo(() => {
     if (isStudentPortal) {
@@ -449,8 +467,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isStudent,
     isParent,
     highestRole,
-    formattedRoles
-  }), [user, supabaseUser, session, effectiveSchoolRoles, loading, error, isMainAdmin, isStaff, isTeacher, isStudent, isParent, highestRole, formattedRoles]);
+    formattedRoles,
+    isStudentPortal,
+    isTeacherDomain,
+    isStudentDomain
+  }), [user, supabaseUser, session, effectiveSchoolRoles, loading, error, isMainAdmin, isStaff, isTeacher, isStudent, isParent, highestRole, formattedRoles, isStudentPortal, isTeacherDomain, isStudentDomain]);
 
   return (
     <AuthContext.Provider value={value}>

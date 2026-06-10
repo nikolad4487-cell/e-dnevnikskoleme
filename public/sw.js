@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ednevnik-cache-v1';
+const CACHE_NAME = 'ednevnik-cache-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -6,6 +6,7 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
       // Intentionally swallow errors for missing files during dev
@@ -14,30 +15,57 @@ self.addEventListener('install', (event) => {
   );
 });
 
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames.map((cacheName) => {
+          if (cacheName !== CACHE_NAME) {
+            console.log('[SW] Deleting old cache:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => self.clients.claim())
+  );
+});
+
 self.addEventListener('fetch', (event) => {
   // Only handle GET requests or skip if not matching standard http/https
   if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) return;
 
+  // Bypass cache for document loads to avoid stale pages, fall back to cache only when offline
+  if (event.request.headers.get('accept')?.includes('text/html')) {
+    event.respondWith(
+      fetch(event.request).catch(() => {
+        return caches.match('/index.html').then((res) => {
+          return res || caches.match('/');
+        });
+      })
+    );
+    return;
+  }
+
+  // Network-First strategy
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) return cachedResponse;
-      
-      return fetch(event.request).then((response) => {
-        // Cache dynamic responses for offline support if it's JSON from API
-        if (event.request.url.includes('/api/') && response.status === 200) {
+    fetch(event.request)
+      .then((response) => {
+        // Cache dynamic responses for offline support if it's JSON from API, or other assets
+        if (response.status === 200 && !event.request.url.includes('/api/auth/')) {
           const resClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, resClone);
           });
         }
         return response;
-      }).catch(() => {
-        // Offline fallback for html
-        if (event.request.headers.get('accept')?.includes('text/html')) {
-          return caches.match('/');
-        }
-      });
-    })
+      })
+      .catch((err) => {
+        // Fallback to cache if network fails
+        return caches.match(event.request).then((cachedResponse) => {
+          if (cachedResponse) return cachedResponse;
+          throw err; // Re-throw original network error to avoid TypeError in event.respondWith
+        });
+      })
   );
 });
 
