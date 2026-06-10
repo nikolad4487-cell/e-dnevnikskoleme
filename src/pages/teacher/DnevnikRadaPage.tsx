@@ -1243,7 +1243,7 @@ setStudents(uniqueStudents);
 
       const data = await res.json();
       if (!data || !data.success) {
-        toast.error('Neispravan autentifikator kod.');
+        toast.error(data?.error || 'Neispravan autentifikator kod.');
         return;
       }
     }
@@ -1715,8 +1715,40 @@ setStudents(uniqueStudents);
         
         {/* WEEKS LIST */}
         {view === 'WEEKS' && (() => {
-          const isFinalYearClass = selectedClass && (selectedClass.gradeLevel === 4 || selectedClass.name?.includes('4.'));
-          const requiredInstructionalWeeks = isFinalYearClass ? 32 : 35;
+          const getRequiredWeeks = (cls: any) => {
+            if (!cls) return 35;
+            const name = (cls.name || '').trim().toUpperCase();
+            const programName = (cls.program?.name || '').trim().toLowerCase();
+            const gradeLevel = cls.gradeLevel;
+
+            // - svi 1. razredi: 35
+            if (gradeLevel === 1 || name.startsWith('1.')) return 35;
+            // - svi 2. razredi: 35
+            if (gradeLevel === 2 || name.startsWith('2.')) return 35;
+            // - 3.D (Tehničar za ugostiteljstvo): 35
+            if (name.includes('3.D') || (gradeLevel === 3 && programName.includes('ugostiteljstv'))) return 35;
+            // - 4.K: 35
+            if (name.includes('4.K')) return 35;
+
+            // - 3.A, 3.B, 3.C (Kuhar, Konobar, Slastičar): 32
+            if (gradeLevel === 3 && (
+              name.includes('3.A') || name.includes('3.B') || name.includes('3.C') ||
+              programName.includes('kuhar') || programName.includes('konobar') || 
+              programName.includes('slastičar') || programName.includes('slasticar')
+            )) {
+              return 32;
+            }
+
+            // - svi završni 4. razredi osim 4.K: 32 (including 4.D, 4.I, etc.)
+            if (gradeLevel === 4 || name.startsWith('4.')) {
+              if (name.includes('4.K')) return 35;
+              return 32;
+            }
+
+            return 35;
+          };
+
+          const requiredInstructionalWeeks = getRequiredWeeks(selectedClass);
           const actualInstructionalWeeks = weeks.filter(w => {
             if (w.weekType === 'SCHOOL_HOLIDAY') return false;
             if (w.weekType === 'NON_INSTRUCTIONAL') return false;
@@ -1750,9 +1782,9 @@ setStudents(uniqueStudents);
                     <span className="text-gray-400 text-xs font-bold">/ {requiredInstructionalWeeks} tjedana</span>
                   </div>
                   <p className="text-[10px] text-gray-500 mt-1.5">
-                    {isFinalYearClass 
-                      ? '🎓 Razred je prepoznat kao završni (potreban fond: 32 nastavna tjedna).' 
-                      : '🏫 Razred je prepoznat kao redovni (potreban fond: 35 nastavnih tjedana).'
+                    {requiredInstructionalWeeks === 32
+                      ? '🎓 Razred je prepoznat s fondom od 32 nastavna tjedna.' 
+                      : '🏫 Razred je prepoznat s fondom od 35 nastavnih tjedana.'
                     }
                     {' Svi školski praznici i nenastavni tjedni izuzeti su iz ovog zbroja.'}
                   </p>

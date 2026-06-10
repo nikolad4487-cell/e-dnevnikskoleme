@@ -28,14 +28,48 @@ export async function POST(req: Request) {
       });
     }
 
-    // Get Profile's authenticator_secret using auth_user_id
-    const { data: profile, error: profileError } = await supabaseAdmin
+    // Get Profile's authenticator_secret using id or auth_user_id
+    let { data: profile, error: profileError } = await supabaseAdmin
       .from('user_profiles')
-      .select('authenticator_secret')
-      .eq('auth_user_id', authUserId)
-      .single();
+      .select('id, auth_user_id, authenticator_secret')
+      .eq('id', authUserId)
+      .maybeSingle();
 
-    if (profileError || !profile || !profile.authenticator_secret) {
+    if (profileError || !profile) {
+      const { data: p2, error: pe2 } = await supabaseAdmin
+        .from('user_profiles')
+        .select('id, auth_user_id, authenticator_secret')
+        .eq('auth_user_id', authUserId)
+        .maybeSingle();
+      if (p2) {
+        profile = p2;
+        profileError = null;
+      }
+    }
+
+    const userId = authUserId;
+    const secret = profile ? profile.authenticator_secret : null;
+    const token = totpCode;
+
+    console.log("VERIFY USER", userId);
+    console.log("HAS SECRET", !!secret);
+    console.log("TOKEN", token);
+
+    if (profileError) {
+      return new Response(JSON.stringify({ success: false, error: `Greška baze podataka: ${profileError.message}` }), { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (!profile) {
+      return new Response(JSON.stringify({ success: false, error: `Profil nije pronađen za ID ${authUserId}` }), { 
+        status: 404,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (!profile.authenticator_secret) {
       return new Response(JSON.stringify({ success: false, error: "Korisnik nema postavljen autentifikator." }), { 
         status: 403,
         headers: { 'Content-Type': 'application/json' }
@@ -43,13 +77,24 @@ export async function POST(req: Request) {
     }
 
     let isValid = false;
+    let refusalReason = "";
+
     if (profile.authenticator_secret === '123456') {
       isValid = totpCode === '123456';
+      if (!isValid) refusalReason = "Testni kod nije ispravan (očekivano '123456').";
     } else {
       isValid = authenticator.check(totpCode, profile.authenticator_secret);
+      if (!isValid) refusalReason = "Uneseni kod je neispravan za ovaj autentifikator.";
     }
 
-    return new Response(JSON.stringify({ success: isValid }), {
+    if (!isValid) {
+      return new Response(JSON.stringify({ success: false, error: refusalReason || "Neispravan autentifikator kod." }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    return new Response(JSON.stringify({ success: true }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });

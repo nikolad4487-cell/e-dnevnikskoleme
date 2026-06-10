@@ -97,23 +97,60 @@ async function startServer() {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       const { authUserId, totpCode } = req.body;
       
-      const { data: profile } = await supabaseAdmin
+      let { data: profile, error: profileError } = await supabaseAdmin
         .from('user_profiles')
-        .select('authenticator_secret')
-        .eq('auth_user_id', authUserId)
-        .single();
+        .select('id, auth_user_id, authenticator_secret')
+        .eq('id', authUserId)
+        .maybeSingle();
+
+      if (profileError || !profile) {
+        const { data: p2, error: pe2 } = await supabaseAdmin
+          .from('user_profiles')
+          .select('id, auth_user_id, authenticator_secret')
+          .eq('auth_user_id', authUserId)
+          .maybeSingle();
+        if (p2) {
+          profile = p2;
+          profileError = null;
+        }
+      }
+
+      const userId = authUserId;
+      const secret = profile ? profile.authenticator_secret : null;
+      const token = totpCode;
+
+      console.log("VERIFY USER", userId);
+      console.log("HAS SECRET", !!secret);
+      console.log("TOKEN", token);
+
+      if (profileError) {
+        return res.status(500).json({ success: false, error: `Greška baze podataka: ${profileError.message}` });
+      }
+
+      if (!profile) {
+        return res.status(404).json({ success: false, error: `Profil nije pronađen za ID ${authUserId}` });
+      }
         
-      if (!profile || !profile.authenticator_secret) {
+      if (!profile.authenticator_secret) {
         return res.status(403).json({ success: false, error: "Korisnik nema postavljen autentifikator." });
       }
       
       let isValid = false;
+      let refusalReason = "";
+
       if (profile.authenticator_secret === '123456') {
         isValid = totpCode === '123456';
+        if (!isValid) refusalReason = "Testni kod nije ispravan (očekivano '123456').";
       } else {
         isValid = authenticator.check(totpCode, profile.authenticator_secret);
+        if (!isValid) refusalReason = "Uneseni kod je neispravan za ovaj autentifikator.";
       }
-      res.json({ success: isValid });
+
+      if (!isValid) {
+        return res.status(400).json({ success: false, error: refusalReason || "Neispravan autentifikator kod." });
+      }
+
+      res.json({ success: true });
     } catch (err: any) {
       console.error("[SERVER] TOTP Verification Error:", err);
       res.status(500).json({ success: false, error: err.message });

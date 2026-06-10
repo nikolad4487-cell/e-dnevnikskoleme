@@ -101,7 +101,7 @@ export default function TeacherIzostanciPage() {
 
       const data = await res.json();
       if (!data || !data.success) {
-        toast.error('Neispravan autentifikator kod.');
+        toast.error(data?.error || 'Neispravan autentifikator kod.');
         return;
       }
     }
