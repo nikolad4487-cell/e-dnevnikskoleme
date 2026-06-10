@@ -1388,105 +1388,114 @@ export default function AdminSettingsPage() {
                         </div>
 
                         {/* Personal data dynamic wrap paragraph */}
-                        <div
-                          className="font-serif text-justify leading-relaxed mx-4 hyphens-auto text-[11px]"
+                        <div 
+                          className="font-serif text-justify leading-relaxed mx-4 hyphens-auto"
                           style={{ fontSize: `${activeConf.typography?.bodyFontSize ?? 10}px` }}
                         >
-                          ro?en 10.12.2005. godine u Zagrebu, Republika Hrvatska, dr?avljanstvo Republike Hrvatske, ime i prezime
-                          roditelja/skrbnika: Dra?en ?uri? i Mateja Jeleni?,
+                          rođen 10.12.2005. godine u Zagrebu, Republika Hrvatska, državljanstvo Republika Hrvatska, ime i prezime roditelja/skrbnika: Dražen Đurić, 
                           {editingTemplateType === 'CLASS_CERTIFICATE' ? (
-                            <span>
-                              {' '}upisao je ?kolske godine {docSettings?.overall_success_label ? '2023./2024.' : '____/_____'} prvi put prvi razred
-                              programa obrazovanja za stjecanje kvalifikacije kuhar u trajanju od tri godine i postigao sljede?i uspjeh:
-                            </span>
+                            <span> upisao je školske godine {docSettings?.overall_success_label ? '2023./24.' : '____/_____'} prvi put prvi razred programa obrazovanja za zanimanje/strukovnog kurikuluma za stjecanje kvalifikacije kuhar u trajanju od tri godine i postigao sljedeći uspjeh:</span>
                           ) : (
-                            <span>
-                              {' '}nakon zavr?enoga programa obrazovanja izradio je i obranio zavr?ni rad te postigao sljede?i uspjeh:
-                            </span>
+                            <span> s uspjehom je završio izradbu i obranu završnoga rada u strukovnom programu obrazovanja za zanimanje kuhar školske godine 2023./2024. te je postigao sljedeći uspjeh:</span>
                           )}
                         </div>
 
+                        {/* Dynamic split subject tables or final work grades */}
                         {editingTemplateType === 'CLASS_CERTIFICATE' ? (
-                          <div className="mx-4 font-serif mt-3 text-[11px] leading-[1.75]">
-                            <div className="border border-slate-500 relative overflow-hidden">
-                              <div className="absolute inset-y-0 left-1/2 w-px bg-slate-300" />
-                              <div className="grid grid-cols-2 min-h-[290px]">
-                                <div className="px-4 py-3">
-                                  <div className="font-bold text-[12px] mb-2">Obvezni predmeti</div>
-                                  {[
-                                    ['Hrvatski jezik', 'vrlo dobar (4)'],
-                                    ['Povijest', 'odli?an (5)'],
-                                    ['Tjelesna i zdravstvena kultura', 'dobar (3)'],
-                                    ['Engleski jezik', 'dovoljan (2)'],
-                                    ['Talijanski jezik', 'dobar (3)'],
-                                    ['Gospodarska matematika', 'dobar (3)'],
-                                    ['Ra?unalstvo', 'odli?an (5)'],
-                                    ['Biologija s higijenom i ekologijom', 'vrlo dobar (4)'],
-                                    ['Osnove turizma', 'odli?an (5)'],
-                                    ['Poznavanje robe i prehrana', 'vrlo dobar (4)'],
-                                    ['Kuharstvo', 'odli?an (5)'],
-                                    ['Prakti?na nastava', 'odli?an (5)'],
-                                  ].map(([subject, grade]) => (
-                                    <div key={subject} className="flex items-baseline gap-2">
-                                      <span className="shrink-0">{subject}</span>
-                                      <span className="flex-1 border-b border-dotted border-slate-500 translate-y-[-2px]" />
-                                      <span className="shrink-0">{grade}</span>
+                          <>
+                            {activeConf.elements?.showTable && (
+                              <div className="mx-4 font-serif border border-slate-400">
+                                {activeConf.elements?.splitSubjects ? (
+                                  <>
+                                    <div className="bg-slate-100 text-left px-3 py-1 font-sans text-[9px] font-extrabold border-b border-slate-400 uppercase tracking-wider">
+                                      I. Obvezni Predmeti
                                     </div>
-                                  ))}
+                                    {[
+                                      ['Hrvatski jezik', 'odličan (5)'],
+                                      ['Matematika', 'vrlo dobar (4)'],
+                                      ['Engleski jezik', 'odličan (5)']
+                                    ].map(([subj, gr], i) => (
+                                      <div key={i} className="flex justify-between items-center px-4 py-1.5 border-b border-slate-200 text-xs">
+                                        <span className="font-medium font-serif">{subj}</span>
+                                        <span className="font-bold underline font-sans text-[11px]">{gr}</span>
+                                      </div>
+                                    ))}
 
-                                  <div className="font-bold text-[12px] mt-4 mb-2">Izborni predmeti</div>
-                                  {[
-                                    ['Etika', 'odli?an (5)'],
-                                  ].map(([subject, grade]) => (
-                                    <div key={subject} className="flex items-baseline gap-2">
-                                      <span className="shrink-0">{subject}</span>
-                                      <span className="flex-1 border-b border-dotted border-slate-500 translate-y-[-2px]" />
-                                      <span className="shrink-0">{grade}</span>
+                                    <div className="bg-slate-100 text-left px-3 py-1 font-sans text-[9px] font-extrabold border-y border-slate-400 uppercase tracking-wider">
+                                      II. Izborni Predmeti
                                     </div>
-                                  ))}
-                                </div>
-
-                                <div className="px-4 py-3 bg-slate-50/25">
-                                  <div className="h-full w-full border border-slate-200 bg-white/60" />
-                                </div>
+                                    {[
+                                      ['Vjeronauk', 'odličan (5)'],
+                                      ['Informatika', 'odličan (5)']
+                                    ].map(([subj, gr], i) => (
+                                      <div key={i} className="flex justify-between items-center px-4 py-1.5 border-b border-slate-200 text-xs last:border-b-0">
+                                        <span className="font-medium font-serif">{subj}</span>
+                                        <span className="font-bold underline font-sans text-[11px]">{gr}</span>
+                                      </div>
+                                    ))}
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="bg-slate-100 flex justify-between px-4 py-1.5 font-sans text-[9px] font-black uppercase border-b border-slate-400">
+                                      <span>Nastavni predmet</span>
+                                      <span>Zaključna ocjena</span>
+                                    </div>
+                                    {[
+                                      ['Hrvatski jezik', 'odličan (5)'],
+                                      ['Matematika', 'vrlo dobar (4)'],
+                                      ['Engleski jezik', 'odličan (5)'],
+                                      ['Vjeronauk (izborni)', 'odličan (5)'],
+                                    ].map(([subj, gr], i) => (
+                                      <div key={i} className="flex justify-between items-center px-4 py-1.5 border-b border-slate-200 text-xs last:border-b-0">
+                                        <span className="font-medium font-serif">{subj}</span>
+                                        <span className="font-bold underline font-sans text-[11px]">{gr}</span>
+                                      </div>
+                                    ))}
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          /* FINAL WORK CERTIFICATE Layout specifics (grade definitions and design) */
+                          <div className="mx-4 font-serif space-y-3">
+                            <div className="border border-slate-400">
+                              <div className="bg-slate-100 text-left px-3 py-1 font-sans text-[9px] font-extrabold border-b border-slate-400 uppercase tracking-wider">
+                                Rezultat i ocjene završnoga rada
+                              </div>
+                              <div className="flex justify-between items-center px-4 py-2 border-b border-slate-200 text-xs text-slate-800">
+                                <span className="font-serif">Tema / naslov završnog rada:</span>
+                                <span className="font-bold font-sans text-right max-w-[60%]">"Implementacija suvremene gastronomske ponude"</span>
+                              </div>
+                              <div className="flex justify-between items-center px-4 py-2 border-b border-slate-200 text-xs">
+                                <span className="font-serif">Ocjena izradbe završnog rada:</span>
+                                <span className="font-bold underline font-sans text-[11px]">odličan (5)</span>
+                              </div>
+                              <div className="flex justify-between items-center px-4 py-2 text-xs">
+                                <span className="font-serif">Ocjena obrane završnog rada:</span>
+                                <span className="font-bold underline font-sans text-[11px]">odličan (5)</span>
                               </div>
                             </div>
+                          </div>
+                        )}
 
-                            <div className="mt-4 flex items-start justify-between gap-6 text-[11px]">
-                              <div>Ukupno izostanaka: 0 sati; od toga neopravdano: 0 sati</div>
-                              <div>Vladanje: <strong>uzorno</strong></div>
+                        {/* Summary details box */}
+                        {editingTemplateType === 'CLASS_CERTIFICATE' ? (
+                          <div className="grid grid-cols-2 gap-4 border border-dashed border-slate-300 bg-slate-50/50 p-3 mx-4 text-xs font-serif">
+                            <div className="space-y-1 leading-normal">
+                              <div><strong>Opći uspjeh učenika:</strong> <span className="underline font-bold">odličan (5)</span></div>
+                              <div><strong>Opći prosjek:</strong> <span className="underline">4.67</span></div>
                             </div>
-
-                            <div className="mt-2 text-center text-[12px]">
-                              U?enik je s <strong>vrlo dobrim (4,08)</strong> uspjehom zavr?io prvi razred.
+                            <div className="space-y-1">
+                              <div><strong>Vladanje:</strong> <span className="underline">uzorno</span></div>
+                              <div><strong>Izostanci (opravdano):</strong> <span className="underline">0 sati</span></div>
                             </div>
                           </div>
                         ) : (
-                          <div className="mx-4 font-serif mt-4 text-[11px]">
-                            <div className="relative min-h-[290px] border border-transparent">
-                              <div className="absolute inset-0 flex items-center justify-center opacity-10 text-[180px] font-bold text-amber-700">
-                                ?tit
-                              </div>
-                              <div className="relative z-10 max-w-[340px] mx-auto text-center space-y-5 pt-10">
-                                <div className="flex items-baseline justify-between gap-3">
-                                  <span>Izrada zavr?nog rada</span>
-                                  <span className="flex-1 border-b border-dotted border-slate-500 translate-y-[-2px]" />
-                                  <strong>odli?an (5)</strong>
-                                </div>
-                                <div className="flex items-baseline justify-between gap-3">
-                                  <span>Obrana zavr?nog rada</span>
-                                  <span className="flex-1 border-b border-dotted border-slate-500 translate-y-[-2px]" />
-                                  <strong>odli?an (5)</strong>
-                                </div>
-                                <div className="pt-4">
-                                  <div className="font-bold text-[18px] tracking-wide">OP?I USPJEH</div>
-                                  <div className="font-bold text-[16px] mt-1">odli?an</div>
-                                </div>
-                                <div className="pt-3">
-                                  <div>U?enik je stekao zanimanje/kvalifikaciju</div>
-                                  <div className="font-bold text-[18px] mt-2">kuhar</div>
-                                </div>
-                              </div>
+                          <div className="border border-dashed border-slate-300 bg-slate-50/50 p-3 mx-4 text-xs font-serif">
+                            <div className="flex justify-between leading-normal">
+                              <div><strong>Opći uspjeh iz završnoga rada:</strong> <span className="underline font-bold">odličan (5)</span></div>
+                              <div><strong>Stečeno zanimanje:</strong> <span className="underline font-bold">kuhar</span></div>
                             </div>
                           </div>
                         )}
@@ -1499,11 +1508,10 @@ export default function AdminSettingsPage() {
                           U {county || 'Zagrebu'}, {new Date().toLocaleDateString('hr-HR')}. godine
                         </div>
 
-                        <div className="flex justify-between items-end relative min-h-[72px] pt-3">
+                        <div className="flex justify-between items-end relative min-h-[60px] border-t border-slate-300 pt-3">
                           
                           {/* Teacher signature left */}
                           <div className="text-center w-1/3">
-                            <span className="text-[9px] font-sans font-bold text-slate-500 block mb-2 uppercase">Razrednik</span>
                             <div className="h-8 flex items-center justify-center relative">
                               {teacherSigUrl && activeConf.elements?.showSignatures && (
                                 <img 
@@ -1515,9 +1523,7 @@ export default function AdminSettingsPage() {
                               )}
                             </div>
                             <span className="block border-t border-slate-400 mt-1" />
-                            <span className="block font-sans text-[8px] font-black max-w-full mt-1 leading-none">
-                              {teacherName || 'Razrednik Ime'}
-                            </span>
+                            <span className="text-[9px] font-sans font-bold text-slate-500 block mt-1 uppercase">Razrednik</span>
                           </div>
 
                           {/* Stamp center */}
@@ -1539,7 +1545,6 @@ export default function AdminSettingsPage() {
 
                           {/* Principal right */}
                           <div className="text-center w-1/3">
-                            <span className="text-[9px] font-sans font-bold text-slate-500 block mb-2 uppercase">{principalTitle || 'Ravnatelj'}</span>
                             <div className="h-8 flex items-center justify-center relative">
                               {principalSigUrl && activeConf.elements?.showSignatures && (
                                 <img 
@@ -1550,10 +1555,11 @@ export default function AdminSettingsPage() {
                                 />
                               )}
                             </div>
-                            <span className="block border-t border-slate-400 mt-1" />
-                            <span className="block font-sans text-[8px] font-black max-w-full z-10 mt-1 leading-none">
+                            <span className="block font-sans text-[8px] font-black truncate max-w-full z-10 leading-none">
                               {principalName || 'Ravnatelj Ime'}
                             </span>
+                            <span className="block border-t border-slate-400 mt-1" />
+                            <span className="text-[9px] font-sans font-bold text-slate-500 block mt-1 uppercase">{principalTitle || 'Ravnatelj'}</span>
                           </div>
 
                         </div>

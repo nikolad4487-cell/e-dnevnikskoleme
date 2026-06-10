@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase';
 import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 import { User, Role, UserSchoolRole } from '../types';
 import { mapObject, mapList, mappers } from '../lib/mappers';
-import { getPortalConfig } from '../lib/portal';
 
 interface AuthContextType {
   user: User | null;
@@ -377,10 +376,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-<<<<<<< HEAD
-  const portal = getPortalConfig();
-  const isStudentPortal = portal.audience === 'student';
-=======
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   console.log("HOSTNAME", hostname);
 
@@ -393,7 +388,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
   const isStudentPortal = isStudentDomain || (!isTeacherDomain && (portalType === 'student'));
->>>>>>> 8de1249d395a0deb1bd3c00fe828e744d30d66f5
 
   const effectiveSchoolRoles = React.useMemo(() => {
     if (isStudentPortal) {

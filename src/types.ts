@@ -174,6 +174,9 @@ export type WorkWeek = {
   teachingDays: string[];
   non_teaching_reason?: string;
   non_teaching_reason_note?: string;
+  weekType?: 'INSTRUCTIONAL' | 'NON_INSTRUCTIONAL' | 'SCHOOL_HOLIDAY';
+  holidayType?: 'WINTER_1' | 'WINTER_2' | 'SPRING' | 'SUMMER' | null;
+  isInstructional?: boolean;
 };
 
 export type Lesson = {

@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useEffect, useRef } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { ShieldAlert, Users, Loader2 } from 'lucide-react';
 import { supabase } from './lib/supabase';
@@ -8,10 +8,8 @@ import { SelectionProvider, useSelection } from './contexts/SelectionContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { BasicLayout } from './components/BasicLayout';
 import { ClassDashboardLayout } from './components/ClassDashboardLayout';
-import { EmaticaLayout } from './components/EmaticaLayout';
 import InactivityTracker from './components/InactivityTracker';
 import { Role } from './types';
-import { getPortalConfig } from './lib/portal';
 
 // Pages
 const LoginPage = lazy(() => import('./pages/LoginPage'));
@@ -52,8 +50,6 @@ const InformativkaAdminPage = lazy(() => import('./pages/admin/InformativkaAdmin
 const SettingsPage = lazy(() => import('./pages/shared/SettingsPage'));
 const AuthenticatorSetupPage = lazy(() => import('./pages/auth/AuthenticatorSetupPage'));
 const DigitalniDosjePage = lazy(() => import('./pages/shared/DigitalniDosjePage'));
-const PortalLandingPage = lazy(() => import('./pages/shared/PortalLandingPage'));
-const EmaticaDashboardPage = lazy(() => import('./pages/shared/EmaticaDashboardPage'));
 
 // Admin Pages
 const SchoolsManagementPage = lazy(() => import('./pages/admin/SchoolsManagementPage'));
@@ -69,8 +65,6 @@ const SchoolYearsPage = lazy(() => import('./pages/admin/SchoolYearsPage'));
 const StudentsPage = lazy(() => import('./pages/admin/StudentsPage'));
 const ProgramsPage = lazy(() => import('./pages/admin/ProgramsPage'));
 const RolloverPage = lazy(() => import('./pages/admin/RolloverPage'));
-const EmaticaSyncPage = lazy(() => import('./pages/admin/EmaticaSyncPage'));
-const StudentTransfersPage = lazy(() => import('./pages/admin/StudentTransfersPage'));
 const AdminSettingsPage = lazy(() => import('./pages/admin/AdminSettingsPage'));
 const ZamjenePage = lazy(() => import('./pages/admin/ZamjenePage'));
 const SystemCheckPage = lazy(() => import('./pages/admin/SystemCheckPage'));
@@ -86,14 +80,6 @@ function TeacherRedirectToClass({ subPath }: { subPath: string }) {
   return <Navigate to={`/class/${selectedClassId}/${subPath}`} replace />;
 }
 
-function EmaticaShell() {
-  return (
-    <EmaticaLayout>
-      <Outlet />
-    </EmaticaLayout>
-  );
-}
-
 const APP_VERSION = '1.0.5';
 
 export default function App() {
@@ -107,16 +93,6 @@ export default function App() {
     }
   }
 
-<<<<<<< HEAD
-  const portal = getPortalConfig();
-  const isStudentPortal = portal.audience === 'student';
-  const isEmaticaPortal = portal.kind === 'ematica';
-  const isAdmissionsPortal = portal.kind === 'srednja' || portal.kind === 'fakulteti';
-
-  useEffect(() => {
-    console.log(`[APP] Mounted | Portal Type: ${portal.kind}`);
-  }, []);
-=======
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   console.log("HOSTNAME", hostname);
 
@@ -129,7 +105,6 @@ export default function App() {
   useEffect(() => {
     console.log(`[APP] Mounted | Hostname: ${hostname} | Portal Type: ${portalType} | Is Student Portal: ${isStudentPortal}`);
   }, [hostname, portalType, isStudentPortal]);
->>>>>>> 8de1249d395a0deb1bd3c00fe828e744d30d66f5
 
   return (
     <AuthProvider>
@@ -167,51 +142,7 @@ export default function App() {
 
               <Route path="/" element={
                 <ProtectedRoute>
-                  {isEmaticaPortal ? <Navigate to="/ematica" replace /> : isAdmissionsPortal ? <Navigate to={portal.homePath} replace /> : <Navigate to="/select-class" replace />}
-                </ProtectedRoute>
-              } />
-
-              <Route path="/ematica" element={
-                <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.ADMIN, Role.HOMEROOM, Role.DEPUTY]}>
-                  <Navigate to="/ematica/" replace />
-                </ProtectedRoute>
-              } />
-
-              <Route
-                path="/ematica/*"
-                element={
-                  <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.ADMIN, Role.HOMEROOM, Role.DEPUTY]}>
-                    <EmaticaShell />
-                  </ProtectedRoute>
-                }
-              >
-                <Route index element={<EmaticaDashboardPage />} />
-                <Route path="skole" element={<SchoolsManagementPage />} />
-                <Route path="skolske-godine" element={<SchoolYearsPage />} />
-                <Route path="razredi" element={<ClassManagementPage />} />
-                <Route path="programi" element={<ProgramsPage />} />
-                <Route path="ucenici" element={<StudentsPage />} />
-                <Route path="maticna-knjiga" element={<MaticnaKnjigaPage />} />
-                <Route path="sinkronizacija" element={<EmaticaSyncPage />} />
-                <Route path="premjestaji" element={<StudentTransfersPage />} />
-                <Route path="svjedodzbe" element={<CertificateManagementPage />} />
-                <Route path="prijelaz-godine" element={<RolloverPage />} />
-                <Route path="*" element={<Navigate to="/ematica/" replace />} />
-              </Route>
-
-              <Route path="/upisi/srednja" element={
-                <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.ADMIN, Role.HOMEROOM, Role.DEPUTY, Role.TEACHER, Role.STUDENT, Role.PARENT]}>
-                  <BasicLayout>
-                    <PortalLandingPage variant="srednja" />
-                  </BasicLayout>
-                </ProtectedRoute>
-              } />
-
-              <Route path="/upisi/fakulteti" element={
-                <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.ADMIN, Role.HOMEROOM, Role.DEPUTY, Role.TEACHER, Role.STUDENT, Role.PARENT]}>
-                  <BasicLayout>
-                    <PortalLandingPage variant="fakulteti" />
-                  </BasicLayout>
+                  <Navigate to="/select-class" replace />
                 </ProtectedRoute>
               } />
 
@@ -307,7 +238,7 @@ export default function App() {
               )}
 
               {/* Student/Parent Routes */}
-              {(isStudentPortal || portal.audience !== 'student') && (
+              {(isStudentPortal || portalType === 'staff') && (
                 <Route path="/student/*" element={
                   <ProtectedRoute allowedRoles={[Role.STUDENT, Role.PARENT]}>
                     <SelectionGuard role="STUDENT">

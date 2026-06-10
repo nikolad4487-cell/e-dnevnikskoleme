@@ -256,6 +256,9 @@ export const mappers = {
     isTeachingWeek: raw.is_teaching_week,
     onDutyStudentIds: raw.on_duty_student_ids,
     teachingDays: raw.teaching_days,
+    weekType: raw.week_type || 'INSTRUCTIONAL',
+    holidayType: raw.holiday_type || null,
+    isInstructional: raw.is_instructional !== undefined ? raw.is_instructional : true,
   }),
 
   studentOverallNotes: (raw: any) => ({

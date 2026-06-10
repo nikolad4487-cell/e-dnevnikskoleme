@@ -64,7 +64,6 @@ function writeJsonFile(filename: string, data: any[]) {
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || "";
-const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || "";
 
 // Supabase Admin Client (Service Role)
 let supabaseAdmin: any;
@@ -77,25 +76,6 @@ if (supabaseUrl && supabaseServiceKey) {
   });
 } else {
   console.warn("[SERVER] Supabase credentials missing. Admin features and seeder will be unavailable.");
-}
-
-function createSupabaseAuthClient(accessToken?: string) {
-  const key = supabaseServiceKey || supabaseAnonKey;
-  if (!supabaseUrl || !key) return null;
-
-  return createClient(supabaseUrl, key, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false
-    },
-    global: accessToken
-      ? {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-        }
-      : undefined,
-  });
 }
 
 async function startServer() {
@@ -1948,12 +1928,8 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
   // Unified login endpoint with TOTP verification
   app.post("/api/auth/login", async (req, res) => {
     try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       const { email, password, totpCode, loginType } = req.body;
-      const authClient = supabaseAdmin || createSupabaseAuthClient();
-
-      if (!authClient) {
-        throw new Error("Supabase authentication client not initialized.");
-      }
 
       console.log("[LOGIN_API] Attempting login for", email);
       console.log("[LOGIN_API] password length sent to Supabase:", password?.length);
@@ -1961,8 +1937,13 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       console.log("[LOGIN_API] has SUPABASE_URL:", !!process.env.SUPABASE_URL);
       console.log("[LOGIN_API] has SERVICE_ROLE:", !!process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+      if (!supabaseAdmin) {
+        console.error("[LOGIN_API] supabaseAdmin is NULL");
+        return res.status(500).json({ error: "Server authentication error." });
+      }
+
       // 1. Sign in with Supabase
-      const { data, error } = await authClient.auth.signInWithPassword({
+      const { data, error } = await supabaseAdmin.auth.signInWithPassword({
         email,
         password
       });
@@ -1977,14 +1958,9 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       const authUser = data.user;
       const session = data.session;
-      const scopedClient = supabaseAdmin || createSupabaseAuthClient(session?.access_token);
-
-      if (!scopedClient) {
-        return res.status(500).json({ error: "Server authentication error." });
-      }
 
       // 2. Get Profile
-      const { data: profile, error: profileError } = await scopedClient
+      const { data: profile, error: profileError } = await supabaseAdmin
         .from('user_profiles')
         .select('*')
         .eq('auth_user_id', authUser.id)
@@ -1995,7 +1971,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       }
 
       // 3. Verify TOTP if staff
-      const { data: dbRoles } = await scopedClient
+      const { data: dbRoles } = await supabaseAdmin
         .from('user_school_roles')
         .select('role')
         .eq('user_id', profile.id);

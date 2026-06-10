@@ -6,7 +6,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { cn, formatPersonName } from '../lib/utils';
 import { Role, Notification } from '../types';
-import { getPortalConfig } from '../lib/portal';
 
 interface HeaderProps {
   showNav?: boolean;
@@ -14,7 +13,6 @@ interface HeaderProps {
 }
 
 export function Header({ showNav = true, hideClass = false }: HeaderProps) {
-  const portal = getPortalConfig();
   const { user, signOut, formattedRoles, userSchoolRoles, isStudent, isParent } = useAuth();
   const { 
     selectedSchoolId, 
@@ -65,9 +63,10 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
     
     fetchNotifications();
     
+    const notifSub = { unsubscribe: () => {} };
+      
     return () => {
-      // Notifications are currently disabled, so there is no realtime
-      // channel to unsubscribe from during layout switches.
+      supabase.removeChannel(notifSub);
     };
   }, [user]);
 
@@ -124,7 +123,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
     <header className="bg-[#005c8d] text-white z-50 h-[50px] flex items-center justify-between px-4">
       {/* Left Structure */}
       <div className="flex items-center gap-6">
-        <Link to={portal.homePath} className="font-black text-lg tracking-tight hover:underline">{portal.shortTitle}</Link>
+        <Link to="/" className="font-black text-lg tracking-tight hover:underline">e-Dnevnik</Link>
         
         {/* Current Context Display */}
         <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest bg-black/10 px-3 py-1.5 rounded">

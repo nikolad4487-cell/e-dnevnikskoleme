@@ -12,9 +12,14 @@ import { toast } from 'react-hot-toast';
 interface SchoolEvent {
   id: string;
   school_id: string;
-  date: string; // YYYY-MM-DD
+  date: string; // YYYY-MM-DD (typically start_date)
   time?: string; // HH:MM
-  type: 'PRAZNIK' | 'SJEDNICA' | 'SASTANAK' | 'OBRANA' | 'NATJECANJE' | 'IZLET' | 'DOGAĐAJ';
+  start_date?: string; // YYYY-MM-DD
+  end_date?: string; // YYYY-MM-DD
+  start_time?: string; // HH:MM
+  end_time?: string; // HH:MM
+  holiday_type?: 'WINTER_1' | 'WINTER_2' | 'SPRING' | 'SUMMER';
+  type: 'PRAZNIK' | 'SJEDNICA' | 'SASTANAK' | 'OBRANA' | 'NATJECANJE' | 'IZLET' | 'DOGAĐAJ' | 'ŠKOLSKI_PRAZNIK';
   title: string;
   classroom?: string;
   commission?: string;
@@ -39,11 +44,18 @@ export default function SkolskiKalendarPage() {
   // Form State
   const [newDate, setNewDate] = useState('');
   const [newTime, setNewTime] = useState('08:00');
-  const [newType, setNewType] = useState<'PRAZNIK' | 'SJEDNICA' | 'SASTANAK' | 'OBRANA' | 'NATJECANJE' | 'IZLET' | 'DOGAĐAJ'>('DOGAĐAJ');
+  const [newType, setNewType] = useState<'PRAZNIK' | 'SJEDNICA' | 'SASTANAK' | 'OBRANA' | 'NATJECANJE' | 'IZLET' | 'DOGAĐAJ' | 'ŠKOLSKI_PRAZNIK'>('DOGAĐAJ');
   const [newTitle, setNewTitle] = useState('');
   const [newClassroom, setNewClassroom] = useState('');
   const [newCommission, setNewCommission] = useState('');
   const [newNotes, setNewNotes] = useState('');
+
+  // Additional form state for school holidays
+  const [holidayStartDate, setHolidayStartDate] = useState('');
+  const [holidayEndDate, setHolidayEndDate] = useState('');
+  const [holidayStartTime, setHolidayStartTime] = useState('08:00');
+  const [holidayEndTime, setHolidayEndTime] = useState('14:00');
+  const [holidaySubType, setHolidaySubType] = useState<'WINTER_1' | 'WINTER_2' | 'SPRING' | 'SUMMER'>('WINTER_1');
 
   useEffect(() => {
     if (!selectedSchoolId) return;
@@ -113,23 +125,52 @@ export default function SkolskiKalendarPage() {
     }
   };
 
+  const getDefaultHolidayTitle = (subType: string) => {
+    switch (subType) {
+      case 'WINTER_1': return 'Zimski praznici - 1. dio';
+      case 'WINTER_2': return 'Zimski praznici - 2. dio';
+      case 'SPRING': return 'Proljetni praznici';
+      case 'SUMMER': return 'Ljetni praznici';
+      default: return 'Školski praznici';
+    }
+  };
+
   const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim() || !newDate) {
+    
+    const isHoliday = newType === 'ŠKOLSKI_PRAZNIK';
+    const computedTitle = isHoliday 
+      ? (newTitle.trim() || getDefaultHolidayTitle(holidaySubType))
+      : newTitle.trim();
+    const computedDate = isHoliday ? holidayStartDate : newDate;
+
+    if (!computedTitle || !computedDate) {
       toast.error('Molimo unesite uočljivi naslov i točan datum.');
+      return;
+    }
+
+    if (isHoliday && (!holidayStartDate || !holidayEndDate)) {
+      toast.error('Molimo unesite datum početka i kraja praznika.');
       return;
     }
 
     try {
       const payload: Omit<SchoolEvent, 'id'> = {
         school_id: selectedSchoolId || '',
-        date: newDate,
-        time: newTime,
+        date: computedDate,
+        time: isHoliday ? `${holidayStartTime} - ${holidayEndTime}` : newTime,
         type: newType,
-        title: newTitle,
-        classroom: newClassroom,
-        commission: newCommission,
-        notes: newNotes
+        title: computedTitle,
+        classroom: isHoliday ? '' : newClassroom,
+        commission: isHoliday ? '' : newCommission,
+        notes: newNotes,
+        ...(isHoliday ? {
+          start_date: holidayStartDate,
+          end_date: holidayEndDate,
+          start_time: holidayStartTime,
+          end_time: holidayEndTime,
+          holiday_type: holidaySubType
+        } : {})
       };
 
       const res = await fetch('/api/school-events', {
@@ -159,6 +200,11 @@ export default function SkolskiKalendarPage() {
         setNewClassroom('');
         setNewCommission('');
         setNewNotes('');
+        setHolidayStartDate('');
+        setHolidayEndDate('');
+        setHolidayStartTime('08:00');
+        setHolidayEndTime('14:00');
+        setHolidaySubType('WINTER_1');
         loadEvents();
       } else {
         throw new Error('POST returned failed status');
@@ -241,10 +287,11 @@ export default function SkolskiKalendarPage() {
   const eventBadgeStyle = (type: string) => {
     switch (type) {
       case 'PRAZNIK': return 'bg-emerald-100 text-emerald-800 border-emerald-250 font-black';
+      case 'ŠKOLSKI_PRAZNIK': return 'bg-amber-100 text-amber-800 border-amber-250 font-black';
       case 'SJEDNICA': return 'bg-indigo-100 text-indigo-800 border-indigo-250 font-bold';
       case 'SASTANAK': return 'bg-orange-100 text-orange-900 border-orange-250 font-semibold';
       case 'OBRANA': return 'bg-[#005c8d]/10 text-[#005c8d] border-[#005c8d]/20 font-black';
-      case 'NATJECANJE': return 'bg-yellow-100 text-yellow-900 border-yellow-250 font-bold';
+      case 'NATJECANJE': return 'bg-yellow-105 text-yellow-905 border-yellow-250 font-bold';
       case 'IZLET': return 'bg-teal-100 text-teal-800 border-teal-250 font-bold';
       default: return 'bg-slate-100 text-slate-800 border-slate-205 font-bold';
     }
@@ -253,6 +300,7 @@ export default function SkolskiKalendarPage() {
   const eventLabelCro = (type: string) => {
     switch (type) {
       case 'PRAZNIK': return '🌴 Praznik / Blagdan';
+      case 'ŠKOLSKI_PRAZNIK': return '🌴 Školski praznici';
       case 'SJEDNICA': return '⚖️ Nastavničko Vijeće / Sjednica';
       case 'SASTANAK': return '👥 Roditeljski Sastanak';
       case 'OBRANA': return '🎓 Obrana Završnog Rada';
@@ -304,7 +352,7 @@ export default function SkolskiKalendarPage() {
         {/* Quick legend filters */}
         <div className="flex flex-wrap gap-1.5 items-center">
           <span className="text-[9px] font-black uppercase text-slate-400 mr-2">Filtar:</span>
-          {['SVE', 'PRAZNIK', 'SJEDNICA', 'SASTANAK', 'OBRANA', 'NATJECANJE', 'IZLET', 'DOGAĐAJ'].map((t) => (
+          {['SVE', 'PRAZNIK', 'ŠKOLSKI_PRAZNIK', 'SJEDNICA', 'SASTANAK', 'OBRANA', 'NATJECANJE', 'IZLET', 'DOGAĐAJ'].map((t) => (
             <button
               key={t}
               onClick={() => setSelectedType(t)}
@@ -314,7 +362,7 @@ export default function SkolskiKalendarPage() {
                   : 'bg-slate-100 hover:bg-slate-205 text-slate-650 border-slate-200'
               }`}
             >
-              {t === 'SVE' ? 'Sve aktivnosti' : t}
+              {t === 'SVE' ? 'Sve aktivnosti' : t === 'ŠKOLSKI_PRAZNIK' ? 'Školski praznici' : t}
             </button>
           ))}
         </div>
@@ -336,8 +384,13 @@ export default function SkolskiKalendarPage() {
           
           // Filter matching events
           const dayEvents = events.filter(e => {
-            const matchesDate = e.date === cell.dateStr;
-            const matchesType = selectedType === 'SVE' || e.type === selectedType;
+            let matchesDate = false;
+            if (e.start_date && e.end_date) {
+              matchesDate = cell.dateStr >= e.start_date && cell.dateStr <= e.end_date;
+            } else if (e.date) {
+              matchesDate = e.date === cell.dateStr;
+            }
+            const matchesType = selectedType === 'SVE' || e.type === selectedType || (selectedType === 'PRAZNIK' && e.type === 'ŠKOLSKI_PRAZNIK');
             return matchesDate && matchesType;
           });
 
@@ -413,28 +466,6 @@ export default function SkolskiKalendarPage() {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Datum</label>
-                <input 
-                  type="date" 
-                  value={newDate}
-                  onChange={(e) => setNewDate(e.target.value)}
-                  className="w-full border rounded text-xs p-1.5 focus:outline-none"
-                  required
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Vrijeme</label>
-                <input 
-                  type="time" 
-                  value={newTime}
-                  onChange={(e) => setNewTime(e.target.value)}
-                  className="w-full border rounded text-xs p-1.5 focus:outline-none"
-                />
-              </div>
-            </div>
-
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Kategorija događaja</label>
               <select 
@@ -443,7 +474,8 @@ export default function SkolskiKalendarPage() {
                 className="w-full border rounded text-xs p-1.5 focus:outline-none font-bold"
               >
                 <option value="DOGAĐAJ">🎉 OPĆI ŠKOLSKI DOGAĐAJ</option>
-                <option value="PRAZNIK">🌴 PRAZNIK / BLAGDAN (Nema nastave)</option>
+                <option value="ŠKOLSKI_PRAZNIK">🌴 ŠKOLSKI PRAZNICI (Zimski, proljetni, ljetni)</option>
+                <option value="PRAZNIK">🌴 BLAGDAN / JEDNODNEVNI PRAZNIK (Nema nastave)</option>
                 <option value="SJEDNICA">⚖️ NASTAVNIČKO VIJEĆE / SJEDNICA</option>
                 <option value="SASTANAK">👥 RODITELJSKI SASTANAK</option>
                 <option value="OBRANA">🎓 OBRANA ZAVRŠNOG ISPISTA / RADA</option>
@@ -452,15 +484,99 @@ export default function SkolskiKalendarPage() {
               </select>
             </div>
 
+            {newType !== 'ŠKOLSKI_PRAZNIK' ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Datum</label>
+                  <input 
+                    type="date" 
+                    value={newDate}
+                    onChange={(e) => setNewDate(e.target.value)}
+                    className="w-full border rounded text-xs p-1.5 focus:outline-none font-medium"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Vrijeme</label>
+                  <input 
+                    type="time" 
+                    value={newTime}
+                    onChange={(e) => setNewTime(e.target.value)}
+                    className="w-full border rounded text-xs p-1.5 focus:outline-none"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 bg-amber-50/50 border border-amber-150 p-3 rounded-md">
+                <div>
+                  <label className="text-[10px] font-black text-amber-800 uppercase block mb-1">Vrsta praznika</label>
+                  <select
+                    value={holidaySubType}
+                    onChange={(e: any) => setHolidaySubType(e.target.value)}
+                    className="w-full border bg-white rounded text-xs p-1.5 focus:outline-none font-black text-amber-900"
+                  >
+                    <option value="WINTER_1">Zimski praznici - 1. dio</option>
+                    <option value="WINTER_2">Zimski praznici - 2. dio</option>
+                    <option value="SPRING">Proljetni praznici</option>
+                    <option value="SUMMER">Ljetni praznici</option>
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-black text-amber-800 block mb-1">DATUM POČETKA</label>
+                    <input 
+                      type="date" 
+                      value={holidayStartDate}
+                      onChange={(e) => setHolidayStartDate(e.target.value)}
+                      className="w-full border bg-white rounded text-xs p-1.5 focus:outline-none font-medium"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-amber-800 block mb-1">DATUM KRAJA</label>
+                    <input 
+                      type="date" 
+                      value={holidayEndDate}
+                      onChange={(e) => setHolidayEndDate(e.target.value)}
+                      className="w-full border bg-white rounded text-xs p-1.5 focus:outline-none font-medium"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] font-black text-amber-800 block mb-1">VRIJEME POČETKA</label>
+                    <input 
+                      type="time" 
+                      value={holidayStartTime}
+                      onChange={(e) => setHolidayStartTime(e.target.value)}
+                      className="w-full border bg-white rounded text-xs p-1.5 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-amber-800 block mb-1">VRIJEME KRAJA</label>
+                    <input 
+                      type="time" 
+                      value={holidayEndTime}
+                      onChange={(e) => setHolidayEndTime(e.target.value)}
+                      className="w-full border bg-white rounded text-xs p-1.5 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Naziv događaja / Detalji</label>
+              <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">
+                Naziv događaja / Detalji {newType === 'ŠKOLSKI_PRAZNIK' && '(Opcionalno)'}
+              </label>
               <input 
                 type="text" 
-                placeholder="npr. Obrana rada Marko Marić, Sjednica vijeća..."
+                placeholder={newType === 'ŠKOLSKI_PRAZNIK' ? 'Opcionalna napomena...' : 'npr. Sjednica vijeća, Ispitni rok...'}
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 className="w-full border rounded text-xs p-1.5 focus:outline-none font-semibold text-slate-800"
-                required
+                required={newType !== 'ŠKOLSKI_PRAZNIK'}
               />
             </div>
 
@@ -560,23 +676,40 @@ export default function SkolskiKalendarPage() {
                     <h4 className="text-xs font-black text-slate-950">{e.title}</h4>
                   </div>
                   <div className="text-[10px] text-slate-500 space-y-1 border-t border-dashed pt-2">
-                    {e.time && (
-                      <div className="flex items-center gap-1.5">
-                        <Clock size={11} className="text-slate-400" />
-                        <span>Vrijeme: <span className="text-slate-800 font-bold">{e.time} sati</span></span>
+                    {e.type === 'ŠKOLSKI_PRAZNIK' && e.start_date && e.end_date ? (
+                      <div className="bg-amber-50/50 border border-amber-200 text-amber-900 rounded p-2 text-[9px] font-semibold space-y-0.5">
+                        <div className="flex items-center gap-1">
+                          <span>📅</span>
+                          <span>Trajanje: <span className="font-extrabold">{new Date(e.start_date).toLocaleDateString('hr-HR')}</span> - <span className="font-extrabold">{new Date(e.end_date).toLocaleDateString('hr-HR')}</span></span>
+                        </div>
+                        {e.start_time && e.end_time && (
+                          <div className="flex items-center gap-1">
+                            <span>⏰</span>
+                            <span>Dnevno vrijeme: <span className="font-bold">{e.start_time} - {e.end_time}</span> sati</span>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    {e.classroom && (
-                      <div className="flex items-center gap-1.5">
-                        <MapPin size={11} className="text-slate-400" />
-                        <span>Lokacija: <span className="text-slate-800 font-bold">{e.classroom}</span></span>
-                      </div>
-                    )}
-                    {e.commission && (
-                      <div className="flex items-center gap-1.5">
-                        <Users size={11} className="text-slate-400" />
-                        <span>Komisija / Voditelj: <span className="text-slate-800 font-extrabold">{e.commission}</span></span>
-                      </div>
+                    ) : (
+                      <>
+                        {e.time && (
+                          <div className="flex items-center gap-1.5">
+                            <Clock size={11} className="text-slate-400" />
+                            <span>Vrijeme: <span className="text-slate-800 font-bold">{e.time} sati</span></span>
+                          </div>
+                        )}
+                        {e.classroom && (
+                          <div className="flex items-center gap-1.5">
+                            <MapPin size={11} className="text-slate-400" />
+                            <span>Lokacija: <span className="text-slate-800 font-bold">{e.classroom}</span></span>
+                          </div>
+                        )}
+                        {e.commission && (
+                          <div className="flex items-center gap-1.5">
+                            <Users size={11} className="text-slate-400" />
+                            <span>Komisija / Voditelj: <span className="text-slate-800 font-extrabold">{e.commission}</span></span>
+                          </div>
+                        )}
+                      </>
                     )}
                     {e.notes && (
                       <p className="text-[10px] text-slate-600 italic font-medium whitespace-pre-wrap mt-2 p-2 bg-white border border-dashed rounded">

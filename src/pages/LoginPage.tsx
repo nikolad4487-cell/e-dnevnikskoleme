@@ -6,17 +6,8 @@ import { Role } from '../types';
 import { cn } from '../lib/utils';
 import { Shield, User, Lock, Mail, Info, ChevronRight } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { getPortalConfig } from '../lib/portal';
 
 export default function LoginPage() {
-<<<<<<< HEAD
-  const portal = getPortalConfig();
-  const isStudentPortal = portal.audience === 'student';
-  const { user, supabaseUser, loading: authLoading, error: authContextError, signOut } = useAuth();
-  
-  const isTeacherDomain = portal.kind === 'ednevnik' || portal.kind === 'ematica';
-  const isStudentDomain = portal.kind === 'ocjene' || portal.kind === 'srednja' || portal.kind === 'fakulteti';
-=======
   const { user, supabaseUser, loading: authLoading, error: authContextError, signOut } = useAuth();
   
   const hostname = window.location.hostname;
@@ -24,7 +15,6 @@ export default function LoginPage() {
 
   const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz";
   const isStudentDomain = hostname === "ocjene.skolehr.xyz";
->>>>>>> 8de1249d395a0deb1bd3c00fe828e744d30d66f5
 
   useEffect(() => {
     if (hostname && !isTeacherDomain && !isStudentDomain && !hostname.includes('localhost') && !hostname.includes('run.app') && !hostname.includes('vercel.app') && !hostname.includes('127.0.0.1')) {
@@ -101,14 +91,6 @@ export default function LoginPage() {
 
       console.log("LOGIN INPUT", identifier);
       console.log("NORMALIZED LOGIN EMAIL", normalizedEmail);
-      const directSupabaseFallback = async () => {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email: normalizedEmail,
-          password,
-        });
-        if (signInError) throw signInError;
-        console.log('[LOGIN] Direct Supabase fallback succeeded.');
-      };
       
       const response = await fetch('/api/auth/login', {
         method: 'POST',
@@ -132,12 +114,7 @@ export default function LoginPage() {
       const result = await response.json();
 
       if (!response.ok) {
-        if (result.error === 'fetch failed') {
-          console.warn('[LOGIN] Server auth returned fetch failed, using direct Supabase fallback.');
-          await directSupabaseFallback();
-          return;
-        }
-        throw new Error(result.error || 'Gre?ka pri prijavi.');
+        throw new Error(result.error || 'Greška pri prijavi.');
       }
 
       console.log('[LOGIN] API Result:', { result });
@@ -224,9 +201,9 @@ export default function LoginPage() {
       <div className="max-w-md w-full relative z-10 transition-all duration-500 animate-in fade-in slide-in-from-bottom-4">
         <div className="text-center mb-10">
           <div className="inline-block px-3 py-1 bg-[#005c8d] text-white text-[10px] font-black uppercase tracking-[0.2em] mb-4">Službeni pristup</div>
-          <h1 className="text-5xl font-black text-[#005c8d] tracking-tighter uppercase">{portal.shortTitle}</h1>
+          <h1 className="text-5xl font-black text-[#005c8d] tracking-tighter uppercase">e-Dnevnik</h1>
           <div className="h-1 w-12 bg-[#005c8d] mx-auto mt-2"></div>
-          <p className="text-gray-500 mt-4 text-[11px] font-bold uppercase tracking-widest leading-none">{portal.title}</p>
+          <p className="text-gray-500 mt-4 text-[11px] font-bold uppercase tracking-widest leading-none">Sustav za upravljanje informacijama u školi</p>
         </div>
 
         <div className="bg-white border border-gray-300">
