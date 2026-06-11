@@ -166,6 +166,7 @@ export default function App() {
                           <Route path="school-dashboard" element={<Navigate to="/admin-skole" replace />} />
                           <Route path="schools" element={<SchoolsManagementPage />} />
                           <Route path="skolske-godine" element={<SchoolYearsPage />} />
+                          <Route path="kalendar" element={<SkolskiKalendarPage readOnly={false} />} />
                           <Route path="razredi" element={<ClassManagementPage />} />
                           <Route path="zamjene" element={<ZamjenePage />} />
                           <Route path="korisnici" element={<UserManagementPage />} />

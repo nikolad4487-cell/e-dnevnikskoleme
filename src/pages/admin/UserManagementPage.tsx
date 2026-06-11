@@ -207,7 +207,7 @@ export default function UserManagementPage() {
       const data = await response.json();
       console.log("USER ACTION RESULT:", { status: response.status, data });
       
-      if (!response.ok) throw new Error(data.error || 'Neuspjela obrada zahtjeva');
+      if (!response.ok || (data && data.success === false)) throw new Error(data?.error || 'Neuspjela obrada zahtjeva');
 
       toast.success(editingUser ? 'Korisnik ažuriran' : 'Korisnik uspješno kreiran');
       setIsModalOpen(false);

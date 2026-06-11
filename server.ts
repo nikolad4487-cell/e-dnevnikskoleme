@@ -1549,6 +1549,11 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
   app.post("/api/admin/create-user", async (req, res) => {
     console.log("[ADMIN_CREATE - KORAK 1: prije validacije] Primljen zahtjev za kreiranje/dodavanje korisnika. Tijelo zahtjeva:", JSON.stringify(req.body));
     try {
+      if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        console.error("[ADMIN_CREATE] Nedostaje SUPABASE_SERVICE_ROLE_KEY na serveru.");
+        return res.status(500).json({ success: false, error: "Nedostaje SUPABASE_SERVICE_ROLE_KEY na serveru." });
+      }
+
       if (!supabaseAdmin) {
         console.error("[ADMIN_CREATE] Supabase Admin client nije inicijaliziran!");
         return res.status(500).json({ success: false, error: "Supabase Admin client not initialized. Check your environment variables." });

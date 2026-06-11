@@ -344,8 +344,8 @@ export default function StudentsPage() {
           throw new Error('Server error: Neispravan format odgovora');
         }
 
-        if (!res.ok) {
-          throw new Error(data.error || 'Stvaranje učenika nije uspjelo');
+        if (!res.ok || (data && data.success === false)) {
+          throw new Error(data?.error || 'Stvaranje učenika nije uspjelo');
         }
         
         // Let's check if the user has specified extra parameters (dob, pob, mobile)

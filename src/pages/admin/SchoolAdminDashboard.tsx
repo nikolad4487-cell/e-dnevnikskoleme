@@ -79,6 +79,7 @@ export default function SchoolAdminDashboard() {
   const adminModules = [
     { id: 'skole', name: 'Škole', icon: Building2, color: 'bg-[#005c8d]', link: '/admin/schools' },
     { id: 'godine', name: 'Školske godine', icon: Calendar, color: 'bg-emerald-500', link: '/admin-skole/skolske-godine' },
+    { id: 'kalendar-skole', name: 'Školski kalendar', icon: Calendar, color: 'bg-blue-600', link: '/admin-skole/kalendar' },
     { id: 'razredi', name: 'Razredni odjeli', icon: GraduationCap, color: 'bg-blue-500', link: '/admin-skole/razredi' },
     { id: 'korisnici', name: 'Korisnici / Nastavnici', icon: Users, color: 'bg-indigo-500', link: '/admin-skole/korisnici' },
     { id: 'ucenici', name: 'Učenici u školi', icon: Users, color: 'bg-teal-500', link: '/admin-skole/ucenici' },

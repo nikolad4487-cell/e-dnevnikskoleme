@@ -8,6 +8,7 @@ import {
   MapPin, ShieldAlert, Users, Compass, BookOpen, Star, Sparkles
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface SchoolEvent {
   id: string;
@@ -30,6 +31,8 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
   const { user, isStaff: authIsStaff } = useAuth();
   const isStaff = authIsStaff && !readOnly;
   const { selectedSchoolId } = useSelection();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [events, setEvents] = useState<SchoolEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -313,6 +316,14 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen font-sans space-y-6">
+      {location.pathname.startsWith('/admin-skole') && (
+        <div 
+          onClick={() => navigate('/admin-skole')}
+          className="flex items-center gap-2 text-[#005c8d] text-xs font-black uppercase tracking-widest mb-2 cursor-pointer hover:underline w-fit"
+        >
+          &larr; Povratak na administraciju škole
+        </div>
+      )}
       {/* Upper header controls */}
       <div className="flex flex-col md:flex-row md:items-center justify-between border-b pb-4 gap-4">
         <div>

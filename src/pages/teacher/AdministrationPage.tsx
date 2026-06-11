@@ -161,7 +161,7 @@ export default function AdministrationPage() {
   const isSchoolAdminMode = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/admin-skole');
 
   // Modals / Tabs
-  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN' | 'CONDUCT' | 'PROGRESS' | 'SUPPORTS' | 'ASSIGNMENTS' | 'DOCUMENTS' | 'INFORMATIVKA_ADMIN' | 'CALENDAR'>(
+  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN' | 'CONDUCT' | 'PROGRESS' | 'SUPPORTS' | 'ASSIGNMENTS' | 'DOCUMENTS' | 'INFORMATIVKA_ADMIN' | 'CALENDAR' | 'school-calendar'>(
     isClassAdminMode ? 'CLASS_DETAIL' : (isSchoolAdminMode ? 'SCHOOL_YEARS' : 'MENU')
   );
 
@@ -450,7 +450,7 @@ export default function AdministrationPage() {
       const result = await safeReadJson(response);
       console.log("CREATE UNIFIED USER RESULT:", { status: response.status, result });
       
-      if (!response.ok) throw new Error(result.error || 'Neuspješno kreiranje korisnika');
+      if (!response.ok || (result && result.success === false)) throw new Error(result?.error || 'Neuspješno kreiranje korisnika');
 
       const generatedPassword = result.password || "Nije vraćena";
       const isStudent = newUserForm.globalRole === Role.STUDENT;
@@ -2280,7 +2280,7 @@ setStudents(uniqueMapped as any);
         });
 
         const result = await safeReadJson(response);
-        if (!response.ok) throw new Error(result.error || 'Neuspješno kreiranje korisničkog računa');
+        if (!response.ok || (result && result.success === false)) throw new Error(result?.error || 'Neuspješno kreiranje korisničkog računa');
 
         const createdAuthUser = { id: result.userId, email: result.email || studentEmail };
         const createdProfile = { id: result.profileId };
@@ -3103,7 +3103,7 @@ setAllSubjects(uniqueSub2);
             // SCHOOL MODULES
             { label: 'Administracija škole', tab: 'MENU', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Školske godine', tab: 'SCHOOL_YEARS', mode: 'SCHOOL', hide: false, disabled: false },
-            { label: 'Školski kalendar', tab: 'CALENDAR', mode: 'SCHOOL', hide: false, disabled: false },
+            { label: 'Školski kalendar', tab: 'school-calendar', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Razredni odjeli', tab: 'CLASSES', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Korisnici / Nastavnici', tab: 'USERS', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Učenici u školi', tab: 'STUDENTS', mode: 'SCHOOL', hide: false, disabled: false },
@@ -3197,6 +3197,7 @@ setAllSubjects(uniqueSub2);
                   { label: 'Razredni odjeli', tab: 'CLASSES' },
                   { label: 'Učenici', tab: 'STUDENTS' },
                   { label: 'Predmeti', tab: 'SUBJECTS' },
+                  { label: 'Školski kalendar', tab: 'school-calendar' },
                   { label: 'Dodjela nastavnika predmetima', tab: 'STAFF' },
                   { label: 'Nastavni planovi i satnica', tab: 'PLANNING' },
                   { label: 'Raspored sati', tab: 'PLANNING' },
@@ -5074,9 +5075,9 @@ setAllSubjects(uniqueSub2);
              <CertificateManagementPage currentClass={selectedClassData} currentSchoolId={selectedSchoolId || ''} />
           )}
 
-          {activeTab === 'CALENDAR' && (
+          {(activeTab === 'CALENDAR' || activeTab === 'school-calendar') && (
              <div className="w-full space-y-4">
-               <SkolskiKalendarPage readOnly={false} />
+                <SkolskiKalendarPage readOnly={false} />
              </div>
           )}
 
