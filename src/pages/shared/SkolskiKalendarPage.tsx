@@ -238,7 +238,12 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
       // 7. Log error in catch
       console.error("SAVE SCHOOL CALENDAR ERROR", error);
       // 5. Display detailed message
-      const detailedMsg = error.message || error.details || "Greška pri spremanju kalendara.";
+      const detailedMsg = [
+        error.message,
+        error.details,
+        error.hint,
+        error.code
+      ].filter(Boolean).join(" | ");
       toast.error(`Greška pri spremanju kalendara: ${detailedMsg}`);
     }
   };

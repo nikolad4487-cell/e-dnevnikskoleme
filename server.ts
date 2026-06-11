@@ -842,6 +842,8 @@ async function startServer() {
         is_instructional_day
       };
 
+      console.log("SAVE SCHOOL CALENDAR PAYLOAD:", payload);
+
       if (supabaseAdmin) {
         const { error } = await supabaseAdmin.from("school_events").upsert(payload);
         if (error) {

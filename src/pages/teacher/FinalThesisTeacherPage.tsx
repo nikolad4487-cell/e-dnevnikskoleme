@@ -26,7 +26,7 @@ export default function FinalThesisTeacherPage() {
   const [loading, setLoading] = useState(true);
 
   // Filter tab options
-  const [activeTab, setActiveTab] = useState<'mentorship' | 'class' | 'all' | 'archive'>('mentorship');
+  const [activeTab, setActiveTab] = useState<'mentorship' | 'class' | 'all' | 'archive' | 'defense'>('mentorship');
 
   // search term filter
   const [searchTerm, setSearchTerm] = useState('');
@@ -490,6 +490,17 @@ export default function FinalThesisTeacherPage() {
           >
             📂 Arhiva završnih radova ({applications.filter(app => app.status === 'COMPLETED' || app.final_grade || app.defense_grade).length})
           </button>
+
+          <button
+            onClick={() => setActiveTab('defense')}
+            className={`px-4 py-2 rounded text-xs font-black uppercase tracking-wider transition-all border ${
+              activeTab === 'defense' 
+                ? 'bg-[#005c8d] text-white border-[#005c8d] shadow-sm' 
+                : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+            }`}
+          >
+            RASPORED OBRANE
+          </button>
         </div>
       </div>
 
@@ -596,6 +607,11 @@ export default function FinalThesisTeacherPage() {
               </tbody>
             </table>
           </div>
+        </div>
+      ) : activeTab === 'defense' ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
+          <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Raspored obrane - Uskoro</h3>
+          <p className="text-xs text-gray-500 mt-2">Ova stranica je u izradi.</p>
         </div>
       ) : (
         /* Main Table */
