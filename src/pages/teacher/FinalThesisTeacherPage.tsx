@@ -626,7 +626,9 @@ export default function FinalThesisTeacherPage() {
             </thead>
             <tbody>
               <tr>
-                <td className="px-4 py-3 text-gray-400" colSpan={5}>Raspored obrane završnog rada još nije unesen.</td>
+                <td className="px-4 py-3 text-gray-400" colSpan={5}>
+                  Upozorenje: Sustav ne može trenutno učitati bazu za raspored obrane. Molimo administratora da provjeri tablice `final_exam_defense_schedule` i `final_exam_defense_commission_members`.
+                </td>
               </tr>
             </tbody>
           </table>
