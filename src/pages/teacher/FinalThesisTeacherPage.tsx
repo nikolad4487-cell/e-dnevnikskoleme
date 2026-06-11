@@ -609,9 +609,27 @@ export default function FinalThesisTeacherPage() {
           </div>
         </div>
       ) : activeTab === 'defense' ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
-          <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Raspored obrane - Uskoro</h3>
-          <p className="text-xs text-gray-500 mt-2">Ova stranica je u izradi.</p>
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+          <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+            <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Raspored obrane</h3>
+            <button className="px-3 py-1.5 bg-[#005c8d] text-white text-xs font-bold rounded">Dodaj raspored</button>
+          </div>
+          <table className="w-full text-xs text-left">
+            <thead className="text-gray-500 uppercase bg-gray-50">
+              <tr>
+                <th className="px-4 py-3">Razred</th>
+                <th className="px-4 py-3">Komisija</th>
+                <th className="px-4 py-3">Razrednik</th>
+                <th className="px-4 py-3">Vrijeme</th>
+                <th className="px-4 py-3">Učionica</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td className="px-4 py-3 text-gray-400" colSpan={5}>Raspored obrane završnog rada još nije unesen.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       ) : (
         /* Main Table */

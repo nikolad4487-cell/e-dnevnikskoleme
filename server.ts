@@ -1617,6 +1617,55 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/run-initial-setup", async (req, res) => {
+    try {
+        if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+        const sql = `
+CREATE TABLE IF NOT EXISTS public.school_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id TEXT NOT NULL REFERENCES public.schools(id) ON DELETE CASCADE,
+  school_year text NOT NULL,
+  event_type text NOT NULL,
+  title text,
+  description text,
+  start_date date NOT NULL,
+  end_date date NOT NULL,
+  start_time time,
+  end_time time,
+  is_instructional_day boolean DEFAULT true,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.final_exam_defense_schedule (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  school_id TEXT NOT NULL REFERENCES public.schools(id) ON DELETE CASCADE,
+  school_year text NOT NULL,
+  class_id uuid NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+  defense_time time NOT NULL,
+  classroom text NOT NULL,
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.final_exam_defense_commission_members (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  schedule_id uuid NOT NULL REFERENCES public.final_exam_defense_schedule(id) ON DELETE CASCADE,
+  teacher_profile_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  is_homeroom_teacher boolean DEFAULT false,
+  created_at timestamptz DEFAULT now(),
+  UNIQUE(schedule_id, teacher_profile_id)
+);
+        `;
+        const { error } = await (supabaseAdmin as any).query(sql);
+        if (error) throw error;
+        res.json({ success: true });
+    } catch (err: any) {
+        console.error("[SERVER] Setup migration error:", err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   app.post("/api/admin/run-thesis-migration2", async (req, res) => {
     try {
         if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
