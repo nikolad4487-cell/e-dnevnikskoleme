@@ -211,11 +211,13 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         setHolidaySubType('WINTER_1');
         loadEvents();
       } else {
-        throw new Error('POST returned failed status');
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.error || 'Nepoznata greška na poslužitelju';
+        throw new Error(errMsg);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Greška pri spremanju kalendara.');
+      toast.error(`Greška pri spremanju kalendara: ${err.message}`);
     }
   };
 
@@ -227,9 +229,14 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         toast.success('Događaj uklonjen.');
         setShowDetailsModal(false);
         loadEvents();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.error || 'Nepoznata greška na poslužitelju';
+        throw new Error(errMsg);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      toast.error(`Greška pri brisanju događaja: ${err.message}`);
     }
   };
 

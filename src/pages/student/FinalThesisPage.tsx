@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSelection } from '../../contexts/SelectionContext';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { logSystemAction } from '../../utils/auditLogger';
@@ -8,9 +9,11 @@ import {
   AlertCircle, CheckCircle2, History, XCircle, Ban
 } from 'lucide-react';
 import { ThesisApplication } from '../../types';
+import { FinalExamDefenseSchedule } from '../../components/FinalExamDefenseSchedule';
 
 export default function FinalThesisPage() {
-  const { user, isParent, selectedChildId } = useAuth();
+  const { user, isParent } = useAuth();
+  const { selectedChildId } = useSelection();
   const studentId = isParent ? selectedChildId : user?.id;
 
   const [applications, setApplications] = useState<ThesisApplication[]>([]);
@@ -18,6 +21,7 @@ export default function FinalThesisPage() {
   const [loading, setLoading] = useState(true);
   const [isAccessible, setIsAccessible] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [enrolledClassId, setEnrolledClassId] = useState<string>('');
   
   // Checking access logic
   useEffect(() => {
@@ -31,6 +35,7 @@ export default function FinalThesisPage() {
             .maybeSingle();
 
         if (enrollment && enrollment.classes) {
+            setEnrolledClassId(enrollment.class_id);
             const clazz = enrollment.classes as any;
             const program = clazz.programs as any;
             if (program && clazz.grade_level !== undefined) {
@@ -624,6 +629,10 @@ export default function FinalThesisPage() {
             </ul>
           </div>
         </div>
+      </div>
+
+      <div className="mt-8">
+        <FinalExamDefenseSchedule classId={enrolledClassId} />
       </div>
 
       {/* History of submissions wrapper */}

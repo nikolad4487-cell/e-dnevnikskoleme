@@ -12,6 +12,7 @@ import { mappers, mapList } from '../../lib/mappers';
 import CertificateManagementPage from './certificates/CertificateManagementPage';
 import InformativkaAdminPage from '../admin/InformativkaAdminPage';
 import SkolskiKalendarPage from '../shared/SkolskiKalendarPage';
+import { FinalExamDefenseScheduleAdmin } from '../../components/FinalExamDefenseScheduleAdmin';
 
 async function safeReadJson(response: Response) {
   const text = await response.text();
@@ -161,7 +162,7 @@ export default function AdministrationPage() {
   const isSchoolAdminMode = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/admin-skole');
 
   // Modals / Tabs
-  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN' | 'CONDUCT' | 'PROGRESS' | 'SUPPORTS' | 'ASSIGNMENTS' | 'DOCUMENTS' | 'INFORMATIVKA_ADMIN' | 'CALENDAR' | 'school-calendar'>(
+  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN' | 'CONDUCT' | 'PROGRESS' | 'SUPPORTS' | 'ASSIGNMENTS' | 'DOCUMENTS' | 'INFORMATIVKA_ADMIN' | 'CALENDAR' | 'school-calendar' | 'defense-schedule'>(
     isClassAdminMode ? 'CLASS_DETAIL' : (isSchoolAdminMode ? 'SCHOOL_YEARS' : 'MENU')
   );
 
@@ -2119,7 +2120,8 @@ setStudents(uniqueMapped as any);
       parentName: parentData?.parent_name || '',
       parentPhone: parentData?.parent_phone || '',
       parentEmail: parentData?.parent_email || '',
-      parentNotes: parentData?.notes || ''
+      parentNotes: parentData?.notes || '',
+      enrollSubjects: false
     });
   };
 
@@ -3104,6 +3106,7 @@ setAllSubjects(uniqueSub2);
             { label: 'Administracija škole', tab: 'MENU', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Školske godine', tab: 'SCHOOL_YEARS', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Školski kalendar', tab: 'school-calendar', mode: 'SCHOOL', hide: false, disabled: false },
+            { label: 'Obrane završnih radova', tab: 'defense-schedule', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Razredni odjeli', tab: 'CLASSES', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Korisnici / Nastavnici', tab: 'USERS', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Učenici u školi', tab: 'STUDENTS', mode: 'SCHOOL', hide: false, disabled: false },
@@ -3198,6 +3201,7 @@ setAllSubjects(uniqueSub2);
                   { label: 'Učenici', tab: 'STUDENTS' },
                   { label: 'Predmeti', tab: 'SUBJECTS' },
                   { label: 'Školski kalendar', tab: 'school-calendar' },
+                  { label: 'Obrane završnih radova', tab: 'defense-schedule' },
                   { label: 'Dodjela nastavnika predmetima', tab: 'STAFF' },
                   { label: 'Nastavni planovi i satnica', tab: 'PLANNING' },
                   { label: 'Raspored sati', tab: 'PLANNING' },
@@ -3720,7 +3724,13 @@ setAllSubjects(uniqueSub2);
                                                         subjectId: a.subjectId, 
                                                         classId: a.classId, 
                                                         teacherId: a.teacherId,
-                                                        groupName: a.groupName || ''
+                                                        groupName: a.groupName || '',
+                                                        subjectType: classSubject?.subjectType || 'redovni',
+                                                        isForeignLanguage: !!classSubject?.isForeignLanguage,
+                                                        subjectPeriod: classSubject?.subjectPeriod || 'FULL_YEAR',
+                                                        plannedHoursSemester1: classSubject?.plannedHoursSemester1?.toString() || '',
+                                                        plannedHoursTotal: classSubject?.plannedHoursTotal?.toString() || '',
+                                                        addToAllStudents: true
                                                       });
                                                     }}
                                                     className="text-[#005c8d] hover:scale-110"
@@ -3748,7 +3758,18 @@ setAllSubjects(uniqueSub2);
                                          <button 
                                            onClick={() => {
                                              setEditingAssignmentId(null);
-                                             setAssignmentForm({ subjectId: sid, teacherId: '', classId: selectedClassId || '', groupName: '' });
+                                             setAssignmentForm({ 
+                                                subjectId: sid, 
+                                                teacherId: '', 
+                                                classId: selectedClassId || '', 
+                                                groupName: '',
+                                                subjectType: 'redovni',
+                                                isForeignLanguage: false,
+                                                subjectPeriod: 'FULL_YEAR',
+                                                plannedHoursSemester1: '',
+                                                plannedHoursTotal: '',
+                                                addToAllStudents: true
+                                              });
                                            }}
                                            className="text-[9px] font-black text-gray-400 uppercase hover:text-[#005c8d] flex items-center gap-1"
                                          >
@@ -3790,7 +3811,18 @@ setAllSubjects(uniqueSub2);
                                            <button 
                                              onClick={() => {
                                                setEditingAssignmentId(null);
-                                               setAssignmentForm({ subjectId: sid, classId: selectedClassId || '', teacherId: '' });
+                                               setAssignmentForm({ 
+                                                subjectId: sid, 
+                                                classId: selectedClassId || '', 
+                                                teacherId: '',
+                                                groupName: '',
+                                                subjectType: 'redovni',
+                                                isForeignLanguage: false,
+                                                subjectPeriod: 'FULL_YEAR',
+                                                plannedHoursSemester1: '',
+                                                plannedHoursTotal: '',
+                                                addToAllStudents: true
+                                              });
                                              }}
                                              className="text-gray-400 hover:text-[#005c8d]"
                                            >
@@ -4708,7 +4740,21 @@ setAllSubjects(uniqueSub2);
                       {editingAssignmentId && (
                         <button 
                           type="button"
-                          onClick={() => { setEditingAssignmentId(null); setAssignmentForm({ subjectId: '', teacherId: '', classId: '' }); }}
+                          onClick={() => { 
+                            setEditingAssignmentId(null); 
+                            setAssignmentForm({ 
+                              subjectId: '', 
+                              teacherId: '', 
+                              classId: '',
+                              groupName: '',
+                              subjectType: 'redovni',
+                              isForeignLanguage: false,
+                              subjectPeriod: 'FULL_YEAR',
+                              plannedHoursSemester1: '',
+                              plannedHoursTotal: '',
+                              addToAllStudents: true
+                            }); 
+                          }}
                           className="bg-gray-100 text-gray-500 px-4 py-2 border border-gray-200 font-black text-[10px] uppercase hover:bg-gray-200"
                         >
                           Odustani
@@ -5078,6 +5124,12 @@ setAllSubjects(uniqueSub2);
           {(activeTab === 'CALENDAR' || activeTab === 'school-calendar') && (
              <div className="w-full space-y-4">
                 <SkolskiKalendarPage readOnly={false} />
+             </div>
+          )}
+
+          {activeTab === 'defense-schedule' && (
+             <div className="w-full space-y-4">
+                <FinalExamDefenseScheduleAdmin />
              </div>
           )}
 

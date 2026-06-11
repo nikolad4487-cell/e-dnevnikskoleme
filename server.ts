@@ -41,6 +41,8 @@ initJsonFile("student_registrations.json");
 initJsonFile("student_transfers.json");
 initJsonFile("competitions.json");
 initJsonFile("payments.json");
+initJsonFile("final_exam_defense_schedule.json");
+initJsonFile("final_exam_defense_commission_members.json");
 
 function readJsonFile(filename: string): any[] {
   try {
@@ -84,6 +86,42 @@ async function startServer() {
     const PORT = 3000;
 
     app.use(express.json());
+
+    // Run startup migrations for final exam defense schedule tables if supabase is available
+    if (supabaseAdmin) {
+      try {
+        console.log("[SERVER] Automatically checking and running startup DDL migrations for final exam defense schedules...");
+        const ddlQuery = `
+          CREATE TABLE IF NOT EXISTS public.final_exam_defense_schedule (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            school_id uuid NOT NULL,
+            school_year text NOT NULL,
+            class_id uuid NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+            defense_time text NOT NULL,
+            classroom text NOT NULL,
+            created_at timestamptz DEFAULT now(),
+            updated_at timestamptz DEFAULT now()
+          );
+
+          CREATE TABLE IF NOT EXISTS public.final_exam_defense_commission_members (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            schedule_id uuid NOT NULL REFERENCES public.final_exam_defense_schedule(id) ON DELETE CASCADE,
+            teacher_profile_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+            is_homeroom_teacher boolean DEFAULT false,
+            created_at timestamptz DEFAULT now(),
+            UNIQUE(schedule_id, teacher_profile_id)
+          );
+        `;
+        if (typeof supabaseAdmin.query === 'function') {
+          await supabaseAdmin.query(ddlQuery);
+          console.log("[SERVER] Startup migrations executed successfully.");
+        } else {
+          console.warn("[SERVER] supabaseAdmin.query is not a function. Table creation script skipped (falling back onto flat JSON).");
+        }
+      } catch (migrationErr: any) {
+        console.error("[SERVER] Startup migration error:", migrationErr.message);
+      }
+    }
 
     // Middleware to log requests
     app.use((req, res, next) => {
@@ -414,11 +452,305 @@ async function startServer() {
 
 
   // ==========================================
+  // Final Exam Defense Schedules & Commission Members APIs
+  // ==========================================
+  app.get("/api/final-exam-defense-schedules", async (req, res) => {
+    try {
+      const { schoolId, classId } = req.query;
+      let dbSchedules: any[] = [];
+      let dbMembers: any[] = [];
+
+      if (supabaseAdmin) {
+        try {
+          let sQuery = supabaseAdmin.from('final_exam_defense_schedule').select('*');
+          if (schoolId) sQuery = sQuery.eq('school_id', schoolId);
+          if (classId) sQuery = sQuery.eq('class_id', classId);
+          const { data: sData, error: sErr } = await sQuery;
+          if (sData && !sErr) {
+            dbSchedules = sData;
+            
+            const scheduleIds = dbSchedules.map(s => s.id);
+            if (scheduleIds.length > 0) {
+              const { data: mData, error: mErr } = await supabaseAdmin
+                .from('final_exam_defense_commission_members')
+                .select('*')
+                .in('schedule_id', scheduleIds);
+              if (mData && !mErr) {
+                dbMembers = mData;
+              }
+            }
+          }
+        } catch (dbErr) {
+          console.error("DB reading defense schedules error:", dbErr);
+        }
+      }
+
+      // Merge with flat-file local fallback
+      let localSchedules = readJsonFile("final_exam_defense_schedule.json");
+      let localMembers = readJsonFile("final_exam_defense_commission_members.json");
+
+      if (schoolId) {
+        localSchedules = localSchedules.filter(s => s.school_id === schoolId);
+      }
+      if (classId) {
+        localSchedules = localSchedules.filter(s => s.class_id === classId);
+      }
+
+      const mergedSchedulesMap = new Map();
+      localSchedules.forEach(s => mergedSchedulesMap.set(s.id, s));
+      dbSchedules.forEach(s => mergedSchedulesMap.set(s.id, s));
+      const mergedSchedules = Array.from(mergedSchedulesMap.values());
+
+      const mergedMembersMap = new Map();
+      localMembers.forEach(m => mergedMembersMap.set(m.id, m));
+      dbMembers.forEach(m => mergedMembersMap.set(m.id, m));
+      const mergedMembers = Array.from(mergedMembersMap.values());
+
+      // Wrap up members inside schedule
+      const result = mergedSchedules.map(schedule => {
+        const membersForSchedule = mergedMembers.filter(m => m.schedule_id === schedule.id);
+        return {
+          ...schedule,
+          members: membersForSchedule
+        };
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/final-exam-defense-schedules", async (req, res) => {
+    try {
+      const { school_id, school_year, class_id, defense_time, classroom, teacher_ids, homeroom_teacher_id } = req.body;
+      
+      if (!school_id || !school_year || !class_id || !defense_time || !classroom) {
+        return res.status(400).json({ error: "Nedostaju obavezni podaci za raspored obrane" });
+      }
+
+      const scheduleId = crypto.randomUUID();
+      const newSchedule = {
+        id: scheduleId,
+        school_id,
+        school_year,
+        class_id,
+        defense_time,
+        classroom,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const newMembers: any[] = [];
+      if (teacher_ids && Array.isArray(teacher_ids)) {
+        teacher_ids.forEach((teacherId: string) => {
+          newMembers.push({
+            id: crypto.randomUUID(),
+            schedule_id: scheduleId,
+            teacher_profile_id: teacherId,
+            is_homeroom_teacher: teacherId === homeroom_teacher_id,
+            created_at: new Date().toISOString()
+          });
+        });
+      }
+
+      let dbSaved = false;
+      if (supabaseAdmin) {
+        try {
+          const { error: sErr } = await supabaseAdmin.from('final_exam_defense_schedule').insert(newSchedule);
+          if (!sErr) {
+            if (newMembers.length > 0) {
+              const { error: mErr } = await supabaseAdmin.from('final_exam_defense_commission_members').insert(newMembers);
+              if (!mErr) {
+                dbSaved = true;
+              } else {
+                console.error("DB error inserting defense commission members:", mErr);
+              }
+            } else {
+              dbSaved = true;
+            }
+          } else {
+            console.error("DB error inserting defense schedule:", sErr);
+          }
+        } catch (dbErr) {
+          console.error("DB error connecting for defense schedule post:", dbErr);
+        }
+      }
+
+      // Save to flat files for fallback persistence
+      const localSchedules = readJsonFile("final_exam_defense_schedule.json");
+      localSchedules.push(newSchedule);
+      writeJsonFile("final_exam_defense_schedule.json", localSchedules);
+
+      const localMembers = readJsonFile("final_exam_defense_commission_members.json");
+      localMembers.push(...newMembers);
+      writeJsonFile("final_exam_defense_commission_members.json", localMembers);
+
+      res.json({ success: true, data: { ...newSchedule, members: newMembers }, db_persisted: dbSaved });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/final-exam-defense-schedules/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { defense_time, classroom, teacher_ids, homeroom_teacher_id } = req.body;
+
+      let dbUpdated = false;
+      if (supabaseAdmin) {
+        try {
+          const updates: any = { updated_at: new Date().toISOString() };
+          if (defense_time) updates.defense_time = defense_time;
+          if (classroom) updates.classroom = classroom;
+
+          const { error: sErr } = await supabaseAdmin.from('final_exam_defense_schedule').update(updates).eq('id', id);
+          if (!sErr) {
+            await supabaseAdmin.from('final_exam_defense_commission_members').delete().eq('schedule_id', id);
+            
+            const newMembers: any[] = [];
+            if (teacher_ids && Array.isArray(teacher_ids)) {
+              teacher_ids.forEach((teacherId: string) => {
+                newMembers.push({
+                  id: crypto.randomUUID(),
+                  schedule_id: id,
+                  teacher_profile_id: teacherId,
+                  is_homeroom_teacher: teacherId === homeroom_teacher_id,
+                  created_at: new Date().toISOString()
+                });
+              });
+            }
+
+            if (newMembers.length > 0) {
+              const { error: mErr } = await supabaseAdmin.from('final_exam_defense_commission_members').insert(newMembers);
+              if (!mErr) {
+                dbUpdated = true;
+              } else {
+                console.error("DB commission members update error:", mErr);
+              }
+            } else {
+              dbUpdated = true;
+            }
+          } else {
+            console.error("DB schedule update error:", sErr);
+          }
+        } catch (dbErr) {
+          console.error("DB error connecting for defense schedule update:", dbErr);
+        }
+      }
+
+      // Local JSON update
+      const localSchedules = readJsonFile("final_exam_defense_schedule.json");
+      const sIdx = localSchedules.findIndex(s => s.id === id);
+      if (sIdx !== -1) {
+        if (defense_time) localSchedules[sIdx].defense_time = defense_time;
+        if (classroom) localSchedules[sIdx].classroom = classroom;
+        localSchedules[sIdx].updated_at = new Date().toISOString();
+        writeJsonFile("final_exam_defense_schedule.json", localSchedules);
+      }
+
+      let localMembers = readJsonFile("final_exam_defense_commission_members.json");
+      localMembers = localMembers.filter(m => m.schedule_id !== id);
+      
+      const newLocalMembers: any[] = [];
+      if (teacher_ids && Array.isArray(teacher_ids)) {
+        teacher_ids.forEach((teacherId: string) => {
+          newLocalMembers.push({
+            id: crypto.randomUUID(),
+            schedule_id: id,
+            teacher_profile_id: teacherId,
+            is_homeroom_teacher: teacherId === homeroom_teacher_id,
+            created_at: new Date().toISOString()
+          });
+        });
+      }
+      localMembers.push(...newLocalMembers);
+      writeJsonFile("final_exam_defense_commission_members.json", localMembers);
+
+      res.json({ success: true, db_updated: dbUpdated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/final-exam-defense-schedules/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      let dbDeleted = false;
+      if (supabaseAdmin) {
+        try {
+          const { error: sErr } = await supabaseAdmin.from('final_exam_defense_schedule').delete().eq('id', id);
+          if (!sErr) {
+            dbDeleted = true;
+          } else {
+            console.error("DB schedule delete error:", sErr);
+          }
+        } catch (dbErr) {
+          console.error("DB connection error for schedule delete:", dbErr);
+        }
+      }
+
+      const localSchedules = readJsonFile("final_exam_defense_schedule.json");
+      const filteredSchedules = localSchedules.filter(s => s.id !== id);
+      writeJsonFile("final_exam_defense_schedule.json", filteredSchedules);
+
+      const localMembers = readJsonFile("final_exam_defense_commission_members.json");
+      const filteredMembers = localMembers.filter(m => m.schedule_id !== id);
+      writeJsonFile("final_exam_defense_commission_members.json", filteredMembers);
+
+      res.json({ success: true, db_deleted: dbDeleted });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+
+  // ==========================================
   // School Events (Školski Kalendar) APIs
   // ==========================================
-  app.get("/api/school-events", (req, res) => {
+  function getSchoolYearFromDate(dateStr: string): string {
+    if (!dateStr) return "2025/2026";
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return "2025/2026";
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1; // 1-12
+    if (month >= 9) {
+      return `${year}/${year + 1}`;
+    } else {
+      return `${year - 1}/${year}`;
+    }
+  }
+
+  function getWeekNumber(dateStr: string): number {
+    if (!dateStr) return 1;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return 1;
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+    const yearStart = new Date(d.getFullYear(), 0, 1);
+    const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+    return weekNo;
+  }
+
+  app.get("/api/school-events", async (req, res) => {
     try {
       const { schoolId } = req.query;
+
+      if (supabaseAdmin) {
+        let query = supabaseAdmin.from("school_events").select("*");
+        if (schoolId) {
+          query = query.eq("school_id", schoolId);
+        }
+        const { data, error } = await query.order("date", { ascending: true });
+        if (!error && data) {
+          return res.json(data);
+        }
+        if (error && error.code !== "PGRST205") {
+          console.error("[SERVER] Supabase school_events query error:", error);
+          return res.status(500).json({ error: `Baza podataka: [${error.code}] ${error.message}` });
+        }
+      }
+
       let events = readJsonFile("school_events.json");
       if (schoolId) {
         events = events.filter((e: any) => e.school_id === schoolId || e.schoolId === schoolId);
@@ -429,12 +761,45 @@ async function startServer() {
     }
   });
 
-  app.post("/api/school-events", (req, res) => {
+  app.post("/api/school-events", async (req, res) => {
     try {
       const eventData = req.body;
       if (!eventData.id) {
         eventData.id = crypto.randomUUID();
       }
+
+      const payload = {
+        id: eventData.id,
+        school_id: eventData.school_id || eventData.schoolId || "",
+        school_year: eventData.school_year || getSchoolYearFromDate(eventData.date),
+        date: eventData.date,
+        week: eventData.week !== undefined ? eventData.week : getWeekNumber(eventData.date),
+        time: eventData.time || null,
+        type: eventData.type,
+        title: eventData.title || "",
+        reason: eventData.reason || eventData.title || "",
+        classroom: eventData.classroom || null,
+        commission: eventData.commission || null,
+        notes: eventData.notes || null,
+        start_date: eventData.start_date || null,
+        end_date: eventData.end_date || null,
+        start_time: eventData.start_time || null,
+        end_time: eventData.end_time || null,
+        holiday_type: eventData.holiday_type || null
+      };
+
+      if (supabaseAdmin) {
+        const { error } = await supabaseAdmin.from("school_events").upsert(payload);
+        if (!error) {
+          return res.json({ success: true, data: payload });
+        }
+        if (error && error.code !== "PGRST205") {
+          console.error("[SERVER] Supabase school_events save error:", error);
+          const detailStr = error.details ? ` (${error.details})` : "";
+          return res.status(500).json({ error: `Baza podataka: [${error.code}] ${error.message}${detailStr}` });
+        }
+      }
+
       eventData.created_at = new Date().toISOString();
       const events = readJsonFile("school_events.json");
       events.push(eventData);
@@ -445,9 +810,24 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/school-events/:id", (req, res) => {
+  app.delete("/api/school-events/:id", async (req, res) => {
     try {
       const { id } = req.params;
+
+      if (supabaseAdmin) {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+        if (isUuid) {
+          const { error } = await supabaseAdmin.from("school_events").delete().eq("id", id);
+          if (!error) {
+            return res.json({ success: true });
+          }
+          if (error && error.code !== "PGRST205") {
+            console.error("[SERVER] Supabase school_events delete error:", error);
+            return res.status(500).json({ error: `Baza podataka: [${error.code}] ${error.message}` });
+          }
+        }
+      }
+
       const events = readJsonFile("school_events.json");
       const filtered = events.filter((e: any) => e.id !== id);
       writeJsonFile("school_events.json", filtered);

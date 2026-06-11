@@ -8,12 +8,23 @@ const supabase = createClient(
 );
 
 async function run() {
-  const { data, error } = await supabase.rpc('exec_sql', { query: `
-    SELECT table_name
-    FROM information_schema.tables
-    WHERE table_schema = 'public';
-  `});
-  console.log("Error:", error);
-  console.log("Data:", data);
+  console.log("Probing 'school_events' table...");
+  const { data: eventsData, error: eventsError } = await supabase
+    .from('school_events')
+    .select('*')
+    .limit(1);
+  
+  console.log("school_events Error:", eventsError);
+  console.log("school_events Data:", eventsData);
+
+  console.log("Probing 'school_calendar' table...");
+  const { data: calendarData, error: calendarError } = await supabase
+    .from('school_calendar')
+    .select('*')
+    .limit(1);
+  
+  console.log("school_calendar Error:", calendarError);
+  console.log("school_calendar Data:", calendarData);
 }
 run();
+

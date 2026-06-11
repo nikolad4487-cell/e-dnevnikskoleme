@@ -19,6 +19,7 @@ export type School = {
   subtype: SecondarySubtype | null;
   address?: string;
   city?: string;
+  status?: string;
 };
 
 export type User = {
@@ -41,12 +42,17 @@ export type User = {
   classId?: string;
   class_id?: string;
   status?: 'ACTIVE' | 'INACTIVE';
+  globalRole?: Role;
+  role?: Role;
+  username?: string;
+  full_name?: string;
 };
 
 export type UserSchoolRole = {
   id: string;
   userId: string;
   schoolId: string;
+  school_id?: string;
   role: Role;
   status: string;
 };
@@ -81,6 +87,7 @@ export type Class = {
   schoolYear: string;
   name: string;
   gradeLevel: number;
+  grade_level?: number;
   section?: string;
   status: string;
   homeroomTeacherId: string;
@@ -93,6 +100,8 @@ export type Class = {
   isContinuationProgram?: boolean;
   schoolYearName?: string;
   schoolYearIsActive?: boolean;
+  variant?: any;
+  homeroom_teacher_id?: string;
 };
 
 export type Subject = {
@@ -141,6 +150,8 @@ export type CurriculumPlan = {
   schoolYear: string;
   createdAt?: string;
   updatedAt?: string;
+  subject_id?: string;
+  class_id?: string;
 };
 
 export type GradingElement = {
@@ -379,6 +390,7 @@ export type SchoolYear = {
   startsAt: string;
   endsAt: string;
   isActive: boolean;
+  status?: string;
 };
 
 export type Program = {
@@ -387,6 +399,7 @@ export type Program = {
   name: string;
   durationYears: number;
   type: ProgramType;
+  continuationType?: any;
 };
 
 export type RolloverLog = {
@@ -449,7 +462,7 @@ export type AssistantStudentAssignment = {
 export type ChatGroup = {
   id: string;
   name: string;
-  type: 'PRIVATE' | 'GROUP';
+  type: 'PRIVATE' | 'GROUP' | 'PRIVATE_GROUP';
   created_by: string;
 };
 
@@ -457,8 +470,10 @@ export type Message = {
   id: string;
   groupId: string;
   senderId: string;
-  content: string;
-  createdAt: string;
+  content?: string;
+  createdAt?: string;
+  text?: string;
+  timestamp?: string;
 };
 
 export interface ThesisCommitteeMember {
@@ -507,6 +522,8 @@ export interface ThesisApplication {
   final_graded_by?: string;
   
   committee_members?: ThesisCommitteeMember[];
+  versions?: any[];
+  submission_confirmed?: boolean;
 }
 
 export interface SystemAuditLog {

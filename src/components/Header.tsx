@@ -66,7 +66,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
     const notifSub = { unsubscribe: () => {} };
       
     return () => {
-      supabase.removeChannel(notifSub);
+      supabase.removeChannel(notifSub as any);
     };
   }, [user]);
 

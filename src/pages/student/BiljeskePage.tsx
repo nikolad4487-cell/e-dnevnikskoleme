@@ -133,8 +133,8 @@ export default function BiljeskePage() {
                   <span className="font-bold text-[14px] text-gray-900">{homeroomTeacher.name}</span>
                   <span className="text-gray-500 text-[12px]">{homeroomTeacher.email}</span>
                 </div>
-                {classNotes?.homeroom_info && (
-                    <div className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap mt-2 pt-2 border-t border-gray-100">{classNotes.homeroom_info}</div>
+                {classNotes?.homeroomInfo && (
+                    <div className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap mt-2 pt-2 border-t border-gray-100">{classNotes.homeroomInfo}</div>
                 )}
               </div>
           )}
@@ -147,8 +147,8 @@ export default function BiljeskePage() {
                   <span className="font-bold text-[14px] text-gray-900">{deputyTeacher.name}</span>
                   <span className="text-gray-500 text-[12px]">{deputyTeacher.email}</span>
                 </div>
-                {classNotes?.deputy_info && (
-                  <div className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap mt-2 pt-2 border-t border-gray-100">{classNotes.deputy_info}</div>
+                {classNotes?.deputyInfo && (
+                  <div className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap mt-2 pt-2 border-t border-gray-100">{classNotes.deputyInfo}</div>
                 )}
               </div>
           )}
@@ -160,26 +160,26 @@ export default function BiljeskePage() {
           {/* 3. Bilješka razrednika */}
           <Section 
             title="Bilješka razrednika" 
-            content={notes?.homeroom_note}
+            content={notes?.homeroomNote}
           />
 
           {/* 4. Izvanškolske aktivnosti */}
           <Section 
             title="Izvanškolske aktivnosti" 
-            content={notes?.extracurricular_activities}
+            content={notes?.extracurricularActivities}
           />
 
           {/* 5. Izvannastavne aktivnosti */}
           <Section 
             title="Izvannastavne aktivnosti" 
-            content={notes?.school_activities}
+            content={notes?.schoolActivities}
           />
 
           {/* 6. Vladanje */}
           <div className="space-y-1">
             <h3 className="text-[11px] font-black uppercase text-gray-500 tracking-tight">Vladanje</h3>
             <div className="bg-white border border-gray-300 p-3 text-[12px] min-h-[40px] shadow-sm">
-              {studentYearSummary?.finalized_at ? (
+              {studentYearSummary?.finalizedAt ? (
                 <div className="text-gray-700 font-black uppercase tracking-widest">
                   {studentYearSummary?.behavior || 'Uzorno'}
                 </div>
@@ -192,7 +192,7 @@ export default function BiljeskePage() {
           {/* 7. Pedagoške mjere */}
           <Section 
             title="Pedagoške mjere" 
-            content={notes?.disciplinary_actions}
+            content={notes?.disciplinaryActions}
           />
         </div>
       </div>

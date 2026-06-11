@@ -45,7 +45,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   
   // The ultimate loading state: either we are trying to sign in, or context is loading data
-  const isGlobalLoading = loading || (authLoading && supabaseUser);
+  const isGlobalLoading = loading || (authLoading && !!supabaseUser);
   const [isSeeding, setIsSeeding] = useState(false);
   const [showOtp, setShowOtp] = useState(false);
   const [otp, setOtp] = useState('');
