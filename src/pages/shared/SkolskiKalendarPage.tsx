@@ -277,17 +277,26 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
 
   const handleDeleteEvent = async (eventId: string) => {
     if (!window.confirm('Jeste li sigurni da želite obrisati ovaj događaj?')) return;
+    console.log("DELETE EVENT ID", eventId);
     try {
       const res = await fetch(`/api/school-events/${eventId}`, { method: 'DELETE' });
+      
+      const text = await res.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (e) {
+        console.error("DELETE EVENT JSON PARSE ERROR", e);
+        console.log("DELETE EVENT RAW RESPONSE", text);
+        throw new Error("Server nije vratio ispravan JSON odgovor.");
+      }
+
       if (res.ok) {
         toast.success('Događaj uklonjen.');
         setShowDetailsModal(false);
         loadEvents();
       } else {
-        const errData = await res.json().catch(() => ({}));
-        const errMsg = errData.error || errData.details || 'Nepoznata greška na poslužitelju';
-        console.error("DELETE EVENT FAILED", errData);
-        throw new Error(errMsg);
+        throw new Error(data?.error || data?.message || 'Brisanje nije uspjelo.');
       }
     } catch (err: any) {
       console.error("ERROR DELETING CALENDAR EVENT", err);
