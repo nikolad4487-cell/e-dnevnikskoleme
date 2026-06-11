@@ -1547,8 +1547,12 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
   // Admin create user endpoint
   app.post("/api/admin/create-user", async (req, res) => {
+    console.log("[ADMIN_CREATE - KORAK 1: prije validacije] Primljen zahtjev za kreiranje/dodavanje korisnika. Tijelo zahtjeva:", JSON.stringify(req.body));
     try {
-      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized. Check your environment variables.");
+      if (!supabaseAdmin) {
+        console.error("[ADMIN_CREATE] Supabase Admin client nije inicijaliziran!");
+        return res.status(500).json({ success: false, error: "Supabase Admin client not initialized. Check your environment variables." });
+      }
 
       // Defensive defaults for roles and programs (preventing .includes() crash)
       const roles = Array.isArray(req.body.roles) ? req.body.roles : (Array.isArray(req.body.selectedRoles) ? req.body.selectedRoles : []);
@@ -1562,7 +1566,11 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       let { email, name, surname, address, oib, schoolId, classId, studentData } = req.body;
       
-      const { data: existingUserList } = await supabaseAdmin.auth.admin.listUsers();
+      const { data: existingUserList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+      if (listError) {
+        console.error("[ADMIN_CREATE] Greška prilikom preuzimanja liste postojećih korisnika:", listError);
+        return res.status(500).json({ success: false, error: `Greška pri dohvaćanju baze korisnika: ${listError.message}` });
+      }
       
       if (!email) {
           const existingEmails = new Set<string>();
@@ -1574,6 +1582,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
             if (p.email) existingEmails.add(p.email);
           });
           email = generateUniqueEmail(name || '', surname || '', existingEmails);
+          console.log("[ADMIN_CREATE] Generirana jedinstvena e-mail adresa:", email);
       }
 
       // Determination of password and role requirements
@@ -1595,7 +1604,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         passwordType = 'staff_with_authenticator';
       }
 
-      console.log("CREATE USER DEBUG", { 
+      console.log("[ADMIN_CREATE] Provjera konfiguracije: ", { 
         email, 
         roles, 
         programs, 
@@ -1609,38 +1618,52 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       const mobile = studentData?.mobile || req.body.mobile;
 
       // 1. Auth User
+      console.log("[ADMIN_CREATE - KORAK 2: prije Supabase insert-a] Pokrećemo provjeru i kreiranje u Supabase Auth tablici");
       const existingUser = existingUserList?.users?.find((u: any) => u.email === email);
       
       let userId;
       let createdAuthUser;
       if (existingUser) {
         userId = existingUser.id;
-        await supabaseAdmin.auth.admin.updateUserById(userId, { password: finalPassword });
+        console.log("[ADMIN_CREATE] Korisnik već postoji u Auth. Ažuriramo lozinku za user_id:", userId);
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: finalPassword });
+        if (updateError) {
+          console.error("[ADMIN_CREATE] Greška pri ažuriranju postojećeg korisnika u Auth:", updateError);
+          return res.status(500).json({ success: false, error: `Greška pri ažuriranju Auth korisnika: ${updateError.message}` });
+        }
         createdAuthUser = existingUser;
       } else {
+        console.log("[ADMIN_CREATE] Korisnik ne postoji u Auth. Kreiramo novog Auth korisnika:", email);
         const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
           email,
           password: finalPassword,
           email_confirm: true,
           user_metadata: { name, surname }
         });
-        if (authError) throw authError;
+        if (authError || !authUser?.user) {
+          console.error("[ADMIN_CREATE] Greška pri kreiranju korisnika u Auth:", authError);
+          return res.status(500).json({ success: false, error: `Greška pri kreiranju Auth korisnika: ${authError?.message || 'Nepoznata greška'}` });
+        }
         userId = authUser.user.id;
         createdAuthUser = authUser.user;
+        console.log("[ADMIN_CREATE] Uspješno kreiran korisnik u Auth sa ID-em:", userId);
       }
 
       if (req.body.authOnly) {
+        console.log("[ADMIN_CREATE - KORAK 4: prije slanja response-a] Slanje uspješnog authOnly odgovora");
         return res.json({
           success: true,
           userId,
           createdAuthUser,
           password: finalPassword,
           email: email,
+          student: { auth_user_id: userId, email, name: name || `${name} ${surname}` },
           message: "Korisnik uspješno kreiran (Auth samo)"
         });
       }
       
       // 2. Profile
+      console.log("[ADMIN_CREATE] Pokrećemo upsert u user_profiles tablicu za user_id:", userId);
       const { data: profile, error: profileError } = await supabaseAdmin
         .from('user_profiles')
         .upsert({
@@ -1665,19 +1688,29 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         .select()
         .maybeSingle();
       
-      if (profileError || !profile) throw profileError || new Error("Profile creation failed");
+      if (profileError || !profile) {
+        console.error("[ADMIN_CREATE] Greška prilikom upserta u user_profiles:", profileError);
+        return res.status(500).json({ success: false, error: `Greška pri kreiranju profila u bazi: ${profileError?.message || 'Neuspjelo kreiranje profila'}` });
+      }
+      
+      console.log("[ADMIN_CREATE - KORAK 3: nakon Supabase insert-a] Uspješno upisan/ažuriran profil sa ID-em profila:", profile.id);
 
       // Generate QR Code if secret was created
       let qrCodeDataURL = null;
       if (authenticatorSecret) {
-        const otpauthUrl = `otpauth://totp/e-Dnevnik:${email}?secret=${authenticatorSecret}&issuer=e-Dnevnik`;
-        qrCodeDataURL = await QRCode.toDataURL(otpauthUrl);
+        try {
+          const otpauthUrl = `otpauth://totp/e-Dnevnik:${email}?secret=${authenticatorSecret}&issuer=e-Dnevnik`;
+          qrCodeDataURL = await QRCode.toDataURL(otpauthUrl);
+        } catch (qrErr) {
+          console.error("[ADMIN_CREATE] Greška pri generiranju QR koda:", qrErr);
+        }
       }
 
       // 3. School Roles
       if (schoolId && roles && Array.isArray(roles)) {
+        console.log("[ADMIN_CREATE] Dodavanje školskih uloga:", roles, "za školu:", schoolId);
         for (const role of roles) {
-          await supabaseAdmin
+          const { error: roleErr } = await supabaseAdmin
             .from('user_school_roles')
             .upsert({
               user_id: profile.id,
@@ -1685,14 +1718,21 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
               role: role,
               status: 'ACTIVE'
             }, { onConflict: 'user_id,school_id,role' });
+          if (roleErr) {
+             console.error(`[ADMIN_CREATE] Greška pri dodiranju uloge ${role}:`, roleErr);
+          }
         }
       }
 
       // 4. Student Enrollment
       if (roles.includes('STUDENT') && classId) {
-        const { data: clsInfo } = await supabaseAdmin.from('classes').select('school_year, school_year_id').eq('id', classId).maybeSingle();
+        console.log("[ADMIN_CREATE] Dodavanje upisa u razred:", classId);
+        const { data: clsInfo, error: clsErr } = await supabaseAdmin.from('classes').select('school_year, school_year_id').eq('id', classId).maybeSingle();
+        if (clsErr) {
+          console.error("[ADMIN_CREATE] Greška pri dohvaćanju podataka razreda za upis učenika:", clsErr);
+        }
 
-        await supabaseAdmin.from('student_class_enrollments').upsert({
+        const { error: enrollErr } = await supabaseAdmin.from('student_class_enrollments').upsert({
           student_id: profile.id,
           class_id: classId,
           school_year_id: clsInfo?.school_year_id || null,
@@ -1700,12 +1740,19 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           program_id: programId,
           status: 'ACTIVE'
         }, { onConflict: 'student_id,class_id,school_year' });
+        
+        if (enrollErr) {
+          console.error("[ADMIN_CREATE] Greška pri upisu učenika u razred:", enrollErr);
+          return res.status(500).json({ success: false, error: `Greška pri upisu učenika u razred: ${enrollErr.message}` });
+        }
       }
 
-      res.json({ 
+      console.log("[ADMIN_CREATE - KORAK 4: prije slanja response-a] Sve operacije uspješne. Slanje JSON odgovora.");
+      return res.json({ 
         success: true, 
         userId, 
         profileId: profile.id, 
+        student: profile,
         password: finalPassword, 
         email: email, 
         message: "Korisnik uspješno kreiran",
@@ -1713,8 +1760,8 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         qrCode: qrCodeDataURL
       });
     } catch (err: any) {
-      console.error("[ADMIN_CREATE] Error:", err);
-      res.status(500).json({ success: false, error: err?.message || String(err) });
+      console.log("[ADMIN_CREATE - KORAK 5: u catch bloku] Uhvaćena neočekivana greška na poslužitelju:", err);
+      return res.status(500).json({ success: false, error: err?.message || String(err) });
     }
   });
 
