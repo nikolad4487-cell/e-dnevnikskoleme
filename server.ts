@@ -111,6 +111,8 @@ async function startServer() {
             created_at timestamptz DEFAULT now(),
             UNIQUE(schedule_id, teacher_profile_id)
           );
+          
+          ALTER TABLE public.school_events ADD COLUMN IF NOT EXISTS classroom text;
         `;
         if (typeof supabaseAdmin.query === 'function') {
           await supabaseAdmin.query(ddlQuery);
@@ -832,7 +834,6 @@ async function startServer() {
         title,
         reason,
         classroom: eventData.classroom || null,
-        commission: eventData.commission || null,
         notes: eventData.notes || null,
         start_date: eventData.start_date || null,
         end_date: eventData.end_date || null,

@@ -20,6 +20,7 @@ export default function FinalThesisTeacherPage() {
   const isSchoolAdmin = isMainAdmin || currentSchoolRoles.includes(Role.SCHOOL_ADMIN) || currentSchoolRoles.includes(Role.ADMIN);
 
   const [applications, setApplications] = useState<ThesisApplication[]>([]);
+  const [defenseSchedules, setDefenseSchedules] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [mentors, setMentors] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
@@ -122,6 +123,13 @@ export default function FinalThesisTeacherPage() {
           .select('*')
           .order('submitted_at', { ascending: false });
         if (data) setApplications(data as any[]);
+      }
+
+      // 5. Fetch Defense Schedules
+      const schedsRes = await fetch(`/api/final-exam-defense-schedules?schoolId=${selectedSchoolId}`);
+      if (schedsRes.ok) {
+        const schedsData = await schedsRes.json();
+        setDefenseSchedules(schedsData || []);
       }
     } catch (err: any) {
       console.error(err);
@@ -612,7 +620,12 @@ export default function FinalThesisTeacherPage() {
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
           <div className="p-4 border-b border-gray-100 flex justify-between items-center">
             <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Raspored obrane</h3>
-            <button className="px-3 py-1.5 bg-[#005c8d] text-white text-xs font-bold rounded">Dodaj raspored</button>
+            <button 
+              onClick={() => { /* setShowDefenseScheduleModal(true) */ toast.info("Forma za dodavanje rasporeda će uskoro biti implementirana."); }}
+              className="px-3 py-1.5 bg-[#005c8d] text-white text-xs font-bold rounded"
+            >
+              Dodaj raspored
+            </button>
           </div>
           <table className="w-full text-xs text-left">
             <thead className="text-gray-500 uppercase bg-gray-50">
@@ -624,12 +637,29 @@ export default function FinalThesisTeacherPage() {
                 <th className="px-4 py-3">Učionica</th>
               </tr>
             </thead>
-            <tbody>
-              <tr>
-                <td className="px-4 py-3 text-gray-400" colSpan={5}>
-                  Upozorenje: Sustav ne može trenutno učitati bazu za raspored obrane. Molimo administratora da provjeri tablice `final_exam_defense_schedule` i `final_exam_defense_commission_members`.
-                </td>
-              </tr>
+            <tbody className="divide-y divide-gray-100">
+              {defenseSchedules.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-4 text-center text-gray-400 font-semibold italic">Nema rasporeda za odabranu školu.</td>
+                </tr>
+              ) : (
+                defenseSchedules.map(s => {
+                  const clazz = classes.find(c => c.id === s.class_id);
+                  const homeroom = s.members.find((m: any) => m.is_homeroom_teacher);
+                  const hrTeacher = mentors.find(t => t.id === homeroom?.teacher_profile_id);
+                  const commission = s.members.map((m: any) => mentors.find(t => t.id === m.teacher_profile_id)?.name).filter(Boolean).join(', ');
+                  
+                  return (
+                    <tr key={s.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-black text-gray-900">{clazz?.name || '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 font-medium">{commission || '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 font-semibold">{hrTeacher?.name || '—'}</td>
+                      <td className="px-4 py-3 text-gray-600 font-mono">{s.defense_time}</td>
+                      <td className="px-4 py-3 text-gray-600 font-bold bg-slate-50">{s.classroom}</td>
+                    </tr>
+                  )
+                })
+              )}
             </tbody>
           </table>
         </div>

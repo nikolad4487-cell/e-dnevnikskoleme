@@ -176,7 +176,6 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         type: newType,
         title: computedTitle,
         classroom: isHoliday ? '' : newClassroom,
-        commission: isHoliday ? '' : newCommission,
         notes: newNotes,
         is_instructional_day: isInstructionalDay,
         ...(isHoliday ? {
