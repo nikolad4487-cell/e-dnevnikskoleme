@@ -37,32 +37,39 @@ export default function FinalThesisTeacherPage() {
   const [searchTerm, setSearchTerm] = useState('');
 
   const handleDeleteDefenseSchedule = async (scheduleId: string, classNameStr?: string) => {
-    if (!window.confirm(`Jeste li sigurni da želite obrisati raspored obrane za razred ${classNameStr || 'ovaj razred'}?`)) return;
-
-    console.log("DELETE DEFENSE SCHEDULE ID", scheduleId);
+    console.log("DELETE DEFENSE START", scheduleId);
 
     try {
-      const res = await fetch(`/api/final-exam-defense-schedules/${scheduleId}`, { method: 'DELETE' });
+      console.log("DELETE DEFENSE AFTER START");
 
-      const text = await res.text();
-      let data = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch (e) {
-        console.error("DELETE DEFENSE JSON PARSE ERROR", e);
-        console.log("DELETE DEFENSE RAW RESPONSE", text);
-        throw new Error("Server nije vratio ispravan JSON odgovor.");
+      if (!scheduleId) {
+        console.error("Missing scheduleId");
+        return;
       }
 
-      if (res.ok) {
-        toast.success('Raspored obrane uspješno obrisan!');
-        fetchDefenseSchedules();
-      } else {
-        throw new Error(data?.error || data?.message || 'Brisanje nije uspjelo.');
+      console.log("BEFORE DEFENSE SUPABASE DELETE", scheduleId);
+
+      const result = await supabase
+        .from("final_exam_defense_schedule")
+        .delete()
+        .eq("id", scheduleId)
+        .select();
+
+      console.log("AFTER DEFENSE SUPABASE DELETE", result);
+
+      if (result.error) {
+        console.error("DELETE DEFENSE ERROR", result.error);
+        alert("Greška pri brisanju obrane: " + result.error.message);
+        return;
       }
-    } catch (error: any) {
-      console.error("DELETE DEFENSE SCHEDULE ERROR", error);
-      toast.error(error.message || 'Problem s brisanjem rasporeda obrane.');
+
+      console.log("DELETE DEFENSE SUCCESS", result.data);
+
+      setDefenseSchedules((prev) => prev.filter((item) => item.id !== scheduleId));
+
+    } catch (err) {
+      console.error("DELETE DEFENSE CRASHED", err);
+      alert("Brisanje obrane se srušilo. Pogledaj konzolu.");
     }
   };
 
@@ -690,7 +697,7 @@ export default function FinalThesisTeacherPage() {
               {(() => {
                 const visibleSchedules = isSchoolAdmin
                   ? defenseSchedules
-                  : defenseSchedules.filter(s => (s.members || []).some((m: any) => m.teacher_profile_id === profileId));
+                  : defenseSchedules.filter(s => (s.members || []).some((m: any) => m.teacher_profile_id === user?.id));
 
                 if (visibleSchedules.length === 0) {
                   return (
@@ -718,13 +725,18 @@ export default function FinalThesisTeacherPage() {
                       {isSchoolAdmin && (
                         <td className="px-4 py-3 text-right space-x-2">
                           <button
+                            type="button"
                             onClick={() => setEditDefenseSchedule(s)}
                             className="text-[#005c8d] hover:text-blue-800 font-semibold transition-colors"
                           >
                             Uredi
                           </button>
                           <button
-                            onClick={() => handleDeleteDefenseSchedule(s.id, clazz?.name)}
+                            type="button"
+                            onClick={() => {
+                              console.log("DEBUG: DEFENSE BUTTON CLICKED", s.id);
+                              handleDeleteDefenseSchedule(s.id, clazz?.name);
+                            }}
                             className="text-red-500 hover:text-red-700 font-semibold transition-colors ml-2"
                           >
                             Obriši

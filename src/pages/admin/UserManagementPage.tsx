@@ -199,7 +199,7 @@ export default function UserManagementPage() {
       console.log(`${editingUser ? 'UPDATE' : 'CREATE'} USER CLICKED`, payload);
 
       const response = await fetch(endpoint, {
-        method: 'POST',
+        method: editingUser ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });

@@ -276,31 +276,40 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
   };
 
   const handleDeleteEvent = async (eventId: string) => {
-    if (!window.confirm('Jeste li sigurni da želite obrisati ovaj događaj?')) return;
-    console.log("DELETE EVENT ID", eventId);
+    console.log("DELETE EVENT START", eventId);
+
     try {
-      const res = await fetch(`/api/school-events/${eventId}`, { method: 'DELETE' });
-      
-      const text = await res.text();
-      let data = null;
-      try {
-        data = text ? JSON.parse(text) : null;
-      } catch (e) {
-        console.error("DELETE EVENT JSON PARSE ERROR", e);
-        console.log("DELETE EVENT RAW RESPONSE", text);
-        throw new Error("Server nije vratio ispravan JSON odgovor.");
+      console.log("DELETE EVENT AFTER START");
+
+      if (!eventId) {
+        console.error("Missing eventId");
+        return;
       }
 
-      if (res.ok) {
-        toast.success('Događaj uklonjen.');
-        setShowDetailsModal(false);
-        loadEvents();
-      } else {
-        throw new Error(data?.error || data?.message || 'Brisanje nije uspjelo.');
+      console.log("BEFORE EVENT SUPABASE DELETE", eventId);
+
+      const result = await supabase
+        .from("school_events")
+        .delete()
+        .eq("id", eventId)
+        .select();
+
+      console.log("AFTER EVENT SUPABASE DELETE", result);
+
+      if (result.error) {
+        console.error("DELETE EVENT ERROR", result.error);
+        alert("Greška pri brisanju zapisa: " + result.error.message);
+        return;
       }
-    } catch (err: any) {
-      console.error("ERROR DELETING CALENDAR EVENT", err);
-      toast.error(`Greška pri brisanju događaja: ${err.message}`);
+
+      console.log("DELETE EVENT SUCCESS", result.data);
+
+      setEvents((prev) => prev.filter((item) => item.id !== eventId));
+      setSelectedDayEvents((prev) => prev.filter((item) => item.id !== eventId));
+
+    } catch (err) {
+      console.error("DELETE EVENT CRASHED", err);
+      alert("Brisanje zapisa se srušilo. Pogledaj konzolu.");
     }
   };
 
@@ -775,18 +784,25 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                       </p>
                     )}
                   </div>
-                  {isSchoolAdmin && e.id && !e.id.includes('defense') && !e.id.includes('meeting') && (
+                  {isSchoolAdmin && e.id && (
                     <div className="flex items-center gap-2 pt-2 mt-2 border-t border-slate-100 justify-end">
+                      {!e.id.includes('defense') && !e.id.includes('meeting') && (
+                          <button 
+                            type="button"
+                            className="text-slate-500 hover:text-slate-800 p-1 flex items-center gap-1"
+                            title="Uredi događaj"
+                            onClick={() => handleEditEvent(e)}
+                          >
+                            <Edit2 size={13} />
+                            <span className="text-[10px] font-bold uppercase">Uredi</span>
+                          </button>
+                      )}
                       <button 
-                        className="text-slate-500 hover:text-slate-800 p-1 flex items-center gap-1"
-                        title="Uredi događaj"
-                        onClick={() => handleEditEvent(e)}
-                      >
-                        <Edit2 size={13} />
-                        <span className="text-[10px] font-bold uppercase">Uredi</span>
-                      </button>
-                      <button 
-                        onClick={() => handleDeleteEvent(e.id)} 
+                        type="button"
+                        onClick={() => {
+                          console.log("DEBUG: BUTTON CLICKED", e.id);
+                          handleDeleteEvent(e.id);
+                        }}
                         className="text-red-500 hover:text-red-700 p-1 flex items-center gap-1"
                         title="Obriši događaj"
                       >

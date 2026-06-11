@@ -2299,7 +2299,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
   });
 
   // Admin update user endpoint
-  app.post("/api/admin/update-user", async (req, res) => {
+  app.patch("/api/admin/update-user", async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       const { profileId, authUserId, email, name, surname, address, oib, roles, schoolId, status } = req.body;
@@ -2346,10 +2346,10 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         }
       }
 
-      res.json({ success: true });
+      return res.status(200).json({ success: true });
     } catch (err: any) {
       console.error("[ADMIN_UPDATE] Error:", err);
-      res.status(500).json({ error: err.message });
+      return res.status(500).json({ success: false, error: err.message });
     }
   });
 
