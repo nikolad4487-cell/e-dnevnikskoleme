@@ -23,7 +23,6 @@ interface SchoolEvent {
   type: 'PRAZNIK' | 'SJEDNICA' | 'SASTANAK' | 'OBRANA' | 'NATJECANJE' | 'IZLET' | 'DOGAĐAJ' | 'ŠKOLSKI_PRAZNIK';
   title: string;
   classroom?: string;
-  commission?: string;
   notes?: string;
   is_instructional_day?: boolean;
 }
@@ -52,7 +51,6 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
   const [newType, setNewType] = useState<'PRAZNIK' | 'SJEDNICA' | 'SASTANAK' | 'OBRANA' | 'NATJECANJE' | 'IZLET' | 'DOGAĐAJ' | 'ŠKOLSKI_PRAZNIK'>('DOGAĐAJ');
   const [newTitle, setNewTitle] = useState('');
   const [newClassroom, setNewClassroom] = useState('');
-  const [newCommission, setNewCommission] = useState('');
   const [newNotes, setNewNotes] = useState('');
 
   // Additional form state for school holidays
@@ -102,7 +100,6 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
             type: 'SASTANAK',
             title: `Roditeljski Sastanak: ${m.topic}`,
             classroom: 'Učionica razreda',
-            commission: m.leader,
             notes: m.minutes || ''
           });
         });
@@ -123,7 +120,6 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
               type: 'OBRANA',
               title: `Obrana završnog rada: "${t.thesis_title}"`,
               classroom: 'Ured komisije',
-              commission: 'Ispitno povjerenstvo',
               notes: t.student_note || ''
             });
           }
@@ -215,7 +211,6 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         // Reset form
         setNewTitle('');
         setNewClassroom('');
-        setNewCommission('');
         setNewNotes('');
         setHolidayStartDate('');
         setHolidayEndDate('');
@@ -651,16 +646,6 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                     className="w-full border rounded text-xs p-1.5 bg-white"
                   />
                 </div>
-                <div>
-                  <label className="text-[10px] font-black text-[#005c8d] uppercase block mb-1">Komisija / Voditelj</label>
-                  <input 
-                    type="text" 
-                    placeholder="npr. I.Horvat, M.Babić"
-                    value={newCommission}
-                    onChange={(e) => setNewCommission(e.target.value)}
-                    className="w-full border rounded text-xs p-1.5 bg-white"
-                  />
-                </div>
               </div>
             )}
 
@@ -759,12 +744,6 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                           <div className="flex items-center gap-1.5">
                             <MapPin size={11} className="text-slate-400" />
                             <span>Lokacija: <span className="text-slate-800 font-bold">{e.classroom}</span></span>
-                          </div>
-                        )}
-                        {e.commission && (
-                          <div className="flex items-center gap-1.5">
-                            <Users size={11} className="text-slate-400" />
-                            <span>Komisija / Voditelj: <span className="text-slate-800 font-extrabold">{e.commission}</span></span>
                           </div>
                         )}
                       </>

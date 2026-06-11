@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Role, ThesisApplication } from '../../types';
 import ThesisGradingModal from '../../components/ThesisGradingModal';
+import FinalExamDefenseScheduleModal from '../../components/FinalExamDefenseScheduleModal';
 
 export default function FinalThesisTeacherPage() {
   const { user, userSchoolRoles, isMainAdmin } = useAuth();
@@ -28,6 +29,8 @@ export default function FinalThesisTeacherPage() {
 
   // Filter tab options
   const [activeTab, setActiveTab] = useState<'mentorship' | 'class' | 'all' | 'archive' | 'defense'>('mentorship');
+
+  const [isDefenseScheduleModalOpen, setIsDefenseScheduleModalOpen] = useState(false);
 
   // search term filter
   const [searchTerm, setSearchTerm] = useState('');
@@ -88,6 +91,19 @@ export default function FinalThesisTeacherPage() {
     }
   }, [selectedClassId]);
 
+  const fetchDefenseSchedules = async () => {
+    if (!selectedSchoolId) return;
+    try {
+      const schedsRes = await fetch(`/api/final-exam-defense-schedules?schoolId=${selectedSchoolId}`);
+      if (schedsRes.ok) {
+        const schedsData = await schedsRes.json();
+        setDefenseSchedules(schedsData || []);
+      }
+    } catch (err) {
+      console.error("FINAL EXAM DEFENSE LOAD ERROR:", err);
+    }
+  };
+
   const fetchTeacherData = async () => {
     setLoading(true);
     try {
@@ -126,11 +142,7 @@ export default function FinalThesisTeacherPage() {
       }
 
       // 5. Fetch Defense Schedules
-      const schedsRes = await fetch(`/api/final-exam-defense-schedules?schoolId=${selectedSchoolId}`);
-      if (schedsRes.ok) {
-        const schedsData = await schedsRes.json();
-        setDefenseSchedules(schedsData || []);
-      }
+      await fetchDefenseSchedules();
     } catch (err: any) {
       console.error(err);
       toast.error('Učitavanje završnih radova nije uspjelo.');
@@ -620,12 +632,17 @@ export default function FinalThesisTeacherPage() {
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
           <div className="p-4 border-b border-gray-100 flex justify-between items-center">
             <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Raspored obrane</h3>
-            <button 
-              onClick={() => { /* setShowDefenseScheduleModal(true) */ toast.info("Forma za dodavanje rasporeda će uskoro biti implementirana."); }}
-              className="px-3 py-1.5 bg-[#005c8d] text-white text-xs font-bold rounded"
-            >
-              Dodaj raspored
-            </button>
+            {isSchoolAdmin && (
+              <button 
+                onClick={() => {
+                  console.log("ADD DEFENSE SCHEDULE CLICKED");
+                  setIsDefenseScheduleModalOpen(true);
+                }}
+                className="px-3 py-1.5 bg-[#005c8d] text-white text-xs font-bold rounded hover:bg-[#004a70]"
+              >
+                Dodaj raspored
+              </button>
+            )}
           </div>
           <table className="w-full text-xs text-left">
             <thead className="text-gray-500 uppercase bg-gray-50">
@@ -1118,6 +1135,19 @@ export default function FinalThesisTeacherPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {isDefenseScheduleModalOpen && selectedSchoolId && (
+        <FinalExamDefenseScheduleModal
+          onClose={() => setIsDefenseScheduleModalOpen(false)}
+          onSaved={() => {
+            setIsDefenseScheduleModalOpen(false);
+            fetchDefenseSchedules();
+          }}
+          classes={classes}
+          mentors={mentors}
+          schoolId={selectedSchoolId}
+        />
       )}
     </div>
   );
