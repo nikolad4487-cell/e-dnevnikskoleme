@@ -31,6 +31,12 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Always bypass Service Worker for API calls or non-GET requests to be safe
+  if (event.request.url.includes('/api/') || event.request.method !== 'GET') {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   // Only handle GET requests or skip if not matching standard http/https
   if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) return;
 
@@ -51,7 +57,7 @@ self.addEventListener('fetch', (event) => {
     fetch(event.request)
       .then((response) => {
         // Cache dynamic responses for offline support if it's JSON from API, or other assets
-        if (response.status === 200 && !event.request.url.includes('/api/auth/')) {
+        if (response.status === 200) {
           const resClone = response.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, resClone);

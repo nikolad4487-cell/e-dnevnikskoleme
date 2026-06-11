@@ -204,10 +204,20 @@ export default function UserManagementPage() {
         body: JSON.stringify(payload)
       });
 
-      const data = await response.json();
-      console.log("USER ACTION RESULT:", { status: response.status, data });
+      const text = await response.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (e) {
+        console.error("CREATE USER JSON PARSE ERROR", e);
+        console.log("CREATE USER RAW RESPONSE", text);
+        throw new Error("Server nije vratio ispravan JSON odgovor.");
+      }
+
+      console.log("CREATE USER RESPONSE STATUS", response.status);
+      console.log("CREATE USER RAW RESPONSE", text);
       
-      if (!response.ok || (data && data.success === false)) throw new Error(data?.error || 'Neuspjela obrada zahtjeva');
+      if (!response.ok) throw new Error(data?.error || data?.message || 'Neuspjela obrada zahtjeva');
 
       toast.success(editingUser ? 'Korisnik ažuriran' : 'Korisnik uspješno kreiran');
       setIsModalOpen(false);
@@ -266,8 +276,19 @@ export default function UserManagementPage() {
         })
       });
 
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Neuspjela obrada');
+      const text = await response.text();
+      let data = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (e) {
+        console.error("BULK CREATE JSON PARSE ERROR", e);
+        console.log("BULK CREATE RAW RESPONSE", text);
+        throw new Error("Server nije vratio ispravan JSON odgovor.");
+      }
+
+      console.log("BULK CREATE USERS RESPONSE STATUS", response.status);
+      console.log("BULK CREATE USERS RAW RESPONSE", text);
+      if (!response.ok) throw new Error(data?.error || 'Neuspjela obrada');
       
       toast.success(`Uspješno kreirano ${data.results?.filter((r: any) => r.success).length || 0} korisnika.`);
       setIsBulkModalOpen(false);
