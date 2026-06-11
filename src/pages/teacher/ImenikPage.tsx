@@ -199,9 +199,74 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
   const [enrollments, setEnrollments] = useState<StudentSubjectEnrollment[]>([]);
   const [loading, setLoading] = useState(false);
   
-  const [viewMode, setViewMode] = useState<ViewMode>(initialView || 'STUDENTS');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (initialView) return initialView;
+    const saved = sessionStorage.getItem(`imenik_viewMode_${effectiveClassId || 'default'}`);
+    return (saved as ViewMode) || 'STUDENTS';
+  });
   const [activeStudent, setActiveStudent] = useState<User | null>(null);
   const [activeSubject, setActiveSubject] = useState<Subject | null>(null);
+
+  // Restore state from sessionStorage on class, students, or subjects loaded
+  useEffect(() => {
+    if (effectiveClassId) {
+      const savedViewMode = sessionStorage.getItem(`imenik_viewMode_${effectiveClassId}`) as any;
+      if (savedViewMode) {
+        setViewMode(savedViewMode);
+      } else if (!initialView) {
+        setViewMode('STUDENTS');
+      }
+
+      if (students.length > 0) {
+        const savedStudentId = sessionStorage.getItem(`imenik_activeStudentId_${effectiveClassId}`);
+        if (savedStudentId) {
+          const found = students.find(s => s.id === savedStudentId);
+          if (found) {
+            setActiveStudent(found);
+          }
+        }
+      }
+
+      if (allSubjects.length > 0) {
+        const savedSubjectId = sessionStorage.getItem(`imenik_activeSubjectId_${effectiveClassId}`);
+        if (savedSubjectId) {
+          const found = allSubjects.find(s => s.id === savedSubjectId);
+          if (found) {
+            setActiveSubject(found);
+          }
+        }
+      }
+    }
+  }, [effectiveClassId, students, allSubjects, initialView]);
+
+  // Persist viewMode changes to sessionStorage
+  useEffect(() => {
+    if (effectiveClassId) {
+      sessionStorage.setItem(`imenik_viewMode_${effectiveClassId}`, viewMode);
+    }
+  }, [viewMode, effectiveClassId]);
+
+  // Persist activeStudent changes to sessionStorage
+  useEffect(() => {
+    if (effectiveClassId) {
+      if (activeStudent) {
+        sessionStorage.setItem(`imenik_activeStudentId_${effectiveClassId}`, activeStudent.id);
+      } else {
+        sessionStorage.removeItem(`imenik_activeStudentId_${effectiveClassId}`);
+      }
+    }
+  }, [activeStudent, effectiveClassId]);
+
+  // Persist activeSubject changes to sessionStorage
+  useEffect(() => {
+    if (effectiveClassId) {
+      if (activeSubject) {
+        sessionStorage.setItem(`imenik_activeSubjectId_${effectiveClassId}`, activeSubject.id);
+      } else {
+        sessionStorage.removeItem(`imenik_activeSubjectId_${effectiveClassId}`);
+      }
+    }
+  }, [activeSubject, effectiveClassId]);
 
   useEffect(() => {
     if (initialView) {

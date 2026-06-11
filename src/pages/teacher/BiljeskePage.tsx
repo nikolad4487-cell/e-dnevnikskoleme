@@ -30,7 +30,7 @@ const NotesModal = ({ isOpen, onClose, title, content, onSave, loading }: { isOp
 
 export default function BiljeskePage() {
   console.log("CLASS BILJESKE PAGE RENDERED");
-  const { classId: routeClassId } = useParams<{ classId: string }>();
+  const { classId: routeClassId, studentId } = useParams<{ classId: string, studentId?: string }>();
   const { user } = useAuth();
   const { selectedClassId: contextClassId } = useSelection();
   
@@ -54,6 +54,15 @@ export default function BiljeskePage() {
       fetchData();
     }
   }, [effectiveClassId]);
+
+  useEffect(() => {
+    if (studentId && students.length > 0) {
+      const found = students.find(s => s.id === studentId);
+      if (found) {
+        setSearchTerm(`${found.surname || ''} ${found.name || ''}`.trim());
+      }
+    }
+  }, [studentId, students]);
 
   const fetchData = async () => {
     setLoading(true);

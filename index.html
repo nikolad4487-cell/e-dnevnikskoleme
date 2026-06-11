@@ -32,13 +32,10 @@
           });
         });
 
-        // Ensure pages reload when service worker gains control
+        // Ensure pages do NOT reload constantly when service worker gains control/re-activates on focus
         let refreshing = false;
         navigator.serviceWorker.addEventListener('controllerchange', () => {
-          if (!refreshing) {
-            refreshing = true;
-            window.location.reload();
-          }
+          console.log('[SW] Controller changed. Skipping automatic reload to preserve application state.');
         });
       }
 

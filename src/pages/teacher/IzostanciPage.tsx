@@ -13,7 +13,7 @@ import { usePageTitle } from '../../hooks/usePageTitle';
 
 export default function TeacherIzostanciPage() {
   usePageTitle("Izostanci");
-  const { classId: routeClassId } = useParams<{ classId: string }>();
+  const { classId: routeClassId, studentId } = useParams<{ classId: string, studentId?: string }>();
   const { user, isMainAdmin, highestRole } = useAuth();
   const { selectedClassId: contextClassId } = useSelection();
   
@@ -42,6 +42,15 @@ export default function TeacherIzostanciPage() {
       fetchData();
     }
   }, [effectiveClassId]);
+
+  useEffect(() => {
+    if (studentId && students.length > 0) {
+      const found = students.find(s => s.id === studentId);
+      if (found) {
+        setSelectedStudent(found);
+      }
+    }
+  }, [studentId, students]);
 
   const fetchData = async () => {
     setLoading(true);

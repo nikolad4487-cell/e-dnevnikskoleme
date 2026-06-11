@@ -20,11 +20,11 @@ const SelectionContext = createContext<SelectionContextType | undefined>(undefin
 
 export function SelectionProvider({ children }: { children: React.ReactNode }) {
   const { user, userSchoolRoles, loading: authLoading } = useAuth();
-  const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(() => localStorage.getItem('selectedSchoolId'));
+  const [selectedSchoolId, setSelectedSchoolId] = useState<string | null>(() => sessionStorage.getItem('selectedSchoolId') || localStorage.getItem('selectedSchoolId'));
   const [selectedYearId, setSelectedYearId] = useState<string | null>(() => localStorage.getItem('selectedYearId'));
-  const [selectedClassId, setSelectedClassId] = useState<string | null>(() => localStorage.getItem('selectedClassId'));
-  const [selectedChildId, setSelectedChildId] = useState<string | null>(() => localStorage.getItem('selectedChildId'));
-  const [isArchived, setIsArchived] = useState<boolean>(() => localStorage.getItem('isArchived') === 'true');
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(() => sessionStorage.getItem('selectedClassId') || localStorage.getItem('selectedClassId'));
+  const [selectedChildId, setSelectedChildId] = useState<string | null>(() => sessionStorage.getItem('selectedChildId') || localStorage.getItem('selectedChildId'));
+  const [isArchived, setIsArchived] = useState<boolean>(() => sessionStorage.getItem('isArchived') === 'true' || localStorage.getItem('isArchived') === 'true');
 
   // Removed auto-sync useEffects
 
@@ -32,9 +32,9 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
   const setSelectedSchoolIdCallback = React.useCallback((id: string | null) => {
     setSelectedSchoolId(id);
     if (id !== null) {
-      localStorage.setItem('selectedSchoolId', id);
+      sessionStorage.setItem('selectedSchoolId', id);
     } else {
-      localStorage.removeItem('selectedSchoolId');
+      sessionStorage.removeItem('selectedSchoolId');
     }
   }, []);
 
@@ -50,24 +50,24 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
   const setSelectedClassIdCallback = React.useCallback((id: string | null) => {
     setSelectedClassId(id);
     if (id !== null) {
-      localStorage.setItem('selectedClassId', id);
+      sessionStorage.setItem('selectedClassId', id);
     } else {
-      localStorage.removeItem('selectedClassId');
+      sessionStorage.removeItem('selectedClassId');
     }
   }, []);
 
   const setSelectedChildIdCallback = React.useCallback((id: string | null) => {
     setSelectedChildId(id);
     if (id !== null) {
-      localStorage.setItem('selectedChildId', id);
+      sessionStorage.setItem('selectedChildId', id);
     } else {
-      localStorage.removeItem('selectedChildId');
+      sessionStorage.removeItem('selectedChildId');
     }
   }, []);
 
   const setIsArchivedCallback = React.useCallback((val: boolean) => {
     setIsArchived(val);
-    localStorage.setItem('isArchived', String(val));
+    sessionStorage.setItem('isArchived', String(val));
   }, []);
 
   const clearSelectionCallback = React.useCallback(() => {
@@ -76,11 +76,11 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     setSelectedClassId(null);
     setSelectedChildId(null);
     setIsArchived(false);
-    localStorage.removeItem('selectedSchoolId');
+    sessionStorage.removeItem('selectedSchoolId');
     localStorage.removeItem('selectedYearId');
-    localStorage.removeItem('selectedClassId');
-    localStorage.removeItem('selectedChildId');
-    localStorage.removeItem('isArchived');
+    sessionStorage.removeItem('selectedClassId');
+    sessionStorage.removeItem('selectedChildId');
+    sessionStorage.removeItem('isArchived');
   }, []);
 
   const value = React.useMemo(() => ({

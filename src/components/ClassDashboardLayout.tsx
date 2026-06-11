@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Menu, LogOut, Search, Settings, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Clock, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -37,8 +37,10 @@ const ADMIN_NAV: NavItem[] = [
 ];
 
 export function ClassDashboardLayout({ children }: { children: React.ReactNode }) {
+  const { classId } = useParams<{ classId: string }>();
   const { user, signOut, userSchoolRoles, isMainAdmin, formattedRoles, isStaff } = useAuth();
   const { selectedSchoolId, selectedClassId, isArchived, clearSelection } = useSelection();
+  const effectiveClassId = classId || selectedClassId;
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
@@ -93,11 +95,11 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                    setCanAccessThesis(false);
                 }
             } else {
-                if (selectedClassId) {
+                if (effectiveClassId) {
                     const { data: rawClazz, error } = await supabase
                         .from('classes')
                         .select('grade_level, program_id, programs:program_id(duration_years)')
-                        .eq('id', selectedClassId)
+                        .eq('id', effectiveClassId)
                         .maybeSingle();
                     
                     if (error) {
@@ -130,14 +132,14 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
         }
     };
     checkAccess();
-  }, [isStaff, isAdminPath, user, selectedClassId]);
+  }, [isStaff, isAdminPath, user, effectiveClassId]);
 
   const studentNavFiltered = STUDENT_NAV.filter(item => 
       item.label !== 'Završni rad' || canAccessThesis
   );
   
-  const classPathPrefix = selectedClassId ? `/class/${selectedClassId}` : '';
-  let teacherNavList: NavItem[] = selectedClassId ? [
+  const classPathPrefix = effectiveClassId ? `/class/${effectiveClassId}` : '';
+  let teacherNavList: NavItem[] = effectiveClassId ? [
     { id: 'imenik', label: 'Imenik', path: `${classPathPrefix}/imenik`, icon: <BookOpen size={14} /> },
     { id: 'pregled-rada', label: 'Pregled rada', path: `${classPathPrefix}/pregled-rada`, icon: <List size={14} /> },
     { id: 'dnevnik-rada', label: 'Dnevnik rada', path: `${classPathPrefix}/dnevnik-rada`, icon: <ClipboardList size={14} /> },
@@ -224,7 +226,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       <Header />
       
       {/* Main Teacher Nav (Global) */}
-      {isStaff && selectedClassId && (
+      {isStaff && effectiveClassId && (
         <div className="bg-white border-b border-[#dee2e6] h-14 flex items-center justify-between px-6 shadow-sm z-30">
            <div className="flex items-center gap-1 h-full">
              {teacherNavList.map(tab => (
@@ -311,7 +313,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
         )}
 
         <main className="flex-1 flex flex-col w-full mb-16 md:mb-0">
-          <div key={selectedClassId || 'none'} className="bg-white border-b border-r border-[#005c8d]/20 flex-1 flex flex-col min-h-0">
+          <div key={effectiveClassId || 'none'} className="bg-white border-b border-r border-[#005c8d]/20 flex-1 flex flex-col min-h-0">
             {children}
           </div>
         </main>

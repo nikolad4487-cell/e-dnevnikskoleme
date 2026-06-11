@@ -361,7 +361,18 @@ export default function ClassDashboardPage() {
               <Route path="ucenici" element={<ClassStudentsPage />} />
               
               <Route path="student/:studentId" element={<StudentDashboard />} />
+              <Route path="students/:studentId" element={<StudentDashboard />} />
+              <Route path="student/:studentId/grades" element={<StudentDashboard />} />
+              <Route path="students/:studentId/grades" element={<StudentDashboard />} />
+              
+              <Route path="student/:studentId/absences" element={<TeacherIzostanciPage />} />
+              <Route path="students/:studentId/absences" element={<TeacherIzostanciPage />} />
+              
+              <Route path="student/:studentId/notes" element={<ClassNotesPage />} />
+              <Route path="students/:studentId/notes" element={<ClassNotesPage />} />
+
               <Route path="student/:studentId/subject/:subjectId" element={<StudentSubjectDetail />} />
+              <Route path="students/:studentId/subject/:subjectId" element={<StudentSubjectDetail />} />
               
               <Route path="pretrazivanje" element={<PretrazivanjePage />} />
               <Route path="*" element={<div className="bg-orange-500 text-white p-8 font-black uppercase">ROUTE NOT FOUND! Staza je: {location.pathname}</div>} />

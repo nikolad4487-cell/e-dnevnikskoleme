@@ -194,6 +194,14 @@ export default function App() {
                     </ProtectedRoute>
                   } />
 
+                  <Route path="/classes/:classId/*" element={
+                    <ProtectedRoute allowedRoles={[Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN]}>
+                      <ClassDashboardLayout>
+                        <ClassDashboardPage />
+                      </ClassDashboardLayout>
+                    </ProtectedRoute>
+                  } />
+
                   {/* Teacher/Admin Routes - Contextless/Global */}
                   <Route path="/teacher/*" element={
                     <ProtectedRoute allowedRoles={[Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN]}>

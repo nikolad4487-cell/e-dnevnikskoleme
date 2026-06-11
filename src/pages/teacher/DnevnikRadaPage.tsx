@@ -25,9 +25,56 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [teachers, setTeachers] = useState<User[]>([]);
   
   const [weeks, setWeeks] = useState<WorkWeek[]>([]);
-  const [view, setView] = useState<'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA'>(initialView || 'WEEKS');
+  const [view, setView] = useState<'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA'>(() => {
+    if (initialView) return initialView;
+    const saved = sessionStorage.getItem(`dnevnik_view_${effectiveClassId || 'default'}`);
+    return (saved as any) || 'WEEKS';
+  });
   const [selectedWeek, setSelectedWeek] = useState<WorkWeek | null>(null);
   
+  // Restore state from sessionStorage on class or weeks change
+  useEffect(() => {
+    if (effectiveClassId) {
+      const savedView = sessionStorage.getItem(`dnevnik_view_${effectiveClassId}`) as any;
+      if (savedView) {
+        setView(savedView);
+      } else if (!initialView) {
+        setView('WEEKS');
+      }
+
+      const savedDate = sessionStorage.getItem(`dnevnik_selectedDate_${effectiveClassId}`);
+      setSelectedDate(savedDate || null);
+
+      if (weeks.length > 0) {
+        const savedWeekId = sessionStorage.getItem(`dnevnik_selectedWeekId_${effectiveClassId}`);
+        if (savedWeekId) {
+          const found = weeks.find(w => w.id === savedWeekId);
+          setSelectedWeek(found || null);
+        } else {
+          setSelectedWeek(null);
+        }
+      }
+    }
+  }, [effectiveClassId, weeks, initialView]);
+
+  // Persist view changes to sessionStorage
+  useEffect(() => {
+    if (effectiveClassId) {
+      sessionStorage.setItem(`dnevnik_view_${effectiveClassId}`, view);
+    }
+  }, [view, effectiveClassId]);
+
+  // Persist selectedWeek changes to sessionStorage
+  useEffect(() => {
+    if (effectiveClassId) {
+      if (selectedWeek) {
+        sessionStorage.setItem(`dnevnik_selectedWeekId_${effectiveClassId}`, selectedWeek.id);
+      } else {
+        sessionStorage.removeItem(`dnevnik_selectedWeekId_${effectiveClassId}`);
+      }
+    }
+  }, [selectedWeek, effectiveClassId]);
+
   useEffect(() => {
     if (initialView) {
       setView(initialView);
@@ -42,7 +89,21 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
       setSelectedWeek(activeWeek);
     }
   }, [view, selectedWeek, weeks]);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => {
+    return sessionStorage.getItem(`dnevnik_selectedDate_${effectiveClassId || 'default'}`) || null;
+  });
+
+  // Persist selectedDate changes to sessionStorage
+  useEffect(() => {
+    if (effectiveClassId) {
+      if (selectedDate) {
+        sessionStorage.setItem(`dnevnik_selectedDate_${effectiveClassId}`, selectedDate);
+      } else {
+        sessionStorage.removeItem(`dnevnik_selectedDate_${effectiveClassId}`);
+      }
+    }
+  }, [selectedDate, effectiveClassId]);
   const [dailyLessons, setDailyLessons] = useState<Lesson[]>([]);
   const [currentWeekAbsences, setCurrentWeekAbsences] = useState<any[]>([]);
   const [dailyAbsences, setDailyAbsences] = useState<any[]>([]);
