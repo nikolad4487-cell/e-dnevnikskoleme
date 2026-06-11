@@ -8,6 +8,7 @@ interface FinalExamDefenseScheduleModalProps {
   classes: any[];
   mentors: any[];
   schoolId: string;
+  initialData?: any;
 }
 
 export default function FinalExamDefenseScheduleModal({
@@ -15,20 +16,23 @@ export default function FinalExamDefenseScheduleModal({
   onSaved,
   classes,
   mentors,
-  schoolId
+  schoolId,
+  initialData
 }: FinalExamDefenseScheduleModalProps) {
-  const [selectedClassId, setSelectedClassId] = useState('');
-  const [defenseTime, setDefenseTime] = useState('09:00');
-  const [classroom, setClassroom] = useState('');
-  const [selectedMentors, setSelectedMentors] = useState<string[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState(initialData?.class_id || '');
+  const [defenseTime, setDefenseTime] = useState(initialData?.defense_time?.substring(0, 5) || '09:00');
+  const [classroom, setClassroom] = useState(initialData?.classroom || '');
+  
+  const initialMentorsFromData = initialData?.members ? initialData.members.map((m: any) => m.teacher_profile_id) : [];
+  const [selectedMentors, setSelectedMentors] = useState<string[]>(initialMentorsFromData);
   const [loading, setLoading] = useState(false);
 
-  const homeroomTeacherId = classes.find(c => c.id === selectedClassId)?.homeroom_teacher_id;
+  const homeroomTeacherId = classes.find(c => c.id === selectedClassId)?.homeroom_teacher_id || initialData?.members?.find((m: any) => m.is_homeroom_teacher)?.teacher_profile_id;
   const homeroomTeacherName = mentors.find(m => m.id === homeroomTeacherId)?.name || '';
 
   useEffect(() => {
     if (homeroomTeacherId && !selectedMentors.includes(homeroomTeacherId)) {
-      setSelectedMentors([...selectedMentors, homeroomTeacherId]);
+      setSelectedMentors(prev => [...prev, homeroomTeacherId]);
     }
   }, [selectedClassId, homeroomTeacherId]);
 
@@ -78,13 +82,13 @@ export default function FinalExamDefenseScheduleModal({
 
       console.log("SAVE DEFENSE SCHEDULE PAYLOAD:", payload);
 
-      const res = await fetch('/api/final-exam-defense-schedules', {
-        method: 'POST',
+      const res = await fetch(initialData ? `/api/final-exam-defense-schedules/${initialData.id}` : '/api/final-exam-defense-schedules', {
+        method: initialData ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       if (res.ok) {
-        toast.success('Raspored uspješno spremljen');
+        toast.success(`Raspored uspješno ${initialData ? 'spremljen' : 'dodan'}`);
         onSaved();
       } else {
         const errData = await res.json().catch(() => ({}));
@@ -102,7 +106,7 @@ export default function FinalExamDefenseScheduleModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-          <h2 className="text-lg font-black text-gray-800 uppercase tracking-tight">Dodaj raspored obrane</h2>
+          <h2 className="text-lg font-black text-gray-800 uppercase tracking-tight">{initialData ? 'Uredi raspored obrane' : 'Dodaj raspored obrane'}</h2>
           <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
             <X className="w-5 h-5" />
           </button>

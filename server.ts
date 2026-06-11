@@ -743,9 +743,23 @@ async function startServer() {
         if (schoolId) {
           query = query.eq("school_id", schoolId);
         }
-        const { data, error } = await query.order("date", { ascending: true });
+        const { data, error } = await query.order("start_date", { ascending: true });
         if (!error && data) {
-          return res.json(data);
+          const mappedData = data.map((row: any) => ({
+            id: row.id,
+            school_id: row.school_id,
+            school_year: row.school_year,
+            date: row.start_date,
+            start_date: row.start_date,
+            end_date: row.end_date,
+            time: row.start_time,
+            type: row.event_type,
+            title: row.title,
+            notes: row.description,
+            classroom: row.classroom,
+            is_instructional_day: row.is_instructional_day
+          }));
+          return res.json(mappedData);
         }
         if (error && error.code !== "PGRST205") {
           console.error("[SERVER] Supabase school_events query error:", error);
@@ -768,7 +782,7 @@ async function startServer() {
       const eventData = req.body;
 
       const school_id = eventData.school_id || eventData.schoolId;
-      const date = eventData.date;
+      const date = eventData.date || eventData.start_date;
       const school_year = eventData.school_year || getSchoolYearFromDate(date);
       const type = eventData.type;
       const title = eventData.title || "";
@@ -827,19 +841,14 @@ async function startServer() {
         id: eventData.id,
         school_id,
         school_year,
-        date,
-        week: eventData.week !== undefined ? eventData.week : getWeekNumber(date),
-        time: eventData.time || null,
-        type,
-        title,
-        reason,
-        classroom: eventData.classroom || null,
-        notes: eventData.notes || null,
-        start_date: eventData.start_date || null,
-        end_date: eventData.end_date || null,
-        start_time: eventData.start_time || null,
+        event_type: type,
+        title: title || reason || type,
+        description: eventData.notes || eventData.reason || null,
+        start_date: eventData.start_date || date,
+        end_date: eventData.end_date || date,
+        start_time: eventData.start_time || eventData.time || null,
         end_time: eventData.end_time || null,
-        holiday_type: eventData.holiday_type || null,
+        classroom: eventData.classroom || null,
         is_instructional_day
       };
 

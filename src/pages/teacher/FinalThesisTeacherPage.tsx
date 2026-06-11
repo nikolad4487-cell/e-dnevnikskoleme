@@ -31,9 +31,27 @@ export default function FinalThesisTeacherPage() {
   const [activeTab, setActiveTab] = useState<'mentorship' | 'class' | 'all' | 'archive' | 'defense'>('mentorship');
 
   const [isDefenseScheduleModalOpen, setIsDefenseScheduleModalOpen] = useState(false);
+  const [editDefenseSchedule, setEditDefenseSchedule] = useState<any>(null);
 
   // search term filter
   const [searchTerm, setSearchTerm] = useState('');
+
+  const handleDeleteDefenseSchedule = async (id: string) => {
+    if (!window.confirm('Jeste li sigurni da želite obrisati ovaj raspored obrane?')) return;
+    try {
+      const res = await fetch(`/api/final-exam-defense-schedules/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        toast.success('Raspored obrane obrisan');
+        fetchDefenseSchedules();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        toast.error(`Greška: ${err.error || 'Neuspješno brisanje'}`);
+      }
+    } catch (error) {
+      console.error("DELETE DEFENSE ERROR", error);
+      toast.error('Greska pri brisanju rasporeda');
+    }
+  };
 
   // Classifications modal
   const [showClassifyModal, setShowClassifyModal] = useState(false);
@@ -652,27 +670,45 @@ export default function FinalThesisTeacherPage() {
                 <th className="px-4 py-3">Razrednik</th>
                 <th className="px-4 py-3">Vrijeme</th>
                 <th className="px-4 py-3">Učionica</th>
+                {isSchoolAdmin && <th className="px-4 py-3 text-right">Akcije</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {defenseSchedules.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-4 text-center text-gray-400 font-semibold italic">Nema rasporeda za odabranu školu.</td>
+                  <td colSpan={isSchoolAdmin ? 6 : 5} className="px-4 py-4 text-center text-gray-400 font-semibold italic">Nema rasporeda za odabranu školu.</td>
                 </tr>
               ) : (
                 defenseSchedules.map(s => {
                   const clazz = classes.find(c => c.id === s.class_id);
-                  const homeroom = s.members.find((m: any) => m.is_homeroom_teacher);
+                  const homeroom = (s.members || []).find((m: any) => m.is_homeroom_teacher);
                   const hrTeacher = mentors.find(t => t.id === homeroom?.teacher_profile_id);
-                  const commission = s.members.map((m: any) => mentors.find(t => t.id === m.teacher_profile_id)?.name).filter(Boolean).join(', ');
+                  const commission = (s.members || []).map((m: any) => mentors.find(t => t.id === m.teacher_profile_id)?.name).filter(Boolean).join(', ');
+                  const formattedTime = s.defense_time ? s.defense_time.substring(0, 5) : '—';
                   
                   return (
                     <tr key={s.id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 font-black text-gray-900">{clazz?.name || '—'}</td>
                       <td className="px-4 py-3 text-gray-600 font-medium">{commission || '—'}</td>
                       <td className="px-4 py-3 text-gray-600 font-semibold">{hrTeacher?.name || '—'}</td>
-                      <td className="px-4 py-3 text-gray-600 font-mono">{s.defense_time}</td>
+                      <td className="px-4 py-3 text-gray-600 font-mono">{formattedTime}</td>
                       <td className="px-4 py-3 text-gray-600 font-bold bg-slate-50">{s.classroom}</td>
+                      {isSchoolAdmin && (
+                        <td className="px-4 py-3 text-right space-x-2">
+                          <button
+                            onClick={() => setEditDefenseSchedule(s)}
+                            className="text-[#005c8d] hover:text-blue-800 font-semibold transition-colors"
+                          >
+                            Uredi
+                          </button>
+                          <button
+                            onClick={() => handleDeleteDefenseSchedule(s.id)}
+                            className="text-red-500 hover:text-red-700 font-semibold transition-colors"
+                          >
+                            Obriši
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   )
                 })
@@ -1137,16 +1173,21 @@ export default function FinalThesisTeacherPage() {
         </div>
       )}
 
-      {isDefenseScheduleModalOpen && selectedSchoolId && (
+      {(isDefenseScheduleModalOpen || editDefenseSchedule) && selectedSchoolId && (
         <FinalExamDefenseScheduleModal
-          onClose={() => setIsDefenseScheduleModalOpen(false)}
+          onClose={() => {
+            setIsDefenseScheduleModalOpen(false);
+            setEditDefenseSchedule(null);
+          }}
           onSaved={() => {
             setIsDefenseScheduleModalOpen(false);
+            setEditDefenseSchedule(null);
             fetchDefenseSchedules();
           }}
           classes={classes}
           mentors={mentors}
           schoolId={selectedSchoolId}
+          initialData={editDefenseSchedule}
         />
       )}
     </div>
