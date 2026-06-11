@@ -764,20 +764,73 @@ async function startServer() {
   app.post("/api/school-events", async (req, res) => {
     try {
       const eventData = req.body;
+
+      const school_id = eventData.school_id || eventData.schoolId;
+      const date = eventData.date;
+      const school_year = eventData.school_year || getSchoolYearFromDate(date);
+      const type = eventData.type;
+      const title = eventData.title || "";
+      const reason = eventData.reason || title || "";
+      const is_instructional_day = eventData.is_instructional_day !== undefined ? !!eventData.is_instructional_day : null;
+
+      // 8. Validate mandatory fields
+      if (!school_id) {
+        return res.status(400).json({
+          success: false,
+          error: "Id škole (school_id) je obavezan.",
+          details: "school_id is required."
+        });
+      }
+      if (!date) {
+        return res.status(400).json({
+          success: false,
+          error: "Datum (date) je obavezan.",
+          details: "date is required."
+        });
+      }
+      if (!school_year) {
+        return res.status(400).json({
+          success: false,
+          error: "Školska godina (school_year) je obavezna.",
+          details: "school_year is required."
+        });
+      }
+      if (!type) {
+        return res.status(400).json({
+          success: false,
+          error: "Kategorija događaja (type) je obavezna.",
+          details: "type is required."
+        });
+      }
+      if (!title && !reason) {
+        return res.status(400).json({
+          success: false,
+          error: "Prigoda/naziv događaja (title/reason) je obavezan.",
+          details: "title or reason is required."
+        });
+      }
+      if (is_instructional_day === null) {
+        return res.status(400).json({
+          success: false,
+          error: "Indikator nastavnog dana (is_instructional_day) je obavezan.",
+          details: "is_instructional_day is required."
+        });
+      }
+
       if (!eventData.id) {
         eventData.id = crypto.randomUUID();
       }
 
       const payload = {
         id: eventData.id,
-        school_id: eventData.school_id || eventData.schoolId || "",
-        school_year: eventData.school_year || getSchoolYearFromDate(eventData.date),
-        date: eventData.date,
-        week: eventData.week !== undefined ? eventData.week : getWeekNumber(eventData.date),
+        school_id,
+        school_year,
+        date,
+        week: eventData.week !== undefined ? eventData.week : getWeekNumber(date),
         time: eventData.time || null,
-        type: eventData.type,
-        title: eventData.title || "",
-        reason: eventData.reason || eventData.title || "",
+        type,
+        title,
+        reason,
         classroom: eventData.classroom || null,
         commission: eventData.commission || null,
         notes: eventData.notes || null,
@@ -785,28 +838,44 @@ async function startServer() {
         end_date: eventData.end_date || null,
         start_time: eventData.start_time || null,
         end_time: eventData.end_time || null,
-        holiday_type: eventData.holiday_type || null
+        holiday_type: eventData.holiday_type || null,
+        is_instructional_day
       };
 
       if (supabaseAdmin) {
         const { error } = await supabaseAdmin.from("school_events").upsert(payload);
-        if (!error) {
-          return res.json({ success: true, data: payload });
+        if (error) {
+          // 7. Add console.error in catch / error handling
+          console.error("SAVE SCHOOL CALENDAR ERROR", error);
+          // 4. Return Supabase error parameters
+          return res.status(500).json({
+            success: false,
+            error: error.message,
+            details: error.details,
+            hint: error.hint,
+            code: error.code
+          });
         }
-        if (error && error.code !== "PGRST205") {
-          console.error("[SERVER] Supabase school_events save error:", error);
-          const detailStr = error.details ? ` (${error.details})` : "";
-          return res.status(500).json({ error: `Baza podataka: [${error.code}] ${error.message}${detailStr}` });
-        }
+        return res.json({ success: true, data: payload });
       }
 
       eventData.created_at = new Date().toISOString();
+      eventData.school_year = school_year;
+      eventData.school_id = school_id;
+      eventData.is_instructional_day = is_instructional_day;
       const events = readJsonFile("school_events.json");
       events.push(eventData);
       writeJsonFile("school_events.json", events);
       res.json({ success: true, data: eventData });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+    } catch (error: any) {
+      // 7. Add console.error in catch
+      console.error("SAVE SCHOOL CALENDAR ERROR", error);
+      // 3. Return actual error in standard error envelope
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        details: error
+      });
     }
   });
 
@@ -818,13 +887,17 @@ async function startServer() {
         const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
         if (isUuid) {
           const { error } = await supabaseAdmin.from("school_events").delete().eq("id", id);
-          if (!error) {
-            return res.json({ success: true });
+          if (error) {
+            console.error("DELETE SCHOOL CALENDAR ERROR", error);
+            return res.status(500).json({
+              success: false,
+              error: error.message,
+              details: error.details,
+              hint: error.hint,
+              code: error.code
+            });
           }
-          if (error && error.code !== "PGRST205") {
-            console.error("[SERVER] Supabase school_events delete error:", error);
-            return res.status(500).json({ error: `Baza podataka: [${error.code}] ${error.message}` });
-          }
+          return res.json({ success: true });
         }
       }
 
@@ -832,8 +905,13 @@ async function startServer() {
       const filtered = events.filter((e: any) => e.id !== id);
       writeJsonFile("school_events.json", filtered);
       res.json({ success: true });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+    } catch (error: any) {
+      console.error("DELETE SCHOOL CALENDAR ERROR", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        details: error
+      });
     }
   });
 

@@ -25,6 +25,7 @@ interface SchoolEvent {
   classroom?: string;
   commission?: string;
   notes?: string;
+  is_instructional_day?: boolean;
 }
 
 export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: boolean }) {
@@ -60,11 +61,20 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
   const [holidayStartTime, setHolidayStartTime] = useState('08:00');
   const [holidayEndTime, setHolidayEndTime] = useState('14:00');
   const [holidaySubType, setHolidaySubType] = useState<'WINTER_1' | 'WINTER_2' | 'SPRING' | 'SUMMER'>('WINTER_1');
+  const [isInstructionalDay, setIsInstructionalDay] = useState(true);
 
   useEffect(() => {
     if (!selectedSchoolId) return;
     loadEvents();
   }, [selectedSchoolId]);
+
+  useEffect(() => {
+    if (newType === 'PRAZNIK' || newType === 'ŠKOLSKI_PRAZNIK') {
+      setIsInstructionalDay(false);
+    } else {
+      setIsInstructionalDay(true);
+    }
+  }, [newType]);
 
   const loadEvents = async () => {
     try {
@@ -168,6 +178,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         classroom: isHoliday ? '' : newClassroom,
         commission: isHoliday ? '' : newCommission,
         notes: newNotes,
+        is_instructional_day: isInstructionalDay,
         ...(isHoliday ? {
           start_date: holidayStartDate,
           end_date: holidayEndDate,
@@ -176,6 +187,9 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
           holiday_type: holidaySubType
         } : {})
       };
+
+      // 6. Log payload before sending
+      console.log("SAVE SCHOOL CALENDAR PAYLOAD", payload);
 
       const res = await fetch('/api/school-events', {
         method: 'POST',
@@ -212,12 +226,20 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         loadEvents();
       } else {
         const errData = await res.json().catch(() => ({}));
-        const errMsg = errData.error || 'Nepoznata greška na poslužitelju';
-        throw new Error(errMsg);
+        // Extract message, details or error code as detailed as possible
+        const errMsg = errData.error || errData.details || errData.message || 'Nepoznata greška na poslužitelju';
+        const errorObj = new Error(errMsg);
+        if (errData.details) (errorObj as any).details = errData.details;
+        if (errData.hint) (errorObj as any).hint = errData.hint;
+        if (errData.code) (errorObj as any).code = errData.code;
+        throw errorObj;
       }
-    } catch (err: any) {
-      console.error(err);
-      toast.error(`Greška pri spremanju kalendara: ${err.message}`);
+    } catch (error: any) {
+      // 7. Log error in catch
+      console.error("SAVE SCHOOL CALENDAR ERROR", error);
+      // 5. Display detailed message
+      const detailedMsg = error.message || error.details || "Greška pri spremanju kalendara.";
+      toast.error(`Greška pri spremanju kalendara: ${detailedMsg}`);
     }
   };
 
@@ -584,6 +606,19 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                 </div>
               </div>
             )}
+
+            <div className="flex items-center gap-2 py-1 bg-slate-50 border p-2 rounded">
+              <input 
+                id="is_instructional_day"
+                type="checkbox" 
+                checked={isInstructionalDay}
+                onChange={(e) => setIsInstructionalDay(e.target.checked)}
+                className="rounded border-gray-300 text-[#005c8d] focus:ring-[#005c8d] h-4 w-4"
+              />
+              <label htmlFor="is_instructional_day" className="text-xs font-black text-slate-700 uppercase cursor-pointer select-none">
+                Nastavni dan (Održava se nastava)
+              </label>
+            </div>
 
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">
