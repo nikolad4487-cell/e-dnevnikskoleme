@@ -36,20 +36,28 @@ export default function FinalThesisTeacherPage() {
   // search term filter
   const [searchTerm, setSearchTerm] = useState('');
 
-  const handleDeleteDefenseSchedule = async (id: string) => {
-    if (!window.confirm('Jeste li sigurni da želite obrisati ovaj raspored obrane?')) return;
+  const handleDeleteDefenseSchedule = async (scheduleId: string, classNameStr?: string) => {
+    const confirmMsg = classNameStr 
+      ? `Jeste li sigurni da želite obrisati raspored obrane za razred ${classNameStr}?` 
+      : 'Jeste li sigurni da želite obrisati ovaj raspored obrane?';
+
+    if (!window.confirm(confirmMsg)) return;
+
+    console.log("DELETE DEFENSE SCHEDULE CLICKED", scheduleId);
     try {
-      const res = await fetch(`/api/final-exam-defense-schedules/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/final-exam-defense-schedules/${scheduleId}`, { method: 'DELETE' });
       if (res.ok) {
-        toast.success('Raspored obrane obrisan');
+        toast.success('Raspored obrane je obrisan.');
+        setDefenseSchedules(prev => prev.filter(s => s.id !== scheduleId));
         fetchDefenseSchedules();
       } else {
         const err = await res.json().catch(() => ({}));
-        toast.error(`Greška: ${err.error || 'Neuspješno brisanje'}`);
+        console.error("DELETE DEFENSE SCHEDULE ERROR", err);
+        toast.error(`Greška: ${err.error || err.details || 'Neuspješno brisanje'}`);
       }
-    } catch (error) {
-      console.error("DELETE DEFENSE ERROR", error);
-      toast.error('Greska pri brisanju rasporeda');
+    } catch (error: any) {
+      console.error("DELETE DEFENSE SCHEDULE ERROR", error);
+      toast.error(error.message || 'Greška pri brisanju rasporeda');
     }
   };
 
@@ -142,7 +150,7 @@ export default function FinalThesisTeacherPage() {
       // 3. Fetch Classes
       const { data: classesData } = await supabase
         .from('classes')
-        .select('id, name');
+        .select('id, name, homeroom_teacher_id, grade_level, school_year_id, school_id, programs:program_id(duration_years, name)');
       setClasses(classesData || []);
 
       // 4. Fetch Applications via API
@@ -674,16 +682,25 @@ export default function FinalThesisTeacherPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {defenseSchedules.length === 0 ? (
-                <tr>
-                  <td colSpan={isSchoolAdmin ? 6 : 5} className="px-4 py-4 text-center text-gray-400 font-semibold italic">Nema rasporeda za odabranu školu.</td>
-                </tr>
-              ) : (
-                defenseSchedules.map(s => {
+              {(() => {
+                const visibleSchedules = isSchoolAdmin
+                  ? defenseSchedules
+                  : defenseSchedules.filter(s => (s.members || []).some((m: any) => m.teacher_profile_id === profileId));
+
+                if (visibleSchedules.length === 0) {
+                  return (
+                    <tr>
+                      <td colSpan={isSchoolAdmin ? 6 : 5} className="px-4 py-4 text-center text-gray-400 font-semibold italic">Nema rasporeda za odabranu školu.</td>
+                    </tr>
+                  );
+                }
+
+                return visibleSchedules.map(s => {
                   const clazz = classes.find(c => c.id === s.class_id);
-                  const homeroom = (s.members || []).find((m: any) => m.is_homeroom_teacher);
-                  const hrTeacher = mentors.find(t => t.id === homeroom?.teacher_profile_id);
-                  const commission = (s.members || []).map((m: any) => mentors.find(t => t.id === m.teacher_profile_id)?.name).filter(Boolean).join(', ');
+                  const homeroomId = (s.members || []).find((m: any) => m.is_homeroom_teacher)?.teacher_profile_id || clazz?.homeroom_teacher_id;
+                  const hrTeacher = mentors.find(t => t.id === homeroomId);
+                  const commissionNames = Array.from(new Set((s.members || []).map((m: any) => mentors.find(t => t.id === m.teacher_profile_id)?.name))).filter(Boolean);
+                  const commission = commissionNames.join(', ');
                   const formattedTime = s.defense_time ? s.defense_time.substring(0, 5) : '—';
                   
                   return (
@@ -702,8 +719,8 @@ export default function FinalThesisTeacherPage() {
                             Uredi
                           </button>
                           <button
-                            onClick={() => handleDeleteDefenseSchedule(s.id)}
-                            className="text-red-500 hover:text-red-700 font-semibold transition-colors"
+                            onClick={() => handleDeleteDefenseSchedule(s.id, clazz?.name)}
+                            className="text-red-500 hover:text-red-700 font-semibold transition-colors ml-2"
                           >
                             Obriši
                           </button>
@@ -711,8 +728,8 @@ export default function FinalThesisTeacherPage() {
                       )}
                     </tr>
                   )
-                })
-              )}
+                });
+              })()}
             </tbody>
           </table>
         </div>

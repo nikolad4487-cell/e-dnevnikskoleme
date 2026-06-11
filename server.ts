@@ -681,14 +681,23 @@ async function startServer() {
       let dbDeleted = false;
       if (supabaseAdmin) {
         try {
+          // Delete members first in case no cascade exists
+          const { error: membersErr } = await supabaseAdmin.from('final_exam_defense_commission_members').delete().eq('schedule_id', id);
+          if (membersErr) {
+            console.error("DB members delete error:", membersErr);
+            return res.status(500).json({ error: membersErr.message, details: membersErr });
+          }
+          
           const { error: sErr } = await supabaseAdmin.from('final_exam_defense_schedule').delete().eq('id', id);
           if (!sErr) {
             dbDeleted = true;
           } else {
             console.error("DB schedule delete error:", sErr);
+            return res.status(500).json({ error: sErr.message, details: sErr });
           }
-        } catch (dbErr) {
+        } catch (dbErr: any) {
           console.error("DB connection error for schedule delete:", dbErr);
+          return res.status(500).json({ error: dbErr.message });
         }
       }
 

@@ -263,25 +263,33 @@ export function FinalExamDefenseScheduleAdmin() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!window.confirm('Jeste li sigurni da želite obrisati ovaj raspored obrane?')) {
+  const handleDelete = async (scheduleId: string, classNameStr?: string) => {
+    const confirmMsg = classNameStr 
+      ? `Jeste li sigurni da želite obrisati raspored obrane za razred ${classNameStr}?` 
+      : 'Jeste li sigurni da želite obrisati ovaj raspored obrane?';
+
+    if (!window.confirm(confirmMsg)) {
       return;
     }
 
+    console.log("DELETE DEFENSE SCHEDULE CLICKED", scheduleId);
+
     try {
-      const response = await fetch(`/api/final-exam-defense-schedules/${id}`, {
+      const response = await fetch(`/api/final-exam-defense-schedules/${scheduleId}`, {
         method: 'DELETE'
       });
 
       if (response.ok) {
-        toast.success('Raspored uspješno obrisan.');
-        loadData();
+        toast.success('Raspored obrane je obrisan.');
+        setSchedules(prev => prev.filter(s => s.id !== scheduleId));
       } else {
-        toast.error('Brisanje nije uspjelo.');
+        const errData = await response.json();
+        console.error("DELETE DEFENSE SCHEDULE ERROR", errData);
+        toast.error(`Greška: ${errData.error || errData.details || 'Brisanje nije uspjelo.'}`);
       }
-    } catch (err) {
-      console.error(err);
-      toast.error('Sustavna pogreška prilikom brisanja.');
+    } catch (err: any) {
+      console.error("DELETE DEFENSE SCHEDULE ERROR", err);
+      toast.error(`Sustavna pogreška prilikom brisanja: ${err.message}`);
     }
   };
 
@@ -618,7 +626,7 @@ export function FinalExamDefenseScheduleAdmin() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => handleDelete(schedule.id)}
+                            onClick={() => handleDelete(schedule.id, className)}
                             className="bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 p-2 rounded transition"
                             title="Obriši raspored"
                           >

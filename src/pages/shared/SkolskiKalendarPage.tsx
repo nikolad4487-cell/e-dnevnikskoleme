@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { logSystemAction } from '../../utils/auditLogger';
 import { 
-  Calendar, Check, Plus, Trash2, ChevronLeft, ChevronRight, Filter, Clock, 
+  Calendar, Check, Plus, Trash2, Edit2, ChevronLeft, ChevronRight, Filter, Clock, 
   MapPin, ShieldAlert, Users, Compass, BookOpen, Star, Sparkles
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
@@ -28,22 +28,24 @@ interface SchoolEvent {
 }
 
 export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: boolean }) {
-  const { user, isStaff: authIsStaff } = useAuth();
+  const { user, isStaff: authIsStaff, isMainAdmin, userSchoolRoles } = useAuth();
   const isStaff = authIsStaff && !readOnly;
   const { selectedSchoolId } = useSelection();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const isSchoolAdmin = isMainAdmin || (userSchoolRoles && userSchoolRoles.some(r => r.school_id === selectedSchoolId && (r.role === 'ADMIN' || r.role === 'SCHOOL_ADMIN')));
 
   const [events, setEvents] = useState<SchoolEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
   
   // Filtering & Add modal
-  const [selectedType, setSelectedType] = useState<string>('SVE');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [selectedDayEvents, setSelectedDayEvents] = useState<SchoolEvent[]>([]);
   const [selectedDayDateStr, setSelectedDayDateStr] = useState('');
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
 
   // Form State
   const [newDate, setNewDate] = useState('');
@@ -145,6 +147,35 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
     }
   };
 
+  const handleEditEvent = (event: SchoolEvent) => {
+    setEditingEventId(event.id || null);
+    setNewType(event.type);
+    
+    // Set dates and times
+    if (event.type === 'ŠKOLSKI_PRAZNIK') {
+      setHolidayStartDate(event.start_date || event.date || '');
+      setHolidayEndDate(event.end_date || event.date || '');
+      setHolidayStartTime(event.start_time || '08:00');
+      setHolidayEndTime(event.end_time || '14:00');
+      setHolidaySubType(event.holiday_type || 'WINTER_1');
+    } else {
+      setNewDate(event.start_date || event.date || '');
+      if (event.time && event.time.includes('-')) {
+        setNewTime(event.time.split('-')[0].trim());
+      } else {
+        setNewTime(event.time || event.start_time || '08:00');
+      }
+    }
+    
+    setNewTitle(event.title);
+    setNewClassroom(event.classroom || '');
+    setNewNotes(event.notes || '');
+    setIsInstructionalDay(event.is_instructional_day !== undefined ? event.is_instructional_day : true);
+    
+    setShowDetailsModal(false);
+    setShowAddModal(true);
+  };
+
   const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -165,7 +196,8 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
     }
 
     try {
-      const payload: Omit<SchoolEvent, 'id'> = {
+      const payload: any = {
+        id: editingEventId || undefined,
         school_id: selectedSchoolId || '',
         date: computedDate,
         time: isHoliday ? `${holidayStartTime} - ${holidayEndTime}` : newTime,
@@ -193,8 +225,9 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
       });
 
       if (res.ok) {
-        toast.success('Školski događaj je zabilježen u kalendaru.');
+        toast.success(editingEventId ? 'Školski događaj je ažuriran.' : 'Školski događaj je zabilježen u kalendaru.');
         setShowAddModal(false);
+        setEditingEventId(null);
         
         // Log auditing action
         if (user?.id) {
@@ -243,7 +276,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
   };
 
   const handleDeleteEvent = async (eventId: string) => {
-    if (!window.confirm('Jeste li sigurni da želite obrisati događaj iz kalendara?')) return;
+    if (!window.confirm('Jeste li sigurni da želite obrisati ovaj događaj?')) return;
     try {
       const res = await fetch(`/api/school-events/${eventId}`, { method: 'DELETE' });
       if (res.ok) {
@@ -252,11 +285,12 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         loadEvents();
       } else {
         const errData = await res.json().catch(() => ({}));
-        const errMsg = errData.error || 'Nepoznata greška na poslužitelju';
+        const errMsg = errData.error || errData.details || 'Nepoznata greška na poslužitelju';
+        console.error("DELETE EVENT FAILED", errData);
         throw new Error(errMsg);
       }
     } catch (err: any) {
-      console.error(err);
+      console.error("ERROR DELETING CALENDAR EVENT", err);
       toast.error(`Greška pri brisanju događaja: ${err.message}`);
     }
   };
@@ -388,24 +422,6 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
             <ChevronRight size={16} />
           </button>
         </div>
-
-        {/* Quick legend filters */}
-        <div className="flex flex-wrap gap-1.5 items-center">
-          <span className="text-[9px] font-black uppercase text-slate-400 mr-2">Filtar:</span>
-          {['SVE', 'PRAZNIK', 'ŠKOLSKI_PRAZNIK', 'SJEDNICA', 'SASTANAK', 'OBRANA', 'NATJECANJE', 'IZLET', 'DOGAĐAJ'].map((t) => (
-            <button
-              key={t}
-              onClick={() => setSelectedType(t)}
-              className={`text-[9px] font-bold px-2 py-1 rounded border uppercase tracking-wider transition-all ${
-                selectedType === t 
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-sm' 
-                  : 'bg-slate-100 hover:bg-slate-205 text-slate-650 border-slate-200'
-              }`}
-            >
-              {t === 'SVE' ? 'Sve aktivnosti' : t === 'ŠKOLSKI_PRAZNIK' ? 'Školski praznici' : t}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* Grid Monthly Calendar */}
@@ -430,8 +446,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
             } else if (e.date) {
               matchesDate = e.date === cell.dateStr;
             }
-            const matchesType = selectedType === 'SVE' || e.type === selectedType || (selectedType === 'PRAZNIK' && e.type === 'ŠKOLSKI_PRAZNIK');
-            return matchesDate && matchesType;
+            return matchesDate;
           });
 
           return (
@@ -496,10 +511,13 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
             className="bg-white border rounded-md shadow-md max-w-md w-full p-6 space-y-4"
           >
             <div className="border-b pb-2 flex justify-between items-center">
-              <h3 className="text-sm font-black text-slate-950 uppercase">Novi događaj u kalendaru</h3>
+              <h3 className="text-sm font-black text-slate-950 uppercase">{editingEventId ? 'Uredi Aktivnost' : 'Novi događaj u kalendaru'}</h3>
               <button 
                 type="button" 
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingEventId(null);
+                }}
                 className="text-slate-300 hover:text-slate-600 font-bold"
               >
                 ✕
@@ -663,7 +681,10 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
             <div className="flex gap-2 justify-end pt-2 border-t">
               <button 
                 type="button" 
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingEventId(null);
+                }}
                 className="text-xs font-black uppercase text-slate-400 hover:text-slate-700 px-4 py-2 border rounded"
               >
                 Odustani
@@ -672,7 +693,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                 type="submit" 
                 className="bg-[#005c8d] text-white text-xs font-black uppercase tracking-wider px-4 py-2 rounded shadow-sm hover:bg-[#004f79]"
               >
-                Dodaj u kalendar
+                {editingEventId ? 'Spremi izmjene' : 'Dodaj u kalendar'}
               </button>
             </div>
           </form>
@@ -705,15 +726,6 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                     <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded border inline-block ${eventBadgeStyle(e.type)}`}>
                       {eventLabelCro(e.type)}
                     </span>
-                    {isStaff && e.id && !e.id.includes('defense') && !e.id.includes('meeting') && (
-                      <button 
-                        onClick={() => handleDeleteEvent(e.id)} 
-                        className="text-red-500 hover:text-red-700 p-1"
-                        title="Ukloni događaj"
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
                   </div>
                   <div>
                     <h4 className="text-xs font-black text-slate-950">{e.title}</h4>
@@ -754,6 +766,26 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                       </p>
                     )}
                   </div>
+                  {isSchoolAdmin && e.id && !e.id.includes('defense') && !e.id.includes('meeting') && (
+                    <div className="flex items-center gap-2 pt-2 mt-2 border-t border-slate-100 justify-end">
+                      <button 
+                        className="text-slate-500 hover:text-slate-800 p-1 flex items-center gap-1"
+                        title="Uredi događaj"
+                        onClick={() => handleEditEvent(e)}
+                      >
+                        <Edit2 size={13} />
+                        <span className="text-[10px] font-bold uppercase">Uredi</span>
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteEvent(e.id)} 
+                        className="text-red-500 hover:text-red-700 p-1 flex items-center gap-1"
+                        title="Obriši događaj"
+                      >
+                        <Trash2 size={13} />
+                        <span className="text-[10px] font-bold uppercase">Obriši</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

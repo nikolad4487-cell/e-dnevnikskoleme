@@ -165,14 +165,15 @@ export function FinalExamDefenseSchedule({ classId }: { classId?: string }) {
               const homeroomName = homeroomTeacher ? `${homeroomTeacher.name} ${homeroomTeacher.surname || ''}` : 'Nije dodijeljen';
 
               // Map commission members names
-              const memberNames = (schedule.members || []).map(member => {
-                const teacherObj = teachers.find(t => t.id === member.teacher_profile_id);
-                if (!teacherObj) return 'Nepoznat nastavnik';
+              const commissionTeacherIds = Array.from(new Set((schedule.members || []).map((m: any) => m.teacher_profile_id)));
+              const memberNames = commissionTeacherIds.map(tid => {
+                const teacherObj = teachers.find(t => t.id === tid);
+                if (!teacherObj) return null;
                 
-                const fullName = `${teacherObj.name} ${teacherObj.surname || ''}`;
-                const suffix = member.teacher_profile_id === homeroomTeacherId ? ' (automatski)' : '';
+                const fullName = `${teacherObj.name} ${teacherObj.surname || ''}`.trim();
+                const suffix = tid === homeroomTeacherId ? ' (automatski)' : '';
                 return fullName + suffix;
-              });
+              }).filter(Boolean) as string[];
 
               return (
                 <tr key={schedule.id} className="hover:bg-slate-50/50 transition">
@@ -205,7 +206,7 @@ export function FinalExamDefenseSchedule({ classId }: { classId?: string }) {
                   <td className="p-4 font-semibold">
                     <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold">
                       <Clock size={12} />
-                      {schedule.defense_time}h
+                      {schedule.defense_time ? schedule.defense_time.substring(0, 5) : '—'}h
                     </span>
                   </td>
                   <td className="p-4 font-bold text-slate-600">

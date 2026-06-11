@@ -24,17 +24,30 @@ export default function FinalExamDefenseScheduleModal({
   const [classroom, setClassroom] = useState(initialData?.classroom || '');
   
   const initialMentorsFromData = initialData?.members ? initialData.members.map((m: any) => m.teacher_profile_id) : [];
-  const [selectedMentors, setSelectedMentors] = useState<string[]>(initialMentorsFromData);
+  const [selectedMentors, setSelectedMentors] = useState<string[]>(Array.from(new Set(initialMentorsFromData)));
   const [loading, setLoading] = useState(false);
 
   const homeroomTeacherId = classes.find(c => c.id === selectedClassId)?.homeroom_teacher_id || initialData?.members?.find((m: any) => m.is_homeroom_teacher)?.teacher_profile_id;
   const homeroomTeacherName = mentors.find(m => m.id === homeroomTeacherId)?.name || '';
 
+  // Filter classes: only final year classes
+  const finalClasses = classes.filter(c => {
+    if (c.name === '4.K') return false;
+    // If we have grade_level and programs info, rely on that
+    if (c.grade_level && c.programs?.duration_years) {
+      return c.grade_level === c.programs.duration_years;
+    }
+    // Fallback logic
+    if (c.name.startsWith('1.') || c.name.startsWith('2.')) return false;
+    return c.name.startsWith('3.') || c.name.startsWith('4.');
+  });
+
   useEffect(() => {
     if (homeroomTeacherId && !selectedMentors.includes(homeroomTeacherId)) {
-      setSelectedMentors(prev => [...prev, homeroomTeacherId]);
+      setSelectedMentors(prev => Array.from(new Set([...prev, homeroomTeacherId])));
     }
   }, [selectedClassId, homeroomTeacherId]);
+
 
   const toggleMentor = (mentorId: string) => {
     if (mentorId === homeroomTeacherId) return; // Cannot remove homeroom teacher
@@ -71,7 +84,7 @@ export default function FinalExamDefenseScheduleModal({
         class_id: selectedClassId,
         defense_time: defenseTime,
         classroom,
-        teacher_ids: selectedMentors,
+        teacher_ids: Array.from(new Set(selectedMentors)),
         homeroom_teacher_id: homeroomTeacherId
       };
       
@@ -122,7 +135,7 @@ export default function FinalExamDefenseScheduleModal({
                 className="w-full text-sm border-gray-200 rounded-lg p-2.5 focus:ring-2 focus:ring-[#005c8d]/20 focus:border-[#005c8d]"
               >
                 <option value="">-- Odaberite razred --</option>
-                {classes.map(c => (
+                {finalClasses.map(c => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
               </select>
