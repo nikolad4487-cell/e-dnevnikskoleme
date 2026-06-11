@@ -264,15 +264,9 @@ export function FinalExamDefenseScheduleAdmin() {
   };
 
   const handleDelete = async (scheduleId: string, classNameStr?: string) => {
-    const confirmMsg = classNameStr 
-      ? `Jeste li sigurni da želite obrisati raspored obrane za razred ${classNameStr}?` 
-      : 'Jeste li sigurni da želite obrisati ovaj raspored obrane?';
-
-    if (!window.confirm(confirmMsg)) {
+    if (!window.confirm(`Jeste li sigurni da želite obrisati raspored obrane za razred ${classNameStr || 'ovaj razred'}?`)) {
       return;
     }
-
-    console.log("DELETE DEFENSE SCHEDULE CLICKED", scheduleId);
 
     try {
       const response = await fetch(`/api/final-exam-defense-schedules/${scheduleId}`, {
@@ -280,16 +274,14 @@ export function FinalExamDefenseScheduleAdmin() {
       });
 
       if (response.ok) {
-        toast.success('Raspored obrane je obrisan.');
-        setSchedules(prev => prev.filter(s => s.id !== scheduleId));
+        toast.success('Raspored obrane uspješno obrisan!');
+        loadData();
       } else {
-        const errData = await response.json();
-        console.error("DELETE DEFENSE SCHEDULE ERROR", errData);
-        toast.error(`Greška: ${errData.error || errData.details || 'Brisanje nije uspjelo.'}`);
+        throw new Error('Brisanje nije uspjelo.');
       }
     } catch (err: any) {
       console.error("DELETE DEFENSE SCHEDULE ERROR", err);
-      toast.error(`Sustavna pogreška prilikom brisanja: ${err.message}`);
+      toast.error('Problem s brisanjem rasporeda obrane.');
     }
   };
 

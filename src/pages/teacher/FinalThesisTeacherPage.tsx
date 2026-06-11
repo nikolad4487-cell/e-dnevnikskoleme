@@ -37,27 +37,19 @@ export default function FinalThesisTeacherPage() {
   const [searchTerm, setSearchTerm] = useState('');
 
   const handleDeleteDefenseSchedule = async (scheduleId: string, classNameStr?: string) => {
-    const confirmMsg = classNameStr 
-      ? `Jeste li sigurni da želite obrisati raspored obrane za razred ${classNameStr}?` 
-      : 'Jeste li sigurni da želite obrisati ovaj raspored obrane?';
+    if (!window.confirm(`Jeste li sigurni da želite obrisati raspored obrane za razred ${classNameStr || 'ovaj razred'}?`)) return;
 
-    if (!window.confirm(confirmMsg)) return;
-
-    console.log("DELETE DEFENSE SCHEDULE CLICKED", scheduleId);
     try {
       const res = await fetch(`/api/final-exam-defense-schedules/${scheduleId}`, { method: 'DELETE' });
       if (res.ok) {
-        toast.success('Raspored obrane je obrisan.');
-        setDefenseSchedules(prev => prev.filter(s => s.id !== scheduleId));
+        toast.success('Raspored obrane uspješno obrisan!');
         fetchDefenseSchedules();
       } else {
-        const err = await res.json().catch(() => ({}));
-        console.error("DELETE DEFENSE SCHEDULE ERROR", err);
-        toast.error(`Greška: ${err.error || err.details || 'Neuspješno brisanje'}`);
+        throw new Error('Brisanje nije uspjelo.');
       }
     } catch (error: any) {
       console.error("DELETE DEFENSE SCHEDULE ERROR", error);
-      toast.error(error.message || 'Greška pri brisanju rasporeda');
+      toast.error('Problem s brisanjem rasporeda obrane.');
     }
   };
 
