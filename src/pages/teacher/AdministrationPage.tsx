@@ -11,6 +11,23 @@ import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSub
 import { mappers, mapList } from '../../lib/mappers';
 import CertificateManagementPage from './certificates/CertificateManagementPage';
 import InformativkaAdminPage from '../admin/InformativkaAdminPage';
+import SkolskiKalendarPage from '../shared/SkolskiKalendarPage';
+
+async function safeReadJson(response: Response) {
+  const text = await response.text();
+  if (!text || text.trim() === '') {
+    return { success: false, error: 'Prazan odgovor poslužitelja.' };
+  }
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    console.error('Došlo je do greške prilikom parsiranja JSON odgovora:', err);
+    if (text.includes('<!DOCTYPE html>') || text.includes('<html>')) {
+      return { success: false, error: 'Prijenos nije uspio (poslužitelj je vratio HTML stranicu umjesto programskog koda).' };
+    }
+    return { success: false, error: `Nevaljan format odgovora s poslužitelja: ${text.slice(0, 100)}` };
+  }
+}
 
 export default function AdministrationPage() {
   const navigate = useNavigate();
@@ -144,7 +161,7 @@ export default function AdministrationPage() {
   const isSchoolAdminMode = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/admin-skole');
 
   // Modals / Tabs
-  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN' | 'CONDUCT' | 'PROGRESS' | 'SUPPORTS' | 'ASSIGNMENTS' | 'DOCUMENTS' | 'INFORMATIVKA_ADMIN'>(
+  const [activeTab, setActiveTab] = useState<'MENU' | 'CLASSES' | 'STUDENTS' | 'CLASS_DETAIL' | 'SUBJECTS' | 'STAFF' | 'PLANNING' | 'STUDENT_DETAIL' | 'OPCI_PROSJEK' | 'SCHOOL_YEARS' | 'SCHOOLS' | 'PROGRAMS' | 'USERS' | 'ROLLOVER' | 'GRADUATES_ADMIN' | 'CONDUCT' | 'PROGRESS' | 'SUPPORTS' | 'ASSIGNMENTS' | 'DOCUMENTS' | 'INFORMATIVKA_ADMIN' | 'CALENDAR'>(
     isClassAdminMode ? 'CLASS_DETAIL' : (isSchoolAdminMode ? 'SCHOOL_YEARS' : 'MENU')
   );
 
@@ -349,7 +366,7 @@ export default function AdministrationPage() {
         body: JSON.stringify({ profileId })
       });
 
-      const result = await response.json();
+      const result = await safeReadJson(response);
       if (!response.ok) throw new Error(result.error || 'Greška pri resetiranju');
 
       setCreatedStaffTotp({
@@ -379,7 +396,7 @@ export default function AdministrationPage() {
         body: JSON.stringify({ profileId, type })
       });
 
-      const result = await response.json();
+      const result = await safeReadJson(response);
       if (!response.ok) throw new Error(result.error || 'Greška pri resetiranju');
 
       setResetModal({
@@ -430,7 +447,7 @@ export default function AdministrationPage() {
         })
       });
 
-      const result = await response.json();
+      const result = await safeReadJson(response);
       console.log("CREATE UNIFIED USER RESULT:", { status: response.status, result });
       
       if (!response.ok) throw new Error(result.error || 'Neuspješno kreiranje korisnika');
@@ -2262,7 +2279,7 @@ setStudents(uniqueMapped as any);
           body: JSON.stringify(profilePayload)
         });
 
-        const result = await response.json();
+        const result = await safeReadJson(response);
         if (!response.ok) throw new Error(result.error || 'Neuspješno kreiranje korisničkog računa');
 
         const createdAuthUser = { id: result.userId, email: result.email || studentEmail };
@@ -2383,7 +2400,7 @@ setStudents(uniqueMapped as any);
             })
         });
         
-        const data = await res.json();
+        const data = await safeReadJson(res);
         if (!data.success) {
             throw new Error(data.error || 'Greška pri grupnom dodavanju');
         }
@@ -2626,7 +2643,7 @@ setAllSubjects(uniqueSub2);
                  'Authorization': `Bearer ${token}`
              }
           });
-          const result = await response.json();
+          const result = await safeReadJson(response);
             
           console.log('DELETE RESULT', result);
 
@@ -3086,6 +3103,7 @@ setAllSubjects(uniqueSub2);
             // SCHOOL MODULES
             { label: 'Administracija škole', tab: 'MENU', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Školske godine', tab: 'SCHOOL_YEARS', mode: 'SCHOOL', hide: false, disabled: false },
+            { label: 'Školski kalendar', tab: 'CALENDAR', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Razredni odjeli', tab: 'CLASSES', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Korisnici / Nastavnici', tab: 'USERS', mode: 'SCHOOL', hide: false, disabled: false },
             { label: 'Učenici u školi', tab: 'STUDENTS', mode: 'SCHOOL', hide: false, disabled: false },
@@ -5054,6 +5072,12 @@ setAllSubjects(uniqueSub2);
 
           {activeTab === 'DOCUMENTS' && (
              <CertificateManagementPage currentClass={selectedClassData} currentSchoolId={selectedSchoolId || ''} />
+          )}
+
+          {activeTab === 'CALENDAR' && (
+             <div className="w-full space-y-4">
+               <SkolskiKalendarPage readOnly={false} />
+             </div>
           )}
 
           {activeTab === 'SCHOOL_YEARS' && (

@@ -211,7 +211,7 @@ export default function App() {
                             <Route path="informativka" element={<InformativkaPage />} />
                             <Route path="svjedodzbe" element={<CertificateManagementPage />} />
                             <Route path="zavrsni-radovi" element={<FinalThesisTeacherPage />} />
-                            <Route path="kalendar" element={<SkolskiKalendarPage />} />
+                            <Route path="kalendar" element={<SkolskiKalendarPage readOnly={true} />} />
                             <Route path="dokumenti" element={<InterniDokumentiPage />} />
                             <Route path="postavke" element={<SettingsPage />} />
                             <Route path="dosje" element={<DigitalniDosjePage />} />
@@ -259,7 +259,7 @@ export default function App() {
                           <Route path="raspored" element={<RasporedPage />} />
                           <Route path="osobni-podaci" element={<OsobniPodaciPage />} />
                           <Route path="zavrsni-rad" element={<FinalThesisPage />} />
-                          <Route path="kalendar" element={<SkolskiKalendarPage />} />
+                          <Route path="kalendar" element={<SkolskiKalendarPage readOnly={true} />} />
                           <Route path="informativka" element={<InformativkaPage />} />
                           <Route path="informatika" element={<Navigate to="/student/informativka" replace />} />
                           <Route path="postavke" element={<SettingsPage />} />

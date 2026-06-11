@@ -1445,7 +1445,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       res.json({ success: true, results, message: "Korisnici obrađeni." });
     } catch (err: any) {
       console.error("[ADMIN_BULK_CREATE]", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, error: err?.message || String(err) });
     }
   });
 
@@ -1541,7 +1541,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       res.json({ success: true, results, message: "Korisnici obrađeni." });
     } catch (err: any) {
       console.error("[ADMIN_BULK_CREATE_GENERAL]", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, error: err?.message || String(err) });
     }
   });
 
@@ -1714,7 +1714,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       });
     } catch (err: any) {
       console.error("[ADMIN_CREATE] Error:", err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ success: false, error: err?.message || String(err) });
     }
   });
 

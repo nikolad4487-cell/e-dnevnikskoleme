@@ -26,8 +26,9 @@ interface SchoolEvent {
   notes?: string;
 }
 
-export default function SkolskiKalendarPage() {
-  const { user, isStaff } = useAuth();
+export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: boolean }) {
+  const { user, isStaff: authIsStaff } = useAuth();
+  const isStaff = authIsStaff && !readOnly;
   const { selectedSchoolId } = useSelection();
 
   const [events, setEvents] = useState<SchoolEvent[]>([]);
