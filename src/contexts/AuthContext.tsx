@@ -157,6 +157,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (event === "SIGNED_IN") {
           const incomingUserId = session?.user?.id ?? null;
           
+          // Check for cached data after remount
+          const cachedUserId = sessionStorage.getItem("auth.loadedUserId");
+          const cachedAt = Number(sessionStorage.getItem("auth.loadedAt") || "0");
+          const isFresh = Date.now() - cachedAt < 5 * 60 * 1000;
+
+          if (
+            incomingUserId &&
+            cachedUserId === incomingUserId &&
+            isFresh
+          ) {
+            console.log("[AUTH] Duplicate SIGNED_IN after remount ignored from sessionStorage");
+            const cachedProfile = sessionStorage.getItem("auth.profile");
+            const cachedRoles = sessionStorage.getItem("auth.roles");
+            
+            setSession(session);
+            if (cachedProfile) setUser(JSON.parse(cachedProfile));
+            if (cachedRoles) setUserSchoolRoles(JSON.parse(cachedRoles));
+            
+            setAuthInitialized(true);
+            setLoading(false);
+            return;
+          }
+
           if (
             incomingUserId &&
             loadedUserIdRef.current === incomingUserId &&
@@ -185,6 +208,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUserSchoolRoles([]);
         setError(null);
         setLoading(false);
+        sessionStorage.removeItem("auth.loadedUserId");
+        sessionStorage.removeItem("auth.loadedAt");
+        sessionStorage.removeItem("auth.profile");
+        sessionStorage.removeItem("auth.roles");
       }
     });
 
@@ -370,6 +397,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       setError(null);
       loadedUserIdRef.current = authUserId;
+      
+      // Store in cache for remount persistence
+      sessionStorage.setItem("auth.loadedUserId", authUserId);
+      sessionStorage.setItem("auth.loadedAt", Date.now().toString());
+      sessionStorage.setItem("auth.profile", JSON.stringify(profile));
+      sessionStorage.setItem("auth.roles", JSON.stringify(roles));
       
       console.log(`[AUTH] loadUserData SUCCESS in ${Date.now() - startTime}ms`);
     } catch (err: any) {
