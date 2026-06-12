@@ -21,8 +21,8 @@
               if (newWorker) {
                 newWorker.addEventListener('statechange', () => {
                   if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    console.log('[SW] New version loaded. Reloading...');
-                    window.location.reload();
+                    console.log('[SW] New version loaded. Skipping reload to preserve application state.');
+                    // window.location.reload();
                   }
                 });
               }
@@ -42,8 +42,7 @@
       // Detect dynamic import chunk failures and auto-reload to get new index.html with fresh hashes
       window.addEventListener('error', (e) => {
         if (e && e.message && (e.message.indexOf('Failed to fetch dynamically imported module') > -1 || e.message.indexOf('chunk') > -1)) {
-          console.warn('[PWA] Dynamic import/chunk load failed. Force reloading client to fetch latest index...');
-          window.location.reload();
+          console.warn('[PWA] Dynamic import/chunk load failed. Skipping reload to preserve application state.');
         }
       }, true);
     </script>
