@@ -815,18 +815,20 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                             <span className="text-[10px] font-bold uppercase">Uredi</span>
                           </button>
                       )}
-                      <button 
-                        type="button"
-                        onClick={() => {
-                          console.log("DEBUG: BUTTON CLICKED", e.id);
-                          handleDeleteEvent(e.id);
-                        }}
-                        className="text-red-500 hover:text-red-700 p-1 flex items-center gap-1"
-                        title="Obriši događaj"
-                      >
-                        <Trash2 size={13} />
-                        <span className="text-[10px] font-bold uppercase">Obriši</span>
-                      </button>
+                      {!e.id.includes('defense') && !e.id.includes('meeting') && (
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            console.log("DEBUG: BUTTON CLICKED", e.id);
+                            handleDeleteEvent(e.id);
+                          }}
+                          className="text-red-500 hover:text-red-700 p-1 flex items-center gap-1"
+                          title="Obriši događaj"
+                        >
+                          <Trash2 size={13} />
+                          <span className="text-[10px] font-bold uppercase">Obriši</span>
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
