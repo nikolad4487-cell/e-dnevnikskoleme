@@ -13,38 +13,19 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script>
+      // Force unregister all service workers immediately on load to prevent background reloads
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').then(reg => {
-            reg.addEventListener('updatefound', () => {
-              const newWorker = reg.installing;
-              if (newWorker) {
-                newWorker.addEventListener('statechange', () => {
-                  if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                    console.log('[SW] New version loaded. Skipping reload to preserve application state.');
-                    // window.location.reload();
-                  }
-                });
-              }
-            });
-          }).catch(err => {
-            console.log('SW registration failed: ', err);
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          registrations.forEach((registration) => registration.unregister());
+        });
+
+        // Register only in production mode
+        if (import.meta.env.PROD) {
+          window.addEventListener('load', () => {
+             navigator.serviceWorker.register('/sw.js');
           });
-        });
-
-        // Ensure pages do NOT reload constantly when service worker gains control/re-activates on focus
-        let refreshing = false;
-        navigator.serviceWorker.addEventListener('controllerchange', () => {
-          console.log('[SW] Controller changed. Skipping automatic reload to preserve application state.');
-        });
-      }
-
-      // Detect dynamic import chunk failures and auto-reload to get new index.html with fresh hashes
-      window.addEventListener('error', (e) => {
-        if (e && e.message && (e.message.indexOf('Failed to fetch dynamically imported module') > -1 || e.message.indexOf('chunk') > -1)) {
-          console.warn('[PWA] Dynamic import/chunk load failed. Skipping reload to preserve application state.');
         }
-      }, true);
+      }
     </script>
   </body>
 </html>

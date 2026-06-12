@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { User, Lock, MapPin, Save, Shield, X, Printer } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { QRCodeCanvas } from 'qrcode.react';
+import { useNavigate } from 'react-router-dom';
 
 export default function SettingsPage() {
   const { user, formattedRoles, isStaff, signOut } = useAuth();
@@ -116,10 +117,12 @@ export default function SettingsPage() {
     }
   };
 
+  const navigate = useNavigate();
+
   const handleFinishReset = async () => {
     toast.success('Authenticator postavljen. Odjava radi sigurnosti...');
     await signOut();
-    window.location.href = '/login';
+    navigate('/login');
   };
 
   return (

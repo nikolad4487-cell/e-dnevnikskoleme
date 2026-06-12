@@ -27,7 +27,6 @@ export default function InactivityTracker() {
     setShowModal(false);
     await signOut();
     navigate('/login');
-    window.location.reload(); // Ensure everything is cleared
   }, [signOut, navigate]);
 
   const resetTimer = useCallback(() => {

@@ -13,6 +13,8 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   const { user, loading, error, userSchoolRoles, isMainAdmin, isStaff, isStudent, isParent, signOut, isStudentPortal } = useAuth();
   const location = useLocation();
 
+  const navigate = useNavigate();
+  
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-screen bg-slate-50">
@@ -36,7 +38,9 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
           </p>
           <div className="flex flex-col gap-2">
             <button 
-              onClick={() => window.location.reload()}
+              onClick={() => {
+                navigate(location.pathname, { replace: true });
+              }}
               className="w-full bg-[#005c8d] text-white py-3 border border-[#004a71] font-black uppercase tracking-widest text-[10px] hover:bg-[#004a71] transition-all"
             >
               Pokušaj ponovno (Osvježi)
