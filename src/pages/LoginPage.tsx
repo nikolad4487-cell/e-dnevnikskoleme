@@ -62,7 +62,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     const isForceLoggedOut = localStorage.getItem('forceLoggedOut') === 'true';
-    if (!authLoading && user && !isForceLoggedOut) {
+    const isMfaSetupNeeded = localStorage.getItem('mfaSetupNeeded') === 'true';
+
+    if (!authLoading && user && !isForceLoggedOut && !isMfaSetupNeeded) {
       navigate('/', { replace: true });
     }
   }, [user, authLoading, navigate]);
@@ -171,6 +173,12 @@ export default function LoginPage() {
 
       if (sessionError) {
         throw sessionError;
+      }
+
+      if (result.mfa_setup_needed) {
+        localStorage.setItem('mfaSetupNeeded', 'true');
+        navigate('/setup-authenticator', { replace: true });
+        return;
       }
       
       console.log('[LOGIN] Session set successfully, waiting for AuthContext to load profile...');

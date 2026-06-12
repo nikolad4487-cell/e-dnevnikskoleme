@@ -87,40 +87,41 @@ export async function POST(req: Request) {
       );
 
       if (isActuallyStaff) {
-        if (!profile.authenticator_secret) {
-          return new Response(JSON.stringify({ error: "Autentifikator nije podešen za vaš račun. Obratite se administratoru." }), { 
-            status: 401,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
+        // If user already has MFA configured, require TOTP. Otherwise, allow login and flag for setup.
+        const isMfaSet = profile.authenticator_secret && !profile.requires_authenticator_setup;
 
-        if (!totpCode) {
-          return new Response(JSON.stringify({ error: "Unesite 6-znamenkasti kod iz autentifikatora." }), { 
-            status: 401,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
+        if (isMfaSet) {
+          if (!totpCode) {
+            return new Response(JSON.stringify({ error: "Unesite 6-znamenkasti kod iz autentifikatora." }), { 
+              status: 401,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
 
-        let isValid = false;
-        if (profile.authenticator_secret === '123456') {
-          isValid = totpCode === '123456';
+          let isValid = false;
+          if (profile.authenticator_secret === '123456') {
+            isValid = totpCode === '123456';
+          } else {
+            isValid = authenticator.check(totpCode, profile.authenticator_secret);
+          }
+
+          if (!isValid) {
+            return new Response(JSON.stringify({ error: "Neispravan autentifikator kod." }), { 
+              status: 401,
+              headers: { 'Content-Type': 'application/json' }
+            });
+          }
         } else {
-          isValid = authenticator.check(totpCode, profile.authenticator_secret);
-        }
-
-        if (!isValid) {
-          return new Response(JSON.stringify({ error: "Neispravan autentifikator kod." }), { 
-            status: 401,
+          // Flag as MFA setup needed
+          return new Response(JSON.stringify({ 
+            session, 
+            user: profile, 
+            roles: userSchoolRoles,
+            mfa_setup_needed: true
+          }), {
+            status: 200,
             headers: { 'Content-Type': 'application/json' }
           });
-        }
-
-        // If successful and was pending setup, mark as setup done
-        if (profile.requires_authenticator_setup) {
-          await supabaseAdmin
-            .from('user_profiles')
-            .update({ requires_authenticator_setup: false })
-            .eq('id', profile.id);
         }
       }
     }

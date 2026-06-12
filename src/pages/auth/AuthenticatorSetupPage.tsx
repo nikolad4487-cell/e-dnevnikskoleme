@@ -52,6 +52,7 @@ export default function AuthenticatorSetupPage() {
 
       await reloadUserData();
       
+      localStorage.setItem('mfaSetupNeeded', 'false');
       toast.success('Microsoft Authenticator uspješno postavljen!');
       setStep(3);
     } catch (err: any) {
