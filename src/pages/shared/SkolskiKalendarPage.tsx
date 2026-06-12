@@ -46,6 +46,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
   const [selectedDayEvents, setSelectedDayEvents] = useState<SchoolEvent[]>([]);
   const [selectedDayDateStr, setSelectedDayDateStr] = useState('');
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Form State
   const [newDate, setNewDate] = useState('');
@@ -302,12 +303,21 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         return;
       }
 
+      if (!result.data || result.data.length === 0) {
+        console.error("DELETE DID NOT DELETE ANY ROW", eventId);
+        alert("Zapis nije obrisan iz baze. Provjeri id i izvornu tablicu.");
+        return;
+      }
+
       console.log("DELETE EVENT SUCCESS", result.data);
 
       setEvents((prev) => prev.filter((item) => item.id !== eventId));
       setSelectedDayEvents((prev) => prev.filter((item) => item.id !== eventId));
+      toast.success('Događaj uklonjen.');
+      setShowDetailsModal(false);
+      loadEvents();
 
-    } catch (err) {
+    } catch (err: any) {
       console.error("DELETE EVENT CRASHED", err);
       alert("Brisanje zapisa se srušilo. Pogledaj konzolu.");
     }

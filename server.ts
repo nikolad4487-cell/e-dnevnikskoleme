@@ -2298,6 +2298,35 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     }
   });
 
+  // Debug route
+  app.get("/api/debug-db", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      
+      // Get table columns
+      const { data: columns, error: colError } = await supabaseAdmin.rpc('exec_sql', {
+        sql_statement: `
+          SELECT column_name, data_type 
+          FROM information_schema.columns 
+          WHERE table_name IN ('school_events', 'final_exam_defense_schedule');
+        `
+      });
+
+      // Get RLS policies
+      const { data: policies, error: polError } = await supabaseAdmin.rpc('exec_sql', {
+        sql_statement: `
+          SELECT policyname, cmd, permissive, roles 
+          FROM pg_policies 
+          WHERE tablename IN ('school_events', 'final_exam_defense_schedule');
+        `
+      });
+
+      res.json({ columns, policies });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Admin update user endpoint
   app.patch("/api/admin/update-user", async (req, res) => {
     try {

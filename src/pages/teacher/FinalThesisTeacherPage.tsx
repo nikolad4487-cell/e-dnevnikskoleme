@@ -63,11 +63,18 @@ export default function FinalThesisTeacherPage() {
         return;
       }
 
+      if (!result.data || result.data.length === 0) {
+        console.error("DELETE DEFENSE DID NOT DELETE ANY ROW", scheduleId);
+        alert("Obrana nije obrisana iz baze. Provjeri id i RLS policy.");
+        return;
+      }
+
       console.log("DELETE DEFENSE SUCCESS", result.data);
 
       setDefenseSchedules((prev) => prev.filter((item) => item.id !== scheduleId));
-
-    } catch (err) {
+      
+      toast.success('Raspored obrane uspješno obrisan!');
+    } catch (err: any) {
       console.error("DELETE DEFENSE CRASHED", err);
       alert("Brisanje obrane se srušilo. Pogledaj konzolu.");
     }
