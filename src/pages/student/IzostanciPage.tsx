@@ -88,9 +88,21 @@ export default function IzostanciPage() {
               .from('subjects')
               .select('id, name')
               .in('id', subjectIds);
+
+            const { data: classSubjs } = await supabase
+              .from('class_subjects')
+              .select('subject_id, subject_type')
+              .eq('class_id', selectedClassId || '');
+
+            const csMap = new Map<string, string>();
+            if (classSubjs) {
+              for (const cs of classSubjs) {
+                csMap.set(cs.subject_id, cs.subject_type || 'REQUIRED');
+              }
+            }
             
             (subjectsData || []).forEach(s => {
-              subjectsMap.set(s.id, s.name);
+              subjectsMap.set(s.id, formatSubjectDisplayName(s.name, csMap.get(s.id) || 'REQUIRED'));
             });
           }
         }

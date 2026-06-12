@@ -2427,8 +2427,9 @@ setStudents(uniqueMapped as any);
     
     setLoading(true);
     try {
+      const cleanName = newSubjectName.replace(/\s*\((izborni|elective)\)\s*$/i, '').trim();
       const { data, error } = await supabase.from('subjects').insert([{
-        name: newSubjectName,
+        name: cleanName,
         school_id: selectedSchoolId
       }]).select();
       

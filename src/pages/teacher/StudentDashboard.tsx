@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Loader2, Users, BookOpen, FileText, XCircle, ChevronLeft, ChevronRight, Shuffle } from 'lucide-react';
-import { sortStudentsBySurname } from '../../lib/utils';
+import { sortStudentsBySurname, formatSubjectDisplayName } from '../../lib/utils';
 
 export default function StudentDashboard() {
   const { classId, studentId } = useParams();
@@ -123,7 +123,7 @@ export default function StudentDashboard() {
               const teachersList = teacherMap[cs.subject_id] || [];
               mappedSubjects.push({
                 id: cs.subject_id,
-                name: matchedSub.name || 'Nepoznat predmet',
+                name: formatSubjectDisplayName(matchedSub.name || 'Nepoznat predmet', cs.subject_type || 'REQUIRED'),
                 code: matchedSub.code || '',
                 teacher: teachersList.length > 0 ? teachersList.join(', ') : 'NEMA DODIJELJENOG NASTAVNIKA'
               });

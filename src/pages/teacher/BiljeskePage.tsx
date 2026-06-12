@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { User, StudentNote, Class, ClassNotes, StudentNotes } from '../../types';
-import { cn, formatName, getSurname, matchesSearch, sortStudentsBySurname } from '../../lib/utils';
+import { cn, formatName, getSurname, matchesSearch, sortStudentsBySurname, formatSubjectDisplayName } from '../../lib/utils';
 import { MessageSquare, Plus, Search, Calendar, User as UserIcon, Edit2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { mappers, mapList } from '../../lib/mappers';
@@ -89,7 +89,23 @@ export default function BiljeskePage() {
 
       // 3. Fetch Subjects
       const { data: subData } = await supabase.from('subjects').select('id, name');
-      setSubjects(subData || []);
+      const { data: classSubjs } = await supabase
+        .from('class_subjects')
+        .select('subject_id, subject_type')
+        .eq('class_id', effectiveClassId || '');
+
+      const csMap = new Map<string, string>();
+      if (classSubjs) {
+        for (const cs of classSubjs) {
+          csMap.set(cs.subject_id, cs.subject_type || 'REQUIRED');
+        }
+      }
+
+      const formatted = (subData || []).map((s: any) => ({
+        ...s,
+        name: formatSubjectDisplayName(s.name, csMap.get(s.id) || 'REQUIRED')
+      }));
+      setSubjects(formatted);
 
       // 4. Fetch Dnevničke Bilješke (student_notes)
       const { data: notesData } = await supabase

@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
-import { cn, getSurname, formatPersonName, sortStudentsBySurname } from '../../lib/utils';
+import { cn, getSurname, formatPersonName, sortStudentsBySurname, formatSubjectDisplayName } from '../../lib/utils';
 import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, UserX } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
@@ -22,6 +22,8 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const selectedClass = classes.find(c => c.id === effectiveClassId);
   const [students, setStudents] = useState<User[]>([]);
   const [allSubjects, setAllSubjects] = useState<any[]>([]);
+  const [rawSubjects, setRawSubjects] = useState<any[]>([]);
+  const [classSubjects, setClassSubjects] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<User[]>([]);
   
   const [weeks, setWeeks] = useState<WorkWeek[]>([]);
@@ -32,6 +34,21 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   });
   const [selectedWeek, setSelectedWeek] = useState<WorkWeek | null>(null);
   
+  useEffect(() => {
+    if (rawSubjects.length > 0) {
+      const mapped = rawSubjects.map(sub => {
+        const cs = classSubjects.find(c => c.subject_id === sub.id || c.subject_id === sub.subject_id);
+        return {
+          ...sub,
+          name: formatSubjectDisplayName(sub.name, cs?.subject_type || 'redovni')
+        };
+      });
+      setAllSubjects(mapped);
+    } else {
+      setAllSubjects([]);
+    }
+  }, [rawSubjects, classSubjects]);
+
   // Restore state from sessionStorage on class or weeks change
   useEffect(() => {
     if (effectiveClassId) {
@@ -621,7 +638,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
           .select('*')
           .eq('school_id', selectedSchoolId);
         if (se) throw se;
-        setAllSubjects(mapList(subjectsData || [], mappers.subject));
+        setRawSubjects(mapList(subjectsData || [], mappers.subject));
 
         const { data: rolesData, error: re } = await supabase
           .from('user_school_roles')
@@ -680,6 +697,16 @@ setStudents(uniqueStudents);
 
         const weekList = mapList(weeksData || [], mappers.week);
         setWeeks(weekList);
+
+        const { data: csData, error: cse } = await supabase
+          .from('class_subjects')
+          .select('*')
+          .eq('class_id', effectiveClassId);
+        if (!cse && csData) {
+          setClassSubjects(csData);
+        } else {
+          setClassSubjects([]);
+        }
       } catch (error) {
         console.error(error);
         toast.error('Greška pri učitavanju konteksta razreda');

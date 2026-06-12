@@ -390,7 +390,7 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
       // 6. Fetch final grades (period = 'SECOND_TERM' and select value) for specific class
       const { data: finalGradesData, error: fgErr } = await supabase
           .from('final_grades')
-          .select('value, subjects(name, subject_type)')
+          .select('value, subject_id, subjects(name, subject_type)')
           .eq('student_id', student.id)
           .eq('class_id', studentData.class_id || '')
           .eq('period', 'SECOND_TERM');
@@ -431,14 +431,27 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
       console.log("CERT FINAL GRADES ERROR", finalGradesError);
       console.log("CERT CLASS ERROR", classError);
 
+      const { data: classSubs1 } = await supabase
+        .from('class_subjects')
+        .select('subject_id, subject_type')
+        .eq('class_id', studentData.class_id || '');
+
+      const classSubjectTypeMap1 = new Map<string, string>();
+      if (classSubs1) {
+        for (const cs of classSubs1) {
+          classSubjectTypeMap1.set(cs.subject_id, cs.subject_type || 'REQUIRED');
+        }
+      }
+
       // Deduplicate grades/subjects (Jedan predmet smije biti prikazan samo jednom)
       const uniqueGradesMap = new Map<string, any>();
       if (finalGradesData) {
           for (const g of finalGradesData) {
               const subjectName = (g.subjects as any)?.name || 'Nepoznat predmet';
-              const subjectType = (g.subjects as any)?.subject_type || 'REQUIRED';
+              const cleanName = subjectName.replace(/\s*\(izborni\)\s*$/i, '').trim();
+              const subjectType = classSubjectTypeMap1.get(g.subject_id) || (g.subjects as any)?.subject_type || 'REQUIRED';
               // Keep the latest or first
-              uniqueGradesMap.set(subjectName, { value: g.value, subjectType });
+              uniqueGradesMap.set(cleanName, { value: g.value, subjectType });
           }
       }
       const uniqueGradesList = Array.from(uniqueGradesMap.entries()).map(([subj, gData]) => ({
@@ -582,7 +595,7 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
 
       const { data: classSubjects } = await supabase
         .from('class_subjects')
-        .select('subject_id')
+        .select('subject_id, subject_type')
         .eq('class_id', classId);
 
       let requiredSubjectIds: string[] = [];
@@ -654,11 +667,19 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
         return val ? val.toString() : 'N/A';
       };
 
+      const classSubjectTypeMap2 = new Map<string, string>();
+      if (classSubjects) {
+        for (const cs of classSubjects) {
+          classSubjectTypeMap2.set(cs.subject_id, cs.subject_type || 'REQUIRED');
+        }
+      }
+
       const uniqueGradesMap = new Map<string, any>();
-      for (const g of finalGrades) {
+      for (const g of finalGrades || []) {
           const subjectName = (g.subjects as any)?.name || 'Nepoznat predmet';
-          const subjectType = (g.subjects as any)?.subject_type || 'REQUIRED';
-          uniqueGradesMap.set(subjectName, { value: g.value, subjectType });
+          const cleanName = subjectName.replace(/\s*\(izborni\)\s*$/i, '').trim();
+          const subjectType = classSubjectTypeMap2.get(g.subject_id) || (g.subjects as any)?.subject_type || 'REQUIRED';
+          uniqueGradesMap.set(cleanName, { value: g.value, subjectType });
       }
       const uniqueGradesList = Array.from(uniqueGradesMap.entries()).map(([subj, gData]) => ({
           subjectName: subj,

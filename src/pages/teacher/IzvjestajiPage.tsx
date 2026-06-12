@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { BarChart3, PieChart, TrendingUp, Users, Award, AlertTriangle, FileText, User } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, formatSubjectDisplayName } from '../../lib/utils';
 import { Role } from '../../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart as RechartsPieChart, Pie } from 'recharts';
 
@@ -102,10 +102,10 @@ export default function IzvjestajiPage() {
           }
       } else if (activeTab === 'SUBJECTS') {
          // Subjects
-         let subQ = supabase.from('class_subjects').select('subject_id, subjects(name)').eq('class_id', effectiveClassId || '');
+         let subQ = supabase.from('class_subjects').select('subject_id, subject_type, subjects(name)').eq('class_id', effectiveClassId || '');
          const { data: csData } = effectiveClassId ? await subQ : await supabase.from('subjects').select('id, name').eq('school_id', selectedSchoolId || '');
          
-         const subList = effectiveClassId ? (csData||[]).map((c:any)=>({id: c.subject_id, name: c.subjects?.name})) : (csData||[]);
+         const subList = effectiveClassId ? (csData||[]).map((c:any)=>({id: c.subject_id, name: formatSubjectDisplayName(c.subjects?.name || '', c.subject_type || 'REQUIRED')})) : (csData||[]);
          const subRows = await Promise.all(subList.map(async (s:any) => {
                let q = supabase.from('grades').select('value').eq('subject_id', s.id);
                if(effectiveClassId) q = q.eq('class_id', effectiveClassId);
@@ -128,10 +128,10 @@ export default function IzvjestajiPage() {
          });
          setReportData([{ status: 'Opravdani', count: breakdown.EXCUSED, color: '#16a34a' }, { status: 'Neopravdani', count: breakdown.UNEXCUSED, color: '#dc2626' }, { status: 'Neriješeni', count: breakdown.UNRESOLVED, color: '#f59e0b'}]);
       } else if (activeTab === 'FINAL_GRADES') {
-         let subQ = supabase.from('class_subjects').select('subject_id, subjects(name)').eq('class_id', effectiveClassId || '');
+         let subQ = supabase.from('class_subjects').select('subject_id, subject_type, subjects(name)').eq('class_id', effectiveClassId || '');
          const { data: csData } = effectiveClassId ? await subQ : await supabase.from('subjects').select('id, name').eq('school_id', selectedSchoolId || '');
          
-         const subList = effectiveClassId ? (csData||[]).map((c:any)=>({id: c.subject_id, name: c.subjects?.name})) : (csData||[]);
+         const subList = effectiveClassId ? (csData||[]).map((c:any)=>({id: c.subject_id, name: formatSubjectDisplayName(c.subjects?.name || '', c.subject_type || 'REQUIRED')})) : (csData||[]);
          const subRows = await Promise.all(subList.map(async (s:any) => {
                let q = supabase.from('final_grades').select('grade').eq('subject_id', s.id);
                if(effectiveClassId) q = q.eq('class_id', effectiveClassId);

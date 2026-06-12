@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Grade, Subject, User, ClassSubjectTeacher, specialExamTypes, specialExamTypeLabels } from '../../types';
-import { cn, formatPersonName, finalGradeLabels } from '../../lib/utils';
+import { cn, formatPersonName, finalGradeLabels, formatSubjectDisplayName } from '../../lib/utils';
 import { BookOpen, GraduationCap, ChevronRight, ArrowLeft } from 'lucide-react';
 import { mappers, mapList } from '../../lib/mappers';
 
@@ -131,7 +131,22 @@ export default function OcjenePage() {
           .select('*')
           .in('id', activeSubjectIds);
         
-        const activeSubjects = mapList(subjectsData, mappers.subject);
+        const { data: classSubjs } = await supabase
+          .from('class_subjects')
+          .select('subject_id, subject_type')
+          .eq('class_id', selectedClassId || '');
+
+        const csMap = new Map<string, string>();
+        if (classSubjs) {
+          for (const cs of classSubjs) {
+            csMap.set(cs.subject_id, cs.subject_type || 'REQUIRED');
+          }
+        }
+
+        const activeSubjects = mapList(subjectsData, mappers.subject).map((sub: any) => ({
+          ...sub,
+          name: formatSubjectDisplayName(sub.name, csMap.get(sub.id) || 'REQUIRED')
+        }));
         setSubjects(activeSubjects);
 
         // 3. Get teachers for these subjects in this class

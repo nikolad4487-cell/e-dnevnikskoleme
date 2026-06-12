@@ -195,6 +195,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
   const [programs, setPrograms] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<User[]>([]);
   const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
+  const [rawSubjects, setRawSubjects] = useState<Subject[]>([]);
   const [subjectAssignments, setSubjectAssignments] = useState<SubjectTeachingAssignment[]>([]);
   const [enrollments, setEnrollments] = useState<StudentSubjectEnrollment[]>([]);
   const [loading, setLoading] = useState(false);
@@ -387,6 +388,21 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
   const subjectDisplayName = activeSubject ? formatSubjectDisplayName(activeSubject.name || '', activeClassSubject?.subjectType || 'redovni') : '';
 
   useEffect(() => {
+    if (rawSubjects.length > 0) {
+      const mapped = rawSubjects.map(sub => {
+        const cs = classSubjects.find(c => (c.subjectId === sub.id || c.subject_id === sub.id) && c.classId === effectiveClassId);
+        return {
+          ...sub,
+          name: formatSubjectDisplayName(sub.name, cs?.subjectType || 'redovni')
+        };
+      });
+      setAllSubjects(mapped);
+    } else {
+      setAllSubjects([]);
+    }
+  }, [rawSubjects, classSubjects, effectiveClassId]);
+
+  useEffect(() => {
     const fetchInitial = async () => {
       if (!selectedSchoolId || !user) return;
       try {
@@ -429,7 +445,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
           .select('*')
           .eq('school_id', selectedSchoolId);
         if (se) throw se;
-        setAllSubjects(mapList(subjectsRaw || [], mappers.subject));
+        setRawSubjects(mapList(subjectsRaw || [], mappers.subject));
 
         const { data: programsRaw, error: pe } = await supabase
           .from('programs')

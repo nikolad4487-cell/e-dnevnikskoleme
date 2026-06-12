@@ -1444,7 +1444,7 @@ export default function AdminSettingsPage() {
                                       ['Hrvatski jezik', 'odličan (5)'],
                                       ['Matematika', 'vrlo dobar (4)'],
                                       ['Engleski jezik', 'odličan (5)'],
-                                      ['Vjeronauk (izborni)', 'odličan (5)'],
+                                      ['Vjeronauk', 'odličan (5)'],
                                     ].map(([subj, gr], i) => (
                                       <div key={i} className="flex justify-between items-center px-4 py-1.5 border-b border-slate-200 text-xs last:border-b-0">
                                         <span className="font-medium font-serif">{subj}</span>

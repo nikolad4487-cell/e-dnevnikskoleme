@@ -61,7 +61,23 @@ export default function StudentIspitiPage() {
           .from('subjects')
           .select('*')
           .in('id', activeSubjectIds);
-        const activeSubjects = mapList(subjectsData, mappers.subject);
+
+        const { data: classSubjs } = await supabase
+          .from('class_subjects')
+          .select('subject_id, subject_type')
+          .eq('class_id', selectedClassId || '');
+
+        const csMap = new Map<string, string>();
+        if (classSubjs) {
+          for (const cs of classSubjs) {
+            csMap.set(cs.subject_id, cs.subject_type || 'REQUIRED');
+          }
+        }
+        
+        const activeSubjects = mapList(subjectsData, mappers.subject).map((sub: any) => ({
+          ...sub,
+          name: formatSubjectDisplayName(sub.name, csMap.get(sub.id) || 'REQUIRED')
+        }));
         const subjectsMap = new Map<string, Subject>();
         activeSubjects.forEach(s => subjectsMap.set(s.id, s));
 

@@ -85,15 +85,17 @@ export function formatName(item: any) {
 }
 
 export function formatSubjectDisplayName(subjectName: string, subjectType: string) {
-  if (!subjectType) return subjectName;
+  if (!subjectName) return '';
+  const cleaned = subjectName.replace(/\s*\((izborni|elective)\)\s*$/i, '').trim();
+  if (!subjectType) return cleaned;
   const t = subjectType.toLowerCase().trim();
-  if (t === 'redovni' || t === 'required' || t === 'obvezni' || t === 'obvezan') {
-    return subjectName;
+  if (t === 'redovni' || t === 'required' || t === 'obvezni' || t === 'obvezan' || t === 'required') {
+    return cleaned;
   }
   if (t === 'elective' || t === 'izborni') {
-    return `${subjectName} (izborni)`;
+    return `${cleaned} (izborni)`;
   }
-  return `${subjectName} (${subjectType})`;
+  return `${cleaned} (${subjectType})`;
 }
 
 export function sanitizeSubjectType(type: string | null | undefined): 'REQUIRED' | 'ELECTIVE' {

@@ -58,8 +58,9 @@ export default function SubjectManagementPage() {
       return;
     }
     
+    const cleanName = name.replace(/\s*\((izborni|elective)\)\s*$/i, '').trim();
     const payload = { 
-      name, 
+      name: cleanName, 
       code: code || null,
       school_id: selectedSchoolId
     };

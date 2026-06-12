@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { sortStudentsBySurname } from '../../lib/utils';
+import { sortStudentsBySurname, formatSubjectDisplayName } from '../../lib/utils';
 import { toast } from 'react-hot-toast';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import GroupGradesModal from '../../components/GroupGradesModal';
@@ -243,7 +243,26 @@ export default function StudentSubjectDetail() {
       if (examError) console.error("Exams Error", examError);
 
       if (profile) setStudent(profile);
-      if (subData) setSubject(subData);
+      if (subData) {
+        let subjectType = 'REQUIRED';
+        try {
+          const { data: clsSub } = await supabase
+            .from('class_subjects')
+            .select('subject_type')
+            .eq('class_id', classId)
+            .eq('subject_id', subjectId)
+            .maybeSingle();
+          if (clsSub?.subject_type) {
+            subjectType = clsSub.subject_type;
+          }
+        } catch (e) {
+          console.error(e);
+        }
+        setSubject({
+          ...subData,
+          name: formatSubjectDisplayName(subData.name, subjectType)
+        });
+      }
       if (classData) setClassroom(classData);
 
       if (enrollments && enrollments.length > 0) {

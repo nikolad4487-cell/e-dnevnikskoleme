@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, Subject, ScheduleCell, ScheduleCellSubject, Role } from '../../types';
-import { formatPersonName } from '../../lib/utils';
+import { formatPersonName, formatSubjectDisplayName } from '../../lib/utils';
 import { Clock, Monitor, BookOpen } from 'lucide-react';
 import { mappers } from '../../lib/mappers';
 import { ScheduleGrid } from '../../components/ScheduleGrid';
@@ -101,7 +101,24 @@ export default function RasporedPage() {
 
         // Fetch Subjects mapping table for subject names
         const { data: subData } = await supabase.from('subjects').select('*');
-        setSubjects((subData || []).map(row => mappers.subject(row)));
+        const { data: classSubjs } = await supabase
+          .from('class_subjects')
+          .select('subject_id, subject_type')
+          .eq('class_id', selectedClassId || '');
+
+        const csMap = new Map<string, string>();
+        if (classSubjs) {
+          for (const cs of classSubjs) {
+            csMap.set(cs.subject_id, cs.subject_type || 'REQUIRED');
+          }
+        }
+        setSubjects((subData || []).map(row => {
+          const sub = mappers.subject(row);
+          return {
+            ...sub,
+            name: formatSubjectDisplayName(sub.name, csMap.get(sub.id) || 'REQUIRED')
+          };
+        }));
 
       } catch (err) {
         console.error("Error fetching schedule data:", err);
