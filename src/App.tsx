@@ -102,6 +102,32 @@ function RoutePersister() {
   return null;
 }
 
+function TitleManager() {
+  const location = useLocation();
+
+  useEffect(() => {
+    const pageTitles = [
+      { match: "/admin-skole/korisnici", title: "e-Dnevnik - Korisnici i nastavnici" },
+      { match: "/izostanci", title: "e-Dnevnik - Izostanci" },
+      { match: "/admin-skole", title: "e-Dnevnik - Admin škole" },
+      { match: "/admin-razreda", title: "e-Dnevnik - Admin razreda" },
+      { match: "/imenik", title: "e-Dnevnik - Imenik" },
+      { match: "/pregled-rada", title: "e-Dnevnik - Pregled rada" },
+      { match: "/dnevnik-rada", title: "e-Dnevnik - Dnevnik rada" },
+      { match: "/kalendar-skole", title: "e-Dnevnik - Kalendar škole" },
+      { match: "/raspored", title: "e-Dnevnik - Raspored" },
+    ];
+    
+    const current = pageTitles.find((item) =>
+      location.pathname.includes(item.match)
+    );
+
+    document.title = current?.title || "e-Dnevnik";
+  }, [location.pathname]);
+
+  return null;
+}
+
 const APP_VERSION = '1.0.5';
 
 export default function App() {
@@ -134,6 +160,7 @@ export default function App() {
       <SelectionProvider>
         <BrowserRouter>
           <RoutePersister />
+          <TitleManager />
           <Toaster position="top-right" />
           {/* InactivityTracker disabled temporarily to prevent loops */}
           {/* <InactivityTracker /> */}
