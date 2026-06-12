@@ -191,7 +191,15 @@ export default function OcjenePage() {
           .eq('student_id', targetStudentId)
           .eq('class_id', selectedClassId);
         
-        setFinalGrades(mapList(finalGradesData, mappers.finalGrade));
+        const mappedList = mapList(finalGradesData, mappers.finalGrade).map((fg: any) => {
+          const isStatus = ["NEOCIJENJEN", "OSLOBODEN", "ODRADENO", "NEODRADENO"].includes(fg.value);
+          return {
+            ...fg,
+            status: isStatus ? fg.value : null,
+            value: isStatus ? '' : fg.value
+          };
+        });
+        setFinalGrades(mappedList);
 
       } catch (error) {
         console.error(error);

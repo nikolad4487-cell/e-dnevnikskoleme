@@ -34,8 +34,8 @@ export default function GroupFinalGradesModal({ isOpen, onClose, classId, subjec
             subject_id: subjectId,
             class_id: classId,
             period: term,
-            value: data.grade ? data.grade.toString() : null,
-            status: data.status,
+            term: term === 'FIRST_SEMESTER' ? 'FIRST_SEMESTER' : 'FINAL',
+            value: data.grade ? data.grade.toString() : (data.status || ''),
             note: 'Zaključna ocjena'
         }));
       

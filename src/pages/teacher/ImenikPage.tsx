@@ -652,13 +652,21 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
 
     if (viewMode === 'GRADES' && activeStudent && activeSubject) {
       const fetchGradingElements = async () => {
+        const targetTeacherId = (() => {
+          if (isMainAdmin) {
+            const assignment = subjectAssignments.find(a => a.classId === effectiveClassId && a.subjectId === activeSubject.id);
+            if (assignment?.teacherId) return assignment.teacherId;
+          }
+          return user?.id;
+        })();
+
         const { data } = await supabase
           .from('grading_elements')
           .select('*')
           .eq('school_id', selectedSchoolId)
           .eq('class_id', effectiveClassId)
           .eq('subject_id', activeSubject.id)
-          .eq('teacher_id', user?.id)
+          .eq('teacher_id', targetTeacherId)
           .order('display_order', { ascending: true });
         if (data) setGradingElements(mapList(data, mappers.gradingElement));
       };
@@ -1358,17 +1366,46 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     }
   };
 
-  const handleDeleteSpecialExam = async (examId: string) => {
-    const exam = specialExams.find(e => e.id === examId);
-    if (!exam) return;
+  const handleDeleteMakeupExam = async (exam: any) => {
+    console.log("DELETE MAKEUP EXAM START", exam);
 
-    if (!isMainAdmin && exam.teacherId !== user?.id) {
-      toast.error('Niste ovlašteni za brisanje ovog ispita.');
+    if (!exam?.id) {
+      console.error("Missing exam id", exam);
       return;
     }
 
-    setDeleteDialog({ isOpen: true, id: examId, type: 'SPECIAL_EXAM', loading: false });
+    try {
+      console.log("BEFORE MAKEUP EXAM DELETE", exam.id);
+
+      const result = await supabase
+        .from("exams")
+        .delete()
+        .eq("id", exam.id)
+        .select();
+
+      console.log("DELETE MAKEUP EXAM RESULT", result);
+
+      if (result.error) {
+        console.error("DELETE MAKEUP EXAM ERROR", result.error);
+        alert("Greška pri brisanju ispita: " + result.error.message);
+        return;
+      }
+
+      if (!result.data || result.data.length === 0) {
+        console.error("DELETE MAKEUP EXAM DID NOT DELETE ROW", exam.id);
+        alert("Ispit nije obrisan iz baze. Provjeri tablicu, ID ili RLS.");
+        return;
+      }
+
+      console.log("DELETE MAKEUP EXAM SUCCESS", result.data);
+
+      await fetchSpecialExams();
+    } catch (err) {
+      console.error("DELETE MAKEUP EXAM CRASHED", err);
+      alert("Greška pri brisanju ispita.");
+    }
   };
+
 
   const handleAddFinalGrade = async (val: number | string) => {
     if (!activeStudent || !activeSubject || !user || !selectedFinalPeriod || !effectiveClassId || !selectedSchoolId) return;
@@ -1460,12 +1497,36 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     if (!deleteDialog.id || !deleteDialog.type) return;
     
     setDeleteDialog(prev => ({ ...prev, loading: true }));
+
+    if (deleteDialog.type === 'SPECIAL_EXAM') {
+      console.log("DELETE MAKEUP EXAM CONFIRMED FOR EXECUTION", deleteDialog.id);
+      try {
+        const { data, error } = await supabase.from('exams').delete().eq('id', deleteDialog.id).select();
+        console.log("DELETE SPECIAL EXAM RESULT", { data, error });
+        if (error) throw error;
+        
+        if (!data || data.length === 0) {
+          throw new Error("Ispit nije pronađen ili je već obrisan iz baze.");
+        }
+
+        toast.success('Zapis je uspješno obrisan.');
+        await fetchGradesAndNotes();
+        await fetchStudentsData();
+        await fetchWarningData();
+      } catch (err: any) {
+        console.error("DELETE SPECIAL EXAM ERROR", err);
+        toast.error(err.message || 'Brisanje ispita nije uspjelo.');
+      } finally {
+        setDeleteDialog({ isOpen: false, id: '', type: null, loading: false });
+      }
+      return;
+    }
+
     let tableName = '';
     
     switch (deleteDialog.type) {
       case 'GRADE': tableName = 'grades'; console.log("DELETE GRADE CLICKED", { id: deleteDialog.id }); break;
       case 'NOTE': tableName = 'student_notes'; console.log("DELETE NOTE CLICKED", { id: deleteDialog.id }); break;
-      case 'SPECIAL_EXAM': tableName = 'exams'; break;
       case 'FINAL_GRADE': tableName = 'final_grades'; console.log("DELETE FINAL GRADE CLICKED", { id: deleteDialog.id }); break;
     }
 
@@ -2153,13 +2214,20 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                         <td className="p-3 text-center border-r border-slate-300 font-bold text-slate-500">
                           {ex.date ? new Date(ex.date).toLocaleDateString('hr-HR') + '.' : '—'}
                         </td>
-                        <td className="p-3 text-center w-12">
+                        <td className="p-3 text-center w-24">
                           <button 
-                            onClick={() => handleDeleteSpecialExam(ex.id)} 
-                            className="text-slate-300 hover:text-red-500 p-1"
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              console.log("DELETE MAKEUP EXAM BUTTON CLICKED", ex);
+                              void handleDeleteMakeupExam(ex);
+                            }} 
+                            className="bg-red-50 hover:bg-red-100 text-red-700 font-bold px-2 py-1 rounded border border-red-200 text-[10px] tracking-wide uppercase flex items-center justify-center gap-1 cursor-pointer w-full"
                             title="Obriši ispit"
                           >
-                            <Trash2 size={12}/>
+                            <Trash2 size={11} className="pointer-events-none"/>
+                            <span>Obriši</span>
                           </button>
                         </td>
                       </tr>
@@ -2584,16 +2652,30 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
           subject={activeSubject}
           classId={effectiveClassId!}
           schoolId={selectedSchoolId!}
-          teacherId={user?.id!}
+          teacherId={(() => {
+            if (isMainAdmin) {
+              const assignment = subjectAssignments.find(a => a.classId === effectiveClassId && a.subjectId === activeSubject.id);
+              if (assignment?.teacherId) return assignment.teacherId;
+            }
+            return user?.id!;
+          })()}
           onRefresh={() => {
             const fetchGE = async () => {
+              const targetTeacherId = (() => {
+                if (isMainAdmin) {
+                  const assignment = subjectAssignments.find(a => a.classId === effectiveClassId && a.subjectId === activeSubject.id);
+                  if (assignment?.teacherId) return assignment.teacherId;
+                }
+                return user?.id;
+              })();
+
               const { data } = await supabase
                 .from('grading_elements')
                 .select('*')
                 .eq('school_id', selectedSchoolId)
                 .eq('class_id', effectiveClassId)
                 .eq('subject_id', activeSubject.id)
-                .eq('teacher_id', user?.id)
+                .eq('teacher_id', targetTeacherId)
                 .order('display_order', { ascending: true });
               if (data) setGradingElements(mapList(data, mappers.gradingElement));
             };
@@ -2797,6 +2879,12 @@ function GradingElementsModal({ isOpen, onClose, subject, classId, schoolId, tea
   const handleAdd = async () => {
     if (!newElementName.trim()) return;
     
+    if (!teacherId) {
+      console.error("Missing teacher profile id");
+      alert("Nije moguće dodati element ocjenjivanja jer nastavnik nije učitan.");
+      return;
+    }
+
     const payload = {
       school_id: schoolId,
       class_id: classId,
