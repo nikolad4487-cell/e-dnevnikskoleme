@@ -60,6 +60,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const loadingRef = React.useRef<string | null>(null);
   const userRef = React.useRef<User | null>(null);
+  const loadedUserIdRef = React.useRef<string | null>(null);
+  const isLoadingUserRef = React.useRef(false);
+
+  useEffect(() => {
+    console.log('[AUTH] AuthProvider MOUNT');
+    return () => console.log('[AUTH] AuthProvider UNMOUNT');
+  }, []);
 
   // Sync userRef with user state for use in callbacks
   useEffect(() => {
@@ -147,23 +154,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSupabaseUser(session?.user ?? null);
       
       if (userId) {
-        setError(null);
-        
-        // Use the same guard as in initialize
-        if (loadingRef.current === userId && (user || isFetchingUserDataRef.current)) {
-          console.log(`[AUTH] User ${userId} already loaded or loading, skipping duplicate call.`);
-          return;
-        }
-        
-        // Prevent infinite loops if multiple events fire
-        if (loadingRef.current === userId && event !== 'SIGNED_IN') {
-          return;
-        }
+        if (event === "SIGNED_IN") {
+          const incomingUserId = session?.user?.id ?? null;
+          
+          if (
+            incomingUserId &&
+            loadedUserIdRef.current === incomingUserId &&
+            user &&
+            userSchoolRoles.length > 0
+          ) {
+            console.log("[AUTH] Duplicate SIGNED_IN ignored, data already present.");
+            setSession(session);
+            setLoading(false);
+            return;
+          }
 
-        loadingRef.current = userId;
-        loadUserData(userId);
-      } else {
-        loadingRef.current = null;
+          if (isLoadingUserRef.current) {
+            console.log("[AUTH] SIGNED_IN ignored because user data is already loading");
+            setSession(session);
+            return;
+          }
+          
+          loadUserData(incomingUserId);
+        } else if (event === "TOKEN_REFRESHED") {
+          console.log("[AUTH] TOKEN_REFRESHED: Sesija osvježena, podaci ostaju isti.");
+          setSession(session);
+        }
+      } else if (event === "SIGNED_OUT") {
         setUser(null);
         setUserSchoolRoles([]);
         setError(null);
@@ -187,15 +204,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const loadUserData = async (authUserId: string) => {
-    if (isFetchingUserDataRef.current) {
+    if (isLoadingUserRef.current) {
       console.log(`[AUTH] loadUserData already in progress for ${authUserId}, skipping.`);
       return;
     }
 
     const startTime = Date.now();
     console.log(`[AUTH] loadUserData START for ${authUserId}`);
-    isFetchingUserDataRef.current = true;
-    setLoading(true);
+    isLoadingUserRef.current = true;
+    
+    // Only set loading true if we don't have user data yet
+    if (!user) {
+      setLoading(true);
+    }
     
     // Total timeout for the entire sequence
     const controller = new AbortController();
@@ -348,6 +369,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return roles;
       });
       setError(null);
+      loadedUserIdRef.current = authUserId;
       
       console.log(`[AUTH] loadUserData SUCCESS in ${Date.now() - startTime}ms`);
     } catch (err: any) {
@@ -357,7 +379,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserSchoolRoles([]);
     } finally {
       clearTimeout(loadFailsafe);
-      isFetchingUserDataRef.current = false;
+      isLoadingUserRef.current = false;
       setLoading(false);
     }
   };

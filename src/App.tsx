@@ -83,6 +83,7 @@ function TeacherRedirectToClass({ subPath }: { subPath: string }) {
 const APP_VERSION = '1.0.5';
 
 export default function App() {
+  console.log("[APP] App render/mount");
   const location = (window as any).location?.pathname || 'unknown';
   console.log(`[APP] Render | Path: ${location}`);
   
