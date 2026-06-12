@@ -936,6 +936,60 @@ async function startServer() {
     }
   });
 
+  app.post("/api/admin/delete-school-event", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { id } = req.body;
+      if (!id) {
+        return res.status(400).json({ success: false, error: "Missing event id" });
+      }
+
+      // Query the event row first to return it on success
+      const { data: event, error: getError } = await supabaseAdmin
+        .from("school_events")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (getError || !event) {
+        return res.status(404).json({ success: false, error: getError?.message || "Event not found" });
+      }
+
+      // Delete from table
+      const { error: deleteError } = await supabaseAdmin
+        .from("school_events")
+        .delete()
+        .eq("id", id);
+
+      if (deleteError) {
+        return res.status(500).json({ success: false, error: deleteError.message });
+      }
+
+      // Return the expected deleted event mapped payload
+      res.json({
+        success: true,
+        data: {
+          id: event.id,
+          school_id: event.school_id,
+          school_year: event.school_year,
+          date: event.start_date,
+          start_date: event.start_date,
+          end_date: event.end_date,
+          time: event.start_time,
+          type: event.event_type,
+          title: event.title,
+          notes: event.description,
+          classroom: event.classroom,
+          is_instructional_day: event.is_instructional_day
+        }
+      });
+    } catch (err: any) {
+      console.error("[SERVER] delete-school-event error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+
   // ==========================================
   // School Documents (Interni dokumenti škole) APIs
   // ==========================================

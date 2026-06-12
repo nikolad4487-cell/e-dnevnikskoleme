@@ -20,7 +20,10 @@
         });
 
         // Register only in production mode
-        if (import.meta.env.PROD) {
+        const isProduction = !window.location.hostname.includes('localhost') && 
+                             !window.location.hostname.includes('127.0.0.1') && 
+                             !window.location.hostname.includes('europe-west2.run.app');
+        if (isProduction) {
           window.addEventListener('load', () => {
              navigator.serviceWorker.register('/sw.js');
           });

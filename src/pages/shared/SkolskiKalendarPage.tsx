@@ -197,33 +197,43 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
     }
 
     try {
-      const payload: any = {
-        id: editingEventId || undefined,
+      const startDate = isHoliday ? holidayStartDate : computedDate;
+      const endDate = isHoliday ? holidayEndDate : computedDate;
+      const startTime = isHoliday ? holidayStartTime : newTime;
+      const endTime = isHoliday ? holidayEndTime : null;
+
+      // Calculate school year from date
+      let school_year = "2025/2026";
+      const dateObj = new Date(startDate);
+      if (!isNaN(dateObj.getTime())) {
+        const year = dateObj.getFullYear();
+        const month = dateObj.getMonth() + 1;
+        if (month >= 9) {
+          school_year = `${year}/${year + 1}`;
+        } else {
+          school_year = `${year - 1}/${year}`;
+        }
+      }
+
+      const dbPayload = {
         school_id: selectedSchoolId || '',
-        date: computedDate,
-        time: isHoliday ? `${holidayStartTime} - ${holidayEndTime}` : newTime,
-        type: newType,
+        school_year,
+        event_type: newType,
         title: computedTitle,
-        classroom: isHoliday ? '' : newClassroom,
-        notes: newNotes,
+        description: newNotes || null,
+        start_date: startDate,
+        end_date: endDate,
+        start_time: startTime || null,
+        end_time: endTime || null,
         is_instructional_day: isInstructionalDay,
-        ...(isHoliday ? {
-          start_date: holidayStartDate,
-          end_date: holidayEndDate,
-          start_time: holidayStartTime,
-          end_time: holidayEndTime,
-          holiday_type: holidaySubType
-        } : {})
+        classroom: isHoliday ? null : (newClassroom || null)
       };
 
       // 6. Log payload before sending
-      console.log("SAVE SCHOOL CALENDAR PAYLOAD", payload);
+      console.log("SAVE SCHOOL CALENDAR PAYLOAD", dbPayload);
 
       let result;
-      // Remove id from payload for insert
-      const dbPayload = { ...payload };
       if (editingEventId) {
-        delete dbPayload.id;
         result = await supabase
           .from("school_events")
           .update(dbPayload)
@@ -231,7 +241,6 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
           .select()
           .single();
       } else {
-        delete dbPayload.id;
         result = await supabase
           .from("school_events")
           .insert([dbPayload])
@@ -252,7 +261,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
             action_type: 'ADD_CALENDAR_EVENT',
             entity_type: 'SCHOOL_CALENDAR',
             entity_id: selectedSchoolId || '',
-            new_value: payload
+            new_value: dbPayload
           });
         }
 
