@@ -219,13 +219,27 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
       // 6. Log payload before sending
       console.log("SAVE SCHOOL CALENDAR PAYLOAD", payload);
 
-      const res = await fetch('/api/school-events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+      let result;
+      // Remove id from payload for insert
+      const dbPayload = { ...payload };
+      if (editingEventId) {
+        delete dbPayload.id;
+        result = await supabase
+          .from("school_events")
+          .update(dbPayload)
+          .eq("id", editingEventId)
+          .select()
+          .single();
+      } else {
+        delete dbPayload.id;
+        result = await supabase
+          .from("school_events")
+          .insert([dbPayload])
+          .select()
+          .single();
+      }
 
-      if (res.ok) {
+      if (!result.error) {
         toast.success(editingEventId ? 'Školski događaj je ažuriran.' : 'Školski događaj je zabilježen u kalendaru.');
         setShowAddModal(false);
         setEditingEventId(null);
@@ -253,13 +267,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         setHolidaySubType('WINTER_1');
         loadEvents();
       } else {
-        const errData = await res.json().catch(() => ({}));
-        // Extract message, details or error code as detailed as possible
-        const errMsg = errData.error || errData.details || errData.message || 'Nepoznata greška na poslužitelju';
-        const errorObj = new Error(errMsg);
-        if (errData.details) (errorObj as any).details = errData.details;
-        if (errData.hint) (errorObj as any).hint = errData.hint;
-        if (errData.code) (errorObj as any).code = errData.code;
+        const errorObj = new Error(result.error.message || 'Nepoznata greška na poslužitelju');
         throw errorObj;
       }
     } catch (error: any) {
