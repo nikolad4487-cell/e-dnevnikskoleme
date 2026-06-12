@@ -35,6 +35,7 @@ export default function ClassSelectionPage() {
   const [summaries, setSummaries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+  const lastClassesFetchKey = React.useRef("");
 
   // Current roles in selected school
   const currentSchoolRoles = userSchoolRoles.filter(r => r.schoolId === selectedSchoolId).map(r => r.role);
@@ -50,15 +51,11 @@ export default function ClassSelectionPage() {
                    (userSchoolRoles && userSchoolRoles.length > 0 ? userSchoolRoles[0].schoolId : null) ||
                    (user as any).profile?.school_id;
         
-        console.log("CLASS SELECT user", user);
-        console.log("CLASS SELECT resolvedSchoolId", schoolId);
-
         if (schoolId) {
           setSelectedSchoolId(schoolId);
           return; // Trigger re-render
         } else {
           setLoading(false);
-          console.error("No school found for user");
           toast.error("Nije pronađena škola za korisnika.");
           return;
         }
@@ -66,6 +63,11 @@ export default function ClassSelectionPage() {
 
       if (!schoolId) return;
 
+      const fetchKey = `${schoolId}`;
+      if (lastClassesFetchKey.current === fetchKey && classes.length > 0) {
+        return;
+      }
+      
       setLoading(true);
       await fetchSchoolYears();
       if (isStaff) {
@@ -76,6 +78,8 @@ export default function ClassSelectionPage() {
         const yearIds = new Set(enrollments.map((e: any) => e.classes?.school_year_id));
         setSchoolYears(prev => prev.filter(y => yearIds.has(y.id)));
       }
+      
+      lastClassesFetchKey.current = fetchKey;
       setLoading(false);
     };
     init();
@@ -143,12 +147,7 @@ export default function ClassSelectionPage() {
         .eq('school_id', selectedSchoolId);
 
       if (classError) {
-        console.error("CLASSES QUERY ERROR (Staff):", classError);
         throw classError;
-      }
-      console.log("DEBUG: classes query result (raw count)", allClassData?.length);
-      if (allClassData && allClassData.length > 0) {
-        console.log("DEBUG: First class row:", allClassData[0]);
       }
 
       // 2. Get assignments if teacher (to filter if not admin)
@@ -430,9 +429,6 @@ export default function ClassSelectionPage() {
                   );
                   const isFinalized = summary && summary.status === 'FINALIZED';
                   const overall_average = isFinalized ? (summary.average ?? summary.overallAverage) : null;
-
-                  console.log("CLASS SELECT OVERALL SUMMARY", summary);
-                  console.log("OVERALL AVERAGE", overall_average);
 
                   const formattedAverage = typeof overall_average === 'number' 
                     ? overall_average.toLocaleString('hr-HR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
