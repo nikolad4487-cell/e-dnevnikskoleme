@@ -80,6 +80,28 @@ function TeacherRedirectToClass({ subPath }: { subPath: string }) {
   return <Navigate to={`/class/${selectedClassId}/${subPath}`} replace />;
 }
 
+function RoutePersister() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const isInitialized = useRef(false);
+
+  useEffect(() => {
+    sessionStorage.setItem("lastRoute", location.pathname + location.search + location.hash);
+  }, [location]);
+
+  useEffect(() => {
+    if (!isInitialized.current) {
+        const lastRoute = sessionStorage.getItem("lastRoute");
+        if (lastRoute && lastRoute !== "/" && lastRoute !== "/login") {
+            navigate(lastRoute, { replace: true });
+        }
+        isInitialized.current = true;
+    }
+  }, []);
+
+  return null;
+}
+
 const APP_VERSION = '1.0.5';
 
 export default function App() {
@@ -111,6 +133,7 @@ export default function App() {
     <AuthProvider>
       <SelectionProvider>
         <BrowserRouter>
+          <RoutePersister />
           <Toaster position="top-right" />
           {/* InactivityTracker disabled temporarily to prevent loops */}
           {/* <InactivityTracker /> */}

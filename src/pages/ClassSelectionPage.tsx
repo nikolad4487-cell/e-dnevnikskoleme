@@ -31,11 +31,24 @@ export default function ClassSelectionPage() {
   const { setSelectedClassId, setIsArchived, setSelectedSchoolId, selectedSchoolId, selectedChildId } = useSelection();
   const [classes, setClasses] = useState<ClassWithDetails[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
-  const [selectedYearId, setSelectedYearId] = useState<string>('');
+  const [selectedYearId, setSelectedYearId] = useState<string>(() => sessionStorage.getItem('selectedYearId') || '');
   const [summaries, setSummaries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const lastClassesFetchKey = React.useRef("");
+
+  // Sync state with sessionStorage
+  useEffect(() => {
+    if (selectedSchoolId) sessionStorage.setItem('selectedSchoolId', selectedSchoolId);
+    if (selectedYearId) sessionStorage.setItem('selectedYearId', selectedYearId);
+  }, [selectedSchoolId, selectedYearId]);
+
+  useEffect(() => {
+    const cachedSchoolId = sessionStorage.getItem('selectedSchoolId');
+    if (cachedSchoolId && !selectedSchoolId) {
+        setSelectedSchoolId(cachedSchoolId);
+    }
+  }, []);
 
   // Current roles in selected school
   const currentSchoolRoles = userSchoolRoles.filter(r => r.schoolId === selectedSchoolId).map(r => r.role);
