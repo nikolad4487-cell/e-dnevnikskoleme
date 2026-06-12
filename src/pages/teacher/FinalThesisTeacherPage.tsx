@@ -47,6 +47,27 @@ export default function FinalThesisTeacherPage() {
         return;
       }
 
+      console.log("SUPABASE URL", import.meta.env.VITE_SUPABASE_URL);
+
+      const defenseId = scheduleId;
+      const check = await supabase
+        .from("final_exam_defense_schedule")
+        .select("*")
+        .eq("id", defenseId);
+
+      console.log("CHECK DEFENSE BEFORE DELETE", check);
+
+      if (check.error) {
+        console.error("CHECK DEFENSE ERROR", check.error);
+        return;
+      }
+
+      if (!check.data || check.data.length === 0) {
+        console.error("DEFENSE ROW NOT FOUND BEFORE DELETE", defenseId);
+        alert("Aplikacija ne vidi taj zapis u tablici. Provjeri Supabase URL/projekt ili krivu tablicu.");
+        return;
+      }
+
       console.log("BEFORE DEFENSE SUPABASE DELETE", scheduleId);
 
       const result = await supabase
