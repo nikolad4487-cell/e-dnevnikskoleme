@@ -69,7 +69,7 @@ export default function ClassSubjectsPage() {
     assignmentId: '',
     subjectId: '',
     subjectName: '',
-    subjectType: 'redovni',
+    subjectType: 'REDOVNI',
     subjectPeriod: 'FULL_YEAR',
     teacherId: '',
     groupName: '',
@@ -132,7 +132,7 @@ export default function ClassSubjectsPage() {
         return {
           ...item,
           class_subject: cs || {
-            subject_type: 'redovni',
+            subject_type: 'REDOVNI',
             subject_period: 'FULL_YEAR'
           }
         };
@@ -182,12 +182,26 @@ export default function ClassSubjectsPage() {
     console.log("ASSIGN SUBJECT TO CLASS CLICKED", { classId, selectedSubjectId, selectedTeacherId });
 
     try {
-      // 1. Ensure class_subjects entry exists
+      const { data: existingCS } = await supabase
+        .from('class_subjects')
+        .select('id, subject_type')
+        .eq('class_id', classId)
+        .eq('subject_id', selectedSubjectId)
+        .maybeSingle();
+
+      console.log("ADDING TEACHER TO CLASS SUBJECT", {
+        classSubjectId: existingCS?.id,
+        subjectId: selectedSubjectId,
+        oldSubjectType: existingCS?.subject_type,
+        newTeacherId: selectedTeacherId
+      });
+
+      // 1. Ensure class_subjects entry exists, preserve existing subject_type if present
       const { error: csError } = await supabase.from('class_subjects').upsert([{
         class_id: classId,
         subject_id: selectedSubjectId,
         school_id: selectedSchoolId,
-        subject_type: 'REQUIRED',
+        subject_type: existingCS?.subject_type || 'REDOVNI',
         is_foreign_language: false,
         subject_period: 'FULL_YEAR'
       }], { onConflict: 'class_id,subject_id' });
@@ -479,12 +493,12 @@ export default function ClassSubjectsPage() {
                         </div>
                         <div>
                           <p className="font-black text-slate-900 uppercase text-xs tracking-tight">
-                            {formatSubjectDisplayName(item.subject?.name || '', item.class_subject?.subject_type || 'redovni')}
+                            {formatSubjectDisplayName(item.subject?.name || '', item.class_subject?.subject_type || 'REDOVNI')}
                           </p>
                           <div className="flex flex-wrap gap-1.5 mt-1.5">
                             <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">{item.subject?.code}</span>
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-blue-50 text-blue-700 tracking-tighter">
-                              {item.class_subject?.subject_type || 'redovni'}
+                              {item.class_subject?.subject_type || 'REDOVNI'}
                             </span>
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase bg-slate-100 text-slate-600 tracking-tighter">
                               {item.class_subject?.subject_period === 'FIRST_SEMESTER' 
@@ -593,12 +607,12 @@ export default function ClassSubjectsPage() {
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold text-slate-900 focus:border-[#005c8d] outline-none text-xs"
                     required
                   >
-                    <option value="redovni">Redovni</option>
-                    <option value="izborni">Izborni</option>
-                    <option value="fakultativni">Fakultativni</option>
-                    <option value="praksa">Praksa</option>
-                    <option value="dopunska nastava">Dopunska nastava</option>
-                    <option value="dodatna nastava">Dodatna nastava</option>
+                    <option value="REDOVNI">Redovni</option>
+                    <option value="IZBORNI">Izborni</option>
+                    <option value="FAKULTATIVNI">Fakultativni</option>
+                    <option value="PRAKSA">Praksa</option>
+                    <option value="DOPUNSKA NASTAVA">Dopunska nastava</option>
+                    <option value="DODATNA NASTAVA">Dodatna nastava</option>
                   </select>
                 </div>
 

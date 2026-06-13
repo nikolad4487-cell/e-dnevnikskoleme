@@ -440,17 +440,9 @@ export default function AdministrationPage() {
 
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
-      }
-
       const response = await fetch('/api/admin/create-user', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: newUserForm.email?.toLowerCase() || '',
           name: `${newUserForm.name} ${newUserForm.surname}`,
@@ -2293,17 +2285,9 @@ setStudents(uniqueMapped as any);
           }
         };
 
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token) {
-          throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
-        }
-
         const response = await fetch('/api/admin/create-user', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(profilePayload)
         });
 
@@ -2328,6 +2312,7 @@ setStudents(uniqueMapped as any);
               student_id: createdProfile.id,
               subject_id: subId,
               class_id: classIdToUse,
+              school_year_id: classToUse.school_year_id || null,
               school_year: classToUse.schoolYear || '2024/2025',
               status: 'ACTIVE'
             }));
@@ -2402,13 +2387,12 @@ setStudents(uniqueMapped as any);
     const parsedStudents: {name: string, surname: string, email?: string}[] = [];
 
     for (const line of lines) {
-        const separator = line.includes('|') ? '|' : ',';
-        const [rawFullName, rawEmail] = line.split(separator, 2);
-        const fullName = rawFullName.trim();
-        const email = rawEmail?.trim();
-        const nameParts = fullName.split(/\s+/).filter(Boolean);
-        const name = nameParts.shift() || '';
-        const surname = nameParts.join(' ');
+        const parts = line.split(',');
+        const fullName = parts[0].trim();
+        const email = parts[1]?.trim();
+        
+        const name = fullName;
+        const surname = '';
 
         parsedStudents.push({ name, surname, email: email || undefined });
     }
@@ -2446,28 +2430,13 @@ setStudents(uniqueMapped as any);
         }
 
         if (!res.ok) {
-            const failedDetails = Array.isArray(data?.results)
-              ? data.results
-                  .filter((result: any) => !result.success)
-                  .slice(0, 3)
-                  .map((result: any) => {
-                    const studentName = `${result.name || ''} ${result.surname || ''}`.trim();
-                    return `${studentName ? `${studentName}: ` : ''}${result.error || 'Nepoznata greška'}`;
-                  })
-                  .join('\n')
-              : '';
-            throw new Error(data?.error || failedDetails || data?.message || raw || "Prazan odgovor poslužitelja.");
+            throw new Error(data?.error || data?.message || raw || "Prazan odgovor poslužitelja.");
         }
         if (data && !data.success) {
             throw new Error(data.error || "Greška pri grupnom dodavanju");
         }
 
-        const createdCount = Number(data?.createdCount ?? parsedStudents.length);
-        const failedCount = Number(data?.failedCount ?? 0);
-        toast.success(
-          `Učenici uspješno dodani. Dodano: ${createdCount}${failedCount ? `, neuspjelo: ${failedCount}` : ''}.\nLozinka za učenike: yupu8Ev4`,
-          { duration: 8000 },
-        );
+        toast.success(`Učenici uspješno dodani. Dodano ${parsedStudents.length} učenika.\nLozinka za učenike: yupu8Ev4`, { duration: 8000 });
         setBulkStudentText('');
         setIsBulkAddingStudents(false);
         fetchData();
@@ -2580,6 +2549,7 @@ setAllSubjects(uniqueSub2);
                    student_id: s.student_id,
                    subject_id: assignmentForm.subjectId,
                    class_id: assignmentForm.classId,
+                   school_year_id: classData.school_year_id,
                    school_year: classData.schoolYear,
                    status: 'ACTIVE'
                  }));
@@ -4483,9 +4453,9 @@ setAllSubjects(uniqueSub2);
                              onChange={e => setBulkStudentText(e.target.value)}
                              rows={10}
                              className="w-full border border-gray-300 p-3 outline-none focus:border-[#005c8d] font-medium font-mono text-sm"
-                             placeholder={`Marko Marković\nAna Anić | ana.anic@eskole.hr\nIvan Ivić`}
+                             placeholder={`Marko Marković\nAna Anić, ana.anic@email.com\nIvan Ivić`}
                           ></textarea>
-                          <p className="text-gray-400 text-xs italic mt-1">Lozinke se automatski postavljaju na "yupu8Ev4". Format: IME I PREZIME | E-MAIL ili samo IME I PREZIME.</p>
+                          <p className="text-gray-400 text-xs italic mt-1">Lozinke se automatski postavljaju na "yupu8Ev4". Unesite učenike u formatu: Ime Prezime, opcionalni@email.com</p>
                       </div>
                       <div className="flex justify-end">
                           <button 

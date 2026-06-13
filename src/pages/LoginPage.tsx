@@ -119,18 +119,7 @@ export default function LoginPage() {
       }
 
       const result = await response.json();
-      const safeResult = {
-        ...result,
-        session: result.session ? {
-          user: result.session.user ? {
-            id: result.session.user.id,
-            email: result.session.user.email
-          } : null,
-          hasAccessToken: Boolean(result.session.access_token),
-          hasRefreshToken: Boolean(result.session.refresh_token)
-        } : null
-      };
-      console.log("LOGIN API RESULT", JSON.stringify(safeResult, null, 2));
+      console.log("LOGIN API RESULT", result);
 
       if (!response.ok) {
         throw new Error(result.error || 'Greška pri prijavi.');
@@ -151,6 +140,9 @@ export default function LoginPage() {
       }
 
       const { session } = result;
+
+      console.log('[LOGIN] API Result:', { result });
+
       const roles: string[] = result.roles || [];
 
       // Enforce domain/portal-based role checks

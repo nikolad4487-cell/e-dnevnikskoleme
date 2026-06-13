@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getCroatianPublicHolidays } from '../../utils/croatianPublicHolidays';
 
 interface SchoolEvent {
   id: string;
@@ -35,11 +34,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isSchoolAdmin = isMainAdmin || (userSchoolRoles && userSchoolRoles.some((r: any) =>
-    (r.schoolId === selectedSchoolId || r.school_id === selectedSchoolId)
-    && (r.role === 'ADMIN' || r.role === 'SCHOOL_ADMIN' || r.role === 'MAIN_ADMIN')
-    && (!r.status || r.status === 'ACTIVE')
-  ));
+  const isSchoolAdmin = isMainAdmin || (userSchoolRoles && userSchoolRoles.some(r => r.school_id === selectedSchoolId && (r.role === 'ADMIN' || r.role === 'SCHOOL_ADMIN')));
 
   const [events, setEvents] = useState<SchoolEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -237,29 +232,21 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
       // 6. Log payload before sending
       console.log("SAVE SCHOOL CALENDAR PAYLOAD", dbPayload);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
+      let result;
+      if (editingEventId) {
+        result = await supabase
+          .from("school_events")
+          .update(dbPayload)
+          .eq("id", editingEventId)
+          .select()
+          .single();
+      } else {
+        result = await supabase
+          .from("school_events")
+          .insert([dbPayload])
+          .select()
+          .single();
       }
-
-      const response = await fetch('/api/school-events', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify({
-          ...dbPayload,
-          id: editingEventId || undefined,
-        }),
-      });
-      const raw = await response.text();
-      console.log('SAVE SCHOOL CALENDAR STATUS', response.status);
-      console.log('SAVE SCHOOL CALENDAR RAW RESPONSE', raw);
-      const apiResult = raw ? JSON.parse(raw) : null;
-      const result = response.ok && apiResult?.success
-        ? { error: null, data: apiResult.data }
-        : { error: { message: apiResult?.error || raw || 'Nepoznata greška na poslužitelju' }, data: null };
 
       if (!result.error) {
         toast.success(editingEventId ? 'Školski događaj je ažuriran.' : 'Školski događaj je zabilježen u kalendaru.');
@@ -317,31 +304,39 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         return;
       }
 
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
+      console.log("BEFORE EVENT SUPABASE DELETE", eventId);
+
+      const result = await supabase
+        .from("school_events")
+        .delete()
+        .eq("id", eventId)
+        .select();
+
+      console.log("AFTER EVENT SUPABASE DELETE", result);
+
+      if (result.error) {
+        console.error("DELETE EVENT ERROR", result.error);
+        alert("Greška pri brisanju zapisa: " + result.error.message);
+        return;
       }
 
-      const response = await fetch(
-        `/api/school-events?id=${encodeURIComponent(eventId)}&schoolId=${encodeURIComponent(selectedSchoolId || '')}`,
-        {
-          method: 'DELETE',
-          headers: { 'Authorization': `Bearer ${session.access_token}` },
-        },
-      );
-      const raw = await response.text();
-      const apiResult = raw ? JSON.parse(raw) : null;
-      if (!response.ok || !apiResult?.success) {
-        throw new Error(apiResult?.error || raw || 'Brisanje događaja nije uspjelo.');
+      if (!result.data || result.data.length === 0) {
+        console.error("DELETE DID NOT DELETE ANY ROW", eventId);
+        alert("Zapis nije obrisan iz baze. Provjeri id i izvornu tablicu.");
+        return;
       }
+
+      console.log("DELETE EVENT SUCCESS", result.data);
 
       setEvents((prev) => prev.filter((item) => item.id !== eventId));
       setSelectedDayEvents((prev) => prev.filter((item) => item.id !== eventId));
-      toast.success('Događaj je obrisan.');
+      toast.success('Događaj uklonjen.');
       setShowDetailsModal(false);
+      loadEvents();
+
     } catch (err: any) {
       console.error("DELETE EVENT CRASHED", err);
-      toast.error(err?.message || 'Brisanje događaja nije uspjelo.');
+      alert("Brisanje zapisa se srušilo. Pogledaj konzolu.");
     }
   };
 
@@ -355,27 +350,6 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
 
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
-  const calendarEvents = useMemo(() => {
-    const automaticHolidays: SchoolEvent[] = [currentYear - 1, currentYear, currentYear + 1]
-      .flatMap(getCroatianPublicHolidays)
-      .filter((holiday) => !events.some((event) =>
-        (event.date === holiday.date || event.start_date === holiday.date)
-        && event.title.trim().toLocaleLowerCase('hr-HR') === holiday.title.toLocaleLowerCase('hr-HR')
-      ))
-      .map((holiday) => ({
-        id: holiday.id,
-        school_id: selectedSchoolId || '',
-        date: holiday.date,
-        start_date: holiday.date,
-        end_date: holiday.date,
-        type: 'PRAZNIK',
-        title: holiday.title,
-        notes: 'Državni blagdan u Republici Hrvatskoj. Nema nastave.',
-        is_instructional_day: false,
-      }));
-
-    return [...events, ...automaticHolidays];
-  }, [currentYear, events, selectedSchoolId]);
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const startOffset = getFirstDayOfMonth(currentYear, currentMonth);
@@ -510,7 +484,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
           const isToday = new Date().toDateString() === dayDate.toDateString();
           
           // Filter matching events
-          const dayEvents = calendarEvents.filter(e => {
+          const dayEvents = events.filter(e => {
             let matchesDate = false;
             if (e.start_date && e.end_date) {
               matchesDate = cell.dateStr >= e.start_date && cell.dateStr <= e.end_date;
@@ -535,11 +509,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
               }}
               className={`min-h-[105px] border-b border-r border-slate-100 p-2 overflow-y-auto hover:bg-slate-50/50 cursor-pointer transition-all flex flex-col justify-between ${
                 cell.isCurrentMonth ? 'bg-white' : 'bg-slate-50/30 opacity-45'
-              } ${isToday ? 'ring-2 ring-[#005c8d]/60 bg-[#005c8d]/5' : ''} ${
-                dayEvents.some((event) => event.is_instructional_day === false)
-                  ? 'bg-emerald-50/70'
-                  : ''
-              }`}
+              } ${isToday ? 'ring-2 ring-[#005c8d]/60 bg-[#005c8d]/5' : ''}`}
             >
               <div className="flex justify-between items-center mb-1">
                 <span className={`text-[10px] font-black uppercase ${
@@ -555,12 +525,6 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                   </span>
                 )}
               </div>
-
-              {dayEvents.some((event) => event.is_instructional_day === false) && (
-                <div className="mb-1 text-[8px] font-black uppercase tracking-wide text-emerald-700">
-                  Nema nastave
-                </div>
-              )}
 
               {/* Event Badge Items */}
               <div className="space-y-1 mt-1 flex-1">
@@ -847,17 +811,17 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                       </p>
                     )}
                   </div>
-                  {isSchoolAdmin && e.id && !e.id.startsWith('public-holiday-') && (
-                    <div className="flex items-center gap-2 pt-3 mt-2 border-t border-slate-200 justify-end">
+                  {isSchoolAdmin && e.id && (
+                    <div className="flex items-center gap-2 pt-2 mt-2 border-t border-slate-100 justify-end">
                       {!e.id.includes('defense') && !e.id.includes('meeting') && (
                           <button 
                             type="button"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[#005c8d]/30 bg-blue-50 text-[#005c8d] hover:bg-[#005c8d] hover:text-white text-[10px] font-black uppercase transition-colors"
+                            className="text-slate-500 hover:text-slate-800 p-1 flex items-center gap-1"
                             title="Uredi događaj"
                             onClick={() => handleEditEvent(e)}
                           >
                             <Edit2 size={13} />
-                            <span>Uredi</span>
+                            <span className="text-[10px] font-bold uppercase">Uredi</span>
                           </button>
                       )}
                       {!e.id.includes('defense') && !e.id.includes('meeting') && (
@@ -867,11 +831,11 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                             console.log("DEBUG: BUTTON CLICKED", e.id);
                             handleDeleteEvent(e.id);
                           }}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-red-200 bg-red-50 text-red-700 hover:bg-red-700 hover:text-white text-[10px] font-black uppercase transition-colors"
+                          className="text-red-500 hover:text-red-700 p-1 flex items-center gap-1"
                           title="Obriši događaj"
                         >
                           <Trash2 size={13} />
-                          <span>Obriši</span>
+                          <span className="text-[10px] font-bold uppercase">Obriši</span>
                         </button>
                       )}
                     </div>

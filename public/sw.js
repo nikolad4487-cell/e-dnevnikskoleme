@@ -31,16 +31,9 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  if (
-    url.pathname.startsWith('/api/')
-    || url.pathname === '/login'
-    || url.pathname === '/manifest.json'
-    || url.pathname === '/favicon.ico'
-    || url.pathname.startsWith('/icon-')
-    || event.request.method !== 'GET'
-  ) {
+  // Always bypass Service Worker for API calls or non-GET requests to be safe
+  if (event.request.url.includes('/api/') || event.request.method !== 'GET') {
+    event.respondWith(fetch(event.request));
     return;
   }
 

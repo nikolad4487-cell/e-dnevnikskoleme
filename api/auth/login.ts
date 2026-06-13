@@ -1,6 +1,5 @@
 import { supabaseAdmin } from '../_supabase.js';
 import { authenticator } from 'otplib';
-import bcrypt from 'bcryptjs';
 
 export async function POST(req: Request) {
   try {
@@ -23,61 +22,30 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const normalizedEmail = String(body.email || '').trim().toLowerCase();
-    const { password, totpCode, loginType } = body;
+    const { email, password, totpCode, loginType } = body;
 
-    console.log("[LOGIN_API] HOST", req.headers.get('host'));
-    console.log("[LOGIN_API] normalizedEmail", normalizedEmail);
-    console.log("[LOGIN_API] ENV", {
-      hasSupabaseUrl: Boolean(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL),
-      hasServiceRoleKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY),
-      hasAnonKey: Boolean(process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY),
-      hasStaffTechnicalPassword: Boolean(process.env.STAFF_AUTH_TECHNICAL_PASSWORD),
-      supabaseProjectHost: (() => {
-        try {
-          return new URL(String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL)).host;
-        } catch {
-          return 'invalid-or-missing';
-        }
-      })()
+    console.log(`[LOGIN_API] Attempting login for ${email} (${loginType})`);
+
+    // 1. Sign in with Supabase
+    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+      email,
+      password
     });
 
-    // Staff authenticate with their PIN, while Supabase uses the internal password.
-    const technicalPassword = process.env.STAFF_AUTH_TECHNICAL_PASSWORD || '123456';
-    const supabasePassword = loginType === 'STAFF' ? technicalPassword : password;
-    const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
-      email: normalizedEmail,
-      password: supabasePassword
-    });
-
-    if (signInError) {
-      console.error(`[LOGIN_API] Supabase signIn Error for ${normalizedEmail}:`, signInError.message);
-      let errMsg = signInError.message;
+    if (error) {
+      console.error(`[LOGIN_API] Supabase signIn Error for ${email}:`, error.message);
+      let errMsg = error.message;
       if (errMsg === 'Invalid login credentials' || errMsg.includes('Neispravni podaci za prijavu')) {
         errMsg = "Neispravni podaci za prijavu.";
       }
-      return new Response(JSON.stringify({
-        error: errMsg,
-        stage: 'SUPABASE_SIGN_IN',
-        code: 'SUPABASE_SIGN_IN_FAILED'
-      }), {
+      return new Response(JSON.stringify({ error: errMsg }), { 
         status: 401,
         headers: { 'Content-Type': 'application/json' }
       });
     }
 
-    const authUser = signInData.user;
-    const authSession = signInData.session;
-    if (!authUser || !authSession) {
-      return new Response(JSON.stringify({
-        error: "Supabase nije vratio valjanu sesiju.",
-        stage: 'SUPABASE_SIGN_IN',
-        code: 'SESSION_MISSING'
-      }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
+    const authUser = data.user;
+    const session = data.session;
 
     // 2. Get Profile
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -86,12 +54,6 @@ export async function POST(req: Request) {
       .eq('auth_user_id', authUser.id)
       .single();
 
-    console.log("[LOGIN_API] profileFound", Boolean(profile));
-    console.log("[LOGIN_API] profileRole", profile?.role, profile?.access_role);
-    console.log("[LOGIN_API] hasPinHash", Boolean(profile?.pin_hash));
-    console.log("[LOGIN_API] requiresAuthenticatorSetup", profile?.requires_authenticator_setup);
-    console.log("[LOGIN_API] hasAuthenticatorSecret", Boolean(profile?.authenticator_secret));
-
     if (profileError || !profile) {
       return new Response(JSON.stringify({ error: "Profil korisnika nije pronađen." }), { 
         status: 401,
@@ -99,23 +61,6 @@ export async function POST(req: Request) {
       });
     }
 
-    if (loginType === 'STAFF') {
-      if (!profile.pin_hash) {
-        return new Response(JSON.stringify({ error: "PIN nije postavljen." }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-
-      const pinCheck = await bcrypt.compare(String(password || ''), profile.pin_hash);
-      console.log("[LOGIN_API] pinCheck", pinCheck);
-      if (!pinCheck) {
-        return new Response(JSON.stringify({ error: "Neispravan PIN." }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' }
-        });
-      }
-    }
     // 3. Fetch roles from user_school_roles
     const { data: dbRoles, error: rolesError } = await supabaseAdmin
       .from('user_school_roles')
@@ -133,7 +78,7 @@ export async function POST(req: Request) {
       userSchoolRoles.push(profile.role);
     }
 
-    console.log(`[LOGIN_API] User ${normalizedEmail} has resolved roles:`, userSchoolRoles);
+    console.log(`[LOGIN_API] User ${email} has resolved roles:`, userSchoolRoles);
 
     // 4. Verify TOTP if staff
     if (loginType === 'STAFF') {
@@ -153,15 +98,14 @@ export async function POST(req: Request) {
             });
           }
 
-          let totpCheck = false;
+          let isValid = false;
           if (profile.authenticator_secret === '123456') {
-            totpCheck = totpCode === '123456';
+            isValid = totpCode === '123456';
           } else {
-            totpCheck = authenticator.check(totpCode, profile.authenticator_secret);
+            isValid = authenticator.check(totpCode, profile.authenticator_secret);
           }
-          console.log("[LOGIN_API] totpCheck", totpCheck);
 
-          if (!totpCheck) {
+          if (!isValid) {
             return new Response(JSON.stringify({ error: "Neispravan autentifikator kod." }), { 
               status: 401,
               headers: { 'Content-Type': 'application/json' }
@@ -170,7 +114,7 @@ export async function POST(req: Request) {
         } else {
           // Flag as MFA setup needed
           return new Response(JSON.stringify({ 
-            session: authSession,
+            session, 
             user: profile, 
             roles: userSchoolRoles,
             mfa_setup_needed: true
@@ -182,7 +126,7 @@ export async function POST(req: Request) {
       }
     }
 
-    return new Response(JSON.stringify({ session: authSession, user: profile, roles: userSchoolRoles }), {
+    return new Response(JSON.stringify({ session, user: profile, roles: userSchoolRoles }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });

@@ -88,23 +88,23 @@ export function formatSubjectDisplayName(subjectName: string, subjectType: strin
   if (!subjectName) return '';
   const cleaned = subjectName.replace(/\s*\((izborni|elective)\)\s*$/i, '').trim();
   if (!subjectType) return cleaned;
-  const t = subjectType.toLowerCase().trim();
-  if (t === 'redovni' || t === 'required' || t === 'obvezni' || t === 'obvezan' || t === 'required') {
+  const t = subjectType.toUpperCase().trim();
+  if (t === 'REDOVNI') {
     return cleaned;
   }
-  if (t === 'elective' || t === 'izborni') {
+  if (t === 'IZBORNI') {
     return `${cleaned} (izborni)`;
   }
   return `${cleaned} (${subjectType})`;
 }
 
-export function sanitizeSubjectType(type: string | null | undefined): 'REQUIRED' | 'ELECTIVE' {
-  if (!type) return 'REQUIRED';
-  const val = type.toLowerCase().trim();
-  if (val === 'izborni' || val === 'elective' || val.includes('izborni') || val.includes('elective')) {
-    return 'ELECTIVE';
+export function sanitizeSubjectType(type: string | null | undefined): 'REDOVNI' | 'IZBORNI' {
+  if (!type) return 'REDOVNI';
+  const val = type.toUpperCase().trim();
+  if (val === 'IZBORNI' || val === 'ELECTIVE' || val.includes('IZBORNI') || val.includes('ELECTIVE')) {
+    return 'IZBORNI';
   }
-  return 'REQUIRED';
+  return 'REDOVNI';
 }
 
 export const finalGradeLabels: Record<string, string> = {
