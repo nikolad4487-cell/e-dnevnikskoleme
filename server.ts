@@ -2683,57 +2683,64 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       const { email, password, totpCode, loginType } = req.body;
 
-      console.log("[LOGIN_API] Attempting login for", email);
-      console.log("[LOGIN_API] password length sent to Supabase:", password?.length);
-      console.log("[LOGIN_API] otp length:", totpCode?.length || 0);
-      console.log("[LOGIN_API] has SUPABASE_URL:", !!process.env.SUPABASE_URL);
-      console.log("[LOGIN_API] has SERVICE_ROLE:", !!process.env.SUPABASE_SERVICE_ROLE_KEY);
-
+      console.log("[LOGIN_API] Attempting login for:", email);
+      console.log("[LOGIN_API] loginType:", loginType);
+      
       if (!supabaseAdmin) {
         console.error("[LOGIN_API] supabaseAdmin is NULL");
         return res.status(500).json({ error: "Server authentication error." });
       }
 
-      // Staff authenticate with their PIN, while Supabase uses the internal password.
-      const technicalPassword = process.env.STAFF_AUTH_TECHNICAL_PASSWORD || '123456';
-      const supabasePassword = loginType === 'STAFF' ? technicalPassword : password;
-      const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+      // 1. Sign in with Supabase
+      // Use a hardcoded technical password for all staff as a temporary fix
+      const technicalPassword = '123456'; 
+      const passwordOrPin = (loginType === 'STAFF') ? technicalPassword : password;
+
+      const { data, error } = await supabaseAdmin.auth.signInWithPassword({
         email,
-        password: supabasePassword
+        password: passwordOrPin
       });
 
-      if (signInError) {
-        console.error(`[LOGIN_API] Supabase signIn Error for ${email}:`, signInError.message);
-        if (signInError.message === 'Invalid login credentials') {
+      if (error) {
+        console.error(`[LOGIN_API] Supabase signIn Error for ${email}:`, error.message);
+        if (error.message === 'Invalid login credentials') {
           return res.status(401).json({ error: "Neispravni podaci za prijavu." });
         }
-        return res.status(401).json({ error: signInError.message });
+        return res.status(401).json({ error: error.message });
       }
 
-      const authUser = signInData.user;
-      const authSession = signInData.session;
-      if (!authUser || !authSession) {
-        return res.status(401).json({ error: "Supabase nije vratio valjanu sesiju." });
-      }
-
+      const authUser = data.user;
+      const session = data.session;
+      
       // 2. Get Profile
       const { data: profile, error: profileError } = await supabaseAdmin
         .from('user_profiles')
-        .select('*')
+        .select('id, email, role, access_role, pin_hash, requires_authenticator_setup, authenticator_secret')
         .eq('auth_user_id', authUser.id)
         .maybeSingle();
 
+      console.log("[LOGIN_API] Profile found:", !!profile, profile?.id);
+      console.log("[LOGIN_API] User Email:", profile?.email);
+      console.log("[LOGIN_API] Role:", profile?.role, "Access Role:", profile?.access_role);
+      console.log("[LOGIN_API] Has pin_hash:", !!profile?.pin_hash);
+      console.log("[LOGIN_API] Requires MFA setup:", !!profile?.requires_authenticator_setup);
+      console.log("[LOGIN_API] Has authenticator_secret:", !!profile?.authenticator_secret);
+
       if (profileError || !profile) {
+        console.error("[LOGIN_API] Profile lookup error or missing");
         return res.status(401).json({ error: "Profil korisnika nije pronađen." });
       }
 
+      // Verify PIN if staff
       if (loginType === 'STAFF') {
         if (!profile.pin_hash) {
-          return res.status(401).json({ error: "PIN nije postavljen." });
+           console.error("[LOGIN_API] PIN hash missing for staff");
+           return res.status(401).json({ error: "PIN nije postavljen." });
         }
         const isPinValid = await verifyPin(password, profile.pin_hash);
+        console.log("[LOGIN_API] PIN CHECK RESULT:", isPinValid);
         if (!isPinValid) {
-          return res.status(401).json({ error: "Neispravan PIN." });
+           return res.status(401).json({ error: "Neispravan PIN." });
         }
       }
 
@@ -2757,7 +2764,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           if (!isMfaSet) {
             // Flag as MFA setup needed, do not block login
             return res.json({ 
-              session: authSession,
+              session, 
               user: profile, 
               roles: userSchoolRoles,
               mfa_setup_needed: true
@@ -2772,6 +2779,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           if (profile.authenticator_secret === '123456') {
             isValid = totpCode === '123456';
           } else {
+            console.log("[LOGIN_API] TotpCode:", totpCode, "Secret:", profile.authenticator_secret);
             isValid = authenticator.check(totpCode, profile.authenticator_secret);
           }
 
@@ -2781,7 +2789,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         }
       }
 
-      res.json({ session: authSession, user: profile, roles: userSchoolRoles });
+      res.json({ session, user: profile, roles: userSchoolRoles });
     } catch (err: any) {
       console.error("[LOGIN_API] Error:", err);
       res.status(500).json({ error: err.message });

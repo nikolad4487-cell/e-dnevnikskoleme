@@ -119,10 +119,27 @@ export default function LoginPage() {
       }
 
       const result = await response.json();
+      console.log("LOGIN API RESULT", result);
 
       if (!response.ok) {
         throw new Error(result.error || 'Greška pri prijavi.');
       }
+
+      if (result?.requiresAuthenticatorSetup || result?.redirectTo === "/setup-authenticator") {
+        navigate("/setup-authenticator", {
+          state: {
+            email: normalizedEmail,
+            user: result.user
+          }
+        });
+        return;
+      }
+
+      if (!result?.session) {
+        throw new Error(result?.error || "API nije vratio session.");
+      }
+
+      const { session } = result;
 
       console.log('[LOGIN] API Result:', { result });
 
@@ -172,8 +189,8 @@ export default function LoginPage() {
 
       // Set the session locally using the session from server
       const { error: sessionError } = await supabase.auth.setSession({
-        access_token: result.session.access_token,
-        refresh_token: result.session.refresh_token
+        access_token: session.access_token,
+        refresh_token: session.refresh_token
       });
 
       if (sessionError) {
@@ -286,7 +303,9 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest">PIN</label>
+              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                {loginType === 'STAFF' ? 'PIN' : 'LOZINKA'}
+              </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                   <Lock size={16} />
@@ -295,9 +314,15 @@ export default function LoginPage() {
                   type="password"
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  onChange={(e) => {
+                    if (loginType === 'STAFF') {
+                      setPassword(e.target.value.replace(/\D/g, '').slice(0, 4));
+                    } else {
+                      setPassword(e.target.value);
+                    }
+                  }}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 text-sm outline-none focus:border-[#005c8d] focus:bg-blue-50/20 shadow-inner"
-                  placeholder="1234"
+                  placeholder={loginType === 'STAFF' ? "1234" : "yupu8Ev4"}
                 />
               </div>
             </div>
