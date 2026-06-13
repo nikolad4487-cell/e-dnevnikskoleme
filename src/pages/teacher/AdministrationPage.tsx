@@ -2400,9 +2400,13 @@ setStudents(uniqueMapped as any);
     setLoading(true);
     try {
         const currentYear = schoolYears.find(y => y.id === activeYearId) || schoolYears.find(y => y.isActive);
+        const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch('/api/admin/bulk-create-users', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 
+                'Content-Type': 'application/json',
+                ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
+            },
             body: JSON.stringify({
                 students: parsedStudents,
                 classId: classIdToUse,
@@ -2412,9 +2416,24 @@ setStudents(uniqueMapped as any);
             })
         });
         
-        const data = await safeReadJson(res);
-        if (!data.success) {
-            throw new Error(data.error || 'Greška pri grupnom dodavanju');
+        const raw = await res.text();
+        console.log("BULK CREATE STATUS", res.status);
+        console.log("BULK CREATE RAW RESPONSE", raw);
+
+        let data = null;
+        if (raw) {
+          try {
+            data = JSON.parse(raw);
+          } catch (e) {
+            console.error("BULK CREATE JSON PARSE ERROR", e);
+          }
+        }
+
+        if (!res.ok) {
+            throw new Error(data?.error || data?.message || raw || "Prazan odgovor poslužitelja.");
+        }
+        if (data && !data.success) {
+            throw new Error(data.error || "Greška pri grupnom dodavanju");
         }
 
         toast.success(`Učenici uspješno dodani. Dodano ${parsedStudents.length} učenika.\nLozinka za učenike: yupu8Ev4`, { duration: 8000 });

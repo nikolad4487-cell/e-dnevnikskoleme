@@ -266,9 +266,13 @@ export default function UserManagementPage() {
 
       console.log("BULK CREATE SENDING", usersToCreate);
 
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/admin/bulk-create-general', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
+        },
         body: JSON.stringify({
           users: usersToCreate,
           role: bulkRole,
