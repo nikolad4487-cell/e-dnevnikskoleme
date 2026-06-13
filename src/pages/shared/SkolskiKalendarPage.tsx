@@ -34,7 +34,11 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isSchoolAdmin = isMainAdmin || (userSchoolRoles && userSchoolRoles.some(r => r.school_id === selectedSchoolId && (r.role === 'ADMIN' || r.role === 'SCHOOL_ADMIN')));
+  const isSchoolAdmin = isMainAdmin || (userSchoolRoles && userSchoolRoles.some((r: any) =>
+    (r.schoolId === selectedSchoolId || r.school_id === selectedSchoolId)
+    && (r.role === 'ADMIN' || r.role === 'SCHOOL_ADMIN' || r.role === 'MAIN_ADMIN')
+    && (!r.status || r.status === 'ACTIVE')
+  ));
 
   const [events, setEvents] = useState<SchoolEvent[]>([]);
   const [loading, setLoading] = useState(true);
@@ -312,39 +316,31 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         return;
       }
 
-      console.log("BEFORE EVENT SUPABASE DELETE", eventId);
-
-      const result = await supabase
-        .from("school_events")
-        .delete()
-        .eq("id", eventId)
-        .select();
-
-      console.log("AFTER EVENT SUPABASE DELETE", result);
-
-      if (result.error) {
-        console.error("DELETE EVENT ERROR", result.error);
-        alert("Greška pri brisanju zapisa: " + result.error.message);
-        return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
       }
 
-      if (!result.data || result.data.length === 0) {
-        console.error("DELETE DID NOT DELETE ANY ROW", eventId);
-        alert("Zapis nije obrisan iz baze. Provjeri id i izvornu tablicu.");
-        return;
+      const response = await fetch(
+        `/api/school-events?id=${encodeURIComponent(eventId)}&schoolId=${encodeURIComponent(selectedSchoolId || '')}`,
+        {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${session.access_token}` },
+        },
+      );
+      const raw = await response.text();
+      const apiResult = raw ? JSON.parse(raw) : null;
+      if (!response.ok || !apiResult?.success) {
+        throw new Error(apiResult?.error || raw || 'Brisanje događaja nije uspjelo.');
       }
-
-      console.log("DELETE EVENT SUCCESS", result.data);
 
       setEvents((prev) => prev.filter((item) => item.id !== eventId));
       setSelectedDayEvents((prev) => prev.filter((item) => item.id !== eventId));
-      toast.success('Događaj uklonjen.');
+      toast.success('Događaj je obrisan.');
       setShowDetailsModal(false);
-      loadEvents();
-
     } catch (err: any) {
       console.error("DELETE EVENT CRASHED", err);
-      alert("Brisanje zapisa se srušilo. Pogledaj konzolu.");
+      toast.error(err?.message || 'Brisanje događaja nije uspjelo.');
     }
   };
 
@@ -820,16 +816,16 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                     )}
                   </div>
                   {isSchoolAdmin && e.id && (
-                    <div className="flex items-center gap-2 pt-2 mt-2 border-t border-slate-100 justify-end">
+                    <div className="flex items-center gap-2 pt-3 mt-2 border-t border-slate-200 justify-end">
                       {!e.id.includes('defense') && !e.id.includes('meeting') && (
                           <button 
                             type="button"
-                            className="text-slate-500 hover:text-slate-800 p-1 flex items-center gap-1"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-[#005c8d]/30 bg-blue-50 text-[#005c8d] hover:bg-[#005c8d] hover:text-white text-[10px] font-black uppercase transition-colors"
                             title="Uredi događaj"
                             onClick={() => handleEditEvent(e)}
                           >
                             <Edit2 size={13} />
-                            <span className="text-[10px] font-bold uppercase">Uredi</span>
+                            <span>Uredi</span>
                           </button>
                       )}
                       {!e.id.includes('defense') && !e.id.includes('meeting') && (
@@ -839,11 +835,11 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                             console.log("DEBUG: BUTTON CLICKED", e.id);
                             handleDeleteEvent(e.id);
                           }}
-                          className="text-red-500 hover:text-red-700 p-1 flex items-center gap-1"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-red-200 bg-red-50 text-red-700 hover:bg-red-700 hover:text-white text-[10px] font-black uppercase transition-colors"
                           title="Obriši događaj"
                         >
                           <Trash2 size={13} />
-                          <span className="text-[10px] font-bold uppercase">Obriši</span>
+                          <span>Obriši</span>
                         </button>
                       )}
                     </div>
