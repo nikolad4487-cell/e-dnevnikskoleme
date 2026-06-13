@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { getCroatianPublicHolidays } from '../../utils/croatianPublicHolidays';
 
 interface SchoolEvent {
   id: string;
@@ -354,6 +355,27 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
 
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
+  const calendarEvents = useMemo(() => {
+    const automaticHolidays: SchoolEvent[] = [currentYear - 1, currentYear, currentYear + 1]
+      .flatMap(getCroatianPublicHolidays)
+      .filter((holiday) => !events.some((event) =>
+        (event.date === holiday.date || event.start_date === holiday.date)
+        && event.title.trim().toLocaleLowerCase('hr-HR') === holiday.title.toLocaleLowerCase('hr-HR')
+      ))
+      .map((holiday) => ({
+        id: holiday.id,
+        school_id: selectedSchoolId || '',
+        date: holiday.date,
+        start_date: holiday.date,
+        end_date: holiday.date,
+        type: 'PRAZNIK',
+        title: holiday.title,
+        notes: 'Državni blagdan u Republici Hrvatskoj. Nema nastave.',
+        is_instructional_day: false,
+      }));
+
+    return [...events, ...automaticHolidays];
+  }, [currentYear, events, selectedSchoolId]);
 
   const daysInMonth = getDaysInMonth(currentYear, currentMonth);
   const startOffset = getFirstDayOfMonth(currentYear, currentMonth);
@@ -488,7 +510,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
           const isToday = new Date().toDateString() === dayDate.toDateString();
           
           // Filter matching events
-          const dayEvents = events.filter(e => {
+          const dayEvents = calendarEvents.filter(e => {
             let matchesDate = false;
             if (e.start_date && e.end_date) {
               matchesDate = cell.dateStr >= e.start_date && cell.dateStr <= e.end_date;
@@ -513,7 +535,11 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
               }}
               className={`min-h-[105px] border-b border-r border-slate-100 p-2 overflow-y-auto hover:bg-slate-50/50 cursor-pointer transition-all flex flex-col justify-between ${
                 cell.isCurrentMonth ? 'bg-white' : 'bg-slate-50/30 opacity-45'
-              } ${isToday ? 'ring-2 ring-[#005c8d]/60 bg-[#005c8d]/5' : ''}`}
+              } ${isToday ? 'ring-2 ring-[#005c8d]/60 bg-[#005c8d]/5' : ''} ${
+                dayEvents.some((event) => event.is_instructional_day === false)
+                  ? 'bg-emerald-50/70'
+                  : ''
+              }`}
             >
               <div className="flex justify-between items-center mb-1">
                 <span className={`text-[10px] font-black uppercase ${
@@ -529,6 +555,12 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                   </span>
                 )}
               </div>
+
+              {dayEvents.some((event) => event.is_instructional_day === false) && (
+                <div className="mb-1 text-[8px] font-black uppercase tracking-wide text-emerald-700">
+                  Nema nastave
+                </div>
+              )}
 
               {/* Event Badge Items */}
               <div className="space-y-1 mt-1 flex-1">
@@ -815,7 +847,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                       </p>
                     )}
                   </div>
-                  {isSchoolAdmin && e.id && (
+                  {isSchoolAdmin && e.id && !e.id.startsWith('public-holiday-') && (
                     <div className="flex items-center gap-2 pt-3 mt-2 border-t border-slate-200 justify-end">
                       {!e.id.includes('defense') && !e.id.includes('meeting') && (
                           <button 
