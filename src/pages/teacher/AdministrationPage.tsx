@@ -2402,12 +2402,13 @@ setStudents(uniqueMapped as any);
     const parsedStudents: {name: string, surname: string, email?: string}[] = [];
 
     for (const line of lines) {
-        const parts = line.split(',');
-        const fullName = parts[0].trim();
-        const email = parts[1]?.trim();
-        
-        const name = fullName;
-        const surname = '';
+        const separator = line.includes('|') ? '|' : ',';
+        const [rawFullName, rawEmail] = line.split(separator, 2);
+        const fullName = rawFullName.trim();
+        const email = rawEmail?.trim();
+        const nameParts = fullName.split(/\s+/).filter(Boolean);
+        const name = nameParts.shift() || '';
+        const surname = nameParts.join(' ');
 
         parsedStudents.push({ name, surname, email: email || undefined });
     }
@@ -4482,9 +4483,9 @@ setAllSubjects(uniqueSub2);
                              onChange={e => setBulkStudentText(e.target.value)}
                              rows={10}
                              className="w-full border border-gray-300 p-3 outline-none focus:border-[#005c8d] font-medium font-mono text-sm"
-                             placeholder={`Marko Marković\nAna Anić, ana.anic@email.com\nIvan Ivić`}
+                             placeholder={`Marko Marković\nAna Anić | ana.anic@eskole.hr\nIvan Ivić`}
                           ></textarea>
-                          <p className="text-gray-400 text-xs italic mt-1">Lozinke se automatski postavljaju na "yupu8Ev4". Unesite učenike u formatu: Ime Prezime, opcionalni@email.com</p>
+                          <p className="text-gray-400 text-xs italic mt-1">Lozinke se automatski postavljaju na "yupu8Ev4". Format: IME I PREZIME | E-MAIL ili samo IME I PREZIME.</p>
                       </div>
                       <div className="flex justify-end">
                           <button 

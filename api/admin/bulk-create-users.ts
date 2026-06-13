@@ -12,6 +12,24 @@ type StudentInput = {
   email?: string;
 };
 
+function parseStudentInput(student: StudentInput) {
+  let rawName = String(student.name || '').trim();
+  let rawSurname = String(student.surname || '').trim();
+  let email = String(student.email || '').trim().toLowerCase();
+
+  if (!rawSurname && (rawName.includes('|') || rawName.includes(','))) {
+    const separator = rawName.includes('|') ? '|' : ',';
+    const [namePart, emailPart] = rawName.split(separator, 2);
+    rawName = namePart.trim();
+    email = email || String(emailPart || '').trim().toLowerCase();
+  }
+
+  const nameParts = rawSurname ? [rawName] : rawName.split(/\s+/).filter(Boolean);
+  const name = nameParts.shift() || '';
+  const surname = rawSurname || nameParts.join(' ');
+  return { name, surname, fullName: `${name} ${surname}`.trim(), email };
+}
+
 function normalizeForEmail(value: string) {
   return value
     .normalize('NFD')
@@ -92,13 +110,16 @@ export async function POST(req: Request) {
       console.error('BULK CREATE SUBJECTS ERROR', subjectsError);
     }
 
+    const { data: existingClassProfiles, error: profilesError } = await supabaseAdmin
+      .from('user_profiles')
+      .select('id, auth_user_id, name, email')
+      .eq('class_id', classId);
+    if (profilesError) {
+      console.error('BULK CREATE EXISTING PROFILES ERROR', profilesError);
+    }
+
     for (const student of students) {
-      const rawName = String(student.name || '').trim();
-      const rawSurname = String(student.surname || '').trim();
-      const nameParts = rawSurname ? [rawName, rawSurname] : rawName.split(/\s+/);
-      const name = nameParts.shift() || '';
-      const surname = rawSurname || nameParts.join(' ');
-      const fullName = `${name} ${surname}`.trim();
+      const { name, surname, fullName, email: requestedEmail } = parseStudentInput(student);
 
       if (!fullName) {
         results.push({ ...student, success: false, error: 'Ime učenika je obavezno.' });
@@ -106,39 +127,82 @@ export async function POST(req: Request) {
       }
 
       let authUserId: string | null = null;
+      let createdAuthUser = false;
       try {
-        let email = String(student.email || '').trim().toLowerCase();
-        if (!email || await findAuthUserByEmail(email)) {
-          email = await generateUniqueEmail(name, surname);
+        let email = requestedEmail;
+        const malformedProfile = email
+          ? (existingClassProfiles || []).find((profile) => {
+              const profileName = String(profile.name || '').toLowerCase();
+              return profileName.includes('|')
+                && profileName.split('|').slice(1).join('|').trim() === email;
+            })
+          : null;
+
+        let profile: any = null;
+        if (malformedProfile?.auth_user_id) {
+          authUserId = malformedProfile.auth_user_id;
+          const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
+            authUserId,
+            {
+              email,
+              password: studentPassword,
+              email_confirm: true,
+              user_metadata: { name, surname },
+            },
+          );
+          if (authUpdateError) throw authUpdateError;
+
+          const { data: repairedProfile, error: repairError } = await supabaseAdmin
+            .from('user_profiles')
+            .update({ name: fullName, email })
+            .eq('id', malformedProfile.id)
+            .select()
+            .single();
+          if (repairError || !repairedProfile) {
+            throw repairError || new Error('Pogrešno uneseni profil nije moguće popraviti.');
+          }
+          profile = repairedProfile;
+        } else {
+          if (!email || await findAuthUserByEmail(email)) {
+            email = await generateUniqueEmail(name, surname);
+          }
+
+          const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email,
+            password: studentPassword,
+            email_confirm: true,
+            user_metadata: { name, surname },
+          });
+          if (authError || !authData.user) throw authError || new Error('Auth korisnik nije stvoren.');
+          authUserId = authData.user.id;
+          createdAuthUser = true;
+
+          const { data: createdProfile, error: profileError } = await supabaseAdmin
+            .from('user_profiles')
+            .upsert({
+              auth_user_id: authUserId,
+              email,
+              name: fullName,
+              role: 'STUDENT',
+              is_first_login: true,
+              requires_password_change: false,
+              requires_authenticator_setup: false,
+              password_type: 'student_static',
+              class_id: classId,
+              school_id: schoolId,
+              school_year_id: schoolYearId,
+            }, { onConflict: 'auth_user_id' })
+            .select()
+            .single();
+          if (profileError || !createdProfile) {
+            throw profileError || new Error('Profil učenika nije stvoren.');
+          }
+          profile = createdProfile;
         }
 
-        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-          email,
-          password: studentPassword,
-          email_confirm: true,
-          user_metadata: { name, surname },
-        });
-        if (authError || !authData.user) throw authError || new Error('Auth korisnik nije stvoren.');
-        authUserId = authData.user.id;
-
-        const { data: profile, error: profileError } = await supabaseAdmin
-          .from('user_profiles')
-          .upsert({
-            auth_user_id: authUserId,
-            email,
-            name: fullName,
-            role: 'STUDENT',
-            is_first_login: true,
-            requires_password_change: false,
-            requires_authenticator_setup: false,
-            password_type: 'student_static',
-            class_id: classId,
-            school_id: schoolId,
-            school_year_id: schoolYearId,
-          }, { onConflict: 'auth_user_id' })
-          .select()
-          .single();
-        if (profileError || !profile) throw profileError || new Error('Profil učenika nije stvoren.');
+        if (!profile) {
+          throw new Error('Profil učenika nije dostupan.');
+        }
 
         const { error: roleError } = await supabaseAdmin.from('user_school_roles').upsert({
           user_id: profile.id,
@@ -182,7 +246,7 @@ export async function POST(req: Request) {
           student: fullName,
           error: errorMessage(studentError),
         });
-        if (authUserId) {
+        if (createdAuthUser && authUserId) {
           const { error: cleanupError } = await supabaseAdmin.auth.admin.deleteUser(authUserId);
           if (cleanupError) console.error('BULK CREATE CLEANUP ERROR', cleanupError);
         }
