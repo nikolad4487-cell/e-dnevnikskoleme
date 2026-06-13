@@ -2400,21 +2400,13 @@ setStudents(uniqueMapped as any);
     setLoading(true);
     try {
         const currentYear = schoolYears.find(y => y.id === activeYearId) || schoolYears.find(y => y.isActive);
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) {
-          console.error("BULK CREATE SUPABASE SESSION ERROR", sessionError);
-          throw sessionError;
-        }
-        const accessToken = sessionData.session?.access_token;
-        if (!accessToken) {
-          throw new Error("Nedostaje autorizacijski token. Prijavite se ponovno.");
-        }
+        const { data: { session } } = await supabase.auth.getSession();
         const res = await fetch('/api/admin/bulk-create-users', {
             method: 'POST',
-             headers: {
-               'Content-Type': 'application/json',
-               Authorization: `Bearer ${accessToken}`
-             },
+            headers: { 
+                'Content-Type': 'application/json',
+                ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
+            },
             body: JSON.stringify({
                 students: parsedStudents,
                 classId: classIdToUse,

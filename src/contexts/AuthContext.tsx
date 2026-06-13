@@ -64,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isLoadingUserRef = React.useRef(false);
 
   useEffect(() => {
+    console.log("AUTH PROVIDER INIT");
     console.log('[AUTH] AuthProvider MOUNT');
     return () => console.log('[AUTH] AuthProvider UNMOUNT');
   }, []);

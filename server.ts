@@ -8,6 +8,7 @@ import QRCode from "qrcode";
 import fs from "fs";
 import crypto from "crypto";
 import { GoogleGenAI, Type } from "@google/genai";
+import { verifyPin, hashPin } from "./src/pinUtils";
 
 dotenv.config();
 
@@ -2353,6 +2354,18 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
   });
 
   // Debug route
+  app.get("/api/admin/run-pin-hash-migration", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const sql = 'alter table public.user_profiles add column if not exists pin_hash text;';
+      const { error } = await supabaseAdmin.rpc('exec_sql', { sql_statement: sql });
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/debug-db", async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
@@ -2643,32 +2656,49 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       }
 
       // 1. Sign in with Supabase
-      const { data, error } = await supabaseAdmin.auth.signInWithPassword({
-        email,
-        password
-      });
+        // Use a hardcoded technical password for all staff as a temporary fix
+        const technicalPassword = '123456'; 
+        const passwordOrPin = (loginType === 'STAFF') ? technicalPassword : password;
 
-      if (error) {
-        console.error(`[LOGIN_API] Supabase signIn Error for ${email}:`, error.message);
-        if (error.message === 'Invalid login credentials') {
-          return res.status(401).json({ error: "Neispravni podaci za prijavu." });
+        const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+          email,
+          password: passwordOrPin
+        });
+
+        if (error) {
+          console.error(`[LOGIN_API] Supabase signIn Error for ${email}:`, error.message);
+          if (error.message === 'Invalid login credentials') {
+            return res.status(401).json({ error: "Neispravni podaci za prijavu." });
+          }
+          return res.status(401).json({ error: error.message });
         }
-        return res.status(401).json({ error: error.message });
-      }
 
-      const authUser = data.user;
-      const session = data.session;
+        const authUser = data.user;
+        const session = data.session;
 
-      // 2. Get Profile
-      const { data: profile, error: profileError } = await supabaseAdmin
-        .from('user_profiles')
-        .select('*')
-        .eq('auth_user_id', authUser.id)
-        .maybeSingle();
+        // 2. Get Profile
+        const { data: profile, error: profileError } = await supabaseAdmin
+          .from('user_profiles')
+          .select('*')
+          .eq('auth_user_id', authUser.id)
+          .maybeSingle();
 
-      if (profileError || !profile) {
-        return res.status(401).json({ error: "Profil korisnika nije pronađen." });
-      }
+        if (profileError || !profile) {
+          return res.status(401).json({ error: "Profil korisnika nije pronađen." });
+        }
+
+        // Verify PIN if staff
+        if (loginType === 'STAFF') {
+          if (!profile.pin_hash) {
+             // Handle case with no PIN set yet
+             return res.status(401).json({ error: "PIN nije postavljen." });
+          }
+          const isPinValid = await verifyPin(password, profile.pin_hash);
+          if (!isPinValid) {
+             return res.status(401).json({ error: "Neispravan PIN." });
+          }
+        }
+
 
       // 3. Verify TOTP if staff
       const { data: dbRoles } = await supabaseAdmin

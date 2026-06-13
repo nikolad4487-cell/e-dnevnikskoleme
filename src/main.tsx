@@ -17,7 +17,7 @@ window.addEventListener("focus", () => {
   console.log("WINDOW FOCUS");
 });
 
-console.log("[MAIN] createRoot called", new Date().toISOString());
+console.log("APP START");
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>

@@ -64,8 +64,8 @@ export default function SettingsPage() {
       toast.error('Nove lozinke se ne podudaraju');
       return;
     }
-    if (passForm.newPass.length < 8) {
-      toast.error('Lozinka mora imati barem 8 znakova');
+    if (!/^[0-9]{4}$/.test(passForm.newPass)) {
+      toast.error('Lozinka mora imati točno 4 znamenke.');
       return;
     }
 

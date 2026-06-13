@@ -8,6 +8,7 @@ import { Shield, User, Lock, Mail, Info, ChevronRight } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 export default function LoginPage() {
+  console.log("LOGIN PAGE RENDER");
   const { user, supabaseUser, loading: authLoading, error: authContextError, signOut } = useAuth();
   
   const hostname = window.location.hostname;

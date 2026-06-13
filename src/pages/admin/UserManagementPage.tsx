@@ -265,21 +265,13 @@ export default function UserManagementPage() {
       }
 
       console.log("BULK CREATE SENDING", usersToCreate);
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        console.error("BULK CREATE SUPABASE SESSION ERROR", sessionError);
-        throw sessionError;
-      }
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) {
-        throw new Error("Nedostaje autorizacijski token. Prijavite se ponovno.");
-      }
 
+      const { data: { session } } = await supabase.auth.getSession();
       const response = await fetch('/api/admin/bulk-create-general', {
         method: 'POST',
-        headers: {
+        headers: { 
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`
+          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
         },
         body: JSON.stringify({
           users: usersToCreate,
