@@ -2681,9 +2681,10 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
   app.post("/api/auth/login", async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
-      const { email, password, totpCode, loginType } = req.body;
+      const { password, totpCode, loginType } = req.body;
+      const normalizedEmail = String(req.body.email || '').trim().toLowerCase();
 
-      console.log("[LOGIN_API] Attempting login for:", email);
+      console.log("[LOGIN_API] Attempting login for:", normalizedEmail);
       console.log("[LOGIN_API] loginType:", loginType);
       
       if (!supabaseAdmin) {
@@ -2692,17 +2693,16 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       }
 
       // 1. Sign in with Supabase
-      // Use a hardcoded technical password for all staff as a temporary fix
-      const technicalPassword = '123456'; 
+      const technicalPassword = process.env.STAFF_AUTH_TECHNICAL_PASSWORD || '123456';
       const passwordOrPin = (loginType === 'STAFF') ? technicalPassword : password;
 
       const { data, error } = await supabaseAdmin.auth.signInWithPassword({
-        email,
+        email: normalizedEmail,
         password: passwordOrPin
       });
 
       if (error) {
-        console.error(`[LOGIN_API] Supabase signIn Error for ${email}:`, error.message);
+        console.error(`[LOGIN_API] Supabase signIn Error for ${normalizedEmail}:`, error.message);
         if (error.message === 'Invalid login credentials') {
           return res.status(401).json({ error: "Neispravni podaci za prijavu." });
         }
@@ -2779,9 +2779,9 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           if (profile.authenticator_secret === '123456') {
             isValid = totpCode === '123456';
           } else {
-            console.log("[LOGIN_API] TotpCode:", totpCode, "Secret:", profile.authenticator_secret);
             isValid = authenticator.check(totpCode, profile.authenticator_secret);
           }
+          console.log("[LOGIN_API] TOTP CHECK RESULT:", isValid);
 
           if (!isValid) {
             return res.status(401).json({ error: "Neispravan autentifikator kod." });

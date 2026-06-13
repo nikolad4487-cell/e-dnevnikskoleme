@@ -329,19 +329,30 @@ export default function StudentsPage() {
           classId: selectedClassId || undefined
         };
 
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
+        }
+
         const res = await fetch('/api/admin/create-user', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
           body: JSON.stringify(payload)
         });
 
         const text = await res.text();
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch (e) {
-          console.error("NON JSON RESPONSE", text);
-          throw new Error('Server error: Neispravan format odgovora');
+        console.log("CREATE STUDENT RESPONSE STATUS", res.status);
+        console.log("CREATE STUDENT RAW RESPONSE", text);
+        let data = null;
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch (e) {
+            console.error("CREATE STUDENT JSON PARSE ERROR", e, text);
+          }
         }
 
         if (!res.ok || (data && data.success === false)) {

@@ -440,9 +440,17 @@ export default function AdministrationPage() {
 
     setLoading(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
+      }
+
       const response = await fetch('/api/admin/create-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
         body: JSON.stringify({
           email: newUserForm.email?.toLowerCase() || '',
           name: `${newUserForm.name} ${newUserForm.surname}`,
@@ -2285,9 +2293,17 @@ setStudents(uniqueMapped as any);
           }
         };
 
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
+        }
+
         const response = await fetch('/api/admin/create-user', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`
+          },
           body: JSON.stringify(profilePayload)
         });
 

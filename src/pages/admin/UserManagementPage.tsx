@@ -198,9 +198,17 @@ export default function UserManagementPage() {
 
       console.log(`${editingUser ? 'UPDATE' : 'CREATE'} USER CLICKED`, payload);
 
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
+      }
+
       const response = await fetch(endpoint, {
         method: editingUser ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
         body: JSON.stringify(payload)
       });
 
