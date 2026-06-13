@@ -177,7 +177,7 @@ export default function LoginPage() {
 
       if (result.mfa_setup_needed) {
         localStorage.setItem('mfaSetupNeeded', 'true');
-        navigate('/setup-authenticator', { replace: true });
+        navigate('/auth/setup-authenticator', { replace: true });
         return;
       }
       

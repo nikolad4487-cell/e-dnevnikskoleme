@@ -196,46 +196,28 @@ export default function UserManagementPage() {
         password: editingUser ? undefined : password
       };
 
-      console.log("SAVE USER PAYLOAD", {
-        ...payload,
-        password: payload.password ? '[REDACTED]' : undefined
-      });
-
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        console.error("SAVE USER SUPABASE SESSION ERROR", sessionError);
-        throw sessionError;
-      }
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error('Nedostaje aktivna korisnička sesija.');
+      console.log(`${editingUser ? 'UPDATE' : 'CREATE'} USER CLICKED`, payload);
 
       const response = await fetch(endpoint, {
         method: editingUser ? 'PATCH' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
-      console.log("SAVE USER STATUS", response.status);
       const text = await response.text();
-      console.log("SAVE USER RAW RESPONSE", text);
       let data = null;
-      if (text) {
-        try {
-          data = JSON.parse(text);
-        } catch (parseError) {
-          console.error("SAVE USER JSON PARSE ERROR", parseError, text);
-        }
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch (e) {
+        console.error("CREATE USER JSON PARSE ERROR", e);
+        console.log("CREATE USER RAW RESPONSE", text);
+        throw new Error("Server nije vratio ispravan JSON odgovor.");
       }
+
+      console.log("CREATE USER RESPONSE STATUS", response.status);
+      console.log("CREATE USER RAW RESPONSE", text);
       
-      if (!response.ok) {
-        throw new Error(data?.error || data?.message || text || `HTTP ${response.status}: Neuspjela obrada zahtjeva`);
-      }
-      if (data?.success === false) {
-        throw new Error(data.error || data.message || text || 'Neuspjela obrada zahtjeva');
-      }
+      if (!response.ok) throw new Error(data?.error || data?.message || 'Neuspjela obrada zahtjeva');
 
       toast.success(editingUser ? 'Korisnik ažuriran' : 'Korisnik uspješno kreiran');
       setIsModalOpen(false);
@@ -356,42 +338,14 @@ export default function UserManagementPage() {
         if (error) throw error;
         toast.success('Korisnik je trajno obrisan iz sustava.');
       } else {
-        const deletePayload = { profileId, schoolId: selectedSchoolId, softDelete: soft };
-        console.log("DELETE USER PAYLOAD", deletePayload);
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) {
-          console.error("DELETE USER SUPABASE SESSION ERROR", sessionError);
-          throw sessionError;
-        }
-        const accessToken = sessionData.session?.access_token;
-        if (!accessToken) throw new Error('Nedostaje aktivna korisnička sesija.');
-
         const response = await fetch('/api/admin/delete-user', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`
-          },
-          body: JSON.stringify(deletePayload)
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ profileId, schoolId: selectedSchoolId, softDelete: soft })
         });
-        console.log("DELETE STATUS", response.status);
-        const raw = await response.text();
-        console.log("DELETE RAW RESPONSE", raw);
-        let result = null;
-        if (raw) {
-          try {
-            result = JSON.parse(raw);
-          } catch (parseError) {
-            console.error("DELETE JSON PARSE ERROR", parseError, raw);
-          }
-        }
-        if (!response.ok) {
-          throw new Error(result?.error || result?.message || raw || `HTTP ${response.status}: Brisanje nije uspjelo`);
-        }
-        if (result?.success === false) {
-          throw new Error(result.error || result.message || raw || 'Brisanje nije uspjelo');
-        }
-        console.log("DELETE SUCCESS", result);
+        const data = await response.json();
+        console.log("DELETE USER RESULT:", { status: response.status, data });
+        if (!response.ok) throw new Error(data.error || 'Neuspjelo brisanje');
         toast.success(soft ? 'Korisnik deaktiviran' : 'Korisnik uklonjen iz škole');
       }
       fetchUsers();

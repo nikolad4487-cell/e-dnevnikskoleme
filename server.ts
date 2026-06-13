@@ -2684,12 +2684,16 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         );
 
         if (isActuallyStaff) {
-          if (!profile.authenticator_secret) {
-            // This should not happen for staff if they were created correctly
-            // but if they are an old user, we might allow bypass or force setup.
-            // For now, if no secret, we might let them in but they should set it up.
-            // But per instructions "Nastavnici/zaposlenici koriste: lozinka: 1234 + 6-znamenkasti Microsoft Authenticator kod"
-            return res.status(401).json({ error: "Autentifikator nije podešen za vaš račun. Obratite se administratoru." });
+          const isMfaSet = profile.authenticator_secret && !profile.requires_authenticator_setup;
+
+          if (!isMfaSet) {
+            // Flag as MFA setup needed, do not block login
+            return res.json({ 
+              session, 
+              user: profile, 
+              roles: userSchoolRoles,
+              mfa_setup_needed: true
+            });
           }
 
           if (!totpCode) {
@@ -2705,14 +2709,6 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
           if (!isValid) {
             return res.status(401).json({ error: "Neispravan autentifikator kod." });
-          }
-
-          // If successful and was pending setup, mark as setup done
-          if (profile.requires_authenticator_setup) {
-            await supabaseAdmin
-              .from('user_profiles')
-              .update({ requires_authenticator_setup: false })
-              .eq('id', profile.id);
           }
         }
       }
@@ -2738,24 +2734,19 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       if (!profile) throw new Error("Profil nije pronađen.");
 
-      const newSecret = authenticator.generateSecret();
-      const otpauthUrl = `otpauth://totp/e-Dnevnik:${profile.email}?secret=${newSecret}&issuer=e-Dnevnik`;
-      const qrCodeDataURL = await QRCode.toDataURL(otpauthUrl);
-
       const { error: updateError } = await supabaseAdmin
         .from('user_profiles')
         .update({
-          authenticator_secret: newSecret,
+          authenticator_secret: null,
           requires_authenticator_setup: true
         })
         .eq('id', profileId);
 
       if (updateError) throw updateError;
 
-      res.json({
+      res.status(200).json({
         success: true,
-        authenticatorSecret: newSecret,
-        qrCode: qrCodeDataURL
+        message: "Autentifikator je resetiran."
       });
     } catch (err: any) {
       console.error("[RESET_TOTP] Error:", err);

@@ -16,12 +16,8 @@ import { FinalExamDefenseScheduleAdmin } from '../../components/FinalExamDefense
 
 async function safeReadJson(response: Response) {
   const text = await response.text();
-  console.log("API RESPONSE STATUS", response.status);
-  console.log("API RAW RESPONSE", text);
   if (!text || text.trim() === '') {
-    return response.ok
-      ? { success: true }
-      : { success: false, error: `HTTP ${response.status}: Prazan odgovor poslužitelja.` };
+    return { success: false, error: 'Prazan odgovor poslužitelja.' };
   }
   try {
     return JSON.parse(text);
@@ -137,6 +133,16 @@ export default function AdministrationPage() {
   }, [effectiveClassId, selectedClassId]);
 
   const selectedClassData = classes.find(c => c.id === selectedClassId);
+
+  const canManageClass = React.useMemo(() => {
+    return isAnyAdmin || 
+           user?.id === selectedClassData?.homeroom_teacher_id || 
+           user?.id === selectedClassData?.homeroomTeacherId || 
+           user?.id === selectedClassData?.deputy_teacher_id ||
+           user?.id === selectedClassData?.deputyTeacherId;
+  }, [isAnyAdmin, user?.id, selectedClassData]);
+
+  const canViewAllClassSubjects = canManageClass;
 
   // If we are in class administration mode but data hasn't arrived yet
   const isMissingClassData = isClassAdminMode && !selectedClassData && !loading;
@@ -361,7 +367,7 @@ export default function AdministrationPage() {
   };
 
   const handleResetStaffAuthenticator = async (profileId: string, name: string, surname: string, email: string) => {
-    if (!confirm(`Jeste li sigurni da želite resetirati Microsoft Authenticator za korisnika ${name} ${surname}? Korisnik će se morati ponovno postaviti pri sljedećoj prijavi.`)) return;
+    if (!confirm(`Jeste li sigurni da želite resetirati Microsoft Authenticator za korisnika ${name} ${surname}? Korisnik će ga morati ponovno postaviti pri sljedećoj prijavi.`)) return;
 
     setLoading(true);
     try {
@@ -371,17 +377,17 @@ export default function AdministrationPage() {
         body: JSON.stringify({ profileId })
       });
 
-      const result = await safeReadJson(response);
-      if (!response.ok) throw new Error(result.error || 'Greška pri resetiranju');
+      const raw = await response.text();
+      let result = null;
+      if (raw) {
+        try {
+          result = JSON.parse(raw);
+        } catch (err) {}
+      }
 
-      setCreatedStaffTotp({
-        email,
-        name: `${name} ${surname}`,
-        secret: result.authenticatorSecret,
-        qrCode: result.qrCode,
-        tempPassword: 'Zadržana postojeća'
-      });
-      toast.success('Authenticator resetiran. Pokažite novi QR kod korisniku.');
+      if (!response.ok) throw new Error(result?.error || result?.message || raw || 'Greška pri resetiranju');
+
+      toast.success('Authenticator resetiran. Korisnik ga mora ponovno postaviti pri sljedećoj prijavi.');
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || 'Greška pri resetiranju');
@@ -434,36 +440,22 @@ export default function AdministrationPage() {
 
     setLoading(true);
     try {
-      const payload = {
-        email: newUserForm.email?.toLowerCase() || '',
-        name: `${newUserForm.name} ${newUserForm.surname}`,
-        globalRole: newUserForm.globalRole,
-        schoolId: selectedSchoolId || (newUserForm.classId ? classes.find(c => c.id === newUserForm.classId)?.schoolId : null),
-        studentData: newUserForm.globalRole === Role.STUDENT ? {
-          oib: newUserForm.oib,
-          dob: newUserForm.dob,
-          address: newUserForm.address,
-          classId: newUserForm.classId,
-          programId: newUserForm.programId
-        } : undefined
-      };
-      console.log("SAVE USER PAYLOAD", payload);
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      if (sessionError) {
-        console.error("SAVE USER SUPABASE SESSION ERROR", sessionError);
-        throw sessionError;
-      }
-      if (!sessionData.session?.access_token) {
-        throw new Error('Nedostaje aktivna korisnička sesija.');
-      }
-
       const response = await fetch('/api/admin/create-user', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${sessionData.session.access_token}`
-        },
-        body: JSON.stringify(payload)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: newUserForm.email?.toLowerCase() || '',
+          name: `${newUserForm.name} ${newUserForm.surname}`,
+          globalRole: newUserForm.globalRole,
+          schoolId: selectedSchoolId || (newUserForm.classId ? classes.find(c => c.id === newUserForm.classId)?.schoolId : null),
+          studentData: newUserForm.globalRole === Role.STUDENT ? {
+            oib: newUserForm.oib,
+            dob: newUserForm.dob,
+            address: newUserForm.address,
+            classId: newUserForm.classId,
+            programId: newUserForm.programId
+          } : undefined
+        })
       });
 
       const result = await safeReadJson(response);
@@ -2292,22 +2284,10 @@ setStudents(uniqueMapped as any);
             schoolId: classToUse.schoolId || selectedSchoolId
           }
         };
-        console.log("SAVE USER PAYLOAD", profilePayload);
-        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-        if (sessionError) {
-          console.error("SAVE USER SUPABASE SESSION ERROR", sessionError);
-          throw sessionError;
-        }
-        if (!sessionData.session?.access_token) {
-          throw new Error('Nedostaje aktivna korisnička sesija.');
-        }
 
         const response = await fetch('/api/admin/create-user', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${sessionData.session.access_token}`
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(profilePayload)
         });
 
@@ -3506,7 +3486,7 @@ setAllSubjects(uniqueSub2);
                              </button>
                            )}
                          </div>
-                         {(isAnyAdmin || selectedClassData?.homeroom_teacher_id === user?.id) && !editingAssignmentId && (
+                         {canManageClass && !editingAssignmentId && (
                            <button 
                              onClick={() => {
                                setEditingAssignmentId(null);
@@ -3524,7 +3504,7 @@ setAllSubjects(uniqueSub2);
                       </div>
 
                       {/* ADD / EDIT SUBJECT FORM */}
-                      {(isAnyAdmin || selectedClassData?.homeroom_teacher_id === user?.id) && (assignmentForm.classId === selectedClassId || editingAssignmentId) && (
+                      {canManageClass && (assignmentForm.classId === selectedClassId || editingAssignmentId) && (
                         <div className="p-4 bg-gray-50 border-b border-gray-300">
                           <div className="text-[10px] font-black text-gray-500 uppercase mb-3">
                             {editingAssignmentId ? 'Uređivanje postojećeg predmeta' : 'Dodjela novog predmeta razredu'}
@@ -3691,19 +3671,25 @@ setAllSubjects(uniqueSub2);
                               const assignmentSubjectIds = assignmentsInClass.map(a => a.subjectId);
                               const uniqueSubjectIds = Array.from(new Set([...classSubjectIds, ...assignmentSubjectIds])).filter(Boolean) as string[];
                               
-                              return uniqueSubjectIds.map(sid => {
+                              const allowedSubjectIds = canViewAllClassSubjects ? uniqueSubjectIds : uniqueSubjectIds.filter(sid => {
+                                 // Teacher is explicitly assigned to this subject in this class
+                                 return assignmentsInClass.some(a => a.subjectId === sid && a.teacherId === user?.id) ||
+                                        classSubjects.some(cs => cs.classId === selectedClassId && cs.subjectId === sid && cs.teachers?.some(t => t.id === user?.id));
+                              });
+                              
+                              return allowedSubjectIds.map(sid => {
                                 const assignmentsForThisSubject = assignmentsInClass.filter(a => a.subjectId === sid);
                                 const subject = allSubjects.find(s => s.id === sid);
                                 const classSubject = classSubjects.find(cs => cs.subjectId === sid && cs.classId === selectedClassId);
                                 const activeEnrollCount = classEnrollments.filter(e => e.subjectId === sid && e.status === 'ACTIVE').length;
-                                const isManager = isAnyAdmin || selectedClassData?.homeroom_teacher_id === user?.id;
+                                const isManager = canManageClass;
 
                                 return (
                                   <tr key={sid} className="hover:bg-blue-50/30">
                                     <td className="px-4 py-3 border-r border-gray-200">
                                        <div className="font-black text-[#005c8d] uppercase flex items-center justify-between">
                                           {formatSubjectDisplayName(subject?.name || '', classSubject?.subjectType || 'redovni')}
-                                          {classSubject && (
+                                          {classSubject && isManager && (
                                             <button 
                                               onClick={() => setDeleteDialog({
                                                 isOpen: true,
@@ -4368,6 +4354,7 @@ setAllSubjects(uniqueSub2);
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Registracija učenika i pregled</h3>
               </div>
               
+              {(!isClassAdminMode || canManageClass) && (
               <div className="bg-white border border-gray-300 p-4 text-[11px]">
                 <div className="text-[10px] font-black text-[#005c8d] uppercase mb-4 flex justify-between items-center">
                   <div className="flex items-center gap-4">
@@ -4578,6 +4565,7 @@ setAllSubjects(uniqueSub2);
                 </form>
                 )}
               </div>
+              )}
 
               <div className="bg-white border border-gray-300">
                 <table className="w-full text-left border-collapse text-xs">
@@ -4612,21 +4600,25 @@ setAllSubjects(uniqueSub2);
                               >
                                 Pregled
                               </button>
+                             {(!isClassAdminMode || canManageClass) && (
                               <button 
                                 onClick={() => handleEditStudent(s)}
                                 className="text-[10px] font-black text-amber-600 uppercase hover:underline"
                               >
                                 Uredi
                               </button>
+                             )}
                             </div>
                           </td>
                           <td className="px-4 py-2 text-center">
+                           {(!isClassAdminMode || canManageClass) && (
                             <button 
                               onClick={() => setDeleteDialog({ isOpen: true, id: s.id, item: s, type: 'STUDENT', loading: false })}
                               className="text-gray-300 hover:text-red-600 transition-colors"
                             >
                               <Trash2 size={14} />
                             </button>
+                           )}
                           </td>
                         </tr>
                       );

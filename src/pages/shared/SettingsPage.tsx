@@ -99,17 +99,28 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profileId: user?.id })
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Resetiranje nije uspjelo');
       
-      const otpauthUrl = `otpauth://totp/e-Dnevnik:${user?.email}?secret=${result.authenticatorSecret}&issuer=e-Dnevnik`;
+      const raw = await response.text();
+      console.log("RESET AUTH RAW RESPONSE", raw);
+      console.log("RESET AUTH STATUS", response.status);
+
+      let result = null;
+      if (raw) {
+        try {
+          result = JSON.parse(raw);
+        } catch (err) {
+          console.error("RESET AUTH JSON PARSE ERROR", err, raw);
+        }
+      }
+
+      if (!response.ok) {
+        throw new Error(result?.message || result?.error || raw || "Resetiranje nije uspjelo");
+      }
       
-      setResetData({
-        secret: result.authenticatorSecret,
-        qrCode: result.qrCode,
-        otpauthUrl
-      });
-      toast.success('Authenticator resetiran. Skenirajte novi kod.');
+      toast.success('Authenticator resetiran. Bit ćete preusmjereni na postavljanje.');
+      setTimeout(() => {
+        window.location.href = '/auth/setup-authenticator';
+      }, 1500);
     } catch (err: any) {
       toast.error(err.message || 'Greška pri resetiranju');
     } finally {

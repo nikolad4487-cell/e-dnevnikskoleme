@@ -14,12 +14,24 @@ import { usePageTitle } from '../../hooks/usePageTitle';
 export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA' }) {
   usePageTitle("Dnevnik rada");
   const { classId: routeClassId } = useParams<{ classId: string }>();
-  const { user, isMainAdmin, highestRole } = useAuth();
+  const { user, isMainAdmin, highestRole, userSchoolRoles } = useAuth();
   const { selectedSchoolId, selectedClassId: contextClassId, selectedYearId } = useSelection();
   
   const effectiveClassId = contextClassId || routeClassId;
   const [classes, setClasses] = useState<Class[]>([]);
   const selectedClass = classes.find(c => c.id === effectiveClassId);
+
+  const isSchoolAdmin = userSchoolRoles.some(r => r.role === Role.SCHOOL_ADMIN && r.schoolId === selectedSchoolId);
+  const isAdminUser = isMainAdmin || isSchoolAdmin || highestRole === Role.ADMIN || highestRole === Role.MAIN_ADMIN;
+
+  const canManageClass = React.useMemo(() => {
+    return isAdminUser || 
+           user?.id === selectedClass?.homeroom_teacher_id || 
+           user?.id === selectedClass?.homeroomTeacherId || 
+           user?.id === selectedClass?.deputy_teacher_id ||
+           user?.id === selectedClass?.deputyTeacherId;
+  }, [isAdminUser, user?.id, selectedClass]);
+
   const [students, setStudents] = useState<User[]>([]);
   const [allSubjects, setAllSubjects] = useState<any[]>([]);
   const [rawSubjects, setRawSubjects] = useState<any[]>([]);
@@ -188,6 +200,19 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [scheduleSubjects, setScheduleSubjects] = useState<any[]>([]);
   const [curriculumPlans, setCurriculumPlans] = useState<any[]>([]);
   const [subjectAssignments, setSubjectAssignments] = useState<SubjectTeachingAssignment[]>([]);
+
+  const teachesCroatian = useMemo(() => {
+    return subjectAssignments.some(a => {
+      if (a.classId !== effectiveClassId) return false;
+      const sub = allSubjects.find(s => s.id === a.subjectId);
+      return sub && sub.name.toLowerCase().trim() === 'hrvatski jezik' && a.teacherId === user?.id;
+    }) || classSubjects.some((cs) => {
+      const subName = cs.subject?.name || allSubjects.find(sub => sub.id === cs.subject_id)?.name;
+      return cs.class_id === effectiveClassId && subName?.toLowerCase().trim() === 'hrvatski jezik' && cs.teachers?.some((t: any) => t.id === user?.id);
+    });
+  }, [subjectAssignments, classSubjects, allSubjects, effectiveClassId, user?.id]);
+
+  const canAccessLektira = isAdminUser || teachesCroatian;
 
   const canManageWeeks = useMemo(() => {
     if (!user || !effectiveClassId) return false;
@@ -1787,15 +1812,17 @@ setStudents(uniqueStudents);
         >
           <Calendar size={12} /> Raspored
         </button>
-        <button 
-          onClick={() => setView('LEKTIRA')}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2 transition-all border-b-2 font-bold text-[11px] uppercase whitespace-nowrap", 
-            view === 'LEKTIRA' ? "border-[#005c8d] text-[#005c8d] bg-white" : "border-transparent text-gray-500 hover:bg-gray-100"
-          )}
-        >
-          <Book size={12} /> Lektira
-        </button>
+        {canAccessLektira && (
+          <button 
+            onClick={() => setView('LEKTIRA')}
+            className={cn(
+               "flex items-center gap-2 px-4 py-2 transition-all border-b-2 font-bold text-[11px] uppercase whitespace-nowrap", 
+               view === 'LEKTIRA' ? "border-[#005c8d] text-[#005c8d] bg-white" : "border-transparent text-gray-500 hover:bg-gray-100"
+            )}
+          >
+            <Book size={12} /> Lektira
+          </button>
+        )}
       </div>
 
       {/* Main Content */}
@@ -2186,12 +2213,15 @@ setStudents(uniqueStudents);
                  periods={morningPeriods} 
                  days={days} 
                  onCellClick={(day: string, period: number) => {
-                    setEditingCell({ dayOfWeek: day, shift: 'MORNING', periodNumber: period });
-                    setShowScheduleModal(true);
+                    if (canManageClass) {
+                      setEditingCell({ dayOfWeek: day, shift: 'MORNING', periodNumber: period });
+                      setShowScheduleModal(true);
+                    }
                  }}
                  getCellSubjects={getCellSubjects}
                  allSubjects={allSubjects}
                  teachers={teachers}
+                 readOnly={!canManageClass}
                />
 
                <ScheduleGrid 
@@ -2200,12 +2230,15 @@ setStudents(uniqueStudents);
                  periods={afternoonPeriods} 
                  days={days} 
                  onCellClick={(day: string, period: number) => {
-                    setEditingCell({ dayOfWeek: day, shift: 'AFTERNOON', periodNumber: period });
-                    setShowScheduleModal(true);
+                    if (canManageClass) {
+                      setEditingCell({ dayOfWeek: day, shift: 'AFTERNOON', periodNumber: period });
+                      setShowScheduleModal(true);
+                    }
                  }}
                  getCellSubjects={getCellSubjects}
                  allSubjects={allSubjects}
                  teachers={teachers}
+                 readOnly={!canManageClass}
                />
             </div>
 
@@ -3529,7 +3562,7 @@ setStudents(uniqueStudents);
   );
 }
 
-function ScheduleGrid({ title, shift, periods, days, onCellClick, getCellSubjects, allSubjects, teachers }: any) {
+function ScheduleGrid({ title, shift, periods, days, onCellClick, getCellSubjects, allSubjects, teachers, readOnly }: any) {
   return (
     <div className="bg-white border border-gray-300">
       <div className="bg-[#f8f9fa] p-2 border-b border-gray-300">
@@ -3543,7 +3576,7 @@ function ScheduleGrid({ title, shift, periods, days, onCellClick, getCellSubject
           <thead>
             <tr className="bg-gray-50 border-b border-gray-300">
               <th className="w-20 border-r border-gray-300 bg-gray-100"></th>
-              {periods.map(p => (
+              {periods.map((p: any) => (
                 <th key={p} className="p-2 text-[10px] font-bold text-gray-500 uppercase border-r border-gray-300 last:border-r-0">
                   {p}. sat
                 </th>
@@ -3551,18 +3584,21 @@ function ScheduleGrid({ title, shift, periods, days, onCellClick, getCellSubject
             </tr>
           </thead>
           <tbody>
-            {days.map(day => (
+            {days.map((day: any) => (
               <tr key={day} className="border-b border-gray-300 last:border-b-0">
                 <td className="bg-gray-100 border-r border-gray-300 p-2 text-center align-middle font-bold text-[10px] text-gray-500 uppercase">
                    {day}
                 </td>
-                {periods.map(period => {
+                {periods.map((period: any) => {
                   const subjects = getCellSubjects(day, shift, period);
                   return (
                     <td 
                       key={`${day}-${period}`} 
-                      onClick={() => onCellClick(day, period)}
-                      className="p-1 border-r border-gray-300 last:border-r-0 cursor-pointer hover:bg-[#f0f9ff] text-[10px] h-20 align-top"
+                      onClick={() => !readOnly && onCellClick(day, period)}
+                      className={cn(
+                        "p-1 border-r border-gray-300 last:border-r-0 text-[10px] h-20 align-top",
+                        !readOnly ? "cursor-pointer hover:bg-[#f0f9ff]" : ""
+                      )}
                     >
                        <div className="flex flex-col gap-1">
                          {subjects.map((s: any) => {
