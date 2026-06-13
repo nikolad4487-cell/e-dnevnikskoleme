@@ -2446,13 +2446,28 @@ setStudents(uniqueMapped as any);
         }
 
         if (!res.ok) {
-            throw new Error(data?.error || data?.message || raw || "Prazan odgovor poslužitelja.");
+            const failedDetails = Array.isArray(data?.results)
+              ? data.results
+                  .filter((result: any) => !result.success)
+                  .slice(0, 3)
+                  .map((result: any) => {
+                    const studentName = `${result.name || ''} ${result.surname || ''}`.trim();
+                    return `${studentName ? `${studentName}: ` : ''}${result.error || 'Nepoznata greška'}`;
+                  })
+                  .join('\n')
+              : '';
+            throw new Error(data?.error || failedDetails || data?.message || raw || "Prazan odgovor poslužitelja.");
         }
         if (data && !data.success) {
             throw new Error(data.error || "Greška pri grupnom dodavanju");
         }
 
-        toast.success(`Učenici uspješno dodani. Dodano ${parsedStudents.length} učenika.\nLozinka za učenike: yupu8Ev4`, { duration: 8000 });
+        const createdCount = Number(data?.createdCount ?? parsedStudents.length);
+        const failedCount = Number(data?.failedCount ?? 0);
+        toast.success(
+          `Učenici uspješno dodani. Dodano: ${createdCount}${failedCount ? `, neuspjelo: ${failedCount}` : ''}.\nLozinka za učenike: yupu8Ev4`,
+          { duration: 8000 },
+        );
         setBulkStudentText('');
         setIsBulkAddingStudents(false);
         fetchData();

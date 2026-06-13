@@ -192,12 +192,24 @@ export async function POST(req: Request) {
     }
 
     const createdCount = results.filter((result) => result.success).length;
+    const failures = results.filter((result) => !result.success);
+    const firstFailure = failures[0];
+    const firstFailureName = firstFailure
+      ? `${String(firstFailure.name || '')} ${String(firstFailure.surname || '')}`.trim()
+      : '';
+    const firstFailureMessage = firstFailure
+      ? `${firstFailureName ? `${firstFailureName}: ` : ''}${String(firstFailure.error || 'Nepoznata greška.')}`
+      : null;
+
     return jsonResponse({
       success: createdCount > 0,
       createdCount,
       failedCount: results.length - createdCount,
       results,
       message: `Kreirano učenika: ${createdCount}.`,
+      error: createdCount === 0
+        ? firstFailureMessage || 'Nije moguće kreirati nijednog učenika.'
+        : null,
     }, createdCount > 0 ? 200 : 400);
   } catch (error) {
     console.error('BULK CREATE USERS API ERROR', error);
