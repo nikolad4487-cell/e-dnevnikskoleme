@@ -16,8 +16,12 @@ import { FinalExamDefenseScheduleAdmin } from '../../components/FinalExamDefense
 
 async function safeReadJson(response: Response) {
   const text = await response.text();
+  console.log("API RESPONSE STATUS", response.status);
+  console.log("API RAW RESPONSE", text);
   if (!text || text.trim() === '') {
-    return { success: false, error: 'Prazan odgovor poslužitelja.' };
+    return response.ok
+      ? { success: true }
+      : { success: false, error: `HTTP ${response.status}: Prazan odgovor poslužitelja.` };
   }
   try {
     return JSON.parse(text);
@@ -430,22 +434,36 @@ export default function AdministrationPage() {
 
     setLoading(true);
     try {
+      const payload = {
+        email: newUserForm.email?.toLowerCase() || '',
+        name: `${newUserForm.name} ${newUserForm.surname}`,
+        globalRole: newUserForm.globalRole,
+        schoolId: selectedSchoolId || (newUserForm.classId ? classes.find(c => c.id === newUserForm.classId)?.schoolId : null),
+        studentData: newUserForm.globalRole === Role.STUDENT ? {
+          oib: newUserForm.oib,
+          dob: newUserForm.dob,
+          address: newUserForm.address,
+          classId: newUserForm.classId,
+          programId: newUserForm.programId
+        } : undefined
+      };
+      console.log("SAVE USER PAYLOAD", payload);
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error("SAVE USER SUPABASE SESSION ERROR", sessionError);
+        throw sessionError;
+      }
+      if (!sessionData.session?.access_token) {
+        throw new Error('Nedostaje aktivna korisnička sesija.');
+      }
+
       const response = await fetch('/api/admin/create-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: newUserForm.email?.toLowerCase() || '',
-          name: `${newUserForm.name} ${newUserForm.surname}`,
-          globalRole: newUserForm.globalRole,
-          schoolId: selectedSchoolId || (newUserForm.classId ? classes.find(c => c.id === newUserForm.classId)?.schoolId : null),
-          studentData: newUserForm.globalRole === Role.STUDENT ? {
-            oib: newUserForm.oib,
-            dob: newUserForm.dob,
-            address: newUserForm.address,
-            classId: newUserForm.classId,
-            programId: newUserForm.programId
-          } : undefined
-        })
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionData.session.access_token}`
+        },
+        body: JSON.stringify(payload)
       });
 
       const result = await safeReadJson(response);
@@ -2274,10 +2292,22 @@ setStudents(uniqueMapped as any);
             schoolId: classToUse.schoolId || selectedSchoolId
           }
         };
+        console.log("SAVE USER PAYLOAD", profilePayload);
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) {
+          console.error("SAVE USER SUPABASE SESSION ERROR", sessionError);
+          throw sessionError;
+        }
+        if (!sessionData.session?.access_token) {
+          throw new Error('Nedostaje aktivna korisnička sesija.');
+        }
 
         const response = await fetch('/api/admin/create-user', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${sessionData.session.access_token}`
+          },
           body: JSON.stringify(profilePayload)
         });
 
