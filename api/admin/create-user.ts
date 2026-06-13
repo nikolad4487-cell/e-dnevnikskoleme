@@ -124,7 +124,6 @@ export async function POST(req: Request) {
         class_id: body.classId || studentData.classId || null,
         school_id: schoolId,
         school_year_id: studentData.schoolYearId || null,
-        program_id: body.programId || studentData.programId || null,
         pin_hash: pinHash,
         is_first_login: true,
         requires_password_change: false,
