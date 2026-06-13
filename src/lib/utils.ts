@@ -98,6 +98,26 @@ export function formatSubjectDisplayName(subjectName: string, subjectType: strin
   return `${cleaned} (${subjectType})`;
 }
 
+export function getClassSubjectDisplayName(classSubject: any) {
+  const name =
+    classSubject.subject?.name ||
+    classSubject.subjects?.name ||
+    classSubject.name ||
+    classSubject.subject_name ||
+    "";
+
+  const type = String(
+    classSubject.subject_type ||
+    classSubject.type ||
+    ""
+  ).toUpperCase();
+
+  if (type === "IZBORNI") return `${name} (izborni)`;
+  if (type === "PRAKSA") return `${name} (praksa)`;
+
+  return name;
+}
+
 export function sanitizeSubjectType(type: string | null | undefined): 'REDOVNI' | 'IZBORNI' {
   if (!type) return 'REDOVNI';
   const val = type.toUpperCase().trim();
