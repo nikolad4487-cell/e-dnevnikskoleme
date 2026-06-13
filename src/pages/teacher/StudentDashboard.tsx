@@ -143,6 +143,11 @@ export default function StudentDashboard() {
         }
 
         setSubjects(mappedSubjects);
+        console.log("STUDENT SUBJECT DISPLAY DEBUG", mappedSubjects.map(s => ({
+          name: s.name,
+          subject_type: s.type,
+          display: s.name
+        })));
 
       } catch (err) {
         console.error('Error loading student dashboard data:', err);
