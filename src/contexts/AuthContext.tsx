@@ -345,6 +345,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       let rolesData = rolesRawResult || [];
 
+      if (
+        (profileRaw.role === Role.MAIN_ADMIN || profileRaw.role === Role.ADMIN)
+        && !rolesData.some((role: any) => role.role === profileRaw.role)
+      ) {
+        rolesData = [
+          ...rolesData,
+          {
+            id: `global-${profile.id}`,
+            user_id: profile.id,
+            school_id: '',
+            role: profileRaw.role,
+            status: 'ACTIVE',
+          },
+        ];
+      }
+
       // Optional: Auto-repair enrollments if needed, but keep it tight
       try {
         const { data: enrollments } = await withTimeout(

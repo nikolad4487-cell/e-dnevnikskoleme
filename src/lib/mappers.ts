@@ -40,6 +40,7 @@ export const mappers = {
     citizenship: raw.citizenship,
     gender: raw.gender,
     programAdjustment: raw.program_adjustment,
+    globalRole: raw.role,
   }),
 
   userSchoolRole: (raw: any) => ({
