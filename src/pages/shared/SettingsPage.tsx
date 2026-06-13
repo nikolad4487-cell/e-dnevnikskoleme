@@ -57,32 +57,34 @@ export default function SettingsPage() {
     }
   };
 
-  const handleChangePassword = async (e: React.FormEvent) => {
+  const handleChangePin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user) return;
     if (passForm.newPass !== passForm.confirm) {
-      toast.error('Nove lozinke se ne podudaraju');
+      toast.error('Novi PINovi se ne podudaraju');
       return;
     }
     if (!/^[0-9]{4}$/.test(passForm.newPass)) {
-      toast.error('Lozinka mora imati točno 4 znamenke.');
+      toast.error('PIN mora imati točno 4 znamenke.');
       return;
     }
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: passForm.newPass
+      const response = await fetch('/api/auth/change-pin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          currentPin: passForm.current,
+          newPin: passForm.newPass
+        })
       });
       
-      if (error) throw error;
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Greška pri promjeni PIN-a');
       
-      await supabase.from('user_profiles').update({
-        is_first_login: false,
-        requires_password_change: false
-      }).eq('id', user.id);
-
-      toast.success('Lozinka uspješno promijenjena');
+      toast.success('PIN uspješno promijenjen');
       setPassForm({ current: '', newPass: '', confirm: '' });
     } catch (err: any) {
       toast.error('Greška: ' + err.message);
@@ -225,16 +227,16 @@ export default function SettingsPage() {
               </h3>
             </div>
 
-            <form onSubmit={handleChangePassword} className="space-y-4">
+            <form onSubmit={handleChangePin} className="space-y-4">
               <div className="space-y-1">
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Trenutna lozinka</label>
+                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Trenutni PIN</label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-2.5 text-gray-300" size={14} />
                   <input 
                     type="password"
                     required
                     value={passForm.current}
-                    onChange={e => setPassForm({...passForm, current: e.target.value})}
+                    onChange={e => setPassForm({...passForm, current: e.target.value.replace(/\D/g, '').slice(0, 4)})}
                     className="w-full border border-gray-300 pl-8 pr-3 py-2 text-xs outline-none focus:border-[#005c8d]"
                   />
                 </div>
@@ -242,22 +244,22 @@ export default function SettingsPage() {
 
               <div className="space-y-4 pt-2 border-t border-gray-100">
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Nova lozinka</label>
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Novi PIN</label>
                   <input 
                     type="password"
                     required
                     value={passForm.newPass}
-                    onChange={e => setPassForm({...passForm, newPass: e.target.value})}
+                    onChange={e => setPassForm({...passForm, newPass: e.target.value.replace(/\D/g, '').slice(0, 4)})}
                     className="w-full border border-gray-300 p-2 text-xs outline-none focus:border-[#005c8d]"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Ponovite novu lozinku</label>
+                  <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Ponovite novi PIN</label>
                   <input 
                     type="password"
                     required
                     value={passForm.confirm}
-                    onChange={e => setPassForm({...passForm, confirm: e.target.value})}
+                    onChange={e => setPassForm({...passForm, confirm: e.target.value.replace(/\D/g, '').slice(0, 4)})}
                     className="w-full border border-gray-300 p-2 text-xs outline-none focus:border-[#005c8d]"
                   />
                 </div>
@@ -268,7 +270,7 @@ export default function SettingsPage() {
                 disabled={loading}
                 className="w-full flex items-center justify-center gap-2 py-2 bg-[#005c8d] text-white text-[10px] font-black uppercase border border-[#004a70] hover:bg-[#004a70] transition-all disabled:opacity-50"
               >
-                Promijeni lozinku
+                Promijeni PIN
               </button>
             </form>
           </section>

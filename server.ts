@@ -2449,6 +2449,45 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     }
   });
 
+  // Change PIN endpoint
+  app.post("/api/auth/change-pin", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { userId, currentPin, newPin } = req.body;
+
+      // 1. Get profile
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from('user_profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
+        
+      if (profileError || !profile) {
+        return res.status(401).json({ error: "Profil nije pronađen." });
+      }
+
+      // 2. Verify current PIN
+      const isCurrentValid = await verifyPin(currentPin, profile.pin_hash);
+      if (!isCurrentValid) {
+        return res.status(401).json({ error: "Neispravan trenutni PIN." });
+      }
+
+      // 3. Hash and update new PIN
+      const newHash = await hashPin(newPin);
+      const { error: updateError } = await supabaseAdmin
+        .from('user_profiles')
+        .update({ pin_hash: newHash })
+        .eq('id', userId);
+        
+      if (updateError) throw updateError;
+      
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[CHANGE_PIN] Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Admin delete user endpoint
   app.post("/api/admin/delete-user", async (req, res) => {
     try {

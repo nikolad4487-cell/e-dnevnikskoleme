@@ -78,6 +78,10 @@ export default function LoginPage() {
     localStorage.removeItem('forceLoggedOut');
     
     // Virtual MFA simulation for staff
+    if (loginType === 'STAFF' && password.length !== 4) {
+      setError('PIN mora imati točno 4 znamenke.');
+      return;
+    }
     if (loginType === 'STAFF' && (!otp || otp.length !== 6)) {
       setError('Molimo unesite ispravan 6-znamenkasti OTP kod iz autentifikatora.');
       return;
@@ -282,7 +286,7 @@ export default function LoginPage() {
             </div>
 
             <div className="space-y-1">
-              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest">Lozinka</label>
+              <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest">PIN</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400">
                   <Lock size={16} />
@@ -291,9 +295,9 @@ export default function LoginPage() {
                   type="password"
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => setPassword(e.target.value.replace(/\D/g, '').slice(0, 4))}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 text-sm outline-none focus:border-[#005c8d] focus:bg-blue-50/20 shadow-inner"
-                  placeholder="••••••••"
+                  placeholder="1234"
                 />
               </div>
             </div>
