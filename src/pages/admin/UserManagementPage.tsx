@@ -202,6 +202,10 @@ export default function UserManagementPage() {
       if (!session?.access_token) {
         throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
       }
+      console.log(`${editingUser ? 'UPDATE' : 'CREATE'} USER AUTH`, {
+        hasAccessToken: true,
+        userId: session.user?.id || null
+      });
 
       const response = await fetch(endpoint, {
         method: editingUser ? 'PATCH' : 'POST',
