@@ -30,10 +30,34 @@ function getEasterSunday(year: number) {
 }
 
 export function getCroatianPublicHolidays(year: number): CroatianPublicHoliday[] {
-  const corpusChristi = getEasterSunday(year);
+  const easterSunday = getEasterSunday(year);
+  const easterMonday = new Date(easterSunday);
+  easterMonday.setDate(easterMonday.getDate() + 1);
+
+  const corpusChristi = new Date(easterSunday);
   corpusChristi.setDate(corpusChristi.getDate() + 60);
 
   return [
+    {
+      id: `public-holiday-${year}-new-year`,
+      date: `${year}-01-01`,
+      title: 'Nova godina',
+    },
+    {
+      id: `public-holiday-${year}-epiphany`,
+      date: `${year}-01-06`,
+      title: 'Bogojavljenje ili Sveta tri kralja',
+    },
+    {
+      id: `public-holiday-${year}-easter`,
+      date: formatDate(easterSunday),
+      title: 'Uskrs',
+    },
+    {
+      id: `public-holiday-${year}-easter-monday`,
+      date: formatDate(easterMonday),
+      title: 'Uskrsni ponedjeljak',
+    },
     {
       id: `public-holiday-${year}-labour-day`,
       date: `${year}-05-01`,
@@ -50,9 +74,39 @@ export function getCroatianPublicHolidays(year: number): CroatianPublicHoliday[]
       title: 'Tijelovo',
     },
     {
+      id: `public-holiday-${year}-anti-fascist-struggle-day`,
+      date: `${year}-06-22`,
+      title: 'Dan antifašističke borbe',
+    },
+    {
+      id: `public-holiday-${year}-victory-day`,
+      date: `${year}-08-05`,
+      title: 'Dan pobjede i domovinske zahvalnosti i Dan hrvatskih branitelja',
+    },
+    {
+      id: `public-holiday-${year}-assumption`,
+      date: `${year}-08-15`,
+      title: 'Velika Gospa',
+    },
+    {
       id: `public-holiday-${year}-all-saints-day`,
       date: `${year}-11-01`,
       title: 'Svi sveti',
+    },
+    {
+      id: `public-holiday-${year}-remembrance-day`,
+      date: `${year}-11-18`,
+      title: 'Dan sjećanja na žrtve Domovinskog rata i Dan sjećanja na žrtvu Vukovara i Škabrnje',
+    },
+    {
+      id: `public-holiday-${year}-christmas`,
+      date: `${year}-12-25`,
+      title: 'Božić',
+    },
+    {
+      id: `public-holiday-${year}-saint-stephen`,
+      date: `${year}-12-26`,
+      title: 'Sveti Stjepan',
     },
   ];
 }
