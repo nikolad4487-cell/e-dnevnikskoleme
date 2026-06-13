@@ -2694,49 +2694,48 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         return res.status(500).json({ error: "Server authentication error." });
       }
 
-      // 1. Sign in with Supabase
-        // Use a hardcoded technical password for all staff as a temporary fix
-        const technicalPassword = '123456'; 
-        const passwordOrPin = (loginType === 'STAFF') ? technicalPassword : password;
+      // Staff authenticate with their PIN, while Supabase uses the internal password.
+      const technicalPassword = process.env.STAFF_AUTH_TECHNICAL_PASSWORD || '123456';
+      const supabasePassword = loginType === 'STAFF' ? technicalPassword : password;
+      const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
+        email,
+        password: supabasePassword
+      });
 
-        const { data, error } = await supabaseAdmin.auth.signInWithPassword({
-          email,
-          password: passwordOrPin
-        });
-
-        if (error) {
-          console.error(`[LOGIN_API] Supabase signIn Error for ${email}:`, error.message);
-          if (error.message === 'Invalid login credentials') {
-            return res.status(401).json({ error: "Neispravni podaci za prijavu." });
-          }
-          return res.status(401).json({ error: error.message });
+      if (signInError) {
+        console.error(`[LOGIN_API] Supabase signIn Error for ${email}:`, signInError.message);
+        if (signInError.message === 'Invalid login credentials') {
+          return res.status(401).json({ error: "Neispravni podaci za prijavu." });
         }
+        return res.status(401).json({ error: signInError.message });
+      }
 
-        const authUser = data.user;
-        const session = data.session;
+      const authUser = signInData.user;
+      const authSession = signInData.session;
+      if (!authUser || !authSession) {
+        return res.status(401).json({ error: "Supabase nije vratio valjanu sesiju." });
+      }
 
-        // 2. Get Profile
-        const { data: profile, error: profileError } = await supabaseAdmin
-          .from('user_profiles')
-          .select('*')
-          .eq('auth_user_id', authUser.id)
-          .maybeSingle();
+      // 2. Get Profile
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from('user_profiles')
+        .select('*')
+        .eq('auth_user_id', authUser.id)
+        .maybeSingle();
 
-        if (profileError || !profile) {
-          return res.status(401).json({ error: "Profil korisnika nije pronađen." });
+      if (profileError || !profile) {
+        return res.status(401).json({ error: "Profil korisnika nije pronađen." });
+      }
+
+      if (loginType === 'STAFF') {
+        if (!profile.pin_hash) {
+          return res.status(401).json({ error: "PIN nije postavljen." });
         }
-
-        // Verify PIN if staff
-        if (loginType === 'STAFF') {
-          if (!profile.pin_hash) {
-             // Handle case with no PIN set yet
-             return res.status(401).json({ error: "PIN nije postavljen." });
-          }
-          const isPinValid = await verifyPin(password, profile.pin_hash);
-          if (!isPinValid) {
-             return res.status(401).json({ error: "Neispravan PIN." });
-          }
+        const isPinValid = await verifyPin(password, profile.pin_hash);
+        if (!isPinValid) {
+          return res.status(401).json({ error: "Neispravan PIN." });
         }
+      }
 
 
       // 3. Verify TOTP if staff
@@ -2758,7 +2757,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           if (!isMfaSet) {
             // Flag as MFA setup needed, do not block login
             return res.json({ 
-              session, 
+              session: authSession,
               user: profile, 
               roles: userSchoolRoles,
               mfa_setup_needed: true
@@ -2782,7 +2781,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         }
       }
 
-      res.json({ session, user: profile, roles: userSchoolRoles });
+      res.json({ session: authSession, user: profile, roles: userSchoolRoles });
     } catch (err: any) {
       console.error("[LOGIN_API] Error:", err);
       res.status(500).json({ error: err.message });

@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../_supabase.js';
 import { authenticator } from 'otplib';
+import bcrypt from 'bcryptjs';
 
 export async function POST(req: Request) {
   try {
@@ -26,15 +27,17 @@ export async function POST(req: Request) {
 
     console.log(`[LOGIN_API] Attempting login for ${email} (${loginType})`);
 
-    // 1. Sign in with Supabase
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+    // Staff authenticate with their PIN, while Supabase uses the internal password.
+    const technicalPassword = process.env.STAFF_AUTH_TECHNICAL_PASSWORD || '123456';
+    const supabasePassword = loginType === 'STAFF' ? technicalPassword : password;
+    const { data: signInData, error: signInError } = await supabaseAdmin.auth.signInWithPassword({
       email,
-      password
+      password: supabasePassword
     });
 
-    if (error) {
-      console.error(`[LOGIN_API] Supabase signIn Error for ${email}:`, error.message);
-      let errMsg = error.message;
+    if (signInError) {
+      console.error(`[LOGIN_API] Supabase signIn Error for ${email}:`, signInError.message);
+      let errMsg = signInError.message;
       if (errMsg === 'Invalid login credentials' || errMsg.includes('Neispravni podaci za prijavu')) {
         errMsg = "Neispravni podaci za prijavu.";
       }
@@ -44,8 +47,14 @@ export async function POST(req: Request) {
       });
     }
 
-    const authUser = data.user;
-    const session = data.session;
+    const authUser = signInData.user;
+    const authSession = signInData.session;
+    if (!authUser || !authSession) {
+      return new Response(JSON.stringify({ error: "Supabase nije vratio valjanu sesiju." }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
 
     // 2. Get Profile
     const { data: profile, error: profileError } = await supabaseAdmin
@@ -59,6 +68,23 @@ export async function POST(req: Request) {
         status: 401,
         headers: { 'Content-Type': 'application/json' }
       });
+    }
+
+    if (loginType === 'STAFF') {
+      if (!profile.pin_hash) {
+        return new Response(JSON.stringify({ error: "PIN nije postavljen." }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      const isPinValid = await bcrypt.compare(password, profile.pin_hash);
+      if (!isPinValid) {
+        return new Response(JSON.stringify({ error: "Neispravan PIN." }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     // 3. Fetch roles from user_school_roles
@@ -114,7 +140,7 @@ export async function POST(req: Request) {
         } else {
           // Flag as MFA setup needed
           return new Response(JSON.stringify({ 
-            session, 
+            session: authSession,
             user: profile, 
             roles: userSchoolRoles,
             mfa_setup_needed: true
@@ -126,7 +152,7 @@ export async function POST(req: Request) {
       }
     }
 
-    return new Response(JSON.stringify({ session, user: profile, roles: userSchoolRoles }), {
+    return new Response(JSON.stringify({ session: authSession, user: profile, roles: userSchoolRoles }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
