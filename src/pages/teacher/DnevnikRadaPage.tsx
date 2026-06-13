@@ -216,16 +216,14 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
 
   const canManageWeeks = useMemo(() => {
     if (!user || !effectiveClassId) return false;
-    if (isMainAdmin || highestRole === Role.ADMIN) return true;
+    if (isAdminUser || canManageClass) return true;
     
-    const isHomeroom = selectedClass ? selectedClass.homeroomTeacherId === user.id : false;
-    const isDeputy = selectedClass ? selectedClass.deputyTeacherId === user.id : false;
     const isTeachingThisClass = subjectAssignments.some(
       a => a.classId === effectiveClassId && a.teacherId === user.id
     );
 
-    return isHomeroom || isDeputy || isTeachingThisClass;
-  }, [user, isMainAdmin, selectedClass, effectiveClassId, subjectAssignments]);
+    return isTeachingThisClass;
+  }, [user, effectiveClassId, isAdminUser, canManageClass, subjectAssignments]);
 
   const getAutoDutyStudents = (weekNum: number) => {
     if (!students || students.length === 0) return [];
@@ -1420,6 +1418,10 @@ setStudents(uniqueStudents);
         if (error) throw error;
 
         setWeeks(prev => prev.filter(w => w.id !== deleteDialog.id));
+        if (selectedWeek?.id === deleteDialog.id) {
+          setSelectedWeek(null);
+          setView('WEEKS');
+        }
         toast.success('Radni tjedan je uspješno obrisan.');
       }
 
@@ -1929,7 +1931,7 @@ setStudents(uniqueStudents);
                        <th className="px-4 py-2 font-bold uppercase text-gray-500 border-r border-gray-300">Naziv tjedna</th>
                        <th className="px-4 py-2 font-bold uppercase text-gray-500 w-64 border-r border-gray-300">Period i tip / razlog</th>
                        <th className="px-4 py-2 font-bold uppercase text-gray-500 border-r border-gray-300">Dežurni učenici</th>
-                       <th className="px-4 py-2 font-bold uppercase text-gray-500 text-center w-24">Akcije</th>
+                       <th className="px-4 py-2 font-bold uppercase text-gray-500 text-center w-40">Akcije</th>
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-gray-200">
@@ -1975,28 +1977,32 @@ setStudents(uniqueStudents);
                              Array.from(new Set(w.onDutyStudentIds || [])).map(sid => students.find(s => s.id === sid)?.name).filter(Boolean).join(', ') || 'Nema dežurnih'
                            )}
                         </td>
-                       <td className="px-4 py-2 text-center text-right flex justify-end">
+                       <td className="px-3 py-2 text-center">
                           {canManageWeeks && (
-                            <div className="flex items-center gap-1 justify-end">
+                            <div className="flex items-center gap-2 justify-center">
                               <button 
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleEditWeek(w);
                                 }}
-                                className="p-1 px-2 text-gray-300 hover:text-[#005c8d] hover:bg-white border border-transparent hover:border-gray-200 transition-all rounded-sm"
-                                title="Uredi"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-black uppercase text-[#005c8d] border border-[#005c8d]/30 bg-blue-50 hover:bg-[#005c8d] hover:text-white transition-colors"
+                                title="Uredi radni tjedan"
                               >
-                                <Edit2 size={14} />
+                                <Edit2 size={12} />
+                                Uredi
                               </button>
                               <button 
+                                type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setDeleteDialog({ isOpen: true, id: w.id, type: 'WEEK', loading: false });
                                 }}
-                                className="p-1 px-2 text-gray-300 hover:text-red-500 hover:bg-white border border-transparent hover:border-gray-200 transition-all rounded-sm"
-                                title="Obriši"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-black uppercase text-red-700 border border-red-200 bg-red-50 hover:bg-red-700 hover:text-white transition-colors"
+                                title="Obriši radni tjedan"
                               >
-                                <Trash2 size={14} />
+                                <Trash2 size={12} />
+                                Obriši
                               </button>
                             </div>
                           )}
