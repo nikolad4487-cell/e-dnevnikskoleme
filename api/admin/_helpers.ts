@@ -2,6 +2,17 @@ import { supabaseAdmin } from '../_supabase.js';
 import type { User } from '@supabase/supabase-js';
 
 const ADMIN_ROLES = new Set(['MAIN_ADMIN', 'ADMIN', 'SCHOOL_ADMIN']);
+const STAFF_ROLES = new Set([
+  'MAIN_ADMIN',
+  'ADMIN',
+  'SCHOOL_ADMIN',
+  'TEACHER',
+  'HOMEROOM',
+  'HOMEROOM_TEACHER',
+  'DEPUTY',
+  'STAFF',
+  'PRINCIPAL',
+]);
 
 export function jsonResponse(body: unknown, status = 200) {
   return Response.json(body, {
@@ -61,6 +72,52 @@ export async function requireAdmin(req: Request, requestedSchoolId?: string | nu
 
   if (!isSuperAdmin && !hasSchoolAdminRole) {
     throw new Error('Nemate administratorske ovlasti za odabranu školu.');
+  }
+
+  return { authUser: authData.user, profile, isSuperAdmin };
+}
+
+export async function requireSchoolStaff(req: Request, requestedSchoolId: string) {
+  if (!supabaseAdmin) throw new Error('Supabase Admin client nije inicijaliziran.');
+  if (!requestedSchoolId) throw new Error('Škola nije odabrana.');
+
+  const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '');
+  if (!token) throw new Error('Nedostaje autorizacijski token.');
+
+  const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token);
+  if (authError || !authData.user) {
+    throw new Error(authError?.message || 'Prijava korisnika nije valjana.');
+  }
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from('user_profiles')
+    .select('id, role, access_role, school_id')
+    .eq('auth_user_id', authData.user.id)
+    .single();
+  if (profileError || !profile) {
+    throw new Error(profileError?.message || 'Profil korisnika nije pronađen.');
+  }
+
+  const isSuperAdmin = ['super_admin', 'main_admin'].includes(
+    String(profile.access_role || '').toLowerCase(),
+  ) || String(profile.role || '').toUpperCase() === 'MAIN_ADMIN';
+
+  const { data: roleRows, error: rolesError } = await supabaseAdmin
+    .from('user_school_roles')
+    .select('school_id, role, status')
+    .eq('user_id', profile.id)
+    .eq('school_id', requestedSchoolId)
+    .eq('status', 'ACTIVE');
+  if (rolesError) throw rolesError;
+
+  const hasStaffRole = (roleRows || []).some((row) =>
+    STAFF_ROLES.has(String(row.role || '').toUpperCase()),
+  );
+  const profileIsSchoolStaff = profile.school_id === requestedSchoolId
+    && STAFF_ROLES.has(String(profile.role || '').toUpperCase());
+
+  if (!isSuperAdmin && !hasStaffRole && !profileIsSchoolStaff) {
+    throw new Error('Nemate ovlasti za uređivanje kalendara odabrane škole.');
   }
 
   return { authUser: authData.user, profile, isSuperAdmin };

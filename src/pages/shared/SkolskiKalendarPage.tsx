@@ -232,21 +232,29 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
       // 6. Log payload before sending
       console.log("SAVE SCHOOL CALENDAR PAYLOAD", dbPayload);
 
-      let result;
-      if (editingEventId) {
-        result = await supabase
-          .from("school_events")
-          .update(dbPayload)
-          .eq("id", editingEventId)
-          .select()
-          .single();
-      } else {
-        result = await supabase
-          .from("school_events")
-          .insert([dbPayload])
-          .select()
-          .single();
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
       }
+
+      const response = await fetch('/api/school-events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          ...dbPayload,
+          id: editingEventId || undefined,
+        }),
+      });
+      const raw = await response.text();
+      console.log('SAVE SCHOOL CALENDAR STATUS', response.status);
+      console.log('SAVE SCHOOL CALENDAR RAW RESPONSE', raw);
+      const apiResult = raw ? JSON.parse(raw) : null;
+      const result = response.ok && apiResult?.success
+        ? { error: null, data: apiResult.data }
+        : { error: { message: apiResult?.error || raw || 'Nepoznata greška na poslužitelju' }, data: null };
 
       if (!result.error) {
         toast.success(editingEventId ? 'Školski događaj je ažuriran.' : 'Školski događaj je zabilježen u kalendaru.');
