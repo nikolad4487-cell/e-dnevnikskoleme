@@ -2328,7 +2328,6 @@ setStudents(uniqueMapped as any);
               student_id: createdProfile.id,
               subject_id: subId,
               class_id: classIdToUse,
-              school_year_id: classToUse.school_year_id || null,
               school_year: classToUse.schoolYear || '2024/2025',
               status: 'ACTIVE'
             }));
@@ -2580,7 +2579,6 @@ setAllSubjects(uniqueSub2);
                    student_id: s.student_id,
                    subject_id: assignmentForm.subjectId,
                    class_id: assignmentForm.classId,
-                   school_year_id: classData.school_year_id,
                    school_year: classData.schoolYear,
                    status: 'ACTIVE'
                  }));

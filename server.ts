@@ -2011,7 +2011,6 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
                      student_id: profile.id,
                      subject_id: subId,
                      class_id: classDetails.id,
-                     school_year_id: classDetails.school_year_id,
                      school_year: classDetails.school_year || '2024/2025',
                      status: 'ACTIVE'
                  }));

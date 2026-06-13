@@ -170,7 +170,6 @@ export async function POST(req: Request) {
               student_id: profile.id,
               subject_id: subjectId,
               class_id: classId,
-              school_year_id: schoolYearId,
               school_year: classData.school_year || null,
               status: 'ACTIVE',
             })), { onConflict: 'student_id,subject_id,class_id,school_year' });
