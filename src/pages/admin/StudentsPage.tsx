@@ -244,6 +244,15 @@ export default function StudentsPage() {
     try {
       setLoading(true);
       const fullName = `${ime.trim()} ${prezime.trim()}`;
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error("SAVE USER SUPABASE SESSION ERROR", sessionError);
+        throw sessionError;
+      }
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        throw new Error("Nedostaje autorizacijski token. Prijavite se ponovno.");
+      }
 
       if (selectedStudent) {
         // Edit flow
@@ -259,23 +268,30 @@ export default function StudentsPage() {
           schoolId
         };
 
+        console.log("SAVE USER PAYLOAD", payload);
         const res = await fetch('/api/admin/update-user', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`
+          },
           body: JSON.stringify(payload)
         });
 
+        console.log("SAVE USER STATUS", res.status);
         const text = await res.text();
-        let errData;
-        try {
-          errData = JSON.parse(text);
-        } catch (e) {
-          console.error("NON JSON RESPONSE", text);
-          throw new Error('Server error: Neispravan format odgovora');
+        console.log("SAVE USER RAW RESPONSE", text);
+        let errData = null;
+        if (text) {
+          try {
+            errData = JSON.parse(text);
+          } catch (parseError) {
+            console.error("SAVE USER JSON PARSE ERROR", parseError, text);
+          }
         }
 
         if (!res.ok) {
-          throw new Error(errData.error || 'Ažuriranje učenika nije uspjelo');
+          throw new Error(errData?.error || errData?.message || text || `HTTP ${res.status}: Ažuriranje učenika nije uspjelo`);
         }
 
         // Also update dob, pob, mobile in user_profiles since update-user API might miss them
@@ -329,23 +345,30 @@ export default function StudentsPage() {
           classId: selectedClassId || undefined
         };
 
+        console.log("SAVE USER PAYLOAD", payload);
         const res = await fetch('/api/admin/create-user', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`
+          },
           body: JSON.stringify(payload)
         });
 
+        console.log("SAVE USER STATUS", res.status);
         const text = await res.text();
-        let data;
-        try {
-          data = JSON.parse(text);
-        } catch (e) {
-          console.error("NON JSON RESPONSE", text);
-          throw new Error('Server error: Neispravan format odgovora');
+        console.log("SAVE USER RAW RESPONSE", text);
+        let data = null;
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch (parseError) {
+            console.error("SAVE USER JSON PARSE ERROR", parseError, text);
+          }
         }
 
         if (!res.ok || (data && data.success === false)) {
-          throw new Error(data?.error || 'Stvaranje učenika nije uspjelo');
+          throw new Error(data?.error || data?.message || text || `HTTP ${res.status}: Stvaranje učenika nije uspjelo`);
         }
         
         // Let's check if the user has specified extra parameters (dob, pob, mobile)
@@ -431,16 +454,44 @@ export default function StudentsPage() {
       ]);
 
       // Use Server deletion endpoint to completely destroy authentication record and user_profile safely
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError) {
+        console.error("DELETE USER SUPABASE SESSION ERROR", sessionError);
+        throw sessionError;
+      }
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        throw new Error("Nedostaje autorizacijski token. Prijavite se ponovno.");
+      }
+      const deletePayload = { profileId: student.id, schoolId, softDelete: false };
+      console.log("DELETE USER PAYLOAD", deletePayload);
       const response = await fetch('/api/admin/delete-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId: student.id, schoolId, softDelete: false })
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify(deletePayload)
       });
 
-      if (!response.ok) {
-        // Fallback to direct supabase profile deletion
-        await supabase.from('user_profiles').delete().eq('id', student.id);
+      console.log("DELETE STATUS", response.status);
+      const raw = await response.text();
+      console.log("DELETE RAW RESPONSE", raw);
+      let result = null;
+      if (raw) {
+        try {
+          result = JSON.parse(raw);
+        } catch (parseError) {
+          console.error("DELETE JSON PARSE ERROR", parseError, raw);
+        }
       }
+      if (!response.ok) {
+        throw new Error(result?.error || result?.message || raw || `HTTP ${response.status}: Brisanje nije uspjelo`);
+      }
+      if (result?.success === false) {
+        throw new Error(result.error || result.message || raw || 'Brisanje nije uspjelo');
+      }
+      console.log("DELETE SUCCESS", result);
 
       toast.success('Učenik je uspješno obrisan.');
       fetchData();
