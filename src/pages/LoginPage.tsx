@@ -101,7 +101,8 @@ export default function LoginPage() {
       console.log("LOGIN INPUT", identifier);
       console.log("NORMALIZED LOGIN EMAIL", normalizedEmail);
       
-      const response = await fetch('/api/auth/login', {
+      let loginEmail = normalizedEmail;
+      let response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -120,7 +121,27 @@ export default function LoginPage() {
         throw new Error('Prijava trenutno nije moguća (komunikacija sa serverom nije uspjela). Molimo pokušajte ponovno.');
       }
 
-      const result = await response.json();
+      let result = await response.json();
+      if (!response.ok && normalizedEmail.endsWith('@skolehr.xyz')) {
+        loginEmail = normalizedEmail.replace(/@skolehr\.xyz$/i, '@eskole.me');
+        response = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: loginEmail,
+            password,
+            totpCode: otp,
+            loginType
+          })
+        });
+        const legacyContentType = response.headers.get('content-type') || '';
+        if (!legacyContentType.includes('application/json')) {
+          const text = await response.text();
+          console.error('LOGIN LEGACY NON-JSON RESPONSE:', text);
+          throw new Error('Prijava trenutno nije moguÄ‡a (komunikacija sa serverom nije uspjela). Molimo pokuĹˇajte ponovno.');
+        }
+        result = await response.json();
+      }
       console.log("LOGIN API RESULT", result);
 
       if (!response.ok) {
@@ -130,7 +151,7 @@ export default function LoginPage() {
       if (result?.requiresAuthenticatorSetup || result?.redirectTo === "/setup-authenticator") {
         navigate("/setup-authenticator", {
           state: {
-            email: normalizedEmail,
+            email: loginEmail,
             user: result.user
           }
         });
