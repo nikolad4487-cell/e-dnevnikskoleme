@@ -9,7 +9,7 @@ export enum Role {
   ADMIN = 'ADMIN'
 }
 
-export type SchoolType = 'PRIMARY' | 'SECONDARY';
+export type SchoolType = 'PRIMARY' | 'SECONDARY' | 'HIGHER';
 export type SecondarySubtype = 'GENERAL' | 'VOCATIONAL';
 
 export type School = {

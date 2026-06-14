@@ -2691,14 +2691,10 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         return res.status(500).json({ error: "Server authentication error." });
       }
 
-      // 1. Sign in with Supabase
-      // Use a hardcoded technical password for all staff as a temporary fix
-      const technicalPassword = '123456'; 
-      const passwordOrPin = (loginType === 'STAFF') ? technicalPassword : password;
-
+      // Staff accounts use the same four-digit PIN in Supabase Auth and pin_hash.
       const { data, error } = await supabaseAdmin.auth.signInWithPassword({
         email,
-        password: passwordOrPin
+        password
       });
 
       if (error) {
