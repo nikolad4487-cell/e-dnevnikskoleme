@@ -108,23 +108,40 @@ export function formatName(item: any) {
 
 export function formatSubjectDisplayName(subjectName: string, subjectType: string) {
   if (!subjectName) return '';
-  const cleaned = subjectName.replace(/\s*\((izborni|elective)\)\s*$/i, '').trim();
+  const cleaned = subjectName
+    .replace(/\s*\((izborni|elective|fakultativni|praksa|practice|dopunska nastava|dodatna nastava)\)\s*$/i, '')
+    .trim();
   if (!subjectType) return cleaned;
-  const t = subjectType.toUpperCase().trim();
+  const t = normalizeSubjectType(subjectType);
   if (t === 'REDOVNI') {
     return cleaned;
   }
-  if (t === 'IZBORNI') {
-    return `${cleaned} (izborni)`;
-  }
-  return `${cleaned} (${subjectType})`;
+  const labels: Record<Exclude<SubjectType, 'REDOVNI'>, string> = {
+    IZBORNI: 'izborni',
+    FAKULTATIVNI: 'fakultativni',
+    PRAKSA: 'praksa',
+    'DOPUNSKA NASTAVA': 'dopunska nastava',
+    'DODATNA NASTAVA': 'dodatna nastava'
+  };
+  return `${cleaned} (${labels[t]})`;
 }
 
-export function normalizeSubjectType(type: string | null | undefined): 'REDOVNI' | 'IZBORNI' | 'PRAKSA' {
+export type SubjectType =
+  | 'REDOVNI'
+  | 'IZBORNI'
+  | 'FAKULTATIVNI'
+  | 'PRAKSA'
+  | 'DOPUNSKA NASTAVA'
+  | 'DODATNA NASTAVA';
+
+export function normalizeSubjectType(type: string | null | undefined): SubjectType {
   const value = String(type || "").toUpperCase().trim();
 
   if (value === "IZBORNI" || value === "ELECTIVE") return "IZBORNI";
   if (value === "PRAKSA" || value === "PRACTICE") return "PRAKSA";
+  if (value === "FAKULTATIVNI" || value === "OPTIONAL") return "FAKULTATIVNI";
+  if (value === "DOPUNSKA NASTAVA") return "DOPUNSKA NASTAVA";
+  if (value === "DODATNA NASTAVA") return "DODATNA NASTAVA";
   if (value === "REDOVNI" || value === "REQUIRED") return "REDOVNI";
 
   return "REDOVNI";
@@ -150,13 +167,8 @@ export function getClassSubjectDisplayName(classSubject: any) {
   return name;
 }
 
-export function sanitizeSubjectType(type: string | null | undefined): 'REDOVNI' | 'IZBORNI' {
-  if (!type) return 'REDOVNI';
-  const val = type.toUpperCase().trim();
-  if (val === 'IZBORNI' || val === 'ELECTIVE' || val.includes('IZBORNI') || val.includes('ELECTIVE')) {
-    return 'IZBORNI';
-  }
-  return 'REDOVNI';
+export function sanitizeSubjectType(type: string | null | undefined): SubjectType {
+  return normalizeSubjectType(type);
 }
 
 export const finalGradeLabels: Record<string, string> = {

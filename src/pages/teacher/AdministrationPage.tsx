@@ -2496,6 +2496,9 @@ setAllSubjects(uniqueSub2);
     
     setLoading(true);
     try {
+      const existingClassSubject = classSubjects.find(
+        cs => cs.classId === assignmentForm.classId && cs.subjectId === assignmentForm.subjectId
+      );
       const payload = {
         subject_id: assignmentForm.subjectId,
         class_id: assignmentForm.classId,
@@ -2520,8 +2523,14 @@ setAllSubjects(uniqueSub2);
       console.log("GROUP NAME", assignmentForm.groupName);
       console.log("ADD SUBJECT TO ALL STUDENTS", assignmentForm.addToAllStudents);
 
-      const { error: csError } = await supabase.from('class_subjects').upsert([classSubjectPayload], { onConflict: 'class_id,subject_id' });
-      if (csError) throw csError;
+      // Adding another teacher must not reset the existing subject metadata.
+      // Metadata changes are written only for a new subject or an explicit edit.
+      if (!existingClassSubject || editingAssignmentId) {
+        const { error: csError } = await supabase
+          .from('class_subjects')
+          .upsert([classSubjectPayload], { onConflict: 'class_id,subject_id' });
+        if (csError) throw csError;
+      }
 
       if (editingAssignmentId) {
         const { data, error } = await supabase.from('class_subject_teachers').update(payload).eq('id', editingAssignmentId).select();
@@ -3530,7 +3539,6 @@ setAllSubjects(uniqueSub2);
                               <select 
                                 value={assignmentForm.subjectId}
                                 onChange={e => setAssignmentForm({...assignmentForm, subjectId: e.target.value})}
-                                disabled={!!editingAssignmentId}
                                 className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                                 required
                               >
@@ -3543,7 +3551,6 @@ setAllSubjects(uniqueSub2);
                               <select 
                                 value={assignmentForm.subjectType}
                                 onChange={e => setAssignmentForm({...assignmentForm, subjectType: e.target.value})}
-                                disabled={!!editingAssignmentId}
                                 className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                                 required
                               >
@@ -3560,7 +3567,6 @@ setAllSubjects(uniqueSub2);
                               <select 
                                 value={assignmentForm.subjectPeriod}
                                 onChange={e => setAssignmentForm({...assignmentForm, subjectPeriod: e.target.value})}
-                                disabled={!!editingAssignmentId}
                                 className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                                 required
                               >
@@ -3601,7 +3607,6 @@ setAllSubjects(uniqueSub2);
                                 type="number"
                                 value={assignmentForm.plannedHoursSemester1}
                                 onChange={e => setAssignmentForm({...assignmentForm, plannedHoursSemester1: e.target.value})}
-                                disabled={!!editingAssignmentId}
                                 className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                               />
                             </div>
@@ -3611,7 +3616,6 @@ setAllSubjects(uniqueSub2);
                                 type="number"
                                 value={assignmentForm.plannedHoursTotal}
                                 onChange={e => setAssignmentForm({...assignmentForm, plannedHoursTotal: e.target.value})}
-                                disabled={!!editingAssignmentId}
                                 className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                               />
                             </div>
@@ -3622,7 +3626,6 @@ setAllSubjects(uniqueSub2);
                                   type="checkbox"
                                   checked={assignmentForm.isForeignLanguage}
                                   onChange={e => setAssignmentForm({...assignmentForm, isForeignLanguage: e.target.checked})}
-                                  disabled={!!editingAssignmentId}
                                   className="w-4 h-4 cursor-pointer focus:outline-[#005c8d]"
                                 />
                                 Strani jezik
@@ -3793,11 +3796,11 @@ setAllSubjects(uniqueSub2);
                                                 teacherId: '', 
                                                 classId: selectedClassId || '', 
                                                 groupName: '',
-                                                subjectType: 'redovni',
-                                                isForeignLanguage: false,
-                                                subjectPeriod: 'FULL_YEAR',
-                                                plannedHoursSemester1: '',
-                                                plannedHoursTotal: '',
+                                                subjectType: classSubject?.subjectType || 'redovni',
+                                                isForeignLanguage: !!classSubject?.isForeignLanguage,
+                                                subjectPeriod: classSubject?.subjectPeriod || 'FULL_YEAR',
+                                                plannedHoursSemester1: classSubject?.plannedHoursSemester1?.toString() || '',
+                                                plannedHoursTotal: classSubject?.plannedHoursTotal?.toString() || '',
                                                 addToAllStudents: true
                                               });
                                            }}
@@ -3846,11 +3849,11 @@ setAllSubjects(uniqueSub2);
                                                 classId: selectedClassId || '', 
                                                 teacherId: '',
                                                 groupName: '',
-                                                subjectType: 'redovni',
-                                                isForeignLanguage: false,
-                                                subjectPeriod: 'FULL_YEAR',
-                                                plannedHoursSemester1: '',
-                                                plannedHoursTotal: '',
+                                                subjectType: classSubject?.subjectType || 'redovni',
+                                                isForeignLanguage: !!classSubject?.isForeignLanguage,
+                                                subjectPeriod: classSubject?.subjectPeriod || 'FULL_YEAR',
+                                                plannedHoursSemester1: classSubject?.plannedHoursSemester1?.toString() || '',
+                                                plannedHoursTotal: classSubject?.plannedHoursTotal?.toString() || '',
                                                 addToAllStudents: true
                                               });
                                              }}
@@ -4828,17 +4831,20 @@ setAllSubjects(uniqueSub2);
                             <td className="px-4 py-3 text-center flex items-center justify-center gap-4">
                                <button 
                                  onClick={() => {
+                                   const classSubject = classSubjects.find(
+                                     cs => cs.classId === a.classId && cs.subjectId === a.subjectId
+                                   );
                                    setEditingAssignmentId(a.id);
                                    setAssignmentForm({ 
                                      subjectId: a.subjectId, 
                                      classId: a.classId, 
                                      teacherId: a.teacherId,
                                      groupName: a.groupName || '',
-                                     subjectType: 'redovni',
-                                     isForeignLanguage: false,
-                                     subjectPeriod: 'FULL_YEAR',
-                                     plannedHoursSemester1: '',
-                                     plannedHoursTotal: '',
+                                     subjectType: classSubject?.subjectType || 'redovni',
+                                     isForeignLanguage: !!classSubject?.isForeignLanguage,
+                                     subjectPeriod: classSubject?.subjectPeriod || 'FULL_YEAR',
+                                     plannedHoursSemester1: classSubject?.plannedHoursSemester1?.toString() || '',
+                                     plannedHoursTotal: classSubject?.plannedHoursTotal?.toString() || '',
                                      addToAllStudents: true
                                    });
                                  }}

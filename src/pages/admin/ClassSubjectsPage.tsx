@@ -58,6 +58,7 @@ export default function ClassSubjectsPage() {
   const [editModal, setEditModal] = useState<{
     isOpen: boolean;
     assignmentId: string;
+    originalSubjectId: string;
     subjectId: string;
     subjectName: string;
     subjectType: string;
@@ -67,6 +68,7 @@ export default function ClassSubjectsPage() {
   }>({
     isOpen: false,
     assignmentId: '',
+    originalSubjectId: '',
     subjectId: '',
     subjectName: '',
     subjectType: 'REDOVNI',
@@ -184,7 +186,7 @@ export default function ClassSubjectsPage() {
     try {
       const { data: existingCS } = await supabase
         .from('class_subjects')
-        .select('id, subject_type')
+        .select('*')
         .eq('class_id', classId)
         .eq('subject_id', selectedSubjectId)
         .maybeSingle();
@@ -196,16 +198,19 @@ export default function ClassSubjectsPage() {
         newTeacherId: selectedTeacherId
       });
 
-      // 1. Ensure class_subjects entry exists, preserve existing subject_type if present
-      const { error: csError } = await supabase.from('class_subjects').upsert([{
-        class_id: classId,
-        subject_id: selectedSubjectId,
-        school_id: selectedSchoolId,
-        subject_type: existingCS?.subject_type || 'REDOVNI',
-        is_foreign_language: false,
-        subject_period: 'FULL_YEAR'
-      }], { onConflict: 'class_id,subject_id' });
-      if (csError) throw csError;
+      // Existing metadata belongs to the subject, not to each teacher. Adding
+      // another teacher must never reset its type, period or planned hours.
+      if (!existingCS) {
+        const { error: csError } = await supabase.from('class_subjects').insert([{
+          class_id: classId,
+          subject_id: selectedSubjectId,
+          school_id: selectedSchoolId,
+          subject_type: 'REDOVNI',
+          is_foreign_language: false,
+          subject_period: 'FULL_YEAR'
+        }]);
+        if (csError) throw csError;
+      }
 
       // 2. Insert class_subject_teachers
       const { data, error } = await supabase.from('class_subject_teachers').insert([{
@@ -242,6 +247,7 @@ export default function ClassSubjectsPage() {
     setEditModal({
       isOpen: true,
       assignmentId: item.id,
+      originalSubjectId: sId,
       subjectId: sId,
       subjectName: item.subject?.name || '',
       subjectType: item.class_subject?.subject_type || 'redovni',
@@ -253,7 +259,7 @@ export default function ClassSubjectsPage() {
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { assignmentId, subjectId, subjectType, subjectPeriod, teacherId, groupName } = editModal;
+    const { assignmentId, originalSubjectId, subjectId, subjectType, subjectPeriod, teacherId, groupName } = editModal;
     if (!classId || !subjectId || !assignmentId) return;
 
     console.log("EDIT CLASS SUBJECT", { classId, subjectId });
@@ -281,6 +287,7 @@ export default function ClassSubjectsPage() {
       const { error: astError } = await supabase
         .from('class_subject_teachers')
         .update({
+          subject_id: subjectId,
           teacher_id: teacherId,
           group_name: groupName || null
         })
@@ -289,6 +296,27 @@ export default function ClassSubjectsPage() {
       if (astError) {
         console.log("EDIT CLASS SUBJECT ERROR", astError);
         throw astError;
+      }
+
+      if (originalSubjectId !== subjectId) {
+        const { count: remainingTeachers, error: countError } = await supabase
+          .from('class_subject_teachers')
+          .select('id', { count: 'exact', head: true })
+          .eq('class_id', classId)
+          .eq('subject_id', originalSubjectId);
+        if (countError) throw countError;
+
+        // Remove obsolete metadata only when no teacher uses the old subject.
+        // Historical grades and enrollments intentionally remain attached to
+        // their original subject instead of being silently rewritten.
+        if ((remainingTeachers || 0) === 0) {
+          const { error: oldMetadataError } = await supabase
+            .from('class_subjects')
+            .delete()
+            .eq('class_id', classId)
+            .eq('subject_id', originalSubjectId);
+          if (oldMetadataError) throw oldMetadataError;
+        }
       }
 
       toast.success('Predmet zaduženja uspješno uređen');
@@ -586,9 +614,24 @@ export default function ClassSubjectsPage() {
             <form onSubmit={handleSaveEdit} className="p-6 space-y-4">
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Predmet</label>
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold text-slate-500 uppercase text-xs">
-                  {editModal.subjectName}
-                </div>
+                <select
+                  value={editModal.subjectId}
+                  onChange={e => {
+                    const subject = allSubjects.find(item => item.id === e.target.value);
+                    setEditModal({
+                      ...editModal,
+                      subjectId: e.target.value,
+                      subjectName: subject?.name || ''
+                    });
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 font-bold text-slate-900 focus:border-[#005c8d] outline-none text-xs"
+                  required
+                >
+                  <option value="">Odaberi predmet...</option>
+                  {allSubjects.map(subject => (
+                    <option key={subject.id} value={subject.id}>{subject.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div>
