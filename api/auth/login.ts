@@ -1,5 +1,47 @@
 import { supabaseAdmin } from '../_supabase.js';
 import { authenticator } from 'otplib';
+import bcrypt from 'bcryptjs';
+
+function normalizeEmail(value: unknown) {
+  const email = String(value ?? '').trim().toLowerCase();
+  if (!email.includes('@')) return `${email}@skolehr.xyz`;
+  return email.replace(/@eskole\.me$/i, '@skolehr.xyz');
+}
+
+function getLoginEmailCandidates(value: unknown) {
+  const normalized = normalizeEmail(value);
+  const candidates = [normalized];
+  if (normalized.endsWith('@skolehr.xyz')) {
+    candidates.push(normalized.replace(/@skolehr\.xyz$/i, '@eskole.me'));
+  }
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+async function findAuthUserByEmailCandidates(candidates: string[]) {
+  if (!supabaseAdmin) return null;
+
+  for (let page = 1; ; page += 1) {
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ page, perPage: 1000 });
+    if (error) throw error;
+    const user = data.users.find((item: any) => candidates.includes(String(item.email ?? '').toLowerCase()));
+    if (user) return user;
+    if (data.users.length < 1000) return null;
+  }
+}
+
+async function signInWithCandidates(candidates: string[], password: string) {
+  if (!supabaseAdmin) return { data: null, error: new Error('Supabase Admin client not initialized.') };
+
+  let lastError: any = null;
+  for (const candidate of candidates) {
+    const result = await supabaseAdmin.auth.signInWithPassword({ email: candidate, password });
+    if (!result.error && result.data.user && result.data.session) {
+      return { ...result, email: candidate };
+    }
+    lastError = result.error;
+  }
+  return { data: null, error: lastError, email: candidates[0] };
+}
 
 export async function POST(req: Request) {
   try {
@@ -23,17 +65,53 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const { email, password, totpCode, loginType } = body;
+    const emailCandidates = getLoginEmailCandidates(email);
+    const normalizedEmail = emailCandidates[0];
 
-    console.log(`[LOGIN_API] Attempting login for ${email} (${loginType})`);
+    console.log(`[LOGIN_API] Attempting login for ${normalizedEmail} (${loginType})`);
 
     // 1. Sign in with Supabase
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
-      email,
-      password
-    });
+    let signInResult = await signInWithCandidates(emailCandidates, password);
+
+    // Older staff accounts used a technical Supabase password. Verify the
+    // entered PIN against pin_hash, align the Auth password, then retry.
+    if (signInResult.error && loginType === 'STAFF' && /^\d{4}$/.test(String(password ?? ''))) {
+      const authUser = await findAuthUserByEmailCandidates(emailCandidates);
+      if (authUser) {
+        const { data: legacyProfile, error: legacyProfileError } = await supabaseAdmin
+          .from('user_profiles')
+          .select('id, pin_hash')
+          .eq('auth_user_id', authUser.id)
+          .maybeSingle();
+
+        const pinCheck = Boolean(
+          !legacyProfileError
+          && legacyProfile?.pin_hash
+          && await bcrypt.compare(password, legacyProfile.pin_hash)
+        );
+        console.log(`[LOGIN_API] Legacy staff PIN migration check: ${pinCheck}`);
+
+        if (pinCheck) {
+          const { error: updatePasswordError } = await supabaseAdmin.auth.admin.updateUserById(
+            authUser.id,
+            { password }
+          );
+          if (updatePasswordError) {
+            console.error('[LOGIN_API] Failed to align staff Auth password:', updatePasswordError.message);
+          } else {
+            signInResult = await signInWithCandidates(
+              [String(authUser.email ?? normalizedEmail).toLowerCase()],
+              password
+            );
+          }
+        }
+      }
+    }
+
+    const { data, error } = signInResult;
 
     if (error) {
-      console.error(`[LOGIN_API] Supabase signIn Error for ${email}:`, error.message);
+      console.error(`[LOGIN_API] Supabase signIn Error for ${normalizedEmail}:`, error.message);
       let errMsg = error.message;
       if (errMsg === 'Invalid login credentials' || errMsg.includes('Neispravni podaci za prijavu')) {
         errMsg = "Neispravni podaci za prijavu.";
@@ -91,7 +169,7 @@ export async function POST(req: Request) {
       userSchoolRoles.push(mappedAccessRole);
     }
 
-    console.log(`[LOGIN_API] User ${email} has resolved roles:`, userSchoolRoles);
+    console.log(`[LOGIN_API] User ${normalizedEmail} has resolved roles:`, userSchoolRoles);
 
     // 4. Verify TOTP if staff
     if (loginType === 'STAFF') {
@@ -100,6 +178,22 @@ export async function POST(req: Request) {
       );
 
       if (isActuallyStaff) {
+        if (!profile.pin_hash) {
+          return new Response(JSON.stringify({ error: "PIN nije postavljen za ovaj korisnički račun." }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+
+        const pinCheck = await bcrypt.compare(password, profile.pin_hash);
+        console.log(`[LOGIN_API] Staff PIN check: ${pinCheck}`);
+        if (!pinCheck) {
+          return new Response(JSON.stringify({ error: "Neispravan PIN." }), {
+            status: 401,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+
         // If user already has MFA configured, require TOTP. Otherwise, allow login and flag for setup.
         const isMfaSet = profile.authenticator_secret && !profile.requires_authenticator_setup;
 
