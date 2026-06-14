@@ -77,13 +77,26 @@ export async function POST(req: Request) {
     if (profile.role && !userSchoolRoles.includes(profile.role)) {
       userSchoolRoles.push(profile.role);
     }
+    const accessRoleMap: Record<string, string> = {
+      super_admin: 'MAIN_ADMIN',
+      main_admin: 'MAIN_ADMIN',
+      school_admin: 'SCHOOL_ADMIN',
+      admin: 'ADMIN',
+      teacher: 'TEACHER',
+      student: 'STUDENT',
+      parent: 'PARENT',
+    };
+    const mappedAccessRole = accessRoleMap[String(profile.access_role ?? '').toLowerCase()];
+    if (mappedAccessRole && !userSchoolRoles.includes(mappedAccessRole)) {
+      userSchoolRoles.push(mappedAccessRole);
+    }
 
     console.log(`[LOGIN_API] User ${email} has resolved roles:`, userSchoolRoles);
 
     // 4. Verify TOTP if staff
     if (loginType === 'STAFF') {
       const isActuallyStaff = userSchoolRoles.some((role: string) => 
-        ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
+        ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SUPER_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
       );
 
       if (isActuallyStaff) {

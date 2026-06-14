@@ -14,7 +14,7 @@ const supabaseAdmin = createClient(supabaseUrl as string, supabaseKey as string)
 
 async function main() {
   const userId = "5bddd2eb-9d6c-415d-b7f8-26442c51d883";
-  const email = "nikola.duric@eskole.me";
+  const email = "nikola.duric@skolehr.xyz";
   const newPassword = "1234";
 
   console.log(`Setting password for ${email} to 1234...`);

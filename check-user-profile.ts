@@ -9,10 +9,10 @@ const supabaseAdmin = createClient(supabaseUrl as string, supabaseKey as string)
 async function main() {
   const { data: profile } = await supabaseAdmin.from('user_profiles')
     .select('*')
-    .eq('email', 'nikola.duric@eskole.me')
+    .eq('email', 'nikola.duric@skolehr.xyz')
     .single();
   
-  console.log("Profile for nikola.duric@eskole.me:");
+  console.log("Profile for nikola.duric@skolehr.xyz:");
   console.dir(profile, { depth: null });
 }
 main();

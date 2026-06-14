@@ -1833,7 +1833,7 @@ CREATE TABLE IF NOT EXISTS public.final_thesis_committee_members (
       // If this is the very first user in the system (or a specific email), grant them MAIN_ADMIN
       const { count } = await supabaseAdmin.from('user_profiles').select('*', { count: 'exact', head: true });
       
-      const shouldBeAdmin = (count <= 1) || email === 'nikolad4487@gmail.com' || email.endsWith('@eskole.me');
+      const shouldBeAdmin = (count <= 1) || email === 'nikolad4487@gmail.com' || email.endsWith('@skolehr.xyz');
       
       if (shouldBeAdmin) {
         const demoSchoolId = '00000000-0000-0000-0000-000000000001';
@@ -1875,7 +1875,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     const normFirst = normalizeForEmail(firstName).replace(/\s+/g, '');
     const normLast = normalizeForEmail(lastName).replace(/\s+/g, '-');
     const baseAddress = normLast ? `${normFirst}.${normLast}` : normFirst;
-    const baseEmail = `${baseAddress}@eskole.me`;
+    const baseEmail = `${baseAddress}@skolehr.xyz`;
 
     if (!existingEmails.has(baseEmail)) {
         return baseEmail;
@@ -1883,7 +1883,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
     let counter = 2;
     while (true) {
-        const email = `${baseAddress}${counter}@eskole.me`;
+        const email = `${baseAddress}${counter}@skolehr.xyz`;
         if (!existingEmails.has(email)) {
             return email;
         }
@@ -2567,12 +2567,12 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       }
 
       const demoUsers = [
-        { email: 'nikola.duric@eskole.me', password: '1234', name: 'Nikola', surname: 'Đurić', roles: ['MAIN_ADMIN', 'TEACHER'] },
+        { email: 'nikola.duric@skolehr.xyz', password: '1234', name: 'Nikola', surname: 'Đurić', roles: ['MAIN_ADMIN', 'TEACHER'] },
         { email: 'nikolad4487@gmail.com', password: '1234', name: 'Nikola', surname: 'Dev', roles: ['MAIN_ADMIN', 'TEACHER'] },
-        { email: 'marija.majdic@eskole.me', password: '1234', name: 'Marija', surname: 'Majdić', roles: ['TEACHER'] },
-        { email: 'ivan.horvat@eskole.me', password: '1234', name: 'Ivan', surname: 'Horvat', roles: ['TEACHER', 'HOMEROOM'], homeroomClassId: 'class-1a' },
-        { email: 'ana.kovac@eskole.me', password: '1234', name: 'Ana', surname: 'Kovač', roles: ['TEACHER', 'DEPUTY'], deputyClassId: 'class-1a' },
-        { email: 'ivica.malcic@eskole.me', password: 'yupu8Ev4', name: 'Ivica', surname: 'Malčić', roles: ['STUDENT'], studentClassId: 'class-1a' },
+        { email: 'marija.majdic@skolehr.xyz', password: '1234', name: 'Marija', surname: 'Majdić', roles: ['TEACHER'] },
+        { email: 'ivan.horvat@skolehr.xyz', password: '1234', name: 'Ivan', surname: 'Horvat', roles: ['TEACHER', 'HOMEROOM'], homeroomClassId: 'class-1a' },
+        { email: 'ana.kovac@skolehr.xyz', password: '1234', name: 'Ana', surname: 'Kovač', roles: ['TEACHER', 'DEPUTY'], deputyClassId: 'class-1a' },
+        { email: 'ivica.malcic@skolehr.xyz', password: 'yupu8Ev4', name: 'Ivica', surname: 'Malčić', roles: ['STUDENT'], studentClassId: 'class-1a' },
         { email: 'matija.malcic@gmail.com', password: 'yupu8Ev4', name: 'Matija', surname: 'Malčić', roles: ['PARENT'] },
       ];
 
@@ -2752,10 +2752,26 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         .eq('user_id', profile.id);
 
       const userSchoolRoles = dbRoles?.map((r: any) => r.role) || [];
+      if (profile.role && !userSchoolRoles.includes(profile.role)) {
+        userSchoolRoles.push(profile.role);
+      }
+      const accessRoleMap: Record<string, string> = {
+        super_admin: 'MAIN_ADMIN',
+        main_admin: 'MAIN_ADMIN',
+        school_admin: 'SCHOOL_ADMIN',
+        admin: 'ADMIN',
+        teacher: 'TEACHER',
+        student: 'STUDENT',
+        parent: 'PARENT',
+      };
+      const mappedAccessRole = accessRoleMap[String(profile.access_role ?? '').toLowerCase()];
+      if (mappedAccessRole && !userSchoolRoles.includes(mappedAccessRole)) {
+        userSchoolRoles.push(mappedAccessRole);
+      }
 
       if (loginType === 'STAFF') {
         const isActuallyStaff = userSchoolRoles.some((role: string) => 
-          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
+          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SUPER_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
         );
 
         if (isActuallyStaff) {
