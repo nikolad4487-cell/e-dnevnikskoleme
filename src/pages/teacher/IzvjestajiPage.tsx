@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { BarChart3, PieChart, TrendingUp, Users, Award, AlertTriangle, FileText, User } from 'lucide-react';
-import { cn, formatSubjectDisplayName } from '../../lib/utils';
+import { cn, formatSubjectDisplayName, sortPeopleBySurname } from '../../lib/utils';
 import { Role } from '../../types';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart as RechartsPieChart, Pie } from 'recharts';
 
@@ -82,7 +82,7 @@ export default function IzvjestajiPage() {
                       absences: absCount || 0
                   };
               }));
-              setReportData(studentRows.sort((a,b)=> a.name.localeCompare(b.name)));
+              setReportData(sortPeopleBySurname(studentRows));
           }
       } else if (activeTab === 'CLASSES') {
           // fetch classes stats

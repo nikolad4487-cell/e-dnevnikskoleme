@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { matchesSearch } from '../../lib/utils';
+import { formatPersonName, matchesSearch, sortPeopleBySurname } from '../../lib/utils';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
@@ -104,7 +104,7 @@ export default function ClassManagementPage() {
       const uniqueTeachers = rawUserList.filter((item: any, index: number, self: any[]) => 
         self.findIndex((t: any) => t.id === item.id) === index
       );
-      setTeachers(uniqueTeachers as any[]);
+      setTeachers(sortPeopleBySurname(uniqueTeachers) as any[]);
 
       // Fetch Programs
       const { data: progData } = await supabase.from('programs').select('*').eq('school_id', selectedSchoolId);
@@ -603,7 +603,7 @@ export default function ClassManagementPage() {
                 >
                   <option value="">Odaberi nastavnika...</option>
                   {teachers.map(t => (
-                    <option key={t.id} value={t.id}>{(t as any).name}</option>
+                    <option key={t.id} value={t.id}>{formatPersonName(t)}</option>
                   ))}
                 </select>
               </div>
@@ -617,7 +617,7 @@ export default function ClassManagementPage() {
                 >
                   <option value="">Odaberi nastavnika (opcionalno)...</option>
                   {teachers.filter(t => t.id !== homeroomTeacherId).map(t => (
-                    <option key={t.id} value={t.id}>{(t as any).name}</option>
+                    <option key={t.id} value={t.id}>{formatPersonName(t)}</option>
                   ))}
                 </select>
               </div>

@@ -9,6 +9,7 @@ import { Role } from '../../types';
 import { toast } from 'react-hot-toast';
 import { format } from 'date-fns';
 import { mappers } from '../../lib/mappers';
+import { formatPersonName, sortStudentsBySurname } from '../../lib/utils';
 
 export default function DolasciRoditeljaPage() {
   const { classId: routeClassId } = useParams<{ classId: string }>();
@@ -54,7 +55,7 @@ export default function DolasciRoditeljaPage() {
       
       const mappedStudents = (enrollData || []).map(row => mappers.user(row.student));
       const uniqueStudents = Array.from(new Map(mappedStudents.map(s => [s.id, s])).values());
-      const sortedStudents = uniqueStudents.sort((a, b) => (a.surname || '').localeCompare(b.surname || ''));
+      const sortedStudents = sortStudentsBySurname(uniqueStudents);
       setStudents(sortedStudents);
 
       // 2. Fetch Parent Arrivals
@@ -172,7 +173,7 @@ export default function DolasciRoditeljaPage() {
 
   const formatStudentName = (s: any) => {
     if (!s) return 'Nepoznat učenik';
-    return `${s.surname || ''} ${s.name || ''}`.trim() || s.email || 'Nepoznat učenik';
+    return formatPersonName(s) || s.email || 'Nepoznat učenik';
   };
 
   return (
@@ -221,7 +222,7 @@ export default function DolasciRoditeljaPage() {
                 <option value="">-- Odaberite učenika --</option>
                 {students.map(s => (
                   <option key={s.id} value={s.id}>
-                    {s.surname}, {s.name}
+                    {formatPersonName(s)}
                   </option>
                 ))}
               </select>

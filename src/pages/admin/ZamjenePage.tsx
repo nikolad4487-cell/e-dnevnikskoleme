@@ -4,7 +4,7 @@ import { useSelection } from '../../contexts/SelectionContext';
 import { User, Class } from '../../types';
 import { Loader2, Plus, Calendar, Clock, RefreshCw, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { formatPersonName, cn } from '../../lib/utils';
+import { formatPersonName, cn, sortPeopleBySurname } from '../../lib/utils';
 
 export default function ZamjenePage() {
   const { selectedSchoolId, selectedYearId } = useSelection();
@@ -56,7 +56,7 @@ export default function ZamjenePage() {
              .in('role', ['TEACHER', 'HOMEROOM', 'DEPUTY', 'SCHOOL_ADMIN']);
              
           const uniqueTeachers = Array.from(new Map((tp || []).map(r => [r.user_id, { id: r.user_id, name: (Array.isArray(r.user_profiles) ? (r.user_profiles[0] as any)?.name : (r.user_profiles as any)?.name) || 'Nepoznato' }])).values());
-          setTeachers(uniqueTeachers as any);
+          setTeachers(sortPeopleBySurname(uniqueTeachers) as any);
 
           // fetch classes
           const { data: cl } = await supabase.from('classes').select('*').eq('school_id', selectedSchoolId).eq('school_year_id', selectedYearId || '');
@@ -156,14 +156,14 @@ export default function ZamjenePage() {
                            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Originalni nastavnik</label>
                            <select className="w-full border p-2 text-sm" value={formData.original_teacher_id} onChange={e => setFormData({...formData, original_teacher_id: e.target.value})}>
                                <option value="">Odaberi...</option>
-                               {teachers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                               {teachers.map(c => <option key={c.id} value={c.id}>{formatPersonName(c)}</option>)}
                            </select>
                        </div>
                        <div>
                            <label className="block text-xs font-bold text-gray-500 mb-1 uppercase">Zamjenski nastavnik</label>
                            <select className="w-full border p-2 text-sm" value={formData.substitute_teacher_id} onChange={e => setFormData({...formData, substitute_teacher_id: e.target.value})}>
                                <option value="">Odaberi...</option>
-                               {teachers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                               {teachers.map(c => <option key={c.id} value={c.id}>{formatPersonName(c)}</option>)}
                            </select>
                        </div>
                        <div>

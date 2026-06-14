@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, Role } from '../../types';
 import { Loader2, ShieldAlert, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Settings, Search, Menu, Clock, Bookmark, HelpCircle, ChevronDown, Calendar } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, sortStudentsBySurname } from '../../lib/utils';
 import { mappers } from '../../lib/mappers';
 import { ImenikTable } from '../../components/ImenikTable';
 
@@ -93,7 +93,7 @@ export default function ClassDashboardPage() {
         .eq('class_id', classId);
       
       console.log("STUDENTS result", studentsData, studentsError);
-      if (studentsData) setStudents(studentsData);
+      if (studentsData) setStudents(sortStudentsBySurname(studentsData));
 
       // 3. Parallel extra modules with Promise.allSettled
       // (Even if these fail, we don't break the page)

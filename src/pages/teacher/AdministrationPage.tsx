@@ -7,7 +7,7 @@ import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, Cu
 import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info, FileText } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
-import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortStudentsBySurname } from '../../lib/utils';
+import { cn, comparePeopleBySurname, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortPeopleBySurname, sortStudentsBySurname } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import CertificateManagementPage from './certificates/CertificateManagementPage';
 import InformativkaAdminPage from '../admin/InformativkaAdminPage';
@@ -91,11 +91,7 @@ export default function AdministrationPage() {
     const uniqueTeachers = Array.from(new Map(result.map(t => [t.id, t])).values());
     console.log('RAW TEACHERS:', result);
     console.log('UNIQUE TEACHERS:', uniqueTeachers);
-    return uniqueTeachers.sort((a: any, b: any) => {
-      const surnameA = getSurname(String(a.name || ''));
-      const surnameB = getSurname(String(b.name || ''));
-      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-    });
+    return sortPeopleBySurname(uniqueTeachers);
   }, [allUsers, allUserSchoolRolesState, selectedSchoolId]);
 
 
@@ -1222,7 +1218,7 @@ setAllSubjects(uniqueSub);
           });
           
 const uniqueMapped = Array.from(new Map(mapped.map(m => [m.id, m])).values());
-setStudents(uniqueMapped as any);
+setStudents(sortStudentsBySurname(uniqueMapped) as any);
 
         }
       }
@@ -1246,7 +1242,7 @@ setStudents(uniqueMapped as any);
         }));
         
 const uniqueMapped = Array.from(new Map(mapped.map(m => [m.id, m])).values());
-setStudents(uniqueMapped as any);
+setStudents(sortStudentsBySurname(uniqueMapped) as any);
 
       }
 
@@ -3451,7 +3447,7 @@ setAllSubjects(uniqueSub2);
                               onChange={e => setClassDetailForm({...classDetailForm, homeroom_teacher_id: e.target.value})}
                             >
                               <option value="">-- Odaberi --</option>
-                              {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                              {teachers.map(t => <option key={t.id} value={t.id}>{formatPersonName(t)}</option>)}
                             </select>
                          </div>
                          <div className="space-y-1">
@@ -3462,7 +3458,7 @@ setAllSubjects(uniqueSub2);
                               onChange={e => setClassDetailForm({...classDetailForm, deputy_teacher_id: e.target.value})}
                             >
                               <option value="">-- Nema (Opcionalno) --</option>
-                              {teachers.filter(t => t.id !== classDetailForm.homeroom_teacher_id).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                              {teachers.filter(t => t.id !== classDetailForm.homeroom_teacher_id).map(t => <option key={t.id} value={t.id}>{formatPersonName(t)}</option>)}
                             </select>
                          </div>
                          <button 
@@ -3583,11 +3579,9 @@ setAllSubjects(uniqueSub2);
                                 required
                               >
                                 <option value="">-- Odaberi --</option>
-                    {teachers.sort((a, b) => {
-                      const surnameA = getSurname(String(a.name || ''));
-                      const surnameB = getSurname(String(b.name || ''));
-                      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-                    }).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {[...teachers].sort(comparePeopleBySurname).map(t => (
+                      <option key={t.id} value={t.id}>{formatPersonName(t)}</option>
+                    ))}
                               </select>
                             </div>
 
@@ -3889,11 +3883,7 @@ setAllSubjects(uniqueSub2);
                            <button onClick={() => setShowEnrollmentModal({ isOpen: false, subjectId: null })}><X size={18}/></button>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                           {students.filter(s => s.classId === selectedClassId).sort((a, b) => {
-                             const surnameA = getSurname(String(a.name || ''));
-                             const surnameB = getSurname(String(b.name || ''));
-                             return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-                           }).map(s => {
+                           {students.filter(s => s.classId === selectedClassId).sort(comparePeopleBySurname).map(s => {
                               const matches = classEnrollments.filter(e => e.studentId === s.id && e.subjectId === showEnrollmentModal.subjectId);
                               const enrollment = matches[0];
                               const isActive = enrollment?.status === 'ACTIVE';
@@ -4590,7 +4580,7 @@ setAllSubjects(uniqueSub2);
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-gray-100 border-b border-gray-300">
-                      <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Prezime i ime</th>
+                      <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Ime i prezime</th>
                       <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300 w-32">Razred</th>
                       <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Kontakt e-mail</th>
                       <th className="px-4 py-2 text-center w-24 border-x border-gray-300">Akcije</th>
@@ -4758,7 +4748,7 @@ setAllSubjects(uniqueSub2);
                         required
                       >
                         <option value="">-- Odaberi --</option>
-                        {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        {teachers.map(t => <option key={t.id} value={t.id}>{formatPersonName(t)}</option>)}
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -5416,7 +5406,7 @@ setAllSubjects(uniqueSub2);
                           >
                             <option value="">-- Odaberi --</option>
                             {teachers.map(t => (
-                              <option key={t.id} value={t.id}>{t.name}</option>
+                              <option key={t.id} value={t.id}>{formatPersonName(t)}</option>
                             ))}
                           </select>
                         </div>
@@ -5429,7 +5419,7 @@ setAllSubjects(uniqueSub2);
                           >
                             <option value="">-- Nema (Opcionalno) --</option>
                             {teachers.filter(t => t.id !== newClassHomeroomTeacherId).map(t => (
-                              <option key={t.id} value={t.id}>{t.name}</option>
+                              <option key={t.id} value={t.id}>{formatPersonName(t)}</option>
                             ))}
                           </select>
                         </div>
@@ -6098,15 +6088,11 @@ setAllSubjects(uniqueSub2);
                               // School admin filters users of their school
                               return allUserSchoolRolesState.some(r => r.userId === u.id && r.schoolId === selectedSchoolId);
                             })
-                            .sort((a, b) => {
-                              const surnameA = getSurname(String(a.name || ''));
-                              const surnameB = getSurname(String(b.name || ''));
-                              return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
-                            })
+                            .sort(comparePeopleBySurname)
                             .map(u => (
                             <tr key={u.id} className={cn("hover:bg-blue-50/50", selectedUserForRole === u.id && "bg-blue-50")}>
                               <td className="px-3 py-2 border-r">
-                                <div className="font-bold text-gray-700">{u.name}</div>
+                                <div className="font-bold text-gray-700">{formatPersonName(u)}</div>
                                 <div className="text-[9px] text-gray-400">{u.email}</div>
                               </td>
                               <td className="px-3 py-2 border-r">

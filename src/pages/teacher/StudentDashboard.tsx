@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Loader2, Users, BookOpen, FileText, XCircle, ChevronLeft, ChevronRight, Shuffle } from 'lucide-react';
-import { sortStudentsBySurname, getClassSubjectDisplayName } from '../../lib/utils';
+import { formatPersonName, sortStudentsBySurname, getClassSubjectDisplayName } from '../../lib/utils';
 
 export default function StudentDashboard() {
   const { classId, studentId } = useParams();
@@ -203,9 +203,7 @@ export default function StudentDashboard() {
     );
   }
 
-  const formattedName = student 
-    ? `${student.surname || ''} ${student.name || ''}`.toUpperCase().trim() 
-    : 'UČENIK';
+  const formattedName = student ? formatPersonName(student).toUpperCase() : 'UČENIK';
 
   return (
     <div className="p-6 bg-white min-h-full">

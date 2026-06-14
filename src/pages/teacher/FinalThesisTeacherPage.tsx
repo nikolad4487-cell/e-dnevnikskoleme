@@ -11,6 +11,7 @@ import {
 import { Role, ThesisApplication } from '../../types';
 import ThesisGradingModal from '../../components/ThesisGradingModal';
 import FinalExamDefenseScheduleModal from '../../components/FinalExamDefenseScheduleModal';
+import { sortPeopleBySurname, sortStudentsBySurname } from '../../lib/utils';
 
 export default function FinalThesisTeacherPage() {
   const { user, userSchoolRoles, isMainAdmin } = useAuth();
@@ -178,14 +179,14 @@ export default function FinalThesisTeacherPage() {
         .from('user_profiles')
         .select('id, name, class_id')
         .eq('role', 'STUDENT');
-      setStudents(studentsData || []);
+      setStudents(sortStudentsBySurname(studentsData || []));
 
       // 2. Fetch Mentors
       const { data: mentorsData } = await supabase
         .from('user_profiles')
         .select('id, name, role')
         .in('role', ['TEACHER', 'HOMEROOM', 'ADMIN', 'SCHOOL_ADMIN']);
-      setMentors(mentorsData || []);
+      setMentors(sortPeopleBySurname(mentorsData || []));
 
       // 3. Fetch Classes
       const { data: classesData } = await supabase

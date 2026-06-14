@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { sortStudentsBySurname, formatSubjectDisplayName } from '../../lib/utils';
+import { formatPersonName, sortStudentsBySurname, formatSubjectDisplayName } from '../../lib/utils';
 import { toast } from 'react-hot-toast';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import GroupGradesModal from '../../components/GroupGradesModal';
@@ -848,9 +848,7 @@ export default function StudentSubjectDetail() {
   const mathAverageNum = nonFinalGrades.length > 0 ? mathSum / nonFinalGrades.length : 0;
   const mathAverageString = mathAverageNum.toFixed(2);
 
-  const formattedName = student 
-    ? `${student.surname || ''} ${student.name || ''}`.toUpperCase().trim() 
-    : 'UČENIK';
+  const formattedName = student ? formatPersonName(student).toUpperCase() : 'UČENIK';
 
   const croSubjectName = subject?.name ? subject.name.toUpperCase() : (subjectId || 'PREDMET').toUpperCase();
 

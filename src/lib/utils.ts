@@ -7,42 +7,68 @@ export function cn(...inputs: ClassValue[]) {
 
 export const getSurname = (fullName?: string) => {
   if (!fullName) return '';
-  const parts = fullName.trim().split(' ');
+  const parts = fullName.trim().split(/\s+/);
   return parts[parts.length - 1] || '';
 };
 
-export function sortStudentsBySurname(students: any[]): any[] {
-  if (!students) return [];
-  return [...students].sort((a, b) => {
-    const profileA = a.student ? (Array.isArray(a.student) ? a.student[0] : a.student) : a;
-    const profileB = b.student ? (Array.isArray(b.student) ? b.student[0] : b.student) : b;
+function unwrapPerson(value: any): any {
+  if (!value) return {};
 
-    const surnameA = String(profileA?.surname || '').trim();
-    const surnameB = String(profileB?.surname || '').trim();
-    const nameA = String(profileA?.name || '').trim();
-    const nameB = String(profileB?.name || '').trim();
+  for (const key of ['student', 'teacher', 'user', 'profile', 'user_profile', 'user_profiles']) {
+    const nested = value[key];
+    if (nested) return Array.isArray(nested) ? (nested[0] || value) : nested;
+  }
 
-    if (surnameA || surnameB) {
-      const surnameCompare = surnameA.localeCompare(surnameB, "hr", { sensitivity: "base" });
-      if (surnameCompare !== 0) return surnameCompare;
-      return nameA.localeCompare(nameB, "hr", { sensitivity: "base" });
-    }
+  return value;
+}
 
-    const splitName = (fullName: string) => {
-      const parts = fullName.trim().split(/\s+/);
-      const lastName = parts.pop() || "";
-      const firstName = parts.join(" ");
-      return { firstName, lastName };
+export function getPersonNameParts(value: any): { firstName: string; lastName: string } {
+  const person = unwrapPerson(value);
+  const explicitFirst = String(
+    person.firstName || person.first_name || person.given_name || ''
+  ).trim();
+  const explicitLast = String(
+    person.lastName || person.last_name || person.surname || person.family_name || ''
+  ).trim();
+  const storedName = String(
+    person.fullName || person.full_name || person.display_name || person.name || ''
+  ).trim();
+
+  if (explicitFirst || explicitLast) {
+    return {
+      firstName: explicitFirst || storedName,
+      lastName: explicitLast,
     };
+  }
 
-    const aParsed = splitName(nameA);
-    const bParsed = splitName(nameB);
+  const parts = storedName.split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) {
+    return { firstName: storedName, lastName: '' };
+  }
 
-    return (
-      aParsed.lastName.localeCompare(bParsed.lastName, "hr", { sensitivity: "base" }) ||
-      aParsed.firstName.localeCompare(bParsed.firstName, "hr", { sensitivity: "base" })
-    );
-  });
+  return {
+    firstName: parts.slice(0, -1).join(' '),
+    lastName: parts[parts.length - 1],
+  };
+}
+
+export function comparePeopleBySurname(a: any, b: any): number {
+  const personA = getPersonNameParts(a);
+  const personB = getPersonNameParts(b);
+  const options: Intl.CollatorOptions = { sensitivity: 'base' };
+
+  return (
+    personA.lastName.localeCompare(personB.lastName, 'hr', options)
+    || personA.firstName.localeCompare(personB.firstName, 'hr', options)
+  );
+}
+
+export function sortPeopleBySurname<T>(people: T[] | null | undefined): T[] {
+  return [...(people || [])].sort(comparePeopleBySurname);
+}
+
+export function sortStudentsBySurname<T>(students: T[] | null | undefined): T[] {
+  return sortPeopleBySurname(students);
 }
 
 export function removeDiacritics(str: string): string {
@@ -62,17 +88,13 @@ export function matchesSearch(text: string, searchTerm: string): boolean {
 export function formatPersonName(person: any): string {
   if (!person) return '';
 
-  if (person.name && String(person.name).trim()) {
-    const n = String(person.name).trim();
-    if (n.toLowerCase() !== 'undefined' && n.toLowerCase() !== 'null') {
-      return n;
-    }
-  }
+  const unwrapped = unwrapPerson(person);
+  const { firstName, lastName } = getPersonNameParts(unwrapped);
+  const storedName = String(unwrapped.fullName || unwrapped.full_name || unwrapped.display_name || unwrapped.name || '').trim();
+  const storedAlreadyContainsLastName = lastName
+    && storedName.toLocaleLowerCase('hr-HR').endsWith(lastName.toLocaleLowerCase('hr-HR'));
 
-  const first = person.firstName || person.first_name || '';
-  const last = person.lastName || person.last_name || person.surname || '';
-
-  return [first, last]
+  return [storedAlreadyContainsLastName ? storedName : firstName, storedAlreadyContainsLastName ? '' : lastName]
     .filter(Boolean)
     .map(String)
     .map(v => v.trim())

@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { formatPersonName, matchesSearch } from '../../lib/utils';
+import { comparePeopleBySurname, formatPersonName, matchesSearch, sortPeopleBySurname } from '../../lib/utils';
 
 export default function UserManagementPage() {
   const { selectedSchoolId } = useSelection();
@@ -156,7 +156,7 @@ export default function UserManagementPage() {
       
       const combinedUsers = Array.from(usersMap.values());
       console.log("COMBINED USERS", combinedUsers);
-      setUsers(combinedUsers);
+      setUsers(sortPeopleBySurname(combinedUsers));
     } catch (err: any) {
       toast.error('Greška pri učitavanju korisnika');
       console.error(err);
@@ -369,7 +369,7 @@ export default function UserManagementPage() {
     const matchesRole = roleFilter === 'ALL' || (profile.roles && profile.roles.includes(roleFilter));
     
     return matchesSearchTerm && matchesRole;
-  }).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
+  }).sort(comparePeopleBySurname);
 
   const getRoleBadge = (role: string) => {
     switch (role) {

@@ -4,6 +4,7 @@ import { toast } from 'react-hot-toast';
 import { FileText, Loader2 } from 'lucide-react';
 import { generateFinalWorkCertificatePDF } from '../../lib/pdfGenerator';
 import { useSelection } from '../../contexts/SelectionContext';
+import { formatPersonName, sortStudentsBySurname } from '../../lib/utils';
 
 export const FinalThesisTab = () => {
     const { selectedClassId } = useSelection();
@@ -20,7 +21,7 @@ export const FinalThesisTab = () => {
                 .select('*')
                 .eq('role', 'STUDENT')
                 .eq('class_id', selectedClassId);
-            setStudents(data || []);
+            setStudents(sortStudentsBySurname(data || []));
         };
         fetchStudents();
     }, [selectedClassId]);
@@ -89,7 +90,7 @@ export const FinalThesisTab = () => {
             <div className="flex gap-4 mb-4">
                  <select className="border p-2" onChange={(e) => setSelectedStudent(students.find(s => s.id === e.target.value))}>
                     <option value="">Odaberi učenika</option>
-                    {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    {students.map(s => <option key={s.id} value={s.id}>{formatPersonName(s)}</option>)}
                 </select>
                 <button onClick={handleGenerate} className="bg-blue-600 text-white px-4 py-2 flex items-center gap-2" disabled={!selectedStudent || loading}>
                     {loading ? <Loader2 className="animate-spin" /> : <FileText size={16} />} Generiraj potvrdu

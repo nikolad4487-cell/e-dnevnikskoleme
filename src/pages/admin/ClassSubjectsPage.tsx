@@ -16,7 +16,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
-import { formatSubjectDisplayName, sanitizeSubjectType } from '../../lib/utils';
+import { formatPersonName, formatSubjectDisplayName, sanitizeSubjectType, sortPeopleBySurname } from '../../lib/utils';
 
 export default function ClassSubjectsPage() {
   const { selectedSchoolId, selectedClassId } = useSelection();
@@ -158,7 +158,7 @@ export default function ClassSubjectsPage() {
       const uniqueTeachers = rawUserList.filter((item: any, index: number, self: any[]) => 
         self.findIndex((t: any) => t.id === item.id) === index
       );
-      setTeachers(uniqueTeachers as any[]);
+      setTeachers(sortPeopleBySurname(uniqueTeachers) as any[]);
 
     } catch (err: any) {
       toast.error('Greška pri učitavanju');
@@ -454,7 +454,7 @@ export default function ClassSubjectsPage() {
                   >
                     <option value="">Odaberi nastavnika...</option>
                     {teachers.map(t => (
-                      <option key={t.id} value={t.id}>{(t as any).name}</option>
+                      <option key={t.id} value={t.id}>{formatPersonName(t)}</option>
                     ))}
                   </select>
                 </div>
@@ -641,7 +641,7 @@ export default function ClassSubjectsPage() {
                 >
                   <option value="">Odaberi nastavnika...</option>
                   {teachers.map(t => (
-                    <option key={t.id} value={t.id}>{(t as any).name}</option>
+                    <option key={t.id} value={t.id}>{formatPersonName(t)}</option>
                   ))}
                 </select>
               </div>

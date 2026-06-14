@@ -1,5 +1,5 @@
 import React from 'react';
-import { cn, sortStudentsBySurname } from '../lib/utils';
+import { cn, formatPersonName, sortStudentsBySurname } from '../lib/utils';
 
 export function ImenikTable({ students, studentEnrollments, onStudentClick, classWarnings }: { 
   students: any[], 
@@ -15,13 +15,13 @@ export function ImenikTable({ students, studentEnrollments, onStudentClick, clas
         <thead>
           <tr className="bg-gray-100 border-b border-gray-300">
             <th className="p-2 text-center w-12">R.BR.</th>
-            <th className="p-2 text-left">PREZIME I IME</th>
+            <th className="p-2 text-left">IME I PREZIME</th>
             <th className="p-2 text-center">UPOZORENJA</th>
           </tr>
         </thead>
         <tbody>
           {sortedStudents.map((student: any, i: number) => {
-            const name = student.student?.full_name || student.student?.name || 'Nepoznato ime';
+            const name = formatPersonName(student.student) || 'Nepoznato ime';
             const failingCount = classWarnings.failingGrades[student.student_id] || 0;
             const hasPending = classWarnings.pendingAbsences[student.student_id];
 

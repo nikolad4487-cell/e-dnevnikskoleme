@@ -188,7 +188,7 @@ export default function StudentsPage() {
         };
       });
 
-      setStudents(mappedStudents);
+      setStudents(sortStudentsBySurname(mappedStudents));
     } catch (err: any) {
       console.error("fetchData students page error", err);
       toast.error('Pogreška pri preuzimanju podataka: ' + err.message);

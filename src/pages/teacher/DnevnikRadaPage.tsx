@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
-import { cn, getSurname, formatPersonName, sortStudentsBySurname, formatSubjectDisplayName } from '../../lib/utils';
+import { cn, getSurname, formatPersonName, sortPeopleBySurname, sortStudentsBySurname, formatSubjectDisplayName } from '../../lib/utils';
 import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, UserX } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
@@ -680,7 +680,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
           return [u.id, u];
         })).values());
         
-        setTeachers(uniqueTeachers as User[]);
+        setTeachers(sortPeopleBySurname(uniqueTeachers as User[]));
       } catch (error) {
         console.error(error);
         toast.error('Greška pri dohvaćanju inicijalnih podataka');
@@ -711,7 +711,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
         }) as User[];
         
 const uniqueStudents = Array.from(new Map(studentList.map(s => [s.id, s])).values());
-setStudents(uniqueStudents);
+setStudents(sortStudentsBySurname(uniqueStudents));
 
 
         const { data: weeksData, error: we } = await supabase
