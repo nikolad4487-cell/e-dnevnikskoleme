@@ -4,10 +4,10 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, Subject, StudentSubjectEnrollment, SchoolYear, RolloverLog, StudentClassEnrollment, School, Program, SchoolType, SecondarySubtype, ClassVariant, ContinuationType, PROGRAM_TYPES, CONTINUATION_TYPES, CLASS_VARIANTS, ProgramType, ClassSubject } from '../../types';
-import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info, FileText } from 'lucide-react';
+import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info, FileText } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
-import { cn, comparePeopleBySurname, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortPeopleBySurname, sortStudentsBySurname } from '../../lib/utils';
+import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortStudentsBySurname } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import CertificateManagementPage from './certificates/CertificateManagementPage';
 import InformativkaAdminPage from '../admin/InformativkaAdminPage';
@@ -91,7 +91,11 @@ export default function AdministrationPage() {
     const uniqueTeachers = Array.from(new Map(result.map(t => [t.id, t])).values());
     console.log('RAW TEACHERS:', result);
     console.log('UNIQUE TEACHERS:', uniqueTeachers);
-    return sortPeopleBySurname(uniqueTeachers);
+    return uniqueTeachers.sort((a: any, b: any) => {
+      const surnameA = getSurname(String(a.name || ''));
+      const surnameB = getSurname(String(b.name || ''));
+      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+    });
   }, [allUsers, allUserSchoolRolesState, selectedSchoolId]);
 
 
@@ -132,9 +136,9 @@ export default function AdministrationPage() {
 
   const canManageClass = React.useMemo(() => {
     return isAnyAdmin || 
-           user?.id === selectedClassData?.homeroom_teacher_id || 
+           user?.id === (selectedClassData as any)?.homeroom_teacher_id || 
            user?.id === selectedClassData?.homeroomTeacherId || 
-           user?.id === selectedClassData?.deputy_teacher_id ||
+           user?.id === (selectedClassData as any)?.deputy_teacher_id ||
            user?.id === selectedClassData?.deputyTeacherId;
   }, [isAnyAdmin, user?.id, selectedClassData]);
 
@@ -243,15 +247,11 @@ export default function AdministrationPage() {
     user: User | null;
     newPass: string;
     generatedAt: string;
-    credentialType: 'PASSWORD' | 'PIN';
-    authenticatorReset: boolean;
   }>({
     isOpen: false,
     user: null,
     newPass: '',
-    generatedAt: '',
-    credentialType: 'PASSWORD',
-    authenticatorReset: false
+    generatedAt: ''
   });
   
   // Form States
@@ -352,21 +352,6 @@ export default function AdministrationPage() {
 
   const isSchoolAdmin = allUserSchoolRolesState.some(r => r.role === Role.SCHOOL_ADMIN && r.schoolId === selectedSchoolId);
   const canManageUsers = isMainAdmin || isSchoolAdmin;
-  const isStaffUser = (targetUser: User) => {
-    const roles = allUserSchoolRolesState
-      .filter(role => role.userId === targetUser.id)
-      .map(role => role.role);
-    if (targetUser.globalRole) roles.push(targetUser.globalRole);
-    if (targetUser.role) roles.push(targetUser.role);
-    return roles.some(role => [
-      Role.TEACHER,
-      Role.ADMIN,
-      Role.MAIN_ADMIN,
-      Role.SCHOOL_ADMIN,
-      Role.HOMEROOM,
-      Role.DEPUTY
-    ].includes(role));
-  };
 
   const handleLogout = async () => {
     try {
@@ -376,67 +361,68 @@ export default function AdministrationPage() {
     }
   };
 
-  const handleResetUserCredentials = async (
-    targetUser: User,
-    accountType: 'STUDENT' | 'STAFF',
-    mode: 'DEFAULT' | 'GENERATE' = 'GENERATE',
-    resetAuthenticator = false
-  ) => {
-    const credentialLabel = accountType === 'STAFF' ? 'PIN' : 'lozinku';
-    const authenticatorNote = resetAuthenticator
-      ? ' Resetirat će se i autentifikator te će ga korisnik ponovno povezati pri sljedećoj prijavi.'
-      : '';
-    if (!confirm(`Želite li resetirati ${credentialLabel} za korisnika ${formatPersonName(targetUser)}?${authenticatorNote}`)) return;
+  const generatePassword = (length: number) => {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+  };
+
+  const handleResetStaffAuthenticator = async (profileId: string, name: string, surname: string, email: string) => {
+    if (!confirm(`Jeste li sigurni da želite resetirati Microsoft Authenticator za korisnika ${name} ${surname}? Korisnik će ga morati ponovno postaviti pri sljedećoj prijavi.`)) return;
 
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
+      const response = await fetch('/api/auth/reset-authenticator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId })
+      });
+
+      const raw = await response.text();
+      let result = null;
+      if (raw) {
+        try {
+          result = JSON.parse(raw);
+        } catch (err) {}
       }
 
-      const response = await fetch('/api/admin/reset-user-credentials', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
-          profileId: targetUser.id,
-          schoolId: selectedSchoolId,
-          accountType,
-          mode,
-          resetAuthenticator
-        })
-      });
+      if (!response.ok) throw new Error(result?.error || result?.message || raw || 'Greška pri resetiranju');
 
-      const result = await safeReadJson(response);
-      if (!response.ok) throw new Error(result.error || 'Greška pri resetiranju pristupnih podataka.');
-
-      setResetModal({
-        isOpen: true,
-        user: targetUser,
-        newPass: result.credential,
-        generatedAt: new Date().toLocaleString('hr-HR'),
-        credentialType: result.credentialType === 'PIN' ? 'PIN' : 'PASSWORD',
-        authenticatorReset: Boolean(result.authenticatorReset)
-      });
-      toast.success(accountType === 'STAFF' ? 'PIN nastavnika je resetiran.' : 'Lozinka učenika je resetirana.');
+      toast.success('Authenticator resetiran. Korisnik ga mora ponovno postaviti pri sljedećoj prijavi.');
     } catch (err: any) {
-      console.error('RESET USER CREDENTIALS ERROR', err);
-      toast.error(err.message || 'Greška pri resetiranju pristupnih podataka.');
+      console.error(err);
+      toast.error(err.message || 'Greška pri resetiranju');
     } finally {
       setLoading(false);
     }
   };
 
   const handleResetStudentPassword = async (profileId: string, type: 'DEFAULT' | 'GENERATE') => {
-    const student = students.find(item => item.id === profileId) || allUsers.find(item => item.id === profileId);
-    if (!student) {
-      toast.error('Učenik nije pronađen.');
-      return;
+    if (!confirm(`Jeste li sigurni da želite resetirati lozinku za učenika?`)) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/admin/reset-student-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileId, type })
+      });
+
+      const result = await safeReadJson(response);
+      if (!response.ok) throw new Error(result.error || 'Greška pri resetiranju');
+
+      setResetModal({
+        isOpen: true,
+        user: students.find(s => s.id === profileId) || null,
+        newPass: result.newPassword,
+        generatedAt: new Date().toLocaleTimeString()
+      });
+      toast.success('Lozinka je uspješno resetirana.');
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Greška pri resetiranju lozinke');
+    } finally {
+      setLoading(false);
     }
-    await handleResetUserCredentials(student, 'STUDENT', type);
   };
 
   const handleCreateUnifiedUser = async (e: React.FormEvent) => {
@@ -1236,7 +1222,7 @@ setAllSubjects(uniqueSub);
           });
           
 const uniqueMapped = Array.from(new Map(mapped.map(m => [m.id, m])).values());
-setStudents(sortStudentsBySurname(uniqueMapped) as any);
+setStudents(uniqueMapped as any);
 
         }
       }
@@ -1260,7 +1246,7 @@ setStudents(sortStudentsBySurname(uniqueMapped) as any);
         }));
         
 const uniqueMapped = Array.from(new Map(mapped.map(m => [m.id, m])).values());
-setStudents(sortStudentsBySurname(uniqueMapped) as any);
+setStudents(uniqueMapped as any);
 
       }
 
@@ -2514,9 +2500,6 @@ setAllSubjects(uniqueSub2);
     
     setLoading(true);
     try {
-      const existingClassSubject = classSubjects.find(
-        cs => cs.classId === assignmentForm.classId && cs.subjectId === assignmentForm.subjectId
-      );
       const payload = {
         subject_id: assignmentForm.subjectId,
         class_id: assignmentForm.classId,
@@ -2541,14 +2524,8 @@ setAllSubjects(uniqueSub2);
       console.log("GROUP NAME", assignmentForm.groupName);
       console.log("ADD SUBJECT TO ALL STUDENTS", assignmentForm.addToAllStudents);
 
-      // Adding another teacher must not reset the existing subject metadata.
-      // Metadata changes are written only for a new subject or an explicit edit.
-      if (!existingClassSubject || editingAssignmentId) {
-        const { error: csError } = await supabase
-          .from('class_subjects')
-          .upsert([classSubjectPayload], { onConflict: 'class_id,subject_id' });
-        if (csError) throw csError;
-      }
+      const { error: csError } = await supabase.from('class_subjects').upsert([classSubjectPayload], { onConflict: 'class_id,subject_id' });
+      if (csError) throw csError;
 
       if (editingAssignmentId) {
         const { data, error } = await supabase.from('class_subject_teachers').update(payload).eq('id', editingAssignmentId).select();
@@ -3474,7 +3451,7 @@ setAllSubjects(uniqueSub2);
                               onChange={e => setClassDetailForm({...classDetailForm, homeroom_teacher_id: e.target.value})}
                             >
                               <option value="">-- Odaberi --</option>
-                              {teachers.map(t => <option key={t.id} value={t.id}>{formatPersonName(t)}</option>)}
+                              {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
                          </div>
                          <div className="space-y-1">
@@ -3485,7 +3462,7 @@ setAllSubjects(uniqueSub2);
                               onChange={e => setClassDetailForm({...classDetailForm, deputy_teacher_id: e.target.value})}
                             >
                               <option value="">-- Nema (Opcionalno) --</option>
-                              {teachers.filter(t => t.id !== classDetailForm.homeroom_teacher_id).map(t => <option key={t.id} value={t.id}>{formatPersonName(t)}</option>)}
+                              {teachers.filter(t => t.id !== classDetailForm.homeroom_teacher_id).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                             </select>
                          </div>
                          <button 
@@ -3557,6 +3534,7 @@ setAllSubjects(uniqueSub2);
                               <select 
                                 value={assignmentForm.subjectId}
                                 onChange={e => setAssignmentForm({...assignmentForm, subjectId: e.target.value})}
+                                disabled={!!editingAssignmentId}
                                 className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                                 required
                               >
@@ -3569,6 +3547,7 @@ setAllSubjects(uniqueSub2);
                               <select 
                                 value={assignmentForm.subjectType}
                                 onChange={e => setAssignmentForm({...assignmentForm, subjectType: e.target.value})}
+                                disabled={!!editingAssignmentId}
                                 className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                                 required
                               >
@@ -3585,6 +3564,7 @@ setAllSubjects(uniqueSub2);
                               <select 
                                 value={assignmentForm.subjectPeriod}
                                 onChange={e => setAssignmentForm({...assignmentForm, subjectPeriod: e.target.value})}
+                                disabled={!!editingAssignmentId}
                                 className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                                 required
                               >
@@ -3603,9 +3583,11 @@ setAllSubjects(uniqueSub2);
                                 required
                               >
                                 <option value="">-- Odaberi --</option>
-                    {[...teachers].sort(comparePeopleBySurname).map(t => (
-                      <option key={t.id} value={t.id}>{formatPersonName(t)}</option>
-                    ))}
+                    {teachers.sort((a, b) => {
+                      const surnameA = getSurname(String(a.name || ''));
+                      const surnameB = getSurname(String(b.name || ''));
+                      return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+                    }).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                               </select>
                             </div>
 
@@ -3625,6 +3607,7 @@ setAllSubjects(uniqueSub2);
                                 type="number"
                                 value={assignmentForm.plannedHoursSemester1}
                                 onChange={e => setAssignmentForm({...assignmentForm, plannedHoursSemester1: e.target.value})}
+                                disabled={!!editingAssignmentId}
                                 className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                               />
                             </div>
@@ -3634,6 +3617,7 @@ setAllSubjects(uniqueSub2);
                                 type="number"
                                 value={assignmentForm.plannedHoursTotal}
                                 onChange={e => setAssignmentForm({...assignmentForm, plannedHoursTotal: e.target.value})}
+                                disabled={!!editingAssignmentId}
                                 className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                               />
                             </div>
@@ -3644,6 +3628,7 @@ setAllSubjects(uniqueSub2);
                                   type="checkbox"
                                   checked={assignmentForm.isForeignLanguage}
                                   onChange={e => setAssignmentForm({...assignmentForm, isForeignLanguage: e.target.checked})}
+                                  disabled={!!editingAssignmentId}
                                   className="w-4 h-4 cursor-pointer focus:outline-[#005c8d]"
                                 />
                                 Strani jezik
@@ -3708,7 +3693,7 @@ setAllSubjects(uniqueSub2);
                               const allowedSubjectIds = canViewAllClassSubjects ? uniqueSubjectIds : uniqueSubjectIds.filter(sid => {
                                  // Teacher is explicitly assigned to this subject in this class
                                  return assignmentsInClass.some(a => a.subjectId === sid && a.teacherId === user?.id) ||
-                                        classSubjects.some(cs => cs.classId === selectedClassId && cs.subjectId === sid && cs.teachers?.some(t => t.id === user?.id));
+                                        classSubjects.some(cs => cs.classId === selectedClassId && cs.subjectId === sid && (cs as any).teachers?.some((t: any) => t.id === user?.id));
                               });
                               
                               return allowedSubjectIds.map(sid => {
@@ -3814,11 +3799,11 @@ setAllSubjects(uniqueSub2);
                                                 teacherId: '', 
                                                 classId: selectedClassId || '', 
                                                 groupName: '',
-                                                subjectType: classSubject?.subjectType || 'redovni',
-                                                isForeignLanguage: !!classSubject?.isForeignLanguage,
-                                                subjectPeriod: classSubject?.subjectPeriod || 'FULL_YEAR',
-                                                plannedHoursSemester1: classSubject?.plannedHoursSemester1?.toString() || '',
-                                                plannedHoursTotal: classSubject?.plannedHoursTotal?.toString() || '',
+                                                subjectType: 'redovni',
+                                                isForeignLanguage: false,
+                                                subjectPeriod: 'FULL_YEAR',
+                                                plannedHoursSemester1: '',
+                                                plannedHoursTotal: '',
                                                 addToAllStudents: true
                                               });
                                            }}
@@ -3867,11 +3852,11 @@ setAllSubjects(uniqueSub2);
                                                 classId: selectedClassId || '', 
                                                 teacherId: '',
                                                 groupName: '',
-                                                subjectType: classSubject?.subjectType || 'redovni',
-                                                isForeignLanguage: !!classSubject?.isForeignLanguage,
-                                                subjectPeriod: classSubject?.subjectPeriod || 'FULL_YEAR',
-                                                plannedHoursSemester1: classSubject?.plannedHoursSemester1?.toString() || '',
-                                                plannedHoursTotal: classSubject?.plannedHoursTotal?.toString() || '',
+                                                subjectType: 'redovni',
+                                                isForeignLanguage: false,
+                                                subjectPeriod: 'FULL_YEAR',
+                                                plannedHoursSemester1: '',
+                                                plannedHoursTotal: '',
                                                 addToAllStudents: true
                                               });
                                              }}
@@ -3904,7 +3889,11 @@ setAllSubjects(uniqueSub2);
                            <button onClick={() => setShowEnrollmentModal({ isOpen: false, subjectId: null })}><X size={18}/></button>
                         </div>
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                           {students.filter(s => s.classId === selectedClassId).sort(comparePeopleBySurname).map(s => {
+                           {students.filter(s => s.classId === selectedClassId).sort((a, b) => {
+                             const surnameA = getSurname(String(a.name || ''));
+                             const surnameB = getSurname(String(b.name || ''));
+                             return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+                           }).map(s => {
                               const matches = classEnrollments.filter(e => e.studentId === s.id && e.subjectId === showEnrollmentModal.subjectId);
                               const enrollment = matches[0];
                               const isActive = enrollment?.status === 'ACTIVE';
@@ -4601,7 +4590,7 @@ setAllSubjects(uniqueSub2);
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
                     <tr className="bg-gray-100 border-b border-gray-300">
-                      <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Ime i prezime</th>
+                      <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Prezime i ime</th>
                       <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300 w-32">Razred</th>
                       <th className="px-4 py-2 font-black uppercase text-gray-500 border-r border-gray-300">Kontakt e-mail</th>
                       <th className="px-4 py-2 text-center w-24 border-x border-gray-300">Akcije</th>
@@ -4769,7 +4758,7 @@ setAllSubjects(uniqueSub2);
                         required
                       >
                         <option value="">-- Odaberi --</option>
-                        {teachers.map(t => <option key={t.id} value={t.id}>{formatPersonName(t)}</option>)}
+                        {teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                       </select>
                     </div>
                     <div className="space-y-1">
@@ -4849,20 +4838,17 @@ setAllSubjects(uniqueSub2);
                             <td className="px-4 py-3 text-center flex items-center justify-center gap-4">
                                <button 
                                  onClick={() => {
-                                   const classSubject = classSubjects.find(
-                                     cs => cs.classId === a.classId && cs.subjectId === a.subjectId
-                                   );
                                    setEditingAssignmentId(a.id);
                                    setAssignmentForm({ 
                                      subjectId: a.subjectId, 
                                      classId: a.classId, 
                                      teacherId: a.teacherId,
                                      groupName: a.groupName || '',
-                                     subjectType: classSubject?.subjectType || 'redovni',
-                                     isForeignLanguage: !!classSubject?.isForeignLanguage,
-                                     subjectPeriod: classSubject?.subjectPeriod || 'FULL_YEAR',
-                                     plannedHoursSemester1: classSubject?.plannedHoursSemester1?.toString() || '',
-                                     plannedHoursTotal: classSubject?.plannedHoursTotal?.toString() || '',
+                                     subjectType: 'redovni',
+                                     isForeignLanguage: false,
+                                     subjectPeriod: 'FULL_YEAR',
+                                     plannedHoursSemester1: '',
+                                     plannedHoursTotal: '',
                                      addToAllStudents: true
                                    });
                                  }}
@@ -5430,7 +5416,7 @@ setAllSubjects(uniqueSub2);
                           >
                             <option value="">-- Odaberi --</option>
                             {teachers.map(t => (
-                              <option key={t.id} value={t.id}>{formatPersonName(t)}</option>
+                              <option key={t.id} value={t.id}>{t.name}</option>
                             ))}
                           </select>
                         </div>
@@ -5443,7 +5429,7 @@ setAllSubjects(uniqueSub2);
                           >
                             <option value="">-- Nema (Opcionalno) --</option>
                             {teachers.filter(t => t.id !== newClassHomeroomTeacherId).map(t => (
-                              <option key={t.id} value={t.id}>{formatPersonName(t)}</option>
+                              <option key={t.id} value={t.id}>{t.name}</option>
                             ))}
                           </select>
                         </div>
@@ -6112,11 +6098,15 @@ setAllSubjects(uniqueSub2);
                               // School admin filters users of their school
                               return allUserSchoolRolesState.some(r => r.userId === u.id && r.schoolId === selectedSchoolId);
                             })
-                            .sort(comparePeopleBySurname)
+                            .sort((a, b) => {
+                              const surnameA = getSurname(String(a.name || ''));
+                              const surnameB = getSurname(String(b.name || ''));
+                              return surnameA.localeCompare(surnameB, 'hr', { sensitivity: 'base' });
+                            })
                             .map(u => (
                             <tr key={u.id} className={cn("hover:bg-blue-50/50", selectedUserForRole === u.id && "bg-blue-50")}>
                               <td className="px-3 py-2 border-r">
-                                <div className="font-bold text-gray-700">{formatPersonName(u)}</div>
+                                <div className="font-bold text-gray-700">{u.name}</div>
                                 <div className="text-[9px] text-gray-400">{u.email}</div>
                               </td>
                               <td className="px-3 py-2 border-r">
@@ -6143,22 +6133,40 @@ setAllSubjects(uniqueSub2);
                                     Uloge
                                   </button>
                                   <button 
-                                    onClick={() => handleResetUserCredentials(
-                                      u,
-                                      isStaffUser(u) ? 'STAFF' : 'STUDENT',
-                                      'GENERATE'
-                                    )}
+                                    onClick={async () => {
+                                      const isStaff = [Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.HOMEROOM].includes((u as any).globalRole);
+                                      const newPass = generatePassword(isStaff ? 12 : 8);
+                                      
+                                      await supabase.from('user_profiles').update({ 
+                                        temp_password: newPass, 
+                                        password_hash: `HASH:${newPass}`,
+                                        is_first_login: true,
+                                        requires_password_change: true,
+                                        requires_authenticator_setup: isStaff,
+                                        first_login_password_used: false,
+                                        password_type: isStaff ? 'FIRST_LOGIN_OTP_SETUP' : 'NORMAL_PASSWORD',
+                                        authenticator_secret: null
+                                      }).eq('id', u.id);
+
+                                      setResetModal({
+                                        isOpen: true,
+                                        user: u,
+                                        newPass,
+                                        generatedAt: new Date().toLocaleString('hr-HR')
+                                      });
+                                      toast.success('Lozinka resetirana');
+                                    }}
                                     className="text-[8px] font-bold uppercase text-gray-400 hover:text-gray-600"
                                   >
-                                    {isStaffUser(u) ? 'Reset PIN-a' : 'Reset lozinke'}
+                                    Reset lozinke
                                   </button>
-                                  {isStaffUser(u) && (
+                                  {([Role.TEACHER, Role.SCHOOL_ADMIN, Role.ADMIN].includes((u as any).globalRole)) && (
                                     <button 
-                                      onClick={() => handleResetUserCredentials(u, 'STAFF', 'GENERATE', true)}
+                                      onClick={() => handleResetStaffAuthenticator(u.id, u.name, u.surname, u.email)}
                                       className="text-[8px] font-bold uppercase text-red-400 hover:text-red-600 mt-1 flex items-center justify-center gap-1"
-                                      title="Resetiraj PIN i Authenticator"
+                                      title="Resetiraj Authenticator"
                                     >
-                                      <Shield size={8} /> Reset PIN + MFA
+                                      <Shield size={8} /> Reset MFA
                                     </button>
                                   )}
                                 </div>
@@ -6293,9 +6301,7 @@ setAllSubjects(uniqueSub2);
             <div className="p-6 border-b border-gray-200 bg-blue-50 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShieldAlert className="text-[#005c8d]" size={20} />
-                <h3 className="text-sm font-black text-[#005c8d] uppercase tracking-tighter">
-                  {resetModal.credentialType === 'PIN' ? 'PIN resetiran' : 'Lozinka resetirana'}
-                </h3>
+                <h3 className="text-sm font-black text-[#005c8d] uppercase tracking-tighter">Lozinka resetirana</h3>
               </div>
               <button 
                 onClick={() => setResetModal({ ...resetModal, isOpen: false })}
@@ -6321,17 +6327,12 @@ setAllSubjects(uniqueSub2);
                 </div>
 
                 <div className="bg-[#005c8d]/5 border-2 border-dashed border-[#005c8d]/30 p-6 text-center space-y-2">
-                  <label className="text-[9px] font-black text-[#005c8d] uppercase tracking-[0.2em]">
-                    {resetModal.credentialType === 'PIN' ? 'Novi četveroznamenkasti PIN' : 'Nova pristupna lozinka'}
-                  </label>
+                  <label className="text-[9px] font-black text-[#005c8d] uppercase tracking-[0.2em]">Jednokratna lozinka</label>
                   <div className="text-2xl font-black tracking-[0.3em] text-[#005c8d] select-all">
                     {resetModal.newPass}
                   </div>
-                  <p className="text-[9px] font-bold text-gray-500 uppercase flex items-center justify-center gap-1">
-                    <ShieldAlert size={10} />
-                    {resetModal.authenticatorReset
-                      ? 'Pri sljedećoj prijavi potrebno je ponovno povezati autentifikator'
-                      : 'Pristupni podatak vrijedi do sljedećeg reseta'}
+                  <p className="text-[9px] font-bold text-red-500 uppercase flex items-center justify-center gap-1">
+                    <ShieldAlert size={10} /> Lozinka vrijedi samo za jednu prijavu
                   </p>
                 </div>
               </div>
@@ -6345,7 +6346,7 @@ setAllSubjects(uniqueSub2);
                       printWindow.document.write(`
                         <html>
                           <head>
-                            <title>Pristupni podaci</title>
+                            <title>Lozinka Slip</title>
                             <style>
                               body { font-family: sans-serif; padding: 40px; }
                               .slip { border: 2px solid #000; padding: 30px; max-width: 400px; margin: 0 auto; }
@@ -6363,9 +6364,9 @@ setAllSubjects(uniqueSub2);
                               <div class="value">${formatPersonName(resetModal.user)}</div>
                               <div class="label">Korisničko ime / Email</div>
                               <div class="value">${resetModal.user?.username || resetModal.user?.email}</div>
-                              <div class="label">${resetModal.credentialType === 'PIN' ? 'Novi PIN' : 'Nova lozinka'}</div>
+                              <div class="label">Jednokratna lozinka</div>
                               <div class="pass">${resetModal.newPass}</div>
-                              <div class="note">${resetModal.authenticatorReset ? 'Pri sljedećoj prijavi ponovno povežite autentifikator.' : 'Čuvajte ove pristupne podatke.'}</div>
+                              <div class="note">Lozinka vrijedi samo za jednu prijavu.</div>
                             </div>
                           </body>
                         </html>
@@ -6379,12 +6380,12 @@ setAllSubjects(uniqueSub2);
                 </button>
                 <button 
                   onClick={() => {
-                    navigator.clipboard.writeText(resetModal.newPass);
-                    toast.success(resetModal.credentialType === 'PIN' ? 'PIN je kopiran.' : 'Lozinka je kopirana.');
+                    toast.success(`Email s lozinkom poslan na: ${resetModal.user?.email}`);
+                    // Simulation of sending email
                   }}
                   className="flex items-center justify-center gap-2 py-3 border border-gray-300 text-gray-600 text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all"
                 >
-                  <FileText size={16} /> Kopiraj
+                  <Mail size={16} /> Pošalji e-mail
                 </button>
               </div>
 
@@ -6557,6 +6558,60 @@ setAllSubjects(uniqueSub2);
         </div>
       )}
 
+      {resetModal.isOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white max-w-sm w-full animate-in zoom-in-95 duration-200 shadow-2xl relative overflow-hidden ring-1 ring-black/10">
+            <div className="p-4 bg-yellow-500 text-white flex justify-between items-center text-xs font-black uppercase tracking-widest">
+              <div className="flex items-center gap-2">
+                <ShieldAlert size={14}/>
+                Nova lozinka za učenika
+              </div>
+              <button 
+                onClick={() => setResetModal({ ...resetModal, isOpen: false })} 
+                className="hover:rotate-90 transition-transform p-1 bg-white/10"
+              >
+                <X size={16}/>
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-6">
+              <div className="text-center space-y-1">
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Učenik</p>
+                <h4 className="text-xl font-black text-gray-800 uppercase tracking-tighter">{resetModal.user?.name}</h4>
+              </div>
+
+              <div className="bg-gray-50 border-2 border-dashed border-gray-200 p-6 text-center space-y-3">
+                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Nova pristupna lozinka</p>
+                 <div className="text-3xl font-black text-[#005c8d] tracking-[0.3em] font-mono break-all bg-white py-4 shadow-inner ring-1 ring-black/5">
+                   {resetModal.newPass}
+                 </div>
+                 <p className="text-[9px] font-bold text-gray-400">Vrijeme generiranja: {resetModal.generatedAt}</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-3 bg-blue-50 border border-blue-100 rounded-sm">
+                  <div className="flex gap-3">
+                    <Info size={16} className="text-blue-500 shrink-0 mt-0.5" />
+                    <p className="text-[10px] font-bold text-blue-700 leading-relaxed uppercase">
+                      Zabilježite lozinku i predajte je učeniku. Lozinka je stalna i neće se tražiti promjena pri prijavi.
+                    </p>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => {
+                    navigator.clipboard.writeText(resetModal.newPass);
+                    toast.success('Kopirano u međuspremnik!');
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-gray-800 text-white text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
+                >
+                   Kopiraj lozinku
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
           </div>
         </div>
       </>

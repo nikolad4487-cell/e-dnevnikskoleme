@@ -6,7 +6,6 @@ import {
   Building, Calendar, Clock, MapPin, Users, Plus, 
   Trash2, Edit, Save, X, ShieldAlert, CheckCircle, HelpCircle
 } from 'lucide-react';
-import { formatPersonName, sortPeopleBySurname } from '../lib/utils';
 
 interface CommissionMember {
   id: string;
@@ -79,7 +78,7 @@ export function FinalExamDefenseScheduleAdmin() {
 
       setSchedules(scheduleData || []);
       setClasses(cData || []);
-      setTeachers(sortPeopleBySurname(tData || []));
+      setTeachers(tData || []);
       setSchoolYears(syData || []);
 
       // Defaults for form
@@ -482,7 +481,7 @@ export function FinalExamDefenseScheduleAdmin() {
                         className="rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 h-4 w-4"
                       />
                       <div className="truncate">
-                        <span className="font-bold">{formatPersonName(teacher)}</span>
+                        <span className="font-bold">{teacher.name} {teacher.surname || ''}</span>
                         {isHomeroom && <span className="text-[9px] font-black uppercase text-[#005c8d] bg-[#005c8d]/10 px-1 py-0.5 rounded ml-1.5 inline-block">razrednik</span>}
                       </div>
                     </label>
@@ -557,14 +556,14 @@ export function FinalExamDefenseScheduleAdmin() {
                   // Homeroom
                   const homeroomTeacherId = classObj?.homeroom_teacher_id;
                   const homeroomTeacher = teachers.find(t => t.id === homeroomTeacherId);
-                  const homeroomName = homeroomTeacher ? formatPersonName(homeroomTeacher) : 'Nije dodijeljen';
+                  const homeroomName = homeroomTeacher ? `${homeroomTeacher.name} ${homeroomTeacher.surname || ''}` : 'Nije dodijeljen';
 
                   // Commission teachers names
                   const memberNames = (schedule.members || []).map(member => {
                     const teacherObj = teachers.find(t => t.id === member.teacher_profile_id);
                     if (!teacherObj) return '—';
                     const labelSuffix = member.teacher_profile_id === homeroomTeacherId ? ' (razrednik)' : '';
-                    return `${formatPersonName(teacherObj)}${labelSuffix}`;
+                    return `${teacherObj.name} ${teacherObj.surname || ''}${labelSuffix}`;
                   });
 
                   return (

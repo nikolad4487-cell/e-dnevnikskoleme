@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
-import { formatPersonName, sortStudentsBySurname } from '../lib/utils';
 
 interface Props {
   isOpen: boolean;
@@ -99,9 +98,9 @@ export default function GroupGradesModal({ isOpen, onClose, classId, subjectId, 
                 </tr>
             </thead>
             <tbody>
-                {sortStudentsBySurname(students).map(s => (
+                {students.map(s => (
                     <tr key={s.student_id} className='border-b'>
-                        <td className='py-2'>{formatPersonName(s.student)}</td>
+                        <td className='py-2'>{s.student.surname} {s.student.name}</td>
                         <td className='py-2 text-center'>
                              <div className="flex gap-1 justify-center">
                                 {[1, 2, 3, 4, 5].map(g => (

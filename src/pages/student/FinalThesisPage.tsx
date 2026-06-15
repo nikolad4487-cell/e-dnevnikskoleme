@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import { ThesisApplication } from '../../types';
 import { FinalExamDefenseSchedule } from '../../components/FinalExamDefenseSchedule';
-import { formatPersonName, sortPeopleBySurname } from '../../lib/utils';
 
 export default function FinalThesisPage() {
   const { user, isParent } = useAuth();
@@ -73,7 +72,7 @@ export default function FinalThesisPage() {
         .from('user_profiles')
         .select('id, name, role')
         .in('role', ['TEACHER', 'HOMEROOM', 'ADMIN', 'SCHOOL_ADMIN']);
-      setMentors(sortPeopleBySurname(mentorsData || []));
+      setMentors(mentorsData || []);
 
       // Fetch applications via api route
       const response = await fetch(`/api/final-thesis?studentId=${studentId}`);
@@ -281,7 +280,7 @@ export default function FinalThesisPage() {
                     <h3 className="text-xs text-gray-400 font-black uppercase tracking-wider">Odabrani mentor</h3>
                     <p className="font-semibold text-gray-800 mt-1 flex items-center gap-1">
                       <User size={14} className="text-gray-400" />
-                      {formatPersonName(mentors.find(m => m.id === activeApp.mentor_id)) || 'Opći mentor / Nepoznato'}
+                      {mentors.find(m => m.id === activeApp.mentor_id)?.name || 'Opći mentor / Nepoznato'}
                     </p>
                   </div>
 
@@ -570,7 +569,7 @@ export default function FinalThesisPage() {
                     >
                       <option value="">-- Odaberite mentora --</option>
                       {mentors.map(m => (
-                        <option key={m.id} value={m.id}>{formatPersonName(m)}</option>
+                        <option key={m.id} value={m.id}>{m.name}</option>
                       ))}
                     </select>
                   </div>
@@ -666,7 +665,7 @@ export default function FinalThesisPage() {
                     <tr key={app.id} className="border-b border-gray-100 hover:bg-gray-50">
                       <td className="p-3 font-bold text-gray-800">{app.thesis_title}</td>
                       <td className="p-3 font-semibold text-gray-600">
-                        {formatPersonName(mentors.find(m => m.id === app.mentor_id)) || 'Opći mentor'}
+                        {mentors.find(m => m.id === app.mentor_id)?.name || 'Opći mentor'}
                       </td>
                       <td className="p-3 font-semibold text-gray-600">{app.exam_period}</td>
                       <td className="p-3 font-bold">{getStatusBadge(app.status)}</td>

@@ -93,16 +93,13 @@ export default function LoginPage() {
       let normalizedEmail = identifier.trim().toLowerCase();
       
       if (!normalizedEmail.includes('@')) {
-        normalizedEmail = `${normalizedEmail}@skolehr.xyz`;
-      } else if (normalizedEmail.endsWith('@eskole.me')) {
-        normalizedEmail = normalizedEmail.replace(/@eskole\.me$/i, '@skolehr.xyz');
+        normalizedEmail = `${normalizedEmail}@eskole.me`;
       }
 
       console.log("LOGIN INPUT", identifier);
       console.log("NORMALIZED LOGIN EMAIL", normalizedEmail);
       
-      let loginEmail = normalizedEmail;
-      let response = await fetch('/api/auth/login', {
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -121,27 +118,7 @@ export default function LoginPage() {
         throw new Error('Prijava trenutno nije moguća (komunikacija sa serverom nije uspjela). Molimo pokušajte ponovno.');
       }
 
-      let result = await response.json();
-      if (!response.ok && normalizedEmail.endsWith('@skolehr.xyz')) {
-        loginEmail = normalizedEmail.replace(/@skolehr\.xyz$/i, '@eskole.me');
-        response = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: loginEmail,
-            password,
-            totpCode: otp,
-            loginType
-          })
-        });
-        const legacyContentType = response.headers.get('content-type') || '';
-        if (!legacyContentType.includes('application/json')) {
-          const text = await response.text();
-          console.error('LOGIN LEGACY NON-JSON RESPONSE:', text);
-          throw new Error('Prijava trenutno nije moguÄ‡a (komunikacija sa serverom nije uspjela). Molimo pokuĹˇajte ponovno.');
-        }
-        result = await response.json();
-      }
+      const result = await response.json();
       console.log("LOGIN API RESULT", result);
 
       if (!response.ok) {
@@ -151,7 +128,7 @@ export default function LoginPage() {
       if (result?.requiresAuthenticatorSetup || result?.redirectTo === "/setup-authenticator") {
         navigate("/setup-authenticator", {
           state: {
-            email: loginEmail,
+            email: normalizedEmail,
             user: result.user
           }
         });
@@ -170,7 +147,7 @@ export default function LoginPage() {
 
       // Enforce domain/portal-based role checks
       console.log("[LOGIN] Enforcing domain role check with roles:", roles);
-      const staffRoles = ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SUPER_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'];
+      const staffRoles = ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'];
       const studentRoles = ['STUDENT', 'PARENT'];
 
       if (isTeacherDomain) {
@@ -320,7 +297,7 @@ export default function LoginPage() {
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 text-sm outline-none focus:border-[#005c8d] focus:bg-blue-50/20 shadow-inner"
-                  placeholder="nikola.duric ili nikola.duric@skolehr.xyz"
+                  placeholder="nikola.duric ili nikola.duric@eskole.me"
                 />
               </div>
             </div>

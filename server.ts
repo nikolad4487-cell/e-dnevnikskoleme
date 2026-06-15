@@ -1833,7 +1833,7 @@ CREATE TABLE IF NOT EXISTS public.final_thesis_committee_members (
       // If this is the very first user in the system (or a specific email), grant them MAIN_ADMIN
       const { count } = await supabaseAdmin.from('user_profiles').select('*', { count: 'exact', head: true });
       
-      const shouldBeAdmin = (count <= 1) || email === 'nikolad4487@gmail.com' || email.endsWith('@skolehr.xyz');
+      const shouldBeAdmin = (count <= 1) || email === 'nikolad4487@gmail.com' || email.endsWith('@eskole.me');
       
       if (shouldBeAdmin) {
         const demoSchoolId = '00000000-0000-0000-0000-000000000001';
@@ -1875,7 +1875,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     const normFirst = normalizeForEmail(firstName).replace(/\s+/g, '');
     const normLast = normalizeForEmail(lastName).replace(/\s+/g, '-');
     const baseAddress = normLast ? `${normFirst}.${normLast}` : normFirst;
-    const baseEmail = `${baseAddress}@skolehr.xyz`;
+    const baseEmail = `${baseAddress}@eskole.me`;
 
     if (!existingEmails.has(baseEmail)) {
         return baseEmail;
@@ -1883,7 +1883,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
     let counter = 2;
     while (true) {
-        const email = `${baseAddress}${counter}@skolehr.xyz`;
+        const email = `${baseAddress}${counter}@eskole.me`;
         if (!existingEmails.has(email)) {
             return email;
         }
@@ -2567,12 +2567,12 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       }
 
       const demoUsers = [
-        { email: 'nikola.duric@skolehr.xyz', password: '1234', name: 'Nikola', surname: 'Đurić', roles: ['MAIN_ADMIN', 'TEACHER'] },
+        { email: 'nikola.duric@eskole.me', password: '1234', name: 'Nikola', surname: 'Đurić', roles: ['MAIN_ADMIN', 'TEACHER'] },
         { email: 'nikolad4487@gmail.com', password: '1234', name: 'Nikola', surname: 'Dev', roles: ['MAIN_ADMIN', 'TEACHER'] },
-        { email: 'marija.majdic@skolehr.xyz', password: '1234', name: 'Marija', surname: 'Majdić', roles: ['TEACHER'] },
-        { email: 'ivan.horvat@skolehr.xyz', password: '1234', name: 'Ivan', surname: 'Horvat', roles: ['TEACHER', 'HOMEROOM'], homeroomClassId: 'class-1a' },
-        { email: 'ana.kovac@skolehr.xyz', password: '1234', name: 'Ana', surname: 'Kovač', roles: ['TEACHER', 'DEPUTY'], deputyClassId: 'class-1a' },
-        { email: 'ivica.malcic@skolehr.xyz', password: 'yupu8Ev4', name: 'Ivica', surname: 'Malčić', roles: ['STUDENT'], studentClassId: 'class-1a' },
+        { email: 'marija.majdic@eskole.me', password: '1234', name: 'Marija', surname: 'Majdić', roles: ['TEACHER'] },
+        { email: 'ivan.horvat@eskole.me', password: '1234', name: 'Ivan', surname: 'Horvat', roles: ['TEACHER', 'HOMEROOM'], homeroomClassId: 'class-1a' },
+        { email: 'ana.kovac@eskole.me', password: '1234', name: 'Ana', surname: 'Kovač', roles: ['TEACHER', 'DEPUTY'], deputyClassId: 'class-1a' },
+        { email: 'ivica.malcic@eskole.me', password: 'yupu8Ev4', name: 'Ivica', surname: 'Malčić', roles: ['STUDENT'], studentClassId: 'class-1a' },
         { email: 'matija.malcic@gmail.com', password: 'yupu8Ev4', name: 'Matija', surname: 'Malčić', roles: ['PARENT'] },
       ];
 
@@ -2691,10 +2691,14 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         return res.status(500).json({ error: "Server authentication error." });
       }
 
-      // Staff accounts use the same four-digit PIN in Supabase Auth and pin_hash.
+      // 1. Sign in with Supabase
+      // Use a hardcoded technical password for all staff as a temporary fix
+      const technicalPassword = '123456'; 
+      const passwordOrPin = (loginType === 'STAFF') ? technicalPassword : password;
+
       const { data, error } = await supabaseAdmin.auth.signInWithPassword({
         email,
-        password
+        password: passwordOrPin
       });
 
       if (error) {
@@ -2748,26 +2752,10 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         .eq('user_id', profile.id);
 
       const userSchoolRoles = dbRoles?.map((r: any) => r.role) || [];
-      if (profile.role && !userSchoolRoles.includes(profile.role)) {
-        userSchoolRoles.push(profile.role);
-      }
-      const accessRoleMap: Record<string, string> = {
-        super_admin: 'MAIN_ADMIN',
-        main_admin: 'MAIN_ADMIN',
-        school_admin: 'SCHOOL_ADMIN',
-        admin: 'ADMIN',
-        teacher: 'TEACHER',
-        student: 'STUDENT',
-        parent: 'PARENT',
-      };
-      const mappedAccessRole = accessRoleMap[String(profile.access_role ?? '').toLowerCase()];
-      if (mappedAccessRole && !userSchoolRoles.includes(mappedAccessRole)) {
-        userSchoolRoles.push(mappedAccessRole);
-      }
 
       if (loginType === 'STAFF') {
         const isActuallyStaff = userSchoolRoles.some((role: string) => 
-          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SUPER_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
+          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
         );
 
         if (isActuallyStaff) {
@@ -2839,189 +2827,6 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     } catch (err: any) {
       console.error("[RESET_TOTP] Error:", err);
       res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Reset student password or staff PIN. This mirrors the Vercel serverless route.
-  app.post("/api/admin/reset-user-credentials", async (req, res) => {
-    try {
-      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
-
-      const authHeader = req.headers.authorization || "";
-      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-      if (!token) {
-        return res.status(401).json({ success: false, error: "Nedostaje autorizacijski token." });
-      }
-
-      const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token);
-      if (authError || !authData.user) {
-        return res.status(401).json({ success: false, error: "Neispravan autorizacijski token." });
-      }
-
-      const { profileId, schoolId, accountType, mode = "GENERATE", resetAuthenticator = false } = req.body;
-      if (!profileId || !["STUDENT", "STAFF"].includes(accountType)) {
-        return res.status(400).json({ success: false, error: "Nedostaju podaci o korisniku ili vrsti računa." });
-      }
-
-      const { data: callerProfile, error: callerError } = await supabaseAdmin
-        .from("user_profiles")
-        .select("id, role, access_role")
-        .eq("auth_user_id", authData.user.id)
-        .maybeSingle();
-      if (callerError || !callerProfile) {
-        return res.status(403).json({ success: false, error: "Profil administratora nije pronađen." });
-      }
-
-      const globalRoles = [
-        String(callerProfile.role || "").toUpperCase(),
-        String(callerProfile.access_role || "").toUpperCase()
-      ];
-      const isUnrestrictedAdmin = globalRoles.some(role =>
-        ["MAIN_ADMIN", "SUPER_ADMIN", "MAIN_ADMINISTRATOR"].includes(role)
-      );
-      let isAuthorized = isUnrestrictedAdmin;
-
-      if (!isAuthorized) {
-        let roleQuery = supabaseAdmin
-          .from("user_school_roles")
-          .select("role, school_id, status")
-          .eq("user_id", callerProfile.id);
-        if (schoolId) roleQuery = roleQuery.eq("school_id", schoolId);
-
-        const { data: callerRoles, error: rolesError } = await roleQuery;
-        if (rolesError) throw rolesError;
-        isAuthorized = (callerRoles || []).some((entry: any) =>
-          ["SCHOOL_ADMIN", "ADMIN", "MAIN_ADMIN"].includes(String(entry.role || "").toUpperCase()) &&
-          String(entry.status || "ACTIVE").toUpperCase() !== "INACTIVE"
-        );
-      }
-
-      if (!isAuthorized) {
-        return res.status(403).json({ success: false, error: "Nemate ovlasti za reset pristupnih podataka." });
-      }
-
-      const { data: profile, error: profileError } = await supabaseAdmin
-        .from("user_profiles")
-        .select("id, auth_user_id, email, role, access_role")
-        .eq("id", profileId)
-        .maybeSingle();
-      if (profileError) throw profileError;
-      if (!profile?.auth_user_id) {
-        return res.status(404).json({ success: false, error: "Korisnički Auth račun nije pronađen." });
-      }
-
-      const { data: targetRoles, error: targetRolesError } = await supabaseAdmin
-        .from("user_school_roles")
-        .select("role, school_id, status")
-        .eq("user_id", profileId);
-      if (targetRolesError) throw targetRolesError;
-
-      if (!isUnrestrictedAdmin) {
-        if (!schoolId) {
-          return res.status(400).json({ success: false, error: "Nije odabrana škola za reset korisnika." });
-        }
-        const belongsToSchool = (targetRoles || []).some((entry: any) =>
-          entry.school_id === schoolId &&
-          String(entry.status || "ACTIVE").toUpperCase() !== "INACTIVE"
-        );
-        if (!belongsToSchool) {
-          return res.status(403).json({ success: false, error: "Korisnik nije povezan s vašom školom." });
-        }
-      }
-
-      const resolvedRoles = [
-        String(profile.role || "").toUpperCase(),
-        String(profile.access_role || "").toUpperCase(),
-        ...(targetRoles || []).map((entry: any) => String(entry.role || "").toUpperCase())
-      ];
-      const resolvedAccountType = resolvedRoles.some((role: string) =>
-        [
-          "TEACHER",
-          "ADMIN",
-          "MAIN_ADMIN",
-          "SUPER_ADMIN",
-          "SCHOOL_ADMIN",
-          "HOMEROOM",
-          "DEPUTY",
-          "HOMEROOM_TEACHER",
-          "STAFF"
-        ].includes(role)
-      ) ? "STAFF" : "STUDENT";
-      if (resolvedAccountType !== accountType) {
-        return res.status(400).json({
-          success: false,
-          error: resolvedAccountType === "STAFF"
-            ? "Korisnik je zaposlenik; potrebno je resetirati PIN."
-            : "Korisnik je učenik; potrebno je resetirati lozinku."
-        });
-      }
-
-      let credential: string;
-      if (accountType === "STAFF") {
-        credential = String(Math.floor(1000 + Math.random() * 9000));
-      } else if (mode === "DEFAULT") {
-        credential = "yupu8Ev4";
-      } else {
-        const letters = "abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ";
-        const numbers = "23456789";
-        const symbols = "!?-";
-        const source = letters + numbers;
-        const password = Array.from(
-          { length: 6 },
-          () => source[Math.floor(Math.random() * source.length)]
-        );
-        password.push(numbers[Math.floor(Math.random() * numbers.length)]);
-        password.push(symbols[Math.floor(Math.random() * symbols.length)]);
-        credential = password.sort(() => Math.random() - 0.5).join("");
-      }
-
-      const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
-        profile.auth_user_id,
-        { password: credential }
-      );
-      if (authUpdateError) throw authUpdateError;
-
-      const profileUpdate = accountType === "STAFF"
-        ? {
-            pin_hash: await hashPin(credential),
-            password_type: "staff_with_authenticator",
-            requires_password_change: false,
-            ...(resetAuthenticator
-              ? { authenticator_secret: null, requires_authenticator_setup: true }
-              : {})
-          }
-        : {
-            password_type: "student_static",
-            requires_password_change: false
-          };
-
-      const { error: profileUpdateError } = await supabaseAdmin
-        .from("user_profiles")
-        .update(profileUpdate)
-        .eq("id", profileId);
-      if (profileUpdateError) throw profileUpdateError;
-
-      console.log("[RESET_CREDENTIALS] Completed", {
-        profileId,
-        schoolId,
-        accountType,
-        mode,
-        resetAuthenticator,
-        callerProfileId: callerProfile.id
-      });
-
-      return res.status(200).json({
-        success: true,
-        credential,
-        credentialType: accountType === "STAFF" ? "PIN" : "PASSWORD",
-        authenticatorReset: accountType === "STAFF" && Boolean(resetAuthenticator)
-      });
-    } catch (err: any) {
-      console.error("[RESET_CREDENTIALS] Error:", err);
-      return res.status(500).json({
-        success: false,
-        error: err.message || "Reset pristupnih podataka nije uspio."
-      });
     }
   });
 

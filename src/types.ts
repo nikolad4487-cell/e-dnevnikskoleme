@@ -9,7 +9,7 @@ export enum Role {
   ADMIN = 'ADMIN'
 }
 
-export type SchoolType = 'PRIMARY' | 'SECONDARY' | 'HIGHER';
+export type SchoolType = 'PRIMARY' | 'SECONDARY';
 export type SecondarySubtype = 'GENERAL' | 'VOCATIONAL';
 
 export type School = {
@@ -102,7 +102,6 @@ export type Class = {
   schoolYearIsActive?: boolean;
   variant?: any;
   homeroom_teacher_id?: string;
-  deputy_teacher_id?: string;
 };
 
 export type Subject = {
@@ -123,7 +122,6 @@ export type ClassSubject = {
   subjectPeriod: string;
   plannedHoursSemester1?: number;
   plannedHoursTotal?: number;
-  teachers?: User[];
 };
 
 export type ClassSubjectTeacher = {

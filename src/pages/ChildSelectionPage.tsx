@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { Loader2, ArrowRight, User as UserIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Header } from '../components/Header';
-import { formatPersonName, sortPeopleBySurname } from '../lib/utils';
+import { formatPersonName } from '../lib/utils';
 
 export default function ChildSelectionPage() {
   const { user } = useAuth();
@@ -67,7 +67,7 @@ export default function ChildSelectionPage() {
         } as User;
       });
 
-      setChildren(sortPeopleBySurname(mappedChildren));
+      setChildren(mappedChildren);
 
       // Auto-redirect if only one child
       // PH7: If parent has one child: → auto redirect to /select-school

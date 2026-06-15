@@ -167,7 +167,6 @@ export default function SchoolsManagementPage() {
       const payload = {
         name,
         type,
-        education_level: type === 'PRIMARY' ? 'ELEMENTARY' : type,
         subtype: type === 'SECONDARY' ? subtype : null,
         city,
         address: serializedAddress
@@ -291,7 +290,7 @@ export default function SchoolsManagementPage() {
                               <div className="font-extrabold text-slate-800 text-sm uppercase leading-snug">{school.name}</div>
                               <div className="flex items-center gap-2 mt-0.5">
                                 <span className="text-[9px] font-black uppercase tracking-tight text-slate-500">
-                                  {school.type === 'PRIMARY' ? 'Osnovna' : school.type === 'HIGHER' ? 'Fakultet' : 'Srednja'}
+                                  {school.type === 'PRIMARY' ? 'Osnovna' : 'Srednja'}
                                 </span>
                                 {school.subtype && (
                                   <span className="text-[9px] font-bold text-[#005c8d] uppercase tracking-tight">
@@ -400,7 +399,6 @@ export default function SchoolsManagementPage() {
                   >
                     <option value="PRIMARY">Osnovna škola</option>
                     <option value="SECONDARY">Srednja škola</option>
-                    <option value="HIGHER">Fakultet</option>
                   </select>
                 </div>
 

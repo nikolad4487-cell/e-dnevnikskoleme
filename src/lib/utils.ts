@@ -7,68 +7,42 @@ export function cn(...inputs: ClassValue[]) {
 
 export const getSurname = (fullName?: string) => {
   if (!fullName) return '';
-  const parts = fullName.trim().split(/\s+/);
+  const parts = fullName.trim().split(' ');
   return parts[parts.length - 1] || '';
 };
 
-function unwrapPerson(value: any): any {
-  if (!value) return {};
+export function sortStudentsBySurname(students: any[]): any[] {
+  if (!students) return [];
+  return [...students].sort((a, b) => {
+    const profileA = a.student ? (Array.isArray(a.student) ? a.student[0] : a.student) : a;
+    const profileB = b.student ? (Array.isArray(b.student) ? b.student[0] : b.student) : b;
 
-  for (const key of ['student', 'teacher', 'user', 'profile', 'user_profile', 'user_profiles']) {
-    const nested = value[key];
-    if (nested) return Array.isArray(nested) ? (nested[0] || value) : nested;
-  }
+    const surnameA = String(profileA?.surname || '').trim();
+    const surnameB = String(profileB?.surname || '').trim();
+    const nameA = String(profileA?.name || '').trim();
+    const nameB = String(profileB?.name || '').trim();
 
-  return value;
-}
+    if (surnameA || surnameB) {
+      const surnameCompare = surnameA.localeCompare(surnameB, "hr", { sensitivity: "base" });
+      if (surnameCompare !== 0) return surnameCompare;
+      return nameA.localeCompare(nameB, "hr", { sensitivity: "base" });
+    }
 
-export function getPersonNameParts(value: any): { firstName: string; lastName: string } {
-  const person = unwrapPerson(value);
-  const explicitFirst = String(
-    person.firstName || person.first_name || person.given_name || ''
-  ).trim();
-  const explicitLast = String(
-    person.lastName || person.last_name || person.surname || person.family_name || ''
-  ).trim();
-  const storedName = String(
-    person.fullName || person.full_name || person.display_name || person.name || ''
-  ).trim();
-
-  if (explicitFirst || explicitLast) {
-    return {
-      firstName: explicitFirst || storedName,
-      lastName: explicitLast,
+    const splitName = (fullName: string) => {
+      const parts = fullName.trim().split(/\s+/);
+      const lastName = parts.pop() || "";
+      const firstName = parts.join(" ");
+      return { firstName, lastName };
     };
-  }
 
-  const parts = storedName.split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) {
-    return { firstName: storedName, lastName: '' };
-  }
+    const aParsed = splitName(nameA);
+    const bParsed = splitName(nameB);
 
-  return {
-    firstName: parts.slice(0, -1).join(' '),
-    lastName: parts[parts.length - 1],
-  };
-}
-
-export function comparePeopleBySurname(a: any, b: any): number {
-  const personA = getPersonNameParts(a);
-  const personB = getPersonNameParts(b);
-  const options: Intl.CollatorOptions = { sensitivity: 'base' };
-
-  return (
-    personA.lastName.localeCompare(personB.lastName, 'hr', options)
-    || personA.firstName.localeCompare(personB.firstName, 'hr', options)
-  );
-}
-
-export function sortPeopleBySurname<T>(people: T[] | null | undefined): T[] {
-  return [...(people || [])].sort(comparePeopleBySurname);
-}
-
-export function sortStudentsBySurname<T>(students: T[] | null | undefined): T[] {
-  return sortPeopleBySurname(students);
+    return (
+      aParsed.lastName.localeCompare(bParsed.lastName, "hr", { sensitivity: "base" }) ||
+      aParsed.firstName.localeCompare(bParsed.firstName, "hr", { sensitivity: "base" })
+    );
+  });
 }
 
 export function removeDiacritics(str: string): string {
@@ -88,13 +62,17 @@ export function matchesSearch(text: string, searchTerm: string): boolean {
 export function formatPersonName(person: any): string {
   if (!person) return '';
 
-  const unwrapped = unwrapPerson(person);
-  const { firstName, lastName } = getPersonNameParts(unwrapped);
-  const storedName = String(unwrapped.fullName || unwrapped.full_name || unwrapped.display_name || unwrapped.name || '').trim();
-  const storedAlreadyContainsLastName = lastName
-    && storedName.toLocaleLowerCase('hr-HR').endsWith(lastName.toLocaleLowerCase('hr-HR'));
+  if (person.name && String(person.name).trim()) {
+    const n = String(person.name).trim();
+    if (n.toLowerCase() !== 'undefined' && n.toLowerCase() !== 'null') {
+      return n;
+    }
+  }
 
-  return [storedAlreadyContainsLastName ? storedName : firstName, storedAlreadyContainsLastName ? '' : lastName]
+  const first = person.firstName || person.first_name || '';
+  const last = person.lastName || person.last_name || person.surname || '';
+
+  return [first, last]
     .filter(Boolean)
     .map(String)
     .map(v => v.trim())
@@ -108,40 +86,23 @@ export function formatName(item: any) {
 
 export function formatSubjectDisplayName(subjectName: string, subjectType: string) {
   if (!subjectName) return '';
-  const cleaned = subjectName
-    .replace(/\s*\((izborni|elective|fakultativni|praksa|practice|dopunska nastava|dodatna nastava)\)\s*$/i, '')
-    .trim();
+  const cleaned = subjectName.replace(/\s*\((izborni|elective)\)\s*$/i, '').trim();
   if (!subjectType) return cleaned;
-  const t = normalizeSubjectType(subjectType);
+  const t = subjectType.toUpperCase().trim();
   if (t === 'REDOVNI') {
     return cleaned;
   }
-  const labels: Record<Exclude<SubjectType, 'REDOVNI'>, string> = {
-    IZBORNI: 'izborni',
-    FAKULTATIVNI: 'fakultativni',
-    PRAKSA: 'praksa',
-    'DOPUNSKA NASTAVA': 'dopunska nastava',
-    'DODATNA NASTAVA': 'dodatna nastava'
-  };
-  return `${cleaned} (${labels[t]})`;
+  if (t === 'IZBORNI') {
+    return `${cleaned} (izborni)`;
+  }
+  return `${cleaned} (${subjectType})`;
 }
 
-export type SubjectType =
-  | 'REDOVNI'
-  | 'IZBORNI'
-  | 'FAKULTATIVNI'
-  | 'PRAKSA'
-  | 'DOPUNSKA NASTAVA'
-  | 'DODATNA NASTAVA';
-
-export function normalizeSubjectType(type: string | null | undefined): SubjectType {
+export function normalizeSubjectType(type: string | null | undefined): 'REDOVNI' | 'IZBORNI' | 'PRAKSA' {
   const value = String(type || "").toUpperCase().trim();
 
   if (value === "IZBORNI" || value === "ELECTIVE") return "IZBORNI";
   if (value === "PRAKSA" || value === "PRACTICE") return "PRAKSA";
-  if (value === "FAKULTATIVNI" || value === "OPTIONAL") return "FAKULTATIVNI";
-  if (value === "DOPUNSKA NASTAVA") return "DOPUNSKA NASTAVA";
-  if (value === "DODATNA NASTAVA") return "DODATNA NASTAVA";
   if (value === "REDOVNI" || value === "REQUIRED") return "REDOVNI";
 
   return "REDOVNI";
@@ -167,8 +128,13 @@ export function getClassSubjectDisplayName(classSubject: any) {
   return name;
 }
 
-export function sanitizeSubjectType(type: string | null | undefined): SubjectType {
-  return normalizeSubjectType(type);
+export function sanitizeSubjectType(type: string | null | undefined): 'REDOVNI' | 'IZBORNI' {
+  if (!type) return 'REDOVNI';
+  const val = type.toUpperCase().trim();
+  if (val === 'IZBORNI' || val === 'ELECTIVE' || val.includes('IZBORNI') || val.includes('ELECTIVE')) {
+    return 'IZBORNI';
+  }
+  return 'REDOVNI';
 }
 
 export const finalGradeLabels: Record<string, string> = {

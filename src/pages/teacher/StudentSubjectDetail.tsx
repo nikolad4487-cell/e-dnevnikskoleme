@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { formatPersonName, sortStudentsBySurname, formatSubjectDisplayName } from '../../lib/utils';
+import { Role } from '../../types';
+import { sortStudentsBySurname, formatSubjectDisplayName } from '../../lib/utils';
 import { toast } from 'react-hot-toast';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import GroupGradesModal from '../../components/GroupGradesModal';
@@ -118,10 +119,11 @@ function FinalGradeSelector({ value, status, onChange }: { value: string | null,
 export default function StudentSubjectDetail() {
   const { classId, studentId, subjectId } = useParams();
   const navigate = useNavigate();
-  const { user, isMainAdmin, isTeacher } = useAuth();
+  const { user, isMainAdmin, isTeacher, userSchoolRoles } = useAuth();
 
   // App state
   const [loading, setLoading] = useState(true);
+  const [canEdit, setCanEdit] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
   const [student, setStudent] = useState<any>(null);
   const [subject, setSubject] = useState<any>(null);
@@ -292,7 +294,23 @@ export default function StudentSubjectDetail() {
       setFinalGrades(mappedFinGrData);
       setNotes(nData || []);
       setExams(examData || []);
-      console.log("LOAD CRITICAL COMPLETED");
+
+      const { data: isTeacherAssigned } = await supabase
+        .from('class_subject_teachers')
+        .select('id')
+        .eq('class_id', classId)
+        .eq('subject_id', subjectId)
+        .eq('teacher_id', user?.id)
+        .maybeSingle();
+
+      const schoolAdmin = (userSchoolRoles || []).some(r => 
+        r && r.schoolId === classData?.school_id && 
+        [Role.ADMIN, Role.SCHOOL_ADMIN].includes(r.role as Role)
+      );
+
+      const computedCanEdit = !!(isMainAdmin || schoolAdmin || isTeacherAssigned);
+      setCanEdit(computedCanEdit);
+      console.log("LOAD CRITICAL COMPLETED. CAN EDIT:", computedCanEdit);
 
     } catch (error) {
       console.error('Error fetching critical data:', error);
@@ -848,7 +866,9 @@ export default function StudentSubjectDetail() {
   const mathAverageNum = nonFinalGrades.length > 0 ? mathSum / nonFinalGrades.length : 0;
   const mathAverageString = mathAverageNum.toFixed(2);
 
-  const formattedName = student ? formatPersonName(student).toUpperCase() : 'UČENIK';
+  const formattedName = student 
+    ? `${student.surname || ''} ${student.name || ''}`.toUpperCase().trim() 
+    : 'UČENIK';
 
   const croSubjectName = subject?.name ? subject.name.toUpperCase() : (subjectId || 'PREDMET').toUpperCase();
 
@@ -932,6 +952,16 @@ export default function StudentSubjectDetail() {
         </div>
       </div>
 
+      {!canEdit && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-300 text-amber-800 rounded flex items-center gap-3 shadow-xs">
+          <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+          <div className="text-xs">
+            <span className="font-bold uppercase tracking-wider block mb-0.5">PREGLED PODATAKA (Samo za čitanje)</span>
+            Niste zaduženi za ovaj predmet u ovom razredu. Podatke možete pregledavati, ali nemate pravo unosa, izmjene ili brisanja ocjena i bilješki.
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col xl:flex-row gap-6 mt-4">
         {/* COMPREHENSIVE LEFT SIDEBAR WITH e-Dnevnik BOXES */}
         <div className="w-full xl:w-64 shrink-0 space-y-4">
@@ -966,31 +996,33 @@ export default function StudentSubjectDetail() {
           </div>
 
           {/* Quick actions box (Radnje) */}
-          <div>
-            <div className="bg-slate-800 text-white text-xs font-black px-4 py-2 uppercase tracking-wider rounded-t">
-              RADNJE
+          {canEdit && (
+            <div>
+              <div className="bg-slate-800 text-white text-xs font-black px-4 py-2 uppercase tracking-wider rounded-t">
+                RADNJE
+              </div>
+              <div className="border border-t-0 border-gray-200 bg-white p-3 flex flex-col gap-2 rounded-b">
+                <button 
+                  onClick={() => setShowGroupGradesModal(true)}
+                  className="flex items-center justify-center gap-1.5 w-full py-2 border border-[#005c8d] hover:bg-sky-50 text-[#005c8d] font-extrabold text-[10px] uppercase rounded shadow-xs select-none transition-all"
+                >
+                  Grupni unos ocjena
+                </button>
+                <button 
+                  onClick={() => setShowGroupNotesModal(true)}
+                  className="flex items-center justify-center gap-1.5 w-full py-2 border border-[#005c8d] hover:bg-sky-50 text-[#005c8d] font-extrabold text-[10px] uppercase rounded shadow-xs select-none transition-all"
+                >
+                  Grupni unos bilješki
+                </button>
+                <button 
+                  onClick={() => setShowGroupFinalGradesModal(true)}
+                  className="flex items-center justify-center gap-1.5 w-full py-2 border border-slate-300 hover:bg-slate-50 text-slate-800 font-extrabold text-[10px] uppercase rounded shadow-xs select-none transition-all"
+                >
+                  Grupno zaključivanje ocjena
+                </button>
+              </div>
             </div>
-            <div className="border border-t-0 border-gray-200 bg-white p-3 flex flex-col gap-2 rounded-b">
-              <button 
-                onClick={() => setShowGroupGradesModal(true)}
-                className="flex items-center justify-center gap-1.5 w-full py-2 border border-[#005c8d] hover:bg-sky-50 text-[#005c8d] font-extrabold text-[10px] uppercase rounded shadow-xs select-none transition-all"
-              >
-                Grupni unos ocjena
-              </button>
-              <button 
-                onClick={() => setShowGroupNotesModal(true)}
-                className="flex items-center justify-center gap-1.5 w-full py-2 border border-[#005c8d] hover:bg-sky-50 text-[#005c8d] font-extrabold text-[10px] uppercase rounded shadow-xs select-none transition-all"
-              >
-                Grupni unos bilješki
-              </button>
-              <button 
-                onClick={() => setShowGroupFinalGradesModal(true)}
-                className="flex items-center justify-center gap-1.5 w-full py-2 border border-slate-300 hover:bg-slate-50 text-slate-800 font-extrabold text-[10px] uppercase rounded shadow-xs select-none transition-all"
-              >
-                Grupno zaključivanje ocjena
-              </button>
-            </div>
-          </div>
+          )}
 
           {/* Close Card */}
           <button 
@@ -1014,13 +1046,15 @@ export default function StudentSubjectDetail() {
                     <th className="p-3 font-extrabold text-left border-r border-gray-300 w-1/4 uppercase tracking-wider text-[10px]">
                       <div className="flex items-center justify-between">
                         <span>ELEMENTI VREDNOVANJA</span>
-                        <button 
-                          onClick={() => setShowAddElementModal(true)}
-                          className="px-2 py-1 bg-[#005c8d]/90 hover:bg-[#005c8d] text-white rounded text-[9px] uppercase font-bold tracking-wider flex items-center gap-1 select-none transition-all"
-                        >
-                          <Plus className="w-2.5 h-2.5" />
-                          DODAJ ELEMENT
-                        </button>
+                        {canEdit && (
+                          <button 
+                            onClick={() => setShowAddElementModal(true)}
+                            className="px-2 py-1 bg-[#005c8d]/90 hover:bg-[#005c8d] text-white rounded text-[9px] uppercase font-bold tracking-wider flex items-center gap-1 select-none transition-all"
+                          >
+                            <Plus className="w-2.5 h-2.5" />
+                            DODAJ ELEMENT
+                          </button>
+                        )}
                       </div>
                     </th>
                     <th className="p-2 font-black border-r border-gray-200 w-16 text-[10px] bg-slate-50 uppercase tracking-wider">UREDI</th>
@@ -1034,12 +1068,14 @@ export default function StudentSubjectDetail() {
                     <tr>
                       <td colSpan={12} className="p-8 text-center text-gray-500 font-semibold italic">
                         Nema unesenih elemenata vrednovanja za ovaj predmet u ovom razredu.
-                        <button
-                          onClick={() => setShowAddElementModal(true)}
-                          className="block mx-auto mt-2 px-3 py-1.5 bg-[#005c8d] text-white text-xs font-extrabold uppercase rounded shadow-sm hover:brightness-105 transition-all"
-                        >
-                          DODAJ PRVI ELEMENT VREDNOVANJA
-                        </button>
+                        {canEdit && (
+                          <button
+                            onClick={() => setShowAddElementModal(true)}
+                            className="block mx-auto mt-2 px-3 py-1.5 bg-[#005c8d] text-white text-xs font-extrabold uppercase rounded shadow-sm hover:brightness-105 transition-all"
+                          >
+                            DODAJ PRVI ELEMENT VREDNOVANJA
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -1087,27 +1123,29 @@ export default function StudentSubjectDetail() {
 
                           {/* UREDI CELL */}
                           <td className="p-1 border-r border-gray-300 text-center align-middle whitespace-nowrap bg-slate-50/20">
-                            <div className="flex items-center justify-center gap-1.5">
-                              <button
-                                onClick={() => {
-                                  setEditingElementOriginalName(el);
-                                  setEditingElementName(el);
-                                }}
-                                className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                title="Uredi naziv elementa"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={() => handleDeleteElement(el)}
-                                className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Obriši element vrednovanja"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
+                            {canEdit && (
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  onClick={() => {
+                                    setEditingElementOriginalName(el);
+                                    setEditingElementName(el);
+                                  }}
+                                  className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  title="Uredi naziv elementa"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteElement(el)}
+                                  className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  title="Obriši element vrednovanja"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
                           </td>
 
                           {monthLabels.map(m => {
@@ -1124,12 +1162,13 @@ export default function StudentSubjectDetail() {
                               <td 
                                 key={m} 
                                 onClick={() => {
+                                  if (!canEdit) return;
                                   setNewGradeElement(el);
                                   setNewGradeDate(getMonthDateString(m));
                                   setShowAddGradeModal(true);
                                 }}
-                                className="p-1.5 border-r border-gray-200 align-middle cursor-pointer hover:bg-sky-50/60 transition-colors"
-                                title="Kliknite za unos ocjene u ovaj mjesec"
+                                className={`p-1.5 border-r border-gray-200 align-middle transition-colors ${canEdit ? 'cursor-pointer hover:bg-sky-50/60' : ''}`}
+                                title={canEdit ? "Kliknite za unos ocjene u ovaj mjesec" : undefined}
                               >
                                 <div className="flex flex-wrap items-center justify-center gap-1 min-h-[22px]">
                                   {matchingGrades.map((gObj) => {
@@ -1147,9 +1186,10 @@ export default function StudentSubjectDetail() {
                                         `}
                                         onClick={(e) => {
                                           e.stopPropagation(); // Stop clicking cell
+                                          if (!canEdit) return;
                                           handleDeleteGrade(gObj.id);
                                         }}
-                                        title={`${gObj.date}: ${gObj.note || 'Nema opisa'}. ${isDeletable ? 'Kliknite za brisanje.' : 'Brisanje onemogućeno (rok od 45 min je istekao).'}`}
+                                        title={canEdit ? `${gObj.date}: ${gObj.note || 'Nema opisa'}. ${isDeletable ? 'Kliknite za brisanje.' : 'Brisanje onemogućeno (rok od 45 min je istekao).'}` : `${gObj.date}: ${gObj.note || 'Nema opisa'}`}
                                       >
                                         {gObj.value}
                                         
@@ -1284,13 +1324,15 @@ export default function StudentSubjectDetail() {
                 <h2 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
                   DOPUNSKI / RAZLIKOVNI / POPRAVNI ISPITI
                 </h2>
-                <button 
-                  onClick={() => setShowAddExamModal(true)}
-                  className="px-2 py-1 bg-[#005c8d] hover:brightness-115 text-white text-[10px] font-extrabold uppercase rounded shadow-xs select-none transition-all flex items-center gap-1"
-                >
-                  <Plus className="w-3 h-3" />
-                  DODAJ ISPIT
-                </button>
+                {canEdit && (
+                  <button 
+                    onClick={() => setShowAddExamModal(true)}
+                    className="px-2 py-1 bg-[#005c8d] hover:brightness-115 text-white text-[10px] font-extrabold uppercase rounded shadow-xs select-none transition-all flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    DODAJ ISPIT
+                  </button>
+                )}
               </div>
               <div className="p-3">
                 {exams.length === 0 ? (
@@ -1304,7 +1346,7 @@ export default function StudentSubjectDetail() {
                           <th className="pb-2 pt-1 font-bold">ZABILJEŠKA</th>
                           <th className="pb-2 pt-1 font-bold text-center">OCJENA</th>
                           <th className="pb-2 pt-1 font-bold">DATUM</th>
-                          <th className="pb-2 pt-1 font-bold text-right">AKCIJE</th>
+                          {canEdit && <th className="pb-2 pt-1 font-bold text-right">AKCIJE</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -1315,31 +1357,33 @@ export default function StudentSubjectDetail() {
                             <td className="py-2.5 text-center font-extrabold">{ex.grade_value || ex.value || '-'}</td>
                             <td className="py-2.5 text-gray-500 text-[11px]">{ex.exam_date || ex.date}</td>
                             <td className="py-2.5 text-right whitespace-nowrap">
-                              <div className="flex items-center justify-end gap-2">
-                                <button 
-                                  onClick={() => setEditingExam(ex)}
-                                  className="p-1 text-gray-400 hover:text-blue-600 rounded transition-colors"
-                                  title="Uredi"
-                                >
-                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                  </svg>
-                                </button>
-                                <button 
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    console.log("DELETE MAKEUP EXAM BUTTON CLICKED", ex);
-                                    handleDeleteExam(ex.id);
-                                  }}
-                                  className="bg-red-50 hover:bg-red-100 text-red-700 font-bold px-2 py-1 rounded-sm text-[10px] tracking-wide uppercase transition-all flex items-center gap-1 cursor-pointer border border-red-200"
-                                  title="Obriši"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5 pointer-events-none" />
-                                  <span>Obriši</span>
-                                </button>
-                              </div>
+                              {canEdit && (
+                                <div className="flex items-center justify-end gap-2">
+                                  <button 
+                                    onClick={() => setEditingExam(ex)}
+                                    className="p-1 text-gray-400 hover:text-blue-600 rounded transition-colors"
+                                    title="Uredi"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                    </svg>
+                                  </button>
+                                  <button 
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      console.log("DELETE MAKEUP EXAM BUTTON CLICKED", ex);
+                                      handleDeleteExam(ex.id);
+                                    }}
+                                    className="bg-red-50 hover:bg-red-100 text-red-700 font-bold px-2 py-1 rounded-sm text-[10px] tracking-wide uppercase transition-all flex items-center gap-1 cursor-pointer border border-red-200"
+                                    title="Obriši"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5 pointer-events-none" />
+                                    <span>Obriši</span>
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         ))}
@@ -1356,13 +1400,15 @@ export default function StudentSubjectDetail() {
                 <h2 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
                   BILJEŠKE I POJEDINAČNE OCJENE
                 </h2>
-                <button 
-                  onClick={() => setShowAddNoteModal(true)}
-                  className="px-2 py-1 bg-[#005c8d] hover:brightness-115 text-white text-[10px] font-extrabold uppercase rounded shadow-xs select-none transition-all flex items-center gap-1"
-                >
-                  <Plus className="w-3 h-3" />
-                  BILJEŠKA
-                </button>
+                {canEdit && (
+                  <button 
+                    onClick={() => setShowAddNoteModal(true)}
+                    className="px-2 py-1 bg-[#005c8d] hover:brightness-115 text-white text-[10px] font-extrabold uppercase rounded shadow-xs select-none transition-all flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" />
+                    BILJEŠKA
+                  </button>
+                )}
               </div>
               <div className="p-3">
                 {combinedLog.length === 0 ? (
@@ -1376,7 +1422,7 @@ export default function StudentSubjectDetail() {
                           <th className="pb-2 pt-1 font-bold text-center w-[5%]">OCJ.</th>
                           <th className="pb-2 pt-1 font-bold w-[15%]">ELEMENT</th>
                           <th className="pb-2 pt-1 font-bold w-[60%]">BILJEŠKA</th>
-                          <th className="pb-2 pt-1 font-bold text-right w-[10%]">AKCIJE</th>
+                          {canEdit && <th className="pb-2 pt-1 font-bold text-right w-[10%]">AKCIJE</th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
@@ -1387,51 +1433,53 @@ export default function StudentSubjectDetail() {
                             <td className="py-2.5 font-bold uppercase text-[9px] text-gray-500 w-[15%] break-words">{item.element}</td>
                             <td className="py-2.5 text-slate-700 italic w-[60%] whitespace-normal break-words">{item.note || '-'}</td>
                              <td className="py-2.5 text-right whitespace-nowrap w-[10%]">
-                              <div className="flex items-center justify-end gap-1.5">
-                                <button 
-                                  onClick={() => {
-                                    if (item.type === 'GRADE') {
-                                      setEditingGrade({
-                                        id: item.raw.id,
-                                        value: item.raw.value,
-                                        element: item.raw.element || 'Usmeni',
-                                        note: item.raw.note || '',
-                                        date: item.raw.date,
-                                        created_at: item.raw.created_at
-                                      });
-                                    } else {
-                                      setEditingNote({
-                                        id: item.raw.id,
-                                        content: item.raw.content,
-                                        date: item.raw.date,
-                                        created_at: item.raw.created_at
-                                      });
-                                    }
-                                  }}
-                                  className="p-1 text-gray-400 hover:text-blue-600 rounded transition"
-                                  title="Uredi"
-                                >
-                                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                                  </svg>
-                                </button>
-                                {((item.type === 'GRADE' && canDeleteGrade(item.raw)) || (item.type === 'NOTE' && canDeleteNote(item.raw))) && (
-                                  <button 
-                                    onClick={() => {
-                                      if (item.type === 'GRADE') {
-                                        handleDeleteGrade(item.id);
-                                      } else {
-                                        handleDeleteNote(item.id);
-                                      }
-                                    }}
-                                    className="p-1 text-gray-400 hover:text-red-700 rounded transition"
-                                    title="Obriši"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
+                               {canEdit && (
+                                 <div className="flex items-center justify-end gap-1.5">
+                                   <button 
+                                     onClick={() => {
+                                       if (item.type === 'GRADE') {
+                                         setEditingGrade({
+                                           id: item.raw.id,
+                                           value: item.raw.value,
+                                           element: item.raw.element || 'Usmeni',
+                                           note: item.raw.note || '',
+                                           date: item.raw.date,
+                                           created_at: item.raw.created_at
+                                         });
+                                       } else {
+                                         setEditingNote({
+                                           id: item.raw.id,
+                                           content: item.raw.content,
+                                           date: item.raw.date,
+                                           created_at: item.raw.created_at
+                                         });
+                                       }
+                                     }}
+                                     className="p-1 text-gray-400 hover:text-blue-600 rounded transition"
+                                     title="Uredi"
+                                   >
+                                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                     </svg>
+                                   </button>
+                                   {((item.type === 'GRADE' && canDeleteGrade(item.raw)) || (item.type === 'NOTE' && canDeleteNote(item.raw))) && (
+                                     <button 
+                                       onClick={() => {
+                                         if (item.type === 'GRADE') {
+                                           handleDeleteGrade(item.id);
+                                         } else {
+                                           handleDeleteNote(item.id);
+                                         }
+                                       }}
+                                       className="p-1 text-gray-400 hover:text-red-700 rounded transition"
+                                       title="Obriši"
+                                     >
+                                       <Trash2 className="w-3.5 h-3.5" />
+                                     </button>
+                                   )}
+                                 </div>
+                               )}
+                             </td>
                           </tr>
                         ))}
                       </tbody>

@@ -42,8 +42,6 @@ export default function BiljeskePage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeClass, setActiveClass] = useState<Class | null>(null);
-  const [homeroomTeacher, setHomeroomTeacher] = useState<User | null>(null);
-  const [deputyTeacher, setDeputyTeacher] = useState<User | null>(null);
   const [classNotes, setClassNotes] = useState<ClassNotes | null>(null);
   const [studentOverallNotes, setStudentOverallNotes] = useState<StudentNotes[]>([]);
 
@@ -75,26 +73,7 @@ export default function BiljeskePage() {
         .select('*')
         .eq('id', effectiveClassId)
         .maybeSingle();
-      if (classData) {
-        const mappedClass = mappers.class(classData);
-        setActiveClass(mappedClass);
-
-        const staffIds = [mappedClass.homeroomTeacherId, mappedClass.deputyTeacherId].filter(Boolean);
-        if (staffIds.length > 0) {
-          const { data: staffData, error: staffError } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .in('id', staffIds);
-          if (staffError) throw staffError;
-
-          const staff = mapList(staffData, mappers.user);
-          setHomeroomTeacher(staff.find(item => item.id === mappedClass.homeroomTeacherId) || null);
-          setDeputyTeacher(staff.find(item => item.id === mappedClass.deputyTeacherId) || null);
-        } else {
-          setHomeroomTeacher(null);
-          setDeputyTeacher(null);
-        }
-      }
+      if (classData) setActiveClass(mappers.class(classData));
 
       // 2. Fetch Students
       const { data: enrollData } = await supabase
@@ -228,12 +207,7 @@ export default function BiljeskePage() {
     );
   }
 
-  if (
-    students.length === 0 &&
-    !homeroomTeacher &&
-    !deputyTeacher &&
-    (!classNotes || (!classNotes.homeroomInfo && !classNotes.deputyInfo))
-  ) {
+  if (students.length === 0 && (!classNotes || (!classNotes.homeroomInfo && !classNotes.deputyInfo))) {
     return (
       <div className="p-8 font-sans">
         <h1 className="text-xl font-bold mb-2">Bilješke</h1>
@@ -278,42 +252,14 @@ export default function BiljeskePage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white border border-gray-300 p-4 shadow-sm relative">
                <div className="text-[10px] font-black text-[#005c8d] uppercase mb-2">Razrednik</div>
-               {homeroomTeacher ? (
-                 <>
-                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                     <span className="text-[13px] font-black text-gray-900">{formatName(homeroomTeacher)}</span>
-                     <span className="text-[11px] font-medium text-gray-500">{homeroomTeacher.email}</span>
-                   </div>
-                   {classNotes?.homeroomInfo && (
-                     <div className="text-[12px] font-medium text-gray-600 whitespace-pre-wrap mt-3 pt-3 border-t border-gray-100">
-                       {classNotes.homeroomInfo}
-                     </div>
-                   )}
-                 </>
-               ) : (
-                 <div className="text-[12px] font-bold text-gray-400">Razrednik nije dodijeljen</div>
-               )}
+               <div className="text-[12px] font-bold text-gray-700 whitespace-pre-wrap">{classNotes?.homeroomInfo || 'Nema upisanih podataka'}</div>
                {(isHomeroom) && (
                  <button className="absolute top-2 right-2 text-gray-400 hover:text-[#005c8d]" onClick={() => setEditTarget({ type: 'HOMEROOM', field: 'homeroom_info', id: classNotes?.id || '', initialValue: classNotes?.homeroomInfo || '' })}><Edit2 size={14}/></button>
                )}
             </div>
             <div className="bg-white border border-gray-300 p-4 shadow-sm relative">
                <div className="text-[10px] font-black text-[#005c8d] uppercase mb-2">Zamjenik razrednika</div>
-               {deputyTeacher ? (
-                 <>
-                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                     <span className="text-[13px] font-black text-gray-900">{formatName(deputyTeacher)}</span>
-                     <span className="text-[11px] font-medium text-gray-500">{deputyTeacher.email}</span>
-                   </div>
-                   {classNotes?.deputyInfo && (
-                     <div className="text-[12px] font-medium text-gray-600 whitespace-pre-wrap mt-3 pt-3 border-t border-gray-100">
-                       {classNotes.deputyInfo}
-                     </div>
-                   )}
-                 </>
-               ) : (
-                 <div className="text-[12px] font-bold text-gray-400">Zamjenik razrednika nije dodijeljen</div>
-               )}
+               <div className="text-[12px] font-bold text-gray-700 whitespace-pre-wrap">{classNotes?.deputyInfo || 'Nema upisanih podataka'}</div>
                {(isDeputy) && (
                  <button className="absolute top-2 right-2 text-gray-400 hover:text-[#005c8d]" onClick={() => setEditTarget({ type: 'DEPUTY', field: 'deputy_info', id: classNotes?.id || '', initialValue: classNotes?.deputyInfo || '' })}><Edit2 size={14}/></button>
                )}

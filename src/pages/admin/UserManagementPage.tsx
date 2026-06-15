@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { comparePeopleBySurname, formatPersonName, matchesSearch, sortPeopleBySurname } from '../../lib/utils';
+import { formatPersonName, matchesSearch } from '../../lib/utils';
 
 export default function UserManagementPage() {
   const { selectedSchoolId } = useSelection();
@@ -156,7 +156,7 @@ export default function UserManagementPage() {
       
       const combinedUsers = Array.from(usersMap.values());
       console.log("COMBINED USERS", combinedUsers);
-      setUsers(sortPeopleBySurname(combinedUsers));
+      setUsers(combinedUsers);
     } catch (err: any) {
       toast.error('Greška pri učitavanju korisnika');
       console.error(err);
@@ -245,7 +245,7 @@ export default function UserManagementPage() {
         .map(line => line.trim())
         .filter(line => line.length > 0)
         .map(line => {
-          // Format: Ime Prezime | email@skolehr.xyz
+          // Format: Ime Prezime | email@eskole.me
           // or just Ime Prezime
           const parts = line.split('|');
           const namePart = parts[0].trim();
@@ -369,7 +369,7 @@ export default function UserManagementPage() {
     const matchesRole = roleFilter === 'ALL' || (profile.roles && profile.roles.includes(roleFilter));
     
     return matchesSearchTerm && matchesRole;
-  }).sort(comparePeopleBySurname);
+  }).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
 
   const getRoleBadge = (role: string) => {
     switch (role) {
@@ -575,13 +575,13 @@ export default function UserManagementPage() {
                   Popis korisnika (jedan po redu)
                 </label>
                 <p className="text-xs text-slate-500 mb-2">
-                  Format: <strong>Ime Prezime | email@skolehr.xyz</strong> ili samo <strong>Ime Prezime</strong>
+                  Format: <strong>Ime Prezime | email@eskole.me</strong> ili samo <strong>Ime Prezime</strong>
                 </p>
                 <textarea 
                   value={bulkData}
                   onChange={e => setBulkData(e.target.value)}
                   className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-3 font-mono text-sm text-slate-900 focus:border-[#005c8d] outline-none h-48 resize-y"
-                  placeholder="Nikola Đurić | nikola.duric@skolehr.xyz&#10;Ana Kovač | ana.kovac@skolehr.xyz"
+                  placeholder="Nikola Đurić | nikola.duric@eskole.me&#10;Ana Kovač | ana.kovac@eskole.me"
                   required
                 />
               </div>

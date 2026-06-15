@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, Grade, Subject, StudentNote, Exam, FinalGrade, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary, specialExamTypeLabels } from '../../types';
-import { cn, formatName, getSurname, formatSubjectDisplayName, finalGradeLabels, sortPeopleBySurname, sortStudentsBySurname } from '../../lib/utils';
+import { cn, formatName, getSurname, formatSubjectDisplayName, finalGradeLabels, sortStudentsBySurname } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2, Check } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
@@ -468,7 +468,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
             globalRole: r.role
           };
         }) as User[];
-        setTeachers(sortPeopleBySurname(mappedTeachers));
+        setTeachers(mappedTeachers);
       } catch (error) {
         console.error(error);
         toast.error('Greška pri inicijalnom učitavanju');
@@ -548,7 +548,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
       const uniqueStudents = Array.from(new Map(mappedStudents.map(s => [s.id, s])).values());
       
       console.log("[IMENIK] students after filtering", uniqueStudents);
-      setStudents(sortStudentsBySurname(uniqueStudents));
+      setStudents(uniqueStudents);
     } catch (error) {
       console.error(error);
       toast.error('Greška pri učitavanju učenika');
@@ -2335,7 +2335,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                 <thead>
                   <tr className="bg-gray-100">
                     <th className="border p-2 text-center w-12">R.BR.</th>
-                    <th className="border p-2 text-left">IME I PREZIME</th>
+                    <th className="border p-2 text-left">PREZIME I IME</th>
                     <th className="border p-2 text-center">UPOZORENJA</th>
                   </tr>
                 </thead>
@@ -2343,7 +2343,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                   {sortStudentsBySurname(students).map((s, i) => (
                     <tr key={s.id} className="cursor-pointer hover:bg-gray-100" onClick={() => navigate(`/class/${effectiveClassId}/student/${s.id}`)}>
                       <td className="border p-2 text-center">{i + 1}.</td>
-                      <td className="border p-2">{formatName(s)}</td>
+                      <td className="border p-2">{s.surname ? `${s.surname} ${s.name}` : s.name}</td>
                       <td className="border p-2 text-center">
                         {classWarnings.failingGrades[s.id] > 0 && <span className="text-red-600 font-bold">⚠️ {classWarnings.failingGrades[s.id]}</span>}
                         {classWarnings.pendingAbsences[s.id] && <span className="text-red-500 font-bold ml-2">🕒</span>}

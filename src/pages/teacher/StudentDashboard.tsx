@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { Loader2, Users, BookOpen, FileText, XCircle, ChevronLeft, ChevronRight, Shuffle } from 'lucide-react';
-import { formatPersonName, sortStudentsBySurname, getClassSubjectDisplayName } from '../../lib/utils';
+import { sortStudentsBySurname, getClassSubjectDisplayName } from '../../lib/utils';
+import { useAuth } from '../../contexts/AuthContext';
+import { Role } from '../../types';
 
 export default function StudentDashboard() {
   const { classId, studentId } = useParams();
   const navigate = useNavigate();
+  const { user, isMainAdmin, userSchoolRoles } = useAuth();
   const [student, setStudent] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [subjects, setSubjects] = useState<any[]>([]);
@@ -108,6 +111,24 @@ export default function StudentDashboard() {
 
         let mappedSubjects: any[] = [];
         if (classSubs && classSubs.length > 0 && subs && subs.length > 0) {
+          // Check if teacher has full class view (is main admin, or school admin of this class's school, or homeroom/deputy teacher of this class)
+          const { data: classDetails } = await supabase
+            .from('classes')
+            .select('homeroom_teacher_id, deputy_teacher_id, school_id')
+            .eq('id', classId)
+            .single();
+
+          const isSchoolAdmin = (userSchoolRoles || []).some(r => 
+            r && r.schoolId === classDetails?.school_id && 
+            [Role.ADMIN, Role.SCHOOL_ADMIN].includes(r.role as Role)
+          );
+          const isTeacherAdmin = isMainAdmin || isSchoolAdmin;
+
+          const isHomeroom = classDetails?.homeroom_teacher_id === user?.id;
+          const isDeputy = classDetails?.deputy_teacher_id === user?.id;
+
+          const hasFullClassView = isTeacherAdmin || isHomeroom || isDeputy;
+
           const seenSubjectIds = new Set<string>();
           classSubs.forEach((cs: any) => {
             if (seenSubjectIds.has(cs.subject_id)) return;
@@ -116,6 +137,14 @@ export default function StudentDashboard() {
             // Filter: limit to enrolled subjects if enrollment table has data for this student
             if (enrolledSubjectIds.size > 0 && !enrolledSubjectIds.has(cs.subject_id)) {
               return;
+            }
+
+            // Filter: limit to subjects that this teacher teaches if they don't have full class view
+            if (!hasFullClassView) {
+              const isAssigned = (assignments || []).some((asg: any) => asg.subject_id === cs.subject_id && asg.teacher_id === user?.id);
+              if (!isAssigned) {
+                return;
+              }
             }
 
             const matchedSub = subs.find(s => s.id === cs.subject_id);
@@ -203,7 +232,9 @@ export default function StudentDashboard() {
     );
   }
 
-  const formattedName = student ? formatPersonName(student).toUpperCase() : 'UČENIK';
+  const formattedName = student 
+    ? `${student.surname || ''} ${student.name || ''}`.toUpperCase().trim() 
+    : 'UČENIK';
 
   return (
     <div className="p-6 bg-white min-h-full">

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 import { Clock, MapPin, Users, Award, ShieldAlert } from 'lucide-react';
-import { formatPersonName, sortPeopleBySurname } from '../lib/utils';
 
 interface CommissionMember {
   id: string;
@@ -83,7 +82,7 @@ export function FinalExamDefenseSchedule({ classId }: { classId?: string }) {
       
       setSchedules(scheduleData);
       setClasses(classesData || []);
-      setTeachers(sortPeopleBySurname(profilesData || []));
+      setTeachers(profilesData || []);
     } catch (err) {
       console.error('Error loading defense schedule details:', err);
     } finally {
@@ -163,7 +162,7 @@ export function FinalExamDefenseSchedule({ classId }: { classId?: string }) {
               // Find homeroom / razrednik
               const homeroomTeacherId = classObj?.homeroom_teacher_id;
               const homeroomTeacher = teachers.find(t => t.id === homeroomTeacherId);
-              const homeroomName = homeroomTeacher ? formatPersonName(homeroomTeacher) : 'Nije dodijeljen';
+              const homeroomName = homeroomTeacher ? `${homeroomTeacher.name} ${homeroomTeacher.surname || ''}` : 'Nije dodijeljen';
 
               // Map commission members names
               const commissionTeacherIds = Array.from(new Set((schedule.members || []).map((m: any) => m.teacher_profile_id)));
@@ -171,7 +170,7 @@ export function FinalExamDefenseSchedule({ classId }: { classId?: string }) {
                 const teacherObj = teachers.find(t => t.id === tid);
                 if (!teacherObj) return null;
                 
-                const fullName = formatPersonName(teacherObj);
+                const fullName = `${teacherObj.name} ${teacherObj.surname || ''}`.trim();
                 const suffix = tid === homeroomTeacherId ? ' (automatski)' : '';
                 return fullName + suffix;
               }).filter(Boolean) as string[];
