@@ -3,15 +3,19 @@ import { authenticator } from 'otplib';
 import bcrypt from 'bcryptjs';
 
 function normalizeEmail(value: unknown) {
-  const email = String(value ?? '').trim().toLowerCase();
+  let email = String(value ?? '').trim().toLowerCase();
+  if (email === 'skole' || email === 'skole@skolehr.xyz') {
+    return 'skola@skolehr.xyz';
+  }
   if (!email.includes('@')) return `${email}@skolehr.xyz`;
-  return email.replace(/@eskole\.me$/i, '@skolehr.xyz');
+  return email.replace(/@eskole\.(me|hr)$/i, '@skolehr.xyz');
 }
 
 function getLoginEmailCandidates(value: unknown) {
   const normalized = normalizeEmail(value);
   const candidates = [normalized];
   if (normalized.endsWith('@skolehr.xyz')) {
+    candidates.push(normalized.replace(/@skolehr\.xyz$/i, '@eskole.hr'));
     candidates.push(normalized.replace(/@skolehr\.xyz$/i, '@eskole.me'));
   }
   return [...new Set(candidates.filter(Boolean))];
