@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, Subject, StudentSubjectEnrollment, SchoolYear, RolloverLog, StudentClassEnrollment, School, Program, SchoolType, SecondarySubtype, ClassVariant, ContinuationType, PROGRAM_TYPES, CONTINUATION_TYPES, CLASS_VARIANTS, ProgramType, ClassSubject } from '../../types';
-import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info, FileText } from 'lucide-react';
+import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info, FileText } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
 import { cn, comparePeopleBySurname, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortPeopleBySurname, sortStudentsBySurname } from '../../lib/utils';
@@ -243,11 +243,15 @@ export default function AdministrationPage() {
     user: User | null;
     newPass: string;
     generatedAt: string;
+    credentialType: 'PASSWORD' | 'PIN';
+    authenticatorReset: boolean;
   }>({
     isOpen: false,
     user: null,
     newPass: '',
-    generatedAt: ''
+    generatedAt: '',
+    credentialType: 'PASSWORD',
+    authenticatorReset: false
   });
   
   // Form States
@@ -348,6 +352,21 @@ export default function AdministrationPage() {
 
   const isSchoolAdmin = allUserSchoolRolesState.some(r => r.role === Role.SCHOOL_ADMIN && r.schoolId === selectedSchoolId);
   const canManageUsers = isMainAdmin || isSchoolAdmin;
+  const isStaffUser = (targetUser: User) => {
+    const roles = allUserSchoolRolesState
+      .filter(role => role.userId === targetUser.id)
+      .map(role => role.role);
+    if (targetUser.globalRole) roles.push(targetUser.globalRole);
+    if (targetUser.role) roles.push(targetUser.role);
+    return roles.some(role => [
+      Role.TEACHER,
+      Role.ADMIN,
+      Role.MAIN_ADMIN,
+      Role.SCHOOL_ADMIN,
+      Role.HOMEROOM,
+      Role.DEPUTY
+    ].includes(role));
+  };
 
   const handleLogout = async () => {
     try {
@@ -357,68 +376,67 @@ export default function AdministrationPage() {
     }
   };
 
-  const generatePassword = (length: number) => {
-    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    return Array.from({ length }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
-  };
-
-  const handleResetStaffAuthenticator = async (profileId: string, name: string, surname: string, email: string) => {
-    if (!confirm(`Jeste li sigurni da želite resetirati Microsoft Authenticator za korisnika ${name} ${surname}? Korisnik će ga morati ponovno postaviti pri sljedećoj prijavi.`)) return;
+  const handleResetUserCredentials = async (
+    targetUser: User,
+    accountType: 'STUDENT' | 'STAFF',
+    mode: 'DEFAULT' | 'GENERATE' = 'GENERATE',
+    resetAuthenticator = false
+  ) => {
+    const credentialLabel = accountType === 'STAFF' ? 'PIN' : 'lozinku';
+    const authenticatorNote = resetAuthenticator
+      ? ' Resetirat će se i autentifikator te će ga korisnik ponovno povezati pri sljedećoj prijavi.'
+      : '';
+    if (!confirm(`Želite li resetirati ${credentialLabel} za korisnika ${formatPersonName(targetUser)}?${authenticatorNote}`)) return;
 
     setLoading(true);
     try {
-      const response = await fetch('/api/auth/reset-authenticator', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId })
-      });
-
-      const raw = await response.text();
-      let result = null;
-      if (raw) {
-        try {
-          result = JSON.parse(raw);
-        } catch (err) {}
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
       }
 
-      if (!response.ok) throw new Error(result?.error || result?.message || raw || 'Greška pri resetiranju');
+      const response = await fetch('/api/admin/reset-user-credentials', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          profileId: targetUser.id,
+          schoolId: selectedSchoolId,
+          accountType,
+          mode,
+          resetAuthenticator
+        })
+      });
 
-      toast.success('Authenticator resetiran. Korisnik ga mora ponovno postaviti pri sljedećoj prijavi.');
+      const result = await safeReadJson(response);
+      if (!response.ok) throw new Error(result.error || 'Greška pri resetiranju pristupnih podataka.');
+
+      setResetModal({
+        isOpen: true,
+        user: targetUser,
+        newPass: result.credential,
+        generatedAt: new Date().toLocaleString('hr-HR'),
+        credentialType: result.credentialType === 'PIN' ? 'PIN' : 'PASSWORD',
+        authenticatorReset: Boolean(result.authenticatorReset)
+      });
+      toast.success(accountType === 'STAFF' ? 'PIN nastavnika je resetiran.' : 'Lozinka učenika je resetirana.');
     } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || 'Greška pri resetiranju');
+      console.error('RESET USER CREDENTIALS ERROR', err);
+      toast.error(err.message || 'Greška pri resetiranju pristupnih podataka.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleResetStudentPassword = async (profileId: string, type: 'DEFAULT' | 'GENERATE') => {
-    if (!confirm(`Jeste li sigurni da želite resetirati lozinku za učenika?`)) return;
-
-    setLoading(true);
-    try {
-      const response = await fetch('/api/admin/reset-student-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ profileId, type })
-      });
-
-      const result = await safeReadJson(response);
-      if (!response.ok) throw new Error(result.error || 'Greška pri resetiranju');
-
-      setResetModal({
-        isOpen: true,
-        user: students.find(s => s.id === profileId) || null,
-        newPass: result.newPassword,
-        generatedAt: new Date().toLocaleTimeString()
-      });
-      toast.success('Lozinka je uspješno resetirana.');
-    } catch (err: any) {
-      console.error(err);
-      toast.error(err.message || 'Greška pri resetiranju lozinke');
-    } finally {
-      setLoading(false);
+    const student = students.find(item => item.id === profileId) || allUsers.find(item => item.id === profileId);
+    if (!student) {
+      toast.error('Učenik nije pronađen.');
+      return;
     }
+    await handleResetUserCredentials(student, 'STUDENT', type);
   };
 
   const handleCreateUnifiedUser = async (e: React.FormEvent) => {
@@ -6125,40 +6143,22 @@ setAllSubjects(uniqueSub2);
                                     Uloge
                                   </button>
                                   <button 
-                                    onClick={async () => {
-                                      const isStaff = [Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.HOMEROOM].includes((u as any).globalRole);
-                                      const newPass = generatePassword(isStaff ? 12 : 8);
-                                      
-                                      await supabase.from('user_profiles').update({ 
-                                        temp_password: newPass, 
-                                        password_hash: `HASH:${newPass}`,
-                                        is_first_login: true,
-                                        requires_password_change: true,
-                                        requires_authenticator_setup: isStaff,
-                                        first_login_password_used: false,
-                                        password_type: isStaff ? 'FIRST_LOGIN_OTP_SETUP' : 'NORMAL_PASSWORD',
-                                        authenticator_secret: null
-                                      }).eq('id', u.id);
-
-                                      setResetModal({
-                                        isOpen: true,
-                                        user: u,
-                                        newPass,
-                                        generatedAt: new Date().toLocaleString('hr-HR')
-                                      });
-                                      toast.success('Lozinka resetirana');
-                                    }}
+                                    onClick={() => handleResetUserCredentials(
+                                      u,
+                                      isStaffUser(u) ? 'STAFF' : 'STUDENT',
+                                      'GENERATE'
+                                    )}
                                     className="text-[8px] font-bold uppercase text-gray-400 hover:text-gray-600"
                                   >
-                                    Reset lozinke
+                                    {isStaffUser(u) ? 'Reset PIN-a' : 'Reset lozinke'}
                                   </button>
-                                  {([Role.TEACHER, Role.SCHOOL_ADMIN, Role.ADMIN].includes((u as any).globalRole)) && (
+                                  {isStaffUser(u) && (
                                     <button 
-                                      onClick={() => handleResetStaffAuthenticator(u.id, u.name, u.surname, u.email)}
+                                      onClick={() => handleResetUserCredentials(u, 'STAFF', 'GENERATE', true)}
                                       className="text-[8px] font-bold uppercase text-red-400 hover:text-red-600 mt-1 flex items-center justify-center gap-1"
-                                      title="Resetiraj Authenticator"
+                                      title="Resetiraj PIN i Authenticator"
                                     >
-                                      <Shield size={8} /> Reset MFA
+                                      <Shield size={8} /> Reset PIN + MFA
                                     </button>
                                   )}
                                 </div>
@@ -6293,7 +6293,9 @@ setAllSubjects(uniqueSub2);
             <div className="p-6 border-b border-gray-200 bg-blue-50 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ShieldAlert className="text-[#005c8d]" size={20} />
-                <h3 className="text-sm font-black text-[#005c8d] uppercase tracking-tighter">Lozinka resetirana</h3>
+                <h3 className="text-sm font-black text-[#005c8d] uppercase tracking-tighter">
+                  {resetModal.credentialType === 'PIN' ? 'PIN resetiran' : 'Lozinka resetirana'}
+                </h3>
               </div>
               <button 
                 onClick={() => setResetModal({ ...resetModal, isOpen: false })}
@@ -6319,12 +6321,17 @@ setAllSubjects(uniqueSub2);
                 </div>
 
                 <div className="bg-[#005c8d]/5 border-2 border-dashed border-[#005c8d]/30 p-6 text-center space-y-2">
-                  <label className="text-[9px] font-black text-[#005c8d] uppercase tracking-[0.2em]">Jednokratna lozinka</label>
+                  <label className="text-[9px] font-black text-[#005c8d] uppercase tracking-[0.2em]">
+                    {resetModal.credentialType === 'PIN' ? 'Novi četveroznamenkasti PIN' : 'Nova pristupna lozinka'}
+                  </label>
                   <div className="text-2xl font-black tracking-[0.3em] text-[#005c8d] select-all">
                     {resetModal.newPass}
                   </div>
-                  <p className="text-[9px] font-bold text-red-500 uppercase flex items-center justify-center gap-1">
-                    <ShieldAlert size={10} /> Lozinka vrijedi samo za jednu prijavu
+                  <p className="text-[9px] font-bold text-gray-500 uppercase flex items-center justify-center gap-1">
+                    <ShieldAlert size={10} />
+                    {resetModal.authenticatorReset
+                      ? 'Pri sljedećoj prijavi potrebno je ponovno povezati autentifikator'
+                      : 'Pristupni podatak vrijedi do sljedećeg reseta'}
                   </p>
                 </div>
               </div>
@@ -6338,7 +6345,7 @@ setAllSubjects(uniqueSub2);
                       printWindow.document.write(`
                         <html>
                           <head>
-                            <title>Lozinka Slip</title>
+                            <title>Pristupni podaci</title>
                             <style>
                               body { font-family: sans-serif; padding: 40px; }
                               .slip { border: 2px solid #000; padding: 30px; max-width: 400px; margin: 0 auto; }
@@ -6356,9 +6363,9 @@ setAllSubjects(uniqueSub2);
                               <div class="value">${formatPersonName(resetModal.user)}</div>
                               <div class="label">Korisničko ime / Email</div>
                               <div class="value">${resetModal.user?.username || resetModal.user?.email}</div>
-                              <div class="label">Jednokratna lozinka</div>
+                              <div class="label">${resetModal.credentialType === 'PIN' ? 'Novi PIN' : 'Nova lozinka'}</div>
                               <div class="pass">${resetModal.newPass}</div>
-                              <div class="note">Lozinka vrijedi samo za jednu prijavu.</div>
+                              <div class="note">${resetModal.authenticatorReset ? 'Pri sljedećoj prijavi ponovno povežite autentifikator.' : 'Čuvajte ove pristupne podatke.'}</div>
                             </div>
                           </body>
                         </html>
@@ -6372,12 +6379,12 @@ setAllSubjects(uniqueSub2);
                 </button>
                 <button 
                   onClick={() => {
-                    toast.success(`Email s lozinkom poslan na: ${resetModal.user?.email}`);
-                    // Simulation of sending email
+                    navigator.clipboard.writeText(resetModal.newPass);
+                    toast.success(resetModal.credentialType === 'PIN' ? 'PIN je kopiran.' : 'Lozinka je kopirana.');
                   }}
                   className="flex items-center justify-center gap-2 py-3 border border-gray-300 text-gray-600 text-[10px] font-black uppercase tracking-widest hover:bg-gray-50 transition-all"
                 >
-                  <Mail size={16} /> Pošalji e-mail
+                  <FileText size={16} /> Kopiraj
                 </button>
               </div>
 
@@ -6550,60 +6557,6 @@ setAllSubjects(uniqueSub2);
         </div>
       )}
 
-      {resetModal.isOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
-          <div className="bg-white max-w-sm w-full animate-in zoom-in-95 duration-200 shadow-2xl relative overflow-hidden ring-1 ring-black/10">
-            <div className="p-4 bg-yellow-500 text-white flex justify-between items-center text-xs font-black uppercase tracking-widest">
-              <div className="flex items-center gap-2">
-                <ShieldAlert size={14}/>
-                Nova lozinka za učenika
-              </div>
-              <button 
-                onClick={() => setResetModal({ ...resetModal, isOpen: false })} 
-                className="hover:rotate-90 transition-transform p-1 bg-white/10"
-              >
-                <X size={16}/>
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-6">
-              <div className="text-center space-y-1">
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Učenik</p>
-                <h4 className="text-xl font-black text-gray-800 uppercase tracking-tighter">{resetModal.user?.name}</h4>
-              </div>
-
-              <div className="bg-gray-50 border-2 border-dashed border-gray-200 p-6 text-center space-y-3">
-                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Nova pristupna lozinka</p>
-                 <div className="text-3xl font-black text-[#005c8d] tracking-[0.3em] font-mono break-all bg-white py-4 shadow-inner ring-1 ring-black/5">
-                   {resetModal.newPass}
-                 </div>
-                 <p className="text-[9px] font-bold text-gray-400">Vrijeme generiranja: {resetModal.generatedAt}</p>
-              </div>
-
-              <div className="space-y-4">
-                <div className="p-3 bg-blue-50 border border-blue-100 rounded-sm">
-                  <div className="flex gap-3">
-                    <Info size={16} className="text-blue-500 shrink-0 mt-0.5" />
-                    <p className="text-[10px] font-bold text-blue-700 leading-relaxed uppercase">
-                      Zabilježite lozinku i predajte je učeniku. Lozinka je stalna i neće se tražiti promjena pri prijavi.
-                    </p>
-                  </div>
-                </div>
-
-                <button 
-                  onClick={() => {
-                    navigator.clipboard.writeText(resetModal.newPass);
-                    toast.success('Kopirano u međuspremnik!');
-                  }}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-gray-800 text-white text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
-                >
-                   Kopiraj lozinku
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
           </div>
         </div>
       </>
