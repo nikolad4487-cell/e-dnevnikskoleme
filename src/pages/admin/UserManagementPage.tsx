@@ -198,9 +198,17 @@ export default function UserManagementPage() {
 
       console.log(`${editingUser ? 'UPDATE' : 'CREATE'} USER CLICKED`, payload);
 
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
+      }
+
       const response = await fetch(endpoint, {
         method: editingUser ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
         body: JSON.stringify(payload)
       });
 
@@ -342,14 +350,32 @@ export default function UserManagementPage() {
         if (error) throw error;
         toast.success('Korisnik je trajno obrisan iz sustava.');
       } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) {
+          throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
+        }
+
         const response = await fetch('/api/admin/delete-user', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session.access_token}`,
+          },
           body: JSON.stringify({ profileId, schoolId: selectedSchoolId, softDelete: soft })
         });
-        const data = await response.json();
+        const raw = await response.text();
+        console.log("DELETE USER STATUS", response.status);
+        console.log("DELETE USER RAW RESPONSE", raw);
+        let data: any = null;
+        if (raw) {
+          try {
+            data = JSON.parse(raw);
+          } catch (parseError) {
+            console.error("DELETE USER JSON PARSE ERROR", parseError, raw);
+          }
+        }
         console.log("DELETE USER RESULT:", { status: response.status, data });
-        if (!response.ok) throw new Error(data.error || 'Neuspjelo brisanje');
+        if (!response.ok) throw new Error(data?.error || raw || 'Neuspjelo brisanje');
         toast.success(soft ? 'Korisnik deaktiviran' : 'Korisnik uklonjen iz škole');
       }
       fetchUsers();
