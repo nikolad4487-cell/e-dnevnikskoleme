@@ -1343,28 +1343,44 @@ setStudents(uniqueMapped as any);
     if (!selectedClass) return;
     const studentYear = selectedClass.schoolYear;
     
-    // enrollments state is also likely mapped, check useEffect at 495
-    const existing = enrollments.find(e => (e as any).subject_id === subjectId || (e as any).subjectId === subjectId);
     const newStatus = currentStatus === 'ACTIVE' ? 'EXEMPT' : 'ACTIVE';
     
     try {
-      if (existing) {
-        await supabase.from('student_subject_enrollments').update({
+      const { data: existingEnrollment } = await supabase
+        .from("student_subject_enrollments")
+        .select("id")
+        .eq("student_id", selectedStudentId)
+        .eq("subject_id", subjectId)
+        .eq("class_id", selectedStudentData.classId)
+        .maybeSingle();
+
+      console.log("SAVE STUDENT SUBJECT ENROLLMENT", {
+        studentId: selectedStudentId,
+        subjectId,
+        classId: selectedStudentData.classId,
+        existingEnrollmentId: existingEnrollment?.id
+      });
+
+      if (existingEnrollment) {
+        const { error } = await supabase.from('student_subject_enrollments').update({
           status: newStatus,
           updated_at: new Date().toISOString()
-        }).eq('id', existing.id);
+        }).eq('id', existingEnrollment.id);
+        if (error) throw error;
       } else {
-        await supabase.from('student_subject_enrollments').insert([{
+        const { error } = await supabase.from('student_subject_enrollments').insert([{
           student_id: selectedStudentId,
           subject_id: subjectId,
           class_id: selectedStudentData.classId,
           school_year: studentYear,
           status: 'ACTIVE'
         }]);
+        if (error) throw error;
       }
       toast.success('Status predmeta uspješno promijenjen');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      toast.error('Izmjena predmeta nije uspjela: ' + err.message);
     }
   };
 
@@ -2361,7 +2377,7 @@ setStudents(uniqueMapped as any);
             console.log("SAVING SUBJECT ENROLLMENTS", subjectEnrollments);
             const { error: subjectEnrollErr } = await supabase
               .from('student_subject_enrollments')
-              .upsert(subjectEnrollments, { onConflict: 'student_id,subject_id,class_id,school_year' });
+              .upsert(subjectEnrollments, { onConflict: 'student_id,subject_id,class_id' });
 
             if (subjectEnrollErr) {
               console.error("Greška pri upisu predmeta:", subjectEnrollErr);
@@ -2606,7 +2622,7 @@ setAllSubjects(uniqueSub2);
                    status: 'ACTIVE'
                  }));
                  console.log("STUDENT SUBJECT ENROLLMENTS CREATED", enrollments);
-                 const { error: enrollError } = await supabase.from('student_subject_enrollments').upsert(enrollments, { onConflict: 'student_id,subject_id,class_id,school_year' });
+                 const { error: enrollError } = await supabase.from('student_subject_enrollments').upsert(enrollments, { onConflict: 'student_id,subject_id,class_id' });
                  if (enrollError) console.error("ENROLL ERROR:", enrollError);
               }
            }

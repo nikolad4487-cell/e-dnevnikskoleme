@@ -168,7 +168,7 @@ export default function ClassStudentsPage() {
         }));
         const { data: subEnrollResult, error: subEnrollError } = await supabase
           .from('student_subject_enrollments')
-          .upsert(enrollments, { onConflict: 'student_id,subject_id,class_id,school_year' })
+          .upsert(enrollments, { onConflict: 'student_id,subject_id,class_id' })
           .select();
         
         console.log("STUDENT SUBJECT ENROLL RESULT:", { data: subEnrollResult, error: subEnrollError });

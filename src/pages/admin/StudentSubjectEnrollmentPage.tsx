@@ -144,17 +144,42 @@ export default function StudentSubjectEnrollmentPage() {
       }
     } else {
       try {
-        const { error } = await supabase
-          .from('student_subject_enrollments')
-          .upsert({
-            student_id: studentId,
-            subject_id: subjectId,
-            class_id: selectedClassId,
-            status: 'ACTIVE',
-            school_year: schoolYearId
-          }, { onConflict: 'student_id,subject_id,class_id,school_year' });
-        
-        if (error) throw error;
+        const { data: existingEnrollment } = await supabase
+          .from("student_subject_enrollments")
+          .select("id")
+          .eq("student_id", studentId)
+          .eq("subject_id", subjectId)
+          .eq("class_id", selectedClassId)
+          .maybeSingle();
+
+        console.log("SAVE STUDENT SUBJECT ENROLLMENT", {
+          studentId,
+          subjectId,
+          classId: selectedClassId,
+          existingEnrollmentId: existingEnrollment?.id
+        });
+
+        if (existingEnrollment) {
+          const { error } = await supabase
+            .from("student_subject_enrollments")
+            .update({
+              status: 'ACTIVE',
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", existingEnrollment.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase
+            .from("student_subject_enrollments")
+            .insert({
+              student_id: studentId,
+              subject_id: subjectId,
+              class_id: selectedClassId,
+              status: 'ACTIVE',
+              school_year: schoolYearId
+            });
+          if (error) throw error;
+        }
         
         toast.success('Sluša predmet');
         setEnrollments(prev => {
@@ -186,7 +211,7 @@ export default function StudentSubjectEnrollmentPage() {
         school_year: schoolYearId
       }));
       
-      const { error } = await supabase.from('student_subject_enrollments').upsert(payload, { onConflict: 'student_id,subject_id,class_id,school_year' });
+      const { error } = await supabase.from('student_subject_enrollments').upsert(payload, { onConflict: 'student_id,subject_id,class_id' });
       if (error) throw error;
       
       toast.success('Predmet dodijeljen svima');
@@ -220,7 +245,7 @@ export default function StudentSubjectEnrollmentPage() {
         });
       });
 
-      const { error } = await supabase.from('student_subject_enrollments').upsert(payload, { onConflict: 'student_id,subject_id,class_id,school_year' });
+      const { error } = await supabase.from('student_subject_enrollments').upsert(payload, { onConflict: 'student_id,subject_id,class_id' });
       if (error) throw error;
 
       toast.success('Uspješno spremljene kombinacije');
