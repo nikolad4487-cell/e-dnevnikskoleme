@@ -17,6 +17,9 @@ import { FinalExamDefenseScheduleAdmin } from '../../components/FinalExamDefense
 async function safeReadJson(response: Response) {
   const text = await response.text();
   if (!text || text.trim() === '') {
+    if (response.ok) {
+      return { success: true };
+    }
     return { success: false, error: 'Prazan odgovor poslužitelja.' };
   }
   try {
@@ -2491,18 +2494,25 @@ setStudents(uniqueMapped as any);
         console.log("BULK CREATE RAW RESPONSE", raw);
 
         let data = null;
-        if (raw) {
+        if (raw && raw.trim() !== '') {
           try {
             data = JSON.parse(raw);
           } catch (e) {
             console.error("BULK CREATE JSON PARSE ERROR", e);
+            if (raw.includes('<!DOCTYPE html>') || raw.includes('<html>')) {
+              data = { success: false, error: 'Prijenos nije uspio (poslužitelj je vratio HTML stranicu umjesto programskog koda).' };
+            } else {
+              data = { success: false, error: `Nevaljan format odgovora s poslužitelja: ${raw.slice(0, 100)}` };
+            }
           }
+        } else if (res.ok) {
+          data = { success: true };
         }
 
         if (!res.ok) {
             throw new Error(data?.error || data?.message || raw || "Prazan odgovor poslužitelja.");
         }
-        if (data && !data.success) {
+        if (data && data.success === false) {
             throw new Error(data.error || "Greška pri grupnom dodavanju");
         }
 
