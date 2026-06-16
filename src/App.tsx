@@ -41,6 +41,7 @@ const FinalThesisTeacherPage = lazy(() => import('./pages/teacher/FinalThesisTea
 
 const RavnateljDashboardPage = lazy(() => import('./pages/admin/RavnateljDashboardPage'));
 const MaticnaKnjigaPage = lazy(() => import('./pages/admin/MaticnaKnjigaPage'));
+const ArhivaPage = lazy(() => import('./pages/admin/ArhivaPage'));
 const SkolskiKalendarPage = lazy(() => import('./pages/shared/SkolskiKalendarPage'));
 const InterniDokumentiPage = lazy(() => import('./pages/shared/InterniDokumentiPage'));
 
@@ -232,6 +233,7 @@ export default function App() {
                           <Route path="informativka" element={<InformativkaAdminPage />} />
                           <Route path="ravnatelj-dashboard" element={<RavnateljDashboardPage />} />
                           <Route path="maticna-knjiga" element={<MaticnaKnjigaPage />} />
+                          <Route path="arhiva" element={<ArhivaPage />} />
                           <Route path="*" element={<Navigate to="/admin-skole" replace />} />
                         </Routes>
                       </BasicLayout>

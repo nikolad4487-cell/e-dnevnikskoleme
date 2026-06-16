@@ -205,7 +205,8 @@ export default function ClassSelectionPage() {
           } as any;
         });
 
-      setClasses(classesData);
+      const sortedClassesData = (classesData || []).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '', 'hr'));
+      setClasses(sortedClassesData);
     } catch (error) {
       console.error(error);
       toast.error('Greška pri učitavanju razreda');
@@ -288,7 +289,8 @@ export default function ClassSelectionPage() {
         }
       });
 
-      setClasses(classesData);
+      const sortedClassesData = (classesData || []).sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '', 'hr'));
+      setClasses(sortedClassesData);
       return enrollments || [];
     } catch (error) {
       console.error(error);

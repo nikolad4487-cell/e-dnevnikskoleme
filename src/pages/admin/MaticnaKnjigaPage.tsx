@@ -114,7 +114,8 @@ export default function MaticnaKnjigaPage() {
         .from('classes')
         .select('*')
         .eq('school_id', selectedSchoolId);
-      setClasses(classList || []);
+      const sortedClassList = (classList || []).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'hr'));
+      setClasses(sortedClassList);
 
       // 3. Fetch Programs
       const { data: programsData } = await supabase

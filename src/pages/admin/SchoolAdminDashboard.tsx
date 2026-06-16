@@ -14,7 +14,8 @@ import {
   FileText,
   BarChart3,
   UserPlus,
-  MessageSquare
+  MessageSquare,
+  Archive
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -85,8 +86,9 @@ export default function SchoolAdminDashboard() {
     { id: 'ucenici', name: 'Učenici u školi', icon: Users, color: 'bg-teal-500', link: '/admin-skole/ucenici' },
     { id: 'predmeti', name: 'Globalni predmeti', icon: BookOpen, color: 'bg-amber-500', link: '/admin-skole/predmeti' },
     { id: 'smjerovi', name: 'Smjerovi / programi', icon: BookOpen, color: 'bg-orange-500', link: '/admin-skole/programi' },
-    { id: 'ravnatelj-dashboard', name: 'Dashboard Ravnatelja', icon: BarChart3, color: 'bg-indigo-600', link: '/admin-skole/ravnatelj-dashboard' },
+    { id: 'ravnatelj-dashboard', name: 'Dashboard Ravnatelja', icon: BarChart3, color: 'bg-[#005c8d]', link: '/admin-skole/ravnatelj-dashboard' },
     { id: 'maticna-knjiga', name: 'Matična knjiga', icon: FileText, color: 'bg-teal-600', link: '/admin-skole/maticna-knjiga' },
+    { id: 'arhiva', name: 'Arhiva', icon: Archive, color: 'bg-purple-600', link: '/admin-skole/arhiva' },
     { id: 'prijenos', name: 'Prijenos / rollover', icon: FileText, color: 'bg-red-500', link: '/admin-skole/rollover' },
     { id: 'informativka', name: 'Informativka', icon: MessageSquare, color: 'bg-emerald-500', link: '/admin-skole/informativka' },
     { id: 'system-check', name: 'Provjera Sustava', icon: BarChart3, color: 'bg-red-700', link: '/admin-skole/system-check' },

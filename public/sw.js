@@ -31,11 +31,9 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  const url = new URL(event.request.url);
-
-  // Let the browser handle API calls and mutations directly. Wrapping these in
-  // respondWith(fetch(...)) can turn backend errors into opaque SW network errors.
-  if (url.pathname.startsWith('/api/') || event.request.method !== 'GET') {
+  // Always bypass Service Worker for API calls or non-GET requests to be safe
+  if (event.request.url.includes('/api/') || event.request.method !== 'GET') {
+    event.respondWith(fetch(event.request));
     return;
   }
 

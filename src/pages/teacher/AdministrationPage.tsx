@@ -440,17 +440,9 @@ export default function AdministrationPage() {
 
     setLoading(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session?.access_token) {
-        throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
-      }
-
       const response = await fetch('/api/admin/create-user', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: newUserForm.email?.toLowerCase() || '',
           name: `${newUserForm.name} ${newUserForm.surname}`,
@@ -1798,6 +1790,47 @@ setStudents(uniqueMapped as any);
     }
   };
 
+  const handleDeleteClassOverall = async (classIdArg?: any) => {
+    console.log("DELETE CLASS OVERALLS");
+
+    const classId = (typeof classIdArg === 'string' && classIdArg) ? classIdArg : (effectiveClassId || selectedClassId);
+    if (!classId || !selectedClassData) {
+      toast.error("Nije odabran razred.");
+      return;
+    }
+
+    const isClassHomeroomTeacher = selectedClassData?.homeroomTeacherId === user?.id || selectedClassData?.homeroom_teacher_id === user?.id;
+    if (!isAnyAdmin && !isClassHomeroomTeacher) {
+      toast.error("Nemate ovlasti za brisanje općeg uspjeha.");
+      return;
+    }
+
+    if (!window.confirm("Jeste li sigurni da želite obrisati opći prosjek svih učenika u ovom razredu? Ovo će ukloniti sve zaključane prosjeke i opće uspjehe razreda.")) {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const { error } = await supabase
+        .from('student_year_summaries')
+        .delete()
+        .eq('class_id', classId);
+
+      if (error) {
+        throw error;
+      }
+
+      toast.success("Opći prosjek svih učenika u razredu je uspješno obrisan.");
+      fetchData();
+    } catch (err: any) {
+      console.error("Error deleting class summaries:", err);
+      toast.error("Došlo je do greške pri brisanju općeg prosjeka: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleCalculateAndLockClassOverall = async (classIdArg?: any) => {
     console.log("LOCK CLASS OVERALL");
 
@@ -2293,17 +2326,9 @@ setStudents(uniqueMapped as any);
           }
         };
 
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token) {
-          throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
-        }
-
         const response = await fetch('/api/admin/create-user', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(profilePayload)
         });
 
@@ -2524,15 +2549,23 @@ setAllSubjects(uniqueSub2);
         group_name: assignmentForm.groupName || null
       };
 
+      // Find existing class_subject first to identify existing type if any
+      const { data: existingCS } = await supabase
+        .from('class_subjects')
+        .select('*')
+        .eq('class_id', assignmentForm.classId)
+        .eq('subject_id', assignmentForm.subjectId)
+        .maybeSingle();
+
       const classSubjectPayload = {
         class_id: assignmentForm.classId,
         subject_id: assignmentForm.subjectId,
         school_id: selectedSchoolId,
-        subject_type: sanitizeSubjectType(assignmentForm.subjectType),
-        is_foreign_language: typeof assignmentForm.isForeignLanguage === 'boolean' ? assignmentForm.isForeignLanguage : false,
-        subject_period: assignmentForm.subjectPeriod || 'FULL_YEAR',
-        planned_hours_semester_1: assignmentForm.plannedHoursSemester1 ? parseInt(assignmentForm.plannedHoursSemester1) : null,
-        planned_hours_total: assignmentForm.plannedHoursTotal ? parseInt(assignmentForm.plannedHoursTotal) : null
+        subject_type: existingCS?.subject_type || sanitizeSubjectType(assignmentForm.subjectType),
+        is_foreign_language: existingCS ? (existingCS.is_foreign_language ?? false) : (typeof assignmentForm.isForeignLanguage === 'boolean' ? assignmentForm.isForeignLanguage : false),
+        subject_period: existingCS?.subject_period || assignmentForm.subjectPeriod || 'FULL_YEAR',
+        planned_hours_semester_1: existingCS ? (existingCS.planned_hours_semester_1) : (assignmentForm.plannedHoursSemester1 ? parseInt(assignmentForm.plannedHoursSemester1) : null),
+        planned_hours_total: existingCS ? (existingCS.planned_hours_total) : (assignmentForm.plannedHoursTotal ? parseInt(assignmentForm.plannedHoursTotal) : null)
       };
 
       console.log("CLASS SUBJECT CREATE PAYLOAD", classSubjectPayload);
@@ -3984,13 +4017,22 @@ setAllSubjects(uniqueSub2);
                   <h1 className="text-xl font-black text-gray-700 uppercase tracking-tighter">Opći prosjek i vladanje - {selectedClassData?.name}</h1>
                 </div>
                 {(isMainAdmin || isSchoolAdmin || selectedClassData?.homeroomTeacherId === user?.id) && (
-                  <button 
-                    onClick={() => handleCalculateAndLockClassOverall(effectiveClassId)}
-                    disabled={loading}
-                    className="bg-[#005c8d] text-white px-4 py-2 text-[10px] font-black uppercase hover:bg-[#004a70] transition-colors shadow-sm disabled:opacity-50"
-                  >
-                    Zaključi opći uspjeh za cijeli razred
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => handleCalculateAndLockClassOverall(effectiveClassId)}
+                      disabled={loading}
+                      className="bg-[#005c8d] text-white px-4 py-2 text-[10px] font-black uppercase hover:bg-[#004a70] transition-colors shadow-sm disabled:opacity-50"
+                    >
+                      Zaključi opći uspjeh za cijeli razred
+                    </button>
+                    <button 
+                      onClick={() => handleDeleteClassOverall(effectiveClassId)}
+                      disabled={loading}
+                      className="bg-red-600 text-white px-4 py-2 text-[10px] font-black uppercase hover:bg-red-700 transition-colors shadow-sm disabled:opacity-50"
+                    >
+                      Obriši opći prosjek
+                    </button>
+                  </div>
                 )}
               </div>
 
@@ -4007,6 +4049,15 @@ setAllSubjects(uniqueSub2);
                     >
                       <CheckCircle size={14} /> Zaključi opći uspjeh za cijeli razred
                     </button>
+                    {(isMainAdmin || isSchoolAdmin || selectedClassData?.homeroomTeacherId === user?.id) && (
+                      <button 
+                        onClick={() => handleDeleteClassOverall(effectiveClassId)}
+                        disabled={loading}
+                        className="bg-red-600 text-white px-6 py-2 border border-red-700 font-black text-[10px] uppercase hover:bg-red-700 shadow-sm disabled:opacity-50 flex items-center gap-2"
+                      >
+                        <XCircle size={14} /> Obriši opći prosjek
+                      </button>
+                    )}
                   </div>
                   <div className="flex gap-2">
                      <span className="text-[9px] font-black text-gray-400 uppercase">Status razreda:</span>

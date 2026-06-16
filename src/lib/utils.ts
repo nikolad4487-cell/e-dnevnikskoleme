@@ -95,7 +95,10 @@ export function formatSubjectDisplayName(subjectName: string, subjectType: strin
   if (t === 'IZBORNI') {
     return `${cleaned} (izborni)`;
   }
-  return `${cleaned} (${subjectType})`;
+  if (t === 'PRAKSA' || t === 'PRACTICE') {
+    return `${cleaned} (praksa)`;
+  }
+  return `${cleaned} (${subjectType.toLowerCase()})`;
 }
 
 export function normalizeSubjectType(type: string | null | undefined): 'REDOVNI' | 'IZBORNI' | 'PRAKSA' {

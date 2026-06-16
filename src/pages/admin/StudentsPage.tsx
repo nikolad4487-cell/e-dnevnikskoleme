@@ -259,17 +259,9 @@ export default function StudentsPage() {
           schoolId
         };
 
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token) {
-          throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
-        }
-
         const res = await fetch('/api/admin/update-user', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
 
@@ -337,17 +329,9 @@ export default function StudentsPage() {
           classId: selectedClassId || undefined
         };
 
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session?.access_token) {
-          throw new Error('Nedostaje autorizacijski token. Prijavite se ponovno.');
-        }
-
         const res = await fetch('/api/admin/create-user', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${session.access_token}`,
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
 
@@ -449,10 +433,7 @@ export default function StudentsPage() {
       // Use Server deletion endpoint to completely destroy authentication record and user_profile safely
       const response = await fetch('/api/admin/delete-user', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token ?? ''}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ profileId: student.id, schoolId, softDelete: false })
       });
 

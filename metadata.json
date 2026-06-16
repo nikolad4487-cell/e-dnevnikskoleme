@@ -2,5 +2,5 @@
   "name": "e-Dnevnik",
   "description": "Complete Croatian school system replica based on official CARNET workflows, including grading, absences, and real-time chat.",
   "requestFramePermissions": [],
-  "majorCapabilities": []
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
