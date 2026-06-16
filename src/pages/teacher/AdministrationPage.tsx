@@ -264,8 +264,14 @@ export default function AdministrationPage() {
   const [editingSubjectId, setEditingSubjectId] = useState<string | null>(null);
   const [editingStudentId, setEditingStudentId] = useState<string | null>(null);
   const [editingAssignmentId, setEditingAssignmentId] = useState<string | null>(null);
-  const [showBulkSubjectModal, setShowBulkSubjectModal] = useState(false);
-  const [bulkSubjectData, setBulkSubjectData] = useState({ teacherId: '', subjectIds: [] as string[] });
+  const [showSubjectTableModal, setShowSubjectTableModal] = useState(false);
+  const [subjectRows, setSubjectRows] = useState([{
+    subjectId: '',
+    subjectType: 'REDOVNI' as 'REDOVNI' | 'IZBORNI' | 'PRAKSA',
+    teacherIds: [] as string[],
+    isForeignLanguage: false,
+    addToAllStudents: true
+  }]);
   const [editingCurriculumId, setEditingCurriculumId] = useState<string | null>(null);
   const [newClassGrade, setNewClassGrade] = useState(1);
   const [newClassSection, setNewClassSection] = useState('A');
@@ -357,6 +363,54 @@ export default function AdministrationPage() {
 
   const isSchoolAdmin = allUserSchoolRolesState.some(r => r.role === Role.SCHOOL_ADMIN && r.schoolId === selectedSchoolId);
   const canManageUsers = isMainAdmin || isSchoolAdmin;
+
+  const handleBulkAddSubjects = async () => {
+    setLoading(true);
+    try {
+      for (const row of subjectRows) {
+        if (!row.subjectId || row.teacherIds.length === 0) continue;
+        
+        const subject = allSubjects.find(s => s.id === row.subjectId);
+        const subjectName = subject?.name || '';
+        const finalSubjectType = getForcedSubjectType(subjectName, row.subjectType);
+
+        const classSubjectPayload = {
+          class_id: selectedClassId,
+          subject_id: row.subjectId,
+          school_id: selectedSchoolId,
+          subject_type: finalSubjectType,
+          is_foreign_language: row.isForeignLanguage
+        };
+        
+        await supabase.from('class_subjects').upsert([classSubjectPayload], { onConflict: 'class_id,subject_id' });
+        
+        for (const teacherId of row.teacherIds) {
+           await supabase.from('class_subject_teachers').upsert([{
+             class_id: selectedClassId,
+             subject_id: row.subjectId,
+             teacher_id: teacherId,
+             school_id: selectedSchoolId
+           }], { onConflict: 'class_id,subject_id,teacher_id' });
+        }
+      }
+      
+      toast.success('Grupno dodavanje uspješno');
+      fetchData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Greška pri grupnom dodavanju');
+    } finally {
+      setLoading(false);
+      setShowSubjectTableModal(false);
+      setSubjectRows([{
+        subjectId: '',
+        subjectType: 'REDOVNI',
+        teacherIds: [],
+        isForeignLanguage: false,
+        addToAllStudents: true
+      }]);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -3599,9 +3653,21 @@ setAllSubjects(uniqueSub2);
                                Popravi duplikate upisa
                              </button>
                              <button
-                               onClick={() => {
-                                 setBulkSubjectData({ teacherId: '', subjectIds: [] });
-                                 setShowBulkSubjectModal(true);
+                               type="button"
+                               onClick={(e) => {
+                                 e.preventDefault();
+                                 e.stopPropagation();
+                                 console.log("KLIK GRUPNO DODAJ PREDMETE");
+                                 setSubjectRows([
+                                   {
+                                     subjectId: '',
+                                     subjectType: 'REDOVNI',
+                                     teacherIds: [],
+                                     isForeignLanguage: false,
+                                     addToAllStudents: true
+                                   }
+                                 ]);
+                                 setShowSubjectTableModal(true);
                                }}
                                className="text-[#005c8d] font-black uppercase text-[10px] flex items-center gap-1 hover:underline ml-4"
                              >
@@ -6812,6 +6878,89 @@ setAllSubjects(uniqueSub2);
         </div>
       </>
     )}
+      {showSubjectTableModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+           <div className="bg-white max-w-4xl w-full p-6 shadow-2xl relative max-h-[90vh] overflow-auto">
+             <button onClick={() => setShowSubjectTableModal(false)} className="absolute top-4 right-4"><X size={20}/></button>
+             <h2 className="text-sm font-black uppercase tracking-widest mb-6">Grupno dodavanje predmeta</h2>
+             
+             <table className="w-full text-xs mb-4">
+              <thead>
+                <tr className="text-left">
+                  <th>PREDMET</th>
+                  <th>VRSTA</th>
+                  <th>NASTAVNIK</th>
+                  <th>STRANI JEZIK</th>
+                  <th>DODAJ SVIM</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {subjectRows.map((row, i) => (
+                  <tr key={i} className="border-t">
+                    <td className="p-2">
+                      <select value={row.subjectId} onChange={e => {
+                        const newRows = [...subjectRows];
+                        newRows[i].subjectId = e.target.value;
+                        const subj = allSubjects.find(s => s.id === e.target.value);
+                        newRows[i].subjectType = getForcedSubjectType(subj?.name || '', 'REDOVNI');
+                        setSubjectRows(newRows);
+                      }} className="w-full border border-gray-300 p-1">
+                        <option value="">Odaberi</option>
+                        {allSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </td>
+                    <td className="p-2">
+                       <select value={row.subjectType} onChange={e => {
+                         const newRows = [...subjectRows];
+                         newRows[i].subjectType = e.target.value as any;
+                         setSubjectRows(newRows);
+                       }} className="w-full border border-gray-300 p-1">
+                         <option value="REDOVNI">Redovni</option>
+                         <option value="IZBORNI">Izborni</option>
+                         <option value="PRAKSA">Praksa</option>
+                       </select>
+                    </td>
+                    <td className="p-2">
+                      <div className="flex flex-wrap gap-1">
+                        {teachers.map(t => (
+                          <label key={t.id} className="flex items-center text-[10px]">
+                            <input type="checkbox" checked={row.teacherIds.includes(t.id)} onChange={e => {
+                               const newRows = [...subjectRows];
+                               if (e.target.checked) newRows[i].teacherIds.push(t.id);
+                               else newRows[i].teacherIds = newRows[i].teacherIds.filter(id => id !== t.id);
+                               setSubjectRows(newRows);
+                            }} className="mr-1"/>
+                            {formatPersonName(t)}
+                          </label>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="p-2 text-center">
+                      <input type="checkbox" checked={row.isForeignLanguage} onChange={e => {
+                        const newRows = [...subjectRows];
+                        newRows[i].isForeignLanguage = e.target.checked;
+                        setSubjectRows(newRows);
+                      }}/>
+                    </td>
+                    <td className="p-2 text-center">
+                      <input type="checkbox" checked={row.addToAllStudents} onChange={e => {
+                        const newRows = [...subjectRows];
+                        newRows[i].addToAllStudents = e.target.checked;
+                        setSubjectRows(newRows);
+                      }}/>
+                    </td>
+                    <td className="p-2"><button type="button" onClick={() => setSubjectRows(subjectRows.filter((_, idx) => idx !== i))}><X size={14} className="text-red-500"/></button></td>
+                  </tr>
+                ))}
+              </tbody>
+             </table>
+             <button type="button" onClick={() => setSubjectRows([...subjectRows, { subjectId: '', subjectType: 'REDOVNI', teacherIds: [], isForeignLanguage: false, addToAllStudents: true }])} className="text-xs text-[#005c8d] font-bold underline">+ Dodaj redak</button>
+
+             <button type="button" onClick={handleBulkAddSubjects} className="w-full mt-6 bg-[#005c8d] text-white py-2 font-black uppercase text-xs">Spremi</button>
+           </div>
+        </div>
+      )}
     </div>
   );
 }
