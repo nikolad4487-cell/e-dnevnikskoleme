@@ -3591,6 +3591,7 @@ setAllSubjects(uniqueSub2);
 // TODO: Add bulk subject modal
                            <div className="text-[10px] font-black text-gray-400 uppercase">Predmeti u razrednom odjelu</div>
                            {isAnyAdmin && (
+                             <>
                              <button 
                                onClick={handleFixEnrollmentDuplicates}
                                className="text-red-500 font-bold uppercase text-[8px] border border-red-200 bg-red-50 px-2 py-0.5 rounded hover:bg-red-100"
@@ -3606,6 +3607,7 @@ setAllSubjects(uniqueSub2);
                              >
                                <Plus size={14}/> Grupno dodaj
                              </button>
+                             </>
                            )}
                          </div>
                          {canManageClass && !editingAssignmentId && (
@@ -3758,7 +3760,6 @@ setAllSubjects(uniqueSub2);
                               >
                                 {editingAssignmentId ? 'Spremi promjene' : 'Dodaj predmet'}
                               </button>
-                              <>
                               <button 
                                 type="button"
                                 onClick={() => {
