@@ -1833,7 +1833,7 @@ CREATE TABLE IF NOT EXISTS public.final_thesis_committee_members (
       // If this is the very first user in the system (or a specific email), grant them MAIN_ADMIN
       const { count } = await supabaseAdmin.from('user_profiles').select('*', { count: 'exact', head: true });
       
-      const shouldBeAdmin = (count <= 1) || email === 'nikolad4487@gmail.com' || email.endsWith('@eskole.me');
+      const shouldBeAdmin = (count <= 1) || email === 'nikolad4487@gmail.com' || email.endsWith('@eskole.me') || email.endsWith('@skolehr.xyz');
       
       if (shouldBeAdmin) {
         const demoSchoolId = '00000000-0000-0000-0000-000000000001';
@@ -1875,7 +1875,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     const normFirst = normalizeForEmail(firstName).replace(/\s+/g, '');
     const normLast = normalizeForEmail(lastName).replace(/\s+/g, '-');
     const baseAddress = normLast ? `${normFirst}.${normLast}` : normFirst;
-    const baseEmail = `${baseAddress}@eskole.me`;
+    const baseEmail = `${baseAddress}@skolehr.xyz`;
 
     if (!existingEmails.has(baseEmail)) {
         return baseEmail;
@@ -1883,7 +1883,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
     let counter = 2;
     while (true) {
-        const email = `${baseAddress}${counter}@eskole.me`;
+        const email = `${baseAddress}${counter}@skolehr.xyz`;
         if (!existingEmails.has(email)) {
             return email;
         }
@@ -1934,6 +1934,12 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       for (const student of students) {
          let email = student.email;
+         if (email && typeof email === 'string') {
+            email = email.trim().toLowerCase();
+            if (!email.includes('@')) {
+               email = `${email}@skolehr.xyz`;
+            }
+         }
          if (!email) {
             email = generateUniqueEmail(student.name, student.surname, existingEmails);
          } else if (existingEmails.has(email.toLowerCase())) {
@@ -2061,6 +2067,12 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       for (const userData of users) {
          let email = userData.email;
+         if (email && typeof email === 'string') {
+            email = email.trim().toLowerCase();
+            if (!email.includes('@')) {
+               email = `${email}@skolehr.xyz`;
+            }
+         }
          if (!email) {
             email = generateUniqueEmail(userData.name, userData.surname, existingEmails);
          } else if (existingEmails.has(email.toLowerCase())) {
@@ -2153,6 +2165,12 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       const programs = Array.isArray(req.body.programs) ? req.body.programs : (Array.isArray(req.body.selectedPrograms) ? req.body.selectedPrograms : []);
 
       let { email, name, surname, address, oib, schoolId, classId, studentData } = req.body;
+      if (email && typeof email === 'string') {
+        email = email.trim().toLowerCase();
+        if (!email.includes('@')) {
+          email = `${email}@skolehr.xyz`;
+        }
+      }
       
       const { data: existingUserList, error: listError } = await supabaseAdmin.auth.admin.listUsers();
       if (listError) {

@@ -2444,14 +2444,27 @@ setStudents(uniqueMapped as any);
     const parsedStudents: {name: string, surname: string, email?: string}[] = [];
 
     for (const line of lines) {
-        const parts = line.split(',');
-        const fullName = parts[0].trim();
-        const email = parts[1]?.trim();
+        let nameField = '';
+        let emailField = '';
         
-        const name = fullName;
-        const surname = '';
+        if (line.includes('|')) {
+            const parts = line.split('|');
+            nameField = parts[0].trim();
+            emailField = parts[1]?.trim() || '';
+        } else if (line.includes(',')) {
+            const parts = line.split(',');
+            nameField = parts[0].trim();
+            emailField = parts[1]?.trim() || '';
+        } else {
+            nameField = line.trim();
+        }
 
-        parsedStudents.push({ name, surname, email: email || undefined });
+        // Split nameField into first name and surname
+        const nameParts = nameField.split(/\s+/);
+        const name = nameParts[0] || '';
+        const surname = nameParts.slice(1).join(' ') || '';
+
+        parsedStudents.push({ name, surname, email: emailField || undefined });
     }
 
     setLoading(true);
@@ -4539,9 +4552,9 @@ setAllSubjects(uniqueSub2);
                              onChange={e => setBulkStudentText(e.target.value)}
                              rows={10}
                              className="w-full border border-gray-300 p-3 outline-none focus:border-[#005c8d] font-medium font-mono text-sm"
-                             placeholder={`Marko Marković\nAna Anić, ana.anic@email.com\nIvan Ivić`}
+                             placeholder={`Marko Marković\nAna Anić | ana.anic@skolehr.xyz\nIvan Ivić`}
                           ></textarea>
-                          <p className="text-gray-400 text-xs italic mt-1">Lozinke se automatski postavljaju na "yupu8Ev4". Unesite učenike u formatu: Ime Prezime, opcionalni@email.com</p>
+                          <p className="text-gray-400 text-xs italic mt-1">Lozinke se automatski postavljaju na "yupu8Ev4". Unesite učenike u formatu: Ime Prezime | opcionalni@skolehr.xyz</p>
                       </div>
                       <div className="flex justify-end">
                           <button 

@@ -93,7 +93,7 @@ export default function LoginPage() {
       let normalizedEmail = identifier.trim().toLowerCase();
       
       if (!normalizedEmail.includes('@')) {
-        normalizedEmail = `${normalizedEmail}@eskole.me`;
+        normalizedEmail = `${normalizedEmail}@skolehr.xyz`;
       }
 
       console.log("LOGIN INPUT", identifier);
@@ -297,7 +297,7 @@ export default function LoginPage() {
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
                   className="block w-full pl-10 pr-3 py-3 border border-gray-300 text-sm outline-none focus:border-[#005c8d] focus:bg-blue-50/20 shadow-inner"
-                  placeholder="nikola.duric ili nikola.duric@eskole.me"
+                  placeholder="nikola.duric ili nikola.duric@skolehr.xyz"
                 />
               </div>
             </div>
