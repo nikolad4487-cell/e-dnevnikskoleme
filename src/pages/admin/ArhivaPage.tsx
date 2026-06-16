@@ -158,7 +158,7 @@ export default function ArhivaPage() {
         .from('student_class_enrollments')
         .select(`
           status,
-          student:student_id ( id, name, surname, oib )
+          student:student_id ( id, name, oib )
         `)
         .eq('class_id', selectedClassId);
 
@@ -168,10 +168,16 @@ export default function ArhivaPage() {
         .map((env: any) => {
           const profile = env.student;
           const cls = classes.find(c => c.id === selectedClassId);
+          
+          const fullName = profile?.name || '';
+          const nameParts = fullName.trim().split(/\s+/);
+          const firstName = nameParts[0] || '';
+          const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+          
           return {
             id: profile?.id || '',
-            name: profile?.name || '',
-            surname: profile?.surname || '',
+            name: firstName,
+            surname: lastName,
             oib: profile?.oib || 'Nije zaveden',
             class_name: cls?.name || '',
             status: env.status || 'ACTIVE'

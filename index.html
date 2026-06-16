@@ -13,21 +13,10 @@
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
     <script type="module">
-      // Force unregister all service workers immediately on load to prevent background reloads
       if ('serviceWorker' in navigator) {
         navigator.serviceWorker.getRegistrations().then((registrations) => {
           registrations.forEach((registration) => registration.unregister());
         });
-
-        // Register only in production mode
-        const isProduction = !window.location.hostname.includes('localhost') && 
-                             !window.location.hostname.includes('127.0.0.1') && 
-                             !window.location.hostname.includes('europe-west2.run.app');
-        if (isProduction) {
-          window.addEventListener('load', () => {
-             navigator.serviceWorker.register('/sw.js');
-          });
-        }
       }
     </script>
   </body>

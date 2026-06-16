@@ -13,34 +13,41 @@ export function mapList<T>(list: any[] | null, mapper: (item: any) => T): T[] {
 }
 
 export const mappers = {
-  user: (raw: any) => ({
-    id: raw.id,
-    authUserId: raw.auth_user_id,
-    email: raw.email,
-    name: raw.name,
-    surname: raw.surname,
-    address: raw.address,
-    oib: raw.oib,
-    status: raw.status,
-    isFirstLogin: raw.is_first_login,
-    requiresAuthenticatorSetup: raw.requires_authenticator_setup,
-    authenticatorSecret: raw.authenticator_secret,
-    requiresPasswordChange: raw.requires_password_change,
-    dob: raw.dob,
-    pob: raw.pob,
-    mobile: raw.mobile,
-    programId: raw.program_id,
-    classId: raw.class_id,
-    class_id: raw.class_id,
-    studentRegistryNumber: raw.student_registry_number,
-    fatherName: raw.father_name,
-    motherName: raw.mother_name,
-    birthplace: raw.birthplace,
-    birthCountry: raw.birth_country,
-    citizenship: raw.citizenship,
-    gender: raw.gender,
-    programAdjustment: raw.program_adjustment,
-  }),
+  user: (raw: any) => {
+    if (!raw) return null as any;
+    const fullName = raw.name || '';
+    const nameParts = fullName.trim().split(/\s+/);
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+    return {
+      id: raw.id,
+      authUserId: raw.auth_user_id,
+      email: raw.email,
+      name: firstName,
+      surname: lastName,
+      address: raw.address,
+      oib: raw.oib,
+      status: raw.status,
+      isFirstLogin: raw.is_first_login,
+      requiresAuthenticatorSetup: raw.requires_authenticator_setup,
+      authenticatorSecret: raw.authenticator_secret,
+      requiresPasswordChange: raw.requires_password_change,
+      dob: raw.dob,
+      pob: raw.pob,
+      mobile: raw.mobile,
+      programId: raw.program_id,
+      classId: raw.class_id,
+      class_id: raw.class_id,
+      studentRegistryNumber: raw.student_registry_number,
+      fatherName: raw.father_name,
+      motherName: raw.mother_name,
+      birthplace: raw.birthplace,
+      birthCountry: raw.birth_country,
+      citizenship: raw.citizenship,
+      gender: raw.gender,
+      programAdjustment: raw.program_adjustment,
+    };
+  },
 
   userSchoolRole: (raw: any) => ({
     id: raw.id,
