@@ -4887,78 +4887,7 @@ setAllSubjects(uniqueSub2);
                       </div>
                     )}
 
-      {showBulkSubjectModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white p-6 max-w-lg w-full shadow-2xl">
-            <h3 className="text-[12px] font-black text-[#005c8d] uppercase tracking-tighter mb-4">Grupno dodavanje predmeta nastavniku</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Nastavnik</label>
-                <select 
-                  className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
-                  value={bulkSubjectData.teacherId}
-                  onChange={e => setBulkSubjectData({...bulkSubjectData, teacherId: e.target.value})}
-                >
-                  <option value="">-- Odaberi nastavnika --</option>
-                  {teachers.sort((a,b) => getSurname(a.name || '').localeCompare(getSurname(b.name || ''), 'hr')).map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </div>
-              <div className="h-64 overflow-y-auto border border-gray-300 p-2 text-xs">
-                {allSubjects.sort((a,b) => (a.name || '').localeCompare(b.name || '')).map(s => (
-                  <label key={s.id} className="flex items-center gap-2 py-1 cursor-pointer hover:bg-blue-50">
-                    <input 
-                      type="checkbox" 
-                      checked={bulkSubjectData.subjectIds.includes(s.id)}
-                      onChange={e => {
-                        const newIds = e.target.checked 
-                          ? [...bulkSubjectData.subjectIds, s.id]
-                          : bulkSubjectData.subjectIds.filter(id => id !== s.id);
-                        setBulkSubjectData({...bulkSubjectData, subjectIds: newIds});
-                      }}
-                    />
-                    {s.name}
-                  </label>
-                ))}
-              </div>
-              <div className="flex justify-end gap-2 mt-4">
-                <button onClick={() => setShowBulkSubjectModal(false)} className="px-4 py-2 text-[10px] font-bold text-gray-600 hover:text-black">Odustani</button>
-                <button 
-                  onClick={async () => {
-                    if (!bulkSubjectData.teacherId || bulkSubjectData.subjectIds.length === 0) {
-                      toast.error("Molimo odaberite nastavnika i barem jedan predmet");
-                      return;
-                    }
-                    setLoading(true);
-                    try {
-                      for (const sid of bulkSubjectData.subjectIds) {
-                        const payload = {
-                          subject_id: sid,
-                          class_id: selectedClassId,
-                          teacher_id: bulkSubjectData.teacherId,
-                          school_id: selectedSchoolId,
-                          group_name: null
-                        };
-                        const { error } = await supabase.from('class_subject_teachers').upsert([payload], { onConflict: 'class_id,subject_id,teacher_id' }).select();
-                        if (error) throw error;
-                      }
-                      toast.success("Predmeti uspješno dodani");
-                      setShowBulkSubjectModal(false);
-                      fetchData();
-                    } catch (err: any) {
-                      toast.error(err.message || 'Greška pri dodavanju');
-                    } finally {
-                      setLoading(false);
-                    }
-                  }}
-                  className="bg-[#005c8d] text-white px-4 py-2 border font-black text-[10px] uppercase hover:bg-[#004a70]"
-                >
-                  Spremi
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
                   </div>
                 ))}
               </div>

@@ -1827,6 +1827,7 @@ setStudents(uniqueStudents);
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-4 bg-[#f0f2f5]">
+        <div className="p-2 bg-yellow-100 text-[10px]">DEBUG: ClassId={effectiveClassId}, View={view}, SelectedClass={selectedClass?.name}</div>
         
         {/* WEEKS LIST */}
         {view === 'WEEKS' && (() => {
