@@ -113,7 +113,8 @@ export default function ArhivaPage() {
         grade_level: c.grade_level,
         section: c.section,
         school_year: c.school_year,
-        homeroom_teacher: c.homeroom
+        homeroom_teacher: c.homeroom,
+        student_count: 0
       })).sort((a, b) => (a.name || '').localeCompare(b.name || '', 'hr'));
 
       // Get student count per class for this year

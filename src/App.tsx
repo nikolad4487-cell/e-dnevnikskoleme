@@ -220,6 +220,7 @@ export default function App() {
                           <Route path="skolske-godine" element={<SchoolYearsPage />} />
                           <Route path="kalendar" element={<SkolskiKalendarPage readOnly={false} />} />
                           <Route path="razredi" element={<ClassManagementPage />} />
+                          <Route path="upisi-predmeta" element={<StudentSubjectEnrollmentPage />} />
                           <Route path="zamjene" element={<ZamjenePage />} />
                           <Route path="korisnici" element={<UserManagementPage />} />
                           <Route path="ucenici" element={<StudentsPage />} />

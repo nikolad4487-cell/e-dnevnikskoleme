@@ -194,3 +194,33 @@ export const getGroupLabel = (group: string) => {
 export const getAbsenceStatusLabel = (status: string) => {
   return getStatusLabel(status);
 };
+
+export function normalizeText(value: string | null | undefined): string {
+  return String(value || "")
+    .toLowerCase()
+    .trim()
+    .replace(/č/g, "c")
+    .replace(/ć/g, "c")
+    .replace(/š/g, "s")
+    .replace(/ž/g, "z")
+    .replace(/đ/g, "d");
+}
+
+export function getForcedSubjectType(subjectName: string, selectedType: string): 'REDOVNI' | 'IZBORNI' | 'PRAKSA' {
+  const name = normalizeText(subjectName);
+  
+  if (name === "prakticna nastava") {
+    return "PRAKSA";
+  }
+  
+  if (name === "etika" || name === "vjeronauk") {
+    return "IZBORNI";
+  }
+  
+  // Normalize the selectedType to standard types, defaulting to REDOVNI
+  const val = String(selectedType || "").toUpperCase().trim();
+  if (val === "IZBORNI" || val === "ELECTIVE") return "IZBORNI";
+  if (val === "PRAKSA" || val === "PRACTICE") return "PRAKSA";
+  return "REDOVNI";
+}
+

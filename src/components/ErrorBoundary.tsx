@@ -27,6 +27,23 @@ export class ErrorBoundary extends React.Component<Props, State> {
     console.error("CLASS DASHBOARD ERROR", error);
     console.error("ERROR INFO", errorInfo);
     
+    // Auto-reload once on dynamic import errors
+    const isChunkError = error.message && (
+      /Failed to fetch dynamically imported module/i.test(error.message) ||
+      /Loading chunk/i.test(error.message) ||
+      /preload/i.test(error.message) ||
+      /dynamically/i.test(error.message)
+    );
+    if (isChunkError) {
+      const lastReload = sessionStorage.getItem('last_chunk_reload');
+      const now = Date.now();
+      if (!lastReload || now - parseInt(lastReload) > 10000) {
+        sessionStorage.setItem('last_chunk_reload', String(now));
+        window.location.reload();
+        return;
+      }
+    }
+
     // Log error to Supabase
     this.logErrorToDatabase(error, errorInfo);
   }
@@ -54,7 +71,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   private handleReset = () => {
-    this.setState({ hasError: false, errorMessage: "" });
+    // Perform a hard-reload of the entire page to fetch fresh scripts and metadata
+    window.location.reload();
   };
 
   public render() {

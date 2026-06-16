@@ -18,12 +18,15 @@ import {
   Plus
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 export default function StudentSubjectEnrollmentPage() {
   const { selectedSchoolId } = useSelection();
   const { isMainAdmin, userSchoolRoles } = useAuth();
   const navigate = useNavigate();
+  const params = useParams<{ classId?: string }>();
+  const classIdFromUrl = params.classId;
+
   const [classes, setClasses] = useState<Class[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [subjects, setSubjects] = useState<Subject[]>([]);
@@ -39,12 +42,18 @@ export default function StudentSubjectEnrollmentPage() {
   const isAnyAdmin = isMainAdmin || userSchoolRoles.some(r => r.schoolId === selectedSchoolId && (r.role === Role.SCHOOL_ADMIN || r.role === Role.ADMIN));
 
   useEffect(() => {
-    if (!selectedSchoolId) {
+    if (classIdFromUrl) {
+      setSelectedClassId(classIdFromUrl);
+    }
+  }, [classIdFromUrl]);
+
+  useEffect(() => {
+    if (!selectedSchoolId && !classIdFromUrl) {
       navigate('/admin/schools');
       return;
     }
     fetchClasses();
-  }, [selectedSchoolId]);
+  }, [selectedSchoolId, classIdFromUrl]);
 
   useEffect(() => {
     if (selectedClassId) {
@@ -236,7 +245,7 @@ export default function StudentSubjectEnrollmentPage() {
       <div className="flex justify-between items-end mb-8 border-b-2 border-slate-100 pb-6">
         <div>
           <button 
-            onClick={() => navigate('/admin-skole')}
+            onClick={() => navigate(classIdFromUrl ? `/class/${classIdFromUrl}/admin` : '/admin-skole')}
             className="flex items-center gap-1 text-slate-400 hover:text-slate-600 transition-colors uppercase font-black text-[9px] tracking-widest mb-4"
           >
             <ChevronLeft size={12} strokeWidth={3} />
@@ -257,26 +266,28 @@ export default function StudentSubjectEnrollmentPage() {
               </button>
             )}
           </div>
-          <p className="text-slate-500 font-medium text-sm">Masovna dodjela i oslobađanje učenika od predmeta</p>
+          <p className="text-slate-500 font-medium text-sm">Pojedinačna i masovna dodjela i oslobađanje učenika od predmeta</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="md:col-span-1">
-          <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Odaberi razredni odjel</label>
-          <select 
-            value={selectedClassId}
-            onChange={e => setSelectedClassId(e.target.value)}
-            className="w-full bg-white border-2 border-slate-200 rounded-xl p-4 font-bold text-slate-900 outline-none focus:border-[#005c8d] transition-all shadow-sm"
-          >
-            <option value="">Odaberi razred...</option>
-            {classes.map(c => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
-        </div>
+        {!classIdFromUrl && (
+          <div className="md:col-span-1">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Odaberi razredni odjel</label>
+            <select 
+              value={selectedClassId}
+              onChange={e => setSelectedClassId(e.target.value)}
+              className="w-full bg-white border-2 border-slate-200 rounded-xl p-4 font-bold text-slate-900 outline-none focus:border-[#005c8d] transition-all shadow-sm"
+            >
+              <option value="">Odaberi razred...</option>
+              {classes.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
-        <div className="md:col-span-3">
+        <div className={classIdFromUrl ? "md:col-span-4" : "md:col-span-3"}>
           <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Pretraži učenike</label>
           <div className="bg-white border-2 border-slate-200 rounded-xl p-4 flex items-center gap-4 shadow-sm">
             <Search size={20} className="text-slate-300" />

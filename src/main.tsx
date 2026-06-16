@@ -18,6 +18,12 @@ window.addEventListener("focus", () => {
 });
 
 console.log("APP START");
+
+window.addEventListener('vite:preloadError', (event) => {
+  console.warn('Vite preload error detected, reloading page...', event);
+  window.location.reload();
+});
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>

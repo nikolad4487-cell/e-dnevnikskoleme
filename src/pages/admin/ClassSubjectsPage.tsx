@@ -16,7 +16,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
-import { formatSubjectDisplayName, sanitizeSubjectType } from '../../lib/utils';
+import { formatSubjectDisplayName, sanitizeSubjectType, getForcedSubjectType } from '../../lib/utils';
 
 export default function ClassSubjectsPage() {
   const { selectedSchoolId, selectedClassId } = useSelection();
@@ -196,12 +196,15 @@ export default function ClassSubjectsPage() {
         newTeacherId: selectedTeacherId
       });
 
+      const subjectName = allSubjects.find(s => s.id === selectedSubjectId)?.name || '';
+      const finalSubjectType = getForcedSubjectType(subjectName, existingCS?.subject_type || 'REDOVNI');
+
       // 1. Ensure class_subjects entry exists, preserve existing subject_type if present
       const { error: csError } = await supabase.from('class_subjects').upsert([{
         class_id: classId,
         subject_id: selectedSubjectId,
         school_id: selectedSchoolId,
-        subject_type: existingCS?.subject_type || 'REDOVNI',
+        subject_type: finalSubjectType,
         is_foreign_language: false,
         subject_period: 'FULL_YEAR'
       }], { onConflict: 'class_id,subject_id' });
@@ -261,6 +264,9 @@ export default function ClassSubjectsPage() {
     try {
       setEditLoading(true);
 
+      const sName = editModal.subjectName || '';
+      const finalSubjectType = getForcedSubjectType(sName, sanitizeSubjectType(subjectType));
+
       // A. Update class_subjects metadata
       const { error: csError } = await supabase
         .from('class_subjects')
@@ -268,7 +274,7 @@ export default function ClassSubjectsPage() {
           class_id: classId,
           subject_id: subjectId,
           school_id: selectedSchoolId,
-          subject_type: sanitizeSubjectType(subjectType),
+          subject_type: finalSubjectType,
           subject_period: subjectPeriod
         }], { onConflict: 'class_id,subject_id' });
 

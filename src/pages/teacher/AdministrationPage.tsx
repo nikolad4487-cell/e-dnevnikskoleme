@@ -7,7 +7,7 @@ import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, Cu
 import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info, FileText } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
-import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortStudentsBySurname } from '../../lib/utils';
+import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortStudentsBySurname, getForcedSubjectType } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import CertificateManagementPage from './certificates/CertificateManagementPage';
 import InformativkaAdminPage from '../admin/InformativkaAdminPage';
@@ -2557,11 +2557,14 @@ setAllSubjects(uniqueSub2);
         .eq('subject_id', assignmentForm.subjectId)
         .maybeSingle();
 
+      const subjectName = allSubjects.find(s => s.id === assignmentForm.subjectId)?.name || '';
+      const finalSubjectType = getForcedSubjectType(subjectName, existingCS?.subject_type || assignmentForm.subjectType);
+
       const classSubjectPayload = {
         class_id: assignmentForm.classId,
         subject_id: assignmentForm.subjectId,
         school_id: selectedSchoolId,
-        subject_type: existingCS?.subject_type || sanitizeSubjectType(assignmentForm.subjectType),
+        subject_type: finalSubjectType,
         is_foreign_language: existingCS ? (existingCS.is_foreign_language ?? false) : (typeof assignmentForm.isForeignLanguage === 'boolean' ? assignmentForm.isForeignLanguage : false),
         subject_period: existingCS?.subject_period || assignmentForm.subjectPeriod || 'FULL_YEAR',
         planned_hours_semester_1: existingCS ? (existingCS.planned_hours_semester_1) : (assignmentForm.plannedHoursSemester1 ? parseInt(assignmentForm.plannedHoursSemester1) : null),

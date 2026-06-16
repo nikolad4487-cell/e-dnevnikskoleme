@@ -21,6 +21,7 @@ const PedagoskaDokumentacijaPage = lazy(() => import('./PedagoskaDokumentacijaPa
 const PretrazivanjePage = lazy(() => import('./PretrazivanjePage'));
 const ClassSubjectsPage = lazy(() => import('../admin/ClassSubjectsPage'));
 const ClassStudentsPage = lazy(() => import('../admin/ClassStudentsPage'));
+const StudentSubjectEnrollmentPage = lazy(() => import('../admin/StudentSubjectEnrollmentPage'));
 const RoditeljskiSastanciPage = lazy(() => import('./RoditeljskiSastanciPage'));
 const IndividualniRazgovoriPage = lazy(() => import('./IndividualniRazgovoriPage'));
 const DolasciRoditeljaPage = lazy(() => import('./DolasciRoditeljaPage'));
@@ -213,7 +214,7 @@ export default function ClassDashboardPage() {
   if (currentTab === 'minutes' || currentTab === 'roditeljski-sastanci' || currentTab === 'individualni-razgovori' || currentTab === 'dolasci-roditelja') currentTab = 'zapisnici';
   if (currentTab === 'pedagogical') currentTab = 'pedagoska-dokumentacija';
   if (currentTab === 'schedule') currentTab = 'raspored';
-  if (currentTab === 'administration' || currentTab === 'predmeti' || currentTab === 'ucenici') currentTab = 'admin';
+  if (currentTab === 'administration' || currentTab === 'predmeti' || currentTab === 'ucenici' || currentTab === 'upisi-predmeta') currentTab = 'admin';
 
   const isActive = (tabPath: string) => currentTab === tabPath || (tabPath === 'dnevnik-rada' && currentTab === 'pregled-rada'); // Simplified for now
 
@@ -241,7 +242,8 @@ export default function ClassDashboardPage() {
     'admin': [
       { label: 'Administracija razreda', path: 'admin' },
       { label: 'Predmeti u razredu', path: 'predmeti' },
-      { label: 'Učenici u razredu', path: 'ucenici' }
+      { label: 'Učenici u razredu', path: 'ucenici' },
+      { label: 'Predmeti učenika', path: 'upisi-predmeta' }
     ]
   };
 
@@ -359,6 +361,7 @@ export default function ClassDashboardPage() {
               <Route path="administration" element={<AdministrationPage />} />
               <Route path="predmeti" element={<ClassSubjectsPage />} />
               <Route path="ucenici" element={<ClassStudentsPage />} />
+              <Route path="upisi-predmeta" element={<StudentSubjectEnrollmentPage />} />
               
               <Route path="student/:studentId" element={<StudentDashboard />} />
               <Route path="students/:studentId" element={<StudentDashboard />} />
