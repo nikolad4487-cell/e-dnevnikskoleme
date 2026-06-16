@@ -27,10 +27,13 @@ export default function StudentSubjectEnrollmentPage() {
   const [classes, setClasses] = useState<Class[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [enrollments, setEnrollments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [individualStudentId, setIndividualStudentId] = useState('');
+  const [individualSubjectId, setIndividualSubjectId] = useState('');
   
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkSelectedStudents, setBulkSelectedStudents] = useState<string[]>([]);
@@ -78,10 +81,15 @@ export default function StudentSubjectEnrollmentPage() {
         .from('class_subject_teachers')
         .select('subject:subjects(*)')
         .eq('class_id', selectedClassId);
+
+      const { data: schoolSubjects, error: schoolSubjectsError } = await supabase
+        .from('subjects')
+        .select('*')
+        .eq('school_id', selectedSchoolId)
+        .order('name');
       
-      const mappedSubjects = (classSubjects || []).map(cs => cs.subject).filter(Boolean) as any[] as Subject[];
-      const uniqueSubjects = Array.from(new Map(mappedSubjects.map((s: any) => [s.id, s])).values());
-      setSubjects(uniqueSubjects);
+      if (schoolSubjectsError) throw schoolSubjectsError;
+      setAllSubjects(mapList(schoolSubjects || [], mappers.subject));
 
       const { data: enrolls } = await supabase
         .from('student_class_enrollments')
@@ -96,10 +104,20 @@ export default function StudentSubjectEnrollmentPage() {
 
       const { data: subEnrolls } = await supabase
         .from('student_subject_enrollments')
-        .select('*')
+        .select('*, subject:subjects(*)')
         .eq('class_id', selectedClassId);
       
       setEnrollments(subEnrolls || []);
+
+      const mappedSubjects = (classSubjects || [])
+        .map((cs: any) => Array.isArray(cs.subject) ? cs.subject[0] : cs.subject)
+        .filter(Boolean) as any[] as Subject[];
+      const enrolledSubjects = (subEnrolls || [])
+        .map((enrollment: any) => Array.isArray(enrollment.subject) ? enrollment.subject[0] : enrollment.subject)
+        .filter(Boolean) as any[] as Subject[];
+      const uniqueSubjects = Array.from(new Map([...mappedSubjects, ...enrolledSubjects].map((s: any) => [s.id, s])).values())
+        .sort((a: any, b: any) => (a.name || '').localeCompare(b.name || '', 'hr'));
+      setSubjects(uniqueSubjects);
 
     } catch (err: any) {
       toast.error('Greška pri učitavanju');
@@ -109,14 +127,60 @@ export default function StudentSubjectEnrollmentPage() {
     }
   };
 
+  const getActiveClassSchoolYear = () => {
+    const activeClass = classes.find(c => c.id === selectedClassId);
+    const schoolYearId = activeClass?.school_year_id || null;
+    const schoolYear = (activeClass as any)?.schoolYear || (activeClass as any)?.school_year || schoolYearId || 'ACTIVE';
+    return { schoolYearId, schoolYear };
+  };
+
+  const addSubjectToStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAnyAdmin) {
+      toast.error('Nemate dozvolu za mijenjanje upisa.');
+      return;
+    }
+
+    if (!selectedClassId || !individualStudentId || !individualSubjectId) {
+      toast.error('Odaberite učenika i predmet.');
+      return;
+    }
+
+    try {
+      const { schoolYearId, schoolYear } = getActiveClassSchoolYear();
+      const payload = {
+        student_id: individualStudentId,
+        subject_id: individualSubjectId,
+        class_id: selectedClassId,
+        school_year_id: schoolYearId,
+        school_year: schoolYear,
+        status: 'ACTIVE'
+      };
+
+      console.log('INDIVIDUAL SUBJECT ENROLLMENT PAYLOAD', payload);
+
+      const { error } = await supabase
+        .from('student_subject_enrollments')
+        .upsert(payload, { onConflict: 'student_id,subject_id,class_id,school_year' });
+
+      if (error) throw error;
+
+      toast.success('Predmet dodan učeniku');
+      setIndividualSubjectId('');
+      fetchClassData();
+    } catch (err: any) {
+      console.error('INDIVIDUAL SUBJECT ENROLLMENT FAILED', err);
+      toast.error('Greška pri dodavanju predmeta: ' + (err.message || 'Nepoznata greška'));
+    }
+  };
+
   const toggleEnrollment = async (studentId: string, subjectId: string, currentStatus?: string) => {
     if (!isAnyAdmin) {
       toast.error('Nemate dozvolu za mijenjanje upisa.');
       return;
     }
     
-    const activeClass = classes.find(c => c.id === selectedClassId);
-    const schoolYearId = activeClass?.school_year_id || '';
+    const { schoolYearId, schoolYear } = getActiveClassSchoolYear();
 
     if (currentStatus === 'ACTIVE' || currentStatus === 'EXEMPT') {
       try {
@@ -124,12 +188,12 @@ export default function StudentSubjectEnrollmentPage() {
           .delete()
           .eq('student_id', studentId)
           .eq('subject_id', subjectId)
-          .eq('class_id', selectedClassId)
-          .eq('school_year', schoolYearId);
+          .eq('class_id', selectedClassId);
 
         if (error) throw error;
         toast.success('Predmet uklonjen učeniku');
         setEnrollments(prev => prev.filter(e => !(e.student_id === studentId && e.subject_id === subjectId)));
+        fetchClassData();
       } catch (err: any) {
         toast.error('Greška pri uklanjanju upisa: ' + (err.message || 'Nepoznata greška'));
       }
@@ -142,7 +206,8 @@ export default function StudentSubjectEnrollmentPage() {
             subject_id: subjectId,
             class_id: selectedClassId,
             status: 'ACTIVE',
-            school_year: schoolYearId
+            school_year_id: schoolYearId,
+            school_year: schoolYear
           }, { onConflict: 'student_id,subject_id,class_id,school_year' });
         
         if (error) throw error;
@@ -150,7 +215,7 @@ export default function StudentSubjectEnrollmentPage() {
         toast.success('Sluša predmet');
         setEnrollments(prev => {
           const other = prev.filter(e => !(e.student_id === studentId && e.subject_id === subjectId));
-          return [...other, { student_id: studentId, subject_id: subjectId, status: 'ACTIVE' }];
+          return [...other, { student_id: studentId, subject_id: subjectId, class_id: selectedClassId, school_year_id: schoolYearId, school_year: schoolYear, status: 'ACTIVE' }];
         });
       } catch (err: any) {
         toast.error('Greška pri izmjeni upisa: ' + (err.message || 'Nepoznata greška'));
@@ -166,15 +231,15 @@ export default function StudentSubjectEnrollmentPage() {
     
     if (!window.confirm('Dodijeli ovaj predmet svim učenicima u razredu?')) return;
     try {
-      const activeClass = classes.find(c => c.id === selectedClassId);
-      const schoolYearId = activeClass?.school_year_id || '';
+      const { schoolYearId, schoolYear } = getActiveClassSchoolYear();
 
       const payload = students.map(s => ({
         student_id: s.id,
         subject_id: subjectId,
         class_id: selectedClassId,
         status: 'ACTIVE',
-        school_year: schoolYearId
+        school_year_id: schoolYearId,
+        school_year: schoolYear
       }));
       
       const { error } = await supabase.from('student_subject_enrollments').upsert(payload, { onConflict: 'student_id,subject_id,class_id,school_year' });
@@ -195,8 +260,7 @@ export default function StudentSubjectEnrollmentPage() {
 
     try {
       setLoading(true);
-      const activeClass = classes.find(c => c.id === selectedClassId);
-      const schoolYearId = activeClass?.school_year_id || '';
+      const { schoolYearId, schoolYear } = getActiveClassSchoolYear();
 
       const payload: any[] = [];
       bulkSelectedStudents.forEach(stuId => {
@@ -206,7 +270,8 @@ export default function StudentSubjectEnrollmentPage() {
             subject_id: subId,
             class_id: selectedClassId,
             status: 'ACTIVE',
-            school_year: schoolYearId
+            school_year_id: schoolYearId,
+            school_year: schoolYear
           });
         });
       });
@@ -230,6 +295,7 @@ export default function StudentSubjectEnrollmentPage() {
     matchesSearch(s.name, searchTerm)
   );
   const filteredStudents = sortStudentsBySurname(rawFiltered);
+  const sortedAllSubjects = [...allSubjects].sort((a, b) => (a.name || '').localeCompare(b.name || '', 'hr'));
 
   return (
     <div className="p-6 font-sans w-full">
@@ -290,6 +356,60 @@ export default function StudentSubjectEnrollmentPage() {
           </div>
         </div>
       </div>
+
+      {selectedClassId && isAnyAdmin && (
+        <form onSubmit={addSubjectToStudent} className="bg-white border border-slate-200 rounded-3xl shadow-sm p-5 mb-8">
+          <div className="flex flex-col gap-1 mb-4">
+            <div className="flex items-center gap-2">
+              <BookOpen size={18} className="text-[#005c8d]" />
+              <h2 className="text-sm font-black uppercase tracking-widest text-slate-800">Pojedinačno dodavanje predmeta</h2>
+            </div>
+            <p className="text-xs font-medium text-slate-500">
+              Koristi se kada predmet pohađa samo jedan učenik ili manja skupina učenika, bez dodavanja predmeta svim učenicima razreda.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Učenik</label>
+              <select
+                value={individualStudentId}
+                onChange={e => setIndividualStudentId(e.target.value)}
+                className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-3 font-bold text-slate-900 outline-none focus:border-[#005c8d] transition-all"
+              >
+                <option value="">Odaberi učenika...</option>
+                {sortStudentsBySurname(students).map(student => (
+                  <option key={student.id} value={student.id}>{student.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Predmet</label>
+              <select
+                value={individualSubjectId}
+                onChange={e => setIndividualSubjectId(e.target.value)}
+                className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-3 font-bold text-slate-900 outline-none focus:border-[#005c8d] transition-all"
+              >
+                <option value="">Odaberi predmet...</option>
+                {sortedAllSubjects.map(subject => (
+                  <option key={subject.id} value={subject.id}>
+                    {subject.name}{subject.code ? ` (${subject.code})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              disabled={!individualStudentId || !individualSubjectId || loading}
+              className="bg-[#005c8d] text-white px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-[#004a70] disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Plus size={16} /> Dodaj učeniku
+            </button>
+          </div>
+        </form>
+      )}
 
       {!selectedClassId ? (
         <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-3xl p-20 text-center">
