@@ -3588,6 +3588,7 @@ setAllSubjects(uniqueSub2);
                    <div className="bg-white border border-gray-300">
                       <div className="p-4 border-b border-gray-300 flex items-center justify-between">
                          <div className="flex items-center gap-4">
+// TODO: Add bulk subject modal
                            <div className="text-[10px] font-black text-gray-400 uppercase">Predmeti u razrednom odjelu</div>
                            {isAnyAdmin && (
                              <button 
@@ -3757,6 +3758,7 @@ setAllSubjects(uniqueSub2);
                               >
                                 {editingAssignmentId ? 'Spremi promjene' : 'Dodaj predmet'}
                               </button>
+                              <>
                               <button 
                                 type="button"
                                 onClick={() => {
