@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Grade, Subject, User, ClassSubjectTeacher, specialExamTypes } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
-import { formatPersonName, formatSubjectDisplayName } from '../../lib/utils';
+import { formatPersonName, formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
 import { Calendar, FileText, User as UserIcon, BookOpen, Clock, AlertCircle } from 'lucide-react';
 
 interface ExamWithDetails {
@@ -209,7 +209,7 @@ export default function StudentIspitiPage() {
   };
 
   const ExamCard = ({ exam }: { exam: ExamWithDetails }) => {
-    const sName = exam.subject ? formatSubjectDisplayName(exam.subject.name, 'redovni') : 'Nepoznat predmet';
+    const sName = exam.subject ? formatSubjectName(exam.subject) : 'Nepoznat predmet';
     const teacherNames = exam.teachers.length > 0
       ? exam.teachers.map(t => formatPersonName(t)).join(', ')
       : 'Nije dodijeljen nastavnik';

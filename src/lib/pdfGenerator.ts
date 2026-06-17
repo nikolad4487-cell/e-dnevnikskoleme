@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { formatSubjectName } from './utils';
 
 // Helper to load Unicode support
 export const registerUnicodeFont = async (doc: jsPDF) => {
@@ -526,7 +527,7 @@ export const generateExamCertificatePDF = async (student: any, exams: any[], glo
         };
 
         exams.forEach(e => {
-            const subjName = e.subjects?.name || e.subject_name || 'Nepoznat predmet';
+            const subjName = formatSubjectName(e.subjects || { name: e.subject_name || 'Nepoznat predmet' });
             const gradeText = formatGrade(e.grade_value || e.grade);
             doc.text(subjName, 25, y);
             const startX = 25 + doc.getTextWidth(subjName) + 3;

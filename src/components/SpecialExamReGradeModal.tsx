@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { supabase } from '../lib/supabase'; // Assuming this is where it is, need to check
+import { formatSubjectName } from '../lib/utils';
 
 export const SpecialExamReGradeModal = ({ isOpen, onClose, student, subject, exams, finalGrade, onRefresh }: any) => {
     const [selectedGrade, setSelectedGrade] = useState<number>(0);
@@ -92,7 +93,7 @@ export const SpecialExamReGradeModal = ({ isOpen, onClose, student, subject, exa
                     <button onClick={onClose}><X size={16}/></button>
                 </div>
                 <div className="p-6 space-y-4 text-left">
-                    <div className="font-bold text-sm text-[#005c8d] border-b pb-2 mb-2">{student.name} - {subject.name}</div>
+                    <div className="font-bold text-sm text-[#005c8d] border-b pb-2 mb-2">{student.name} - {formatSubjectName(subject)}</div>
                     <table className="w-full text-xs text-left">
                         <thead><tr className="text-gray-400 uppercase"><th>Vrsta</th><th>Datum</th><th>Ocjena</th></tr></thead>
                         <tbody>

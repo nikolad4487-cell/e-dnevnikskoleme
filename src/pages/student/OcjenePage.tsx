@@ -3,7 +3,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Grade, Subject, User, ClassSubjectTeacher, specialExamTypes, specialExamTypeLabels } from '../../types';
-import { cn, formatPersonName, finalGradeLabels, formatSubjectDisplayName } from '../../lib/utils';
+import { cn, formatPersonName, finalGradeLabels, formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
 import { BookOpen, GraduationCap, ChevronRight, ArrowLeft } from 'lucide-react';
 import { mappers, mapList } from '../../lib/mappers';
 
@@ -307,7 +307,7 @@ export default function OcjenePage() {
                       <BookOpen size={20} />
                     </div>
                     <div>
-                      <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm leading-none mb-1">{subject.name}</h3>
+                      <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm leading-none mb-1">{formatSubjectName(subject)}</h3>
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                         {teachersString}
                       </p>
@@ -398,7 +398,7 @@ export default function OcjenePage() {
                     selectedSubject === subject.id ? "text-[#005c8d] bg-blue-50" : "text-slate-700"
                   )}
                 >
-                  {subject.name}
+                  {formatSubjectName(subject)}
                 </button>
               ))}
             </div>

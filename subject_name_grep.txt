@@ -1,0 +1,16 @@
+src/components/SpecialExamReGradeModal.tsx:95:                    <div className="font-bold text-sm text-[#005c8d] border-b pb-2 mb-2">{student.name} - {subject.name}</div>
+src/pages/admin/SubjectManagementPage.tsx:199:                <h3 className="font-black text-slate-900 uppercase text-sm tracking-tight">{subject.name}</h3>
+src/pages/admin/SubjectManagementPage.tsx:210:                      setName(subject.name);
+src/pages/shared/dossier/DossierTypes.ts:86:  subject_name: string;
+src/pages/shared/dossier/DossierRegistrationsTab.tsx:135:          subject_name: subjectName,
+src/pages/shared/dossier/DossierRegistrationsTab.tsx:350:                      <span className="font-extrabold text-xs text-amber-900 tracking-tight uppercase">{comp.subject_name}</span>
+src/pages/student/OcjenePage.tsx:301:                  key={subject.name}
+src/pages/student/OcjenePage.tsx:310:                      <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm leading-none mb-1">{subject.name}</h3>
+src/pages/student/OcjenePage.tsx:401:                  {subject.name}
+src/pages/student/StudentIspitiPage.tsx:212:    const sName = exam.subject ? formatSubjectDisplayName(exam.subject.name, 'redovni') : 'Nepoznat predmet';
+src/pages/student/RasporedPage.tsx:102:        // Fetch Subjects mapping table for subject names
+src/pages/teacher/ImenikPage.tsx:2998:          <span>Elementi ocjenjivanja: {subject.name}</span>
+src/pages/teacher/StudentSubjectDetail.tsx:873:  const croSubjectName = subject?.name ? subject.name.toUpperCase() : (subjectId || 'PREDMET').toUpperCase();
+src/lib/utils.ts:127:    classSubject.subject_name ||
+src/lib/pdfGenerator.ts:529:            const subjName = e.subjects?.name || e.subject_name || 'Nepoznat predmet';
+src/types/certificates.ts:69:  subject_name?: string;

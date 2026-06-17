@@ -23,8 +23,8 @@ export const mappers = {
       id: raw.id,
       authUserId: raw.auth_user_id,
       email: raw.email,
-      name: firstName,
-      surname: lastName,
+      name: fullName, // Full name
+      surname: lastName, // Surname only
       address: raw.address,
       oib: raw.oib,
       status: raw.status,

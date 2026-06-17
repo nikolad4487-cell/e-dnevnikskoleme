@@ -1094,14 +1094,9 @@ async function startServer() {
       if (error) throw error;
       
       // Console logs requested by user
-      console.log("READING ASSIGNMENTS QUERY FILTERS", {
-        class_id: classId,
-        subject_id: subjectId,
-        school_id: schoolId,
-        school_year_id: schoolYearId
-      });
-
-      console.log("READING ASSIGNMENTS RESULT", { data, error });
+      if (error || !data) {
+        console.log("READING ASSIGNMENTS RESULT", { data, error });
+      }
       
       res.json(data || []);
     } catch (err: any) {

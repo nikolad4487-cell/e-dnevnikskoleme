@@ -62,15 +62,16 @@ export function matchesSearch(text: string, searchTerm: string): boolean {
 export function formatPersonName(person: any): string {
   if (!person) return '';
 
-  if (person.name && String(person.name).trim()) {
-    const n = String(person.name).trim();
-    if (n.toLowerCase() !== 'undefined' && n.toLowerCase() !== 'null') {
-      return n;
-    }
-  }
+  const first = String(person.name || person.firstName || person.first_name || '').trim();
+  const last = String(person.surname || person.lastName || person.last_name || '').trim();
 
-  const first = person.firstName || person.first_name || '';
-  const last = person.lastName || person.last_name || person.surname || '';
+  // If the first name already includes the last name string, just return the first string.
+  // This avoids "Ivan Horvat Horvat" if name is full name and surname is provided.
+  if (last && first.toLowerCase().includes(last.toLowerCase())) {
+     const n = first;
+     if (n.toLowerCase() !== 'undefined' && n.toLowerCase() !== 'null') return n;
+     return '';
+  }
 
   return [first, last]
     .filter(Boolean)
@@ -86,19 +87,35 @@ export function formatName(item: any) {
 
 export function formatSubjectDisplayName(subjectName: string, subjectType: string) {
   if (!subjectName) return '';
-  const cleaned = subjectName.replace(/\s*\((izborni|elective)\)\s*$/i, '').trim();
+  
+  // Clean first: remove existing unwanted suffixes
+  const cleaned = subjectName
+    .replace(/\s*\(required\)\s*$/i, '')
+    .replace(/\s*\(izborni\)\s*$/i, '')
+    .replace(/\s*\(elective\)\s*$/i, '')
+    .replace(/\s*\(praksa\)\s*$/i, '')
+    .replace(/\s*\(practice\)\s*$/i, '')
+    .trim();
+    
   if (!subjectType) return cleaned;
   const t = subjectType.toUpperCase().trim();
-  if (t === 'REDOVNI') {
-    return cleaned;
-  }
-  if (t === 'IZBORNI') {
-    return `${cleaned} (izborni)`;
-  }
-  if (t === 'PRAKSA' || t === 'PRACTICE') {
-    return `${cleaned} (praksa)`;
-  }
+  
+  if (t === 'REDOVNI') return cleaned;
+  
+  if (t === 'IZBORNI') return `${cleaned} (izborni)`;
+  
+  if (t === 'PRAKSA' || t === 'PRACTICE') return `${cleaned} (praksa)`;
+  
   return `${cleaned} (${subjectType.toLowerCase()})`;
+}
+
+export function formatSubjectName(subject: any) {
+  if (!subject) return '';
+  
+  const name = subject.name || subject.subject_name || '';
+  const type = subject.subject_type || subject.type || subject.subjectType || 'REDOVNI';
+  
+  return formatSubjectDisplayName(name, type);
 }
 
 export function normalizeSubjectType(type: string | null | undefined): 'REDOVNI' | 'IZBORNI' | 'PRAKSA' {

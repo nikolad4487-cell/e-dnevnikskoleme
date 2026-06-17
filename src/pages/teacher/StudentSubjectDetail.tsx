@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Role } from '../../types';
-import { sortStudentsBySurname, formatSubjectDisplayName } from '../../lib/utils';
+import { sortStudentsBySurname, formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
 import { toast } from 'react-hot-toast';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import GroupGradesModal from '../../components/GroupGradesModal';
@@ -870,7 +870,7 @@ export default function StudentSubjectDetail() {
     ? `${student.surname || ''} ${student.name || ''}`.toUpperCase().trim() 
     : 'UČENIK';
 
-  const croSubjectName = subject?.name ? subject.name.toUpperCase() : (subjectId || 'PREDMET').toUpperCase();
+  const croSubjectName = formatSubjectName(subject || { name: (subjectId || 'PREDMET') }).toUpperCase();
 
   // Unified Chronological log
   const combinedLog: any[] = [];

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { matchesSearch } from '../../lib/utils';
+import { formatSubjectName } from '../../lib/utils';
 import { Subject, Role } from '../../types';
 import { useSelection } from '../../contexts/SelectionContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -196,7 +197,7 @@ export default function SubjectManagementPage() {
                 <BookOpen size={20} />
               </div>
               <div>
-                <h3 className="font-black text-slate-900 uppercase text-sm tracking-tight">{subject.name}</h3>
+                <h3 className="font-black text-slate-900 uppercase text-sm tracking-tight">{formatSubjectName(subject)}</h3>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{subject.code || 'Nema koda'}</p>
               </div>
             </div>

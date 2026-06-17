@@ -15,9 +15,11 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   usePageTitle("Dnevnik rada");
   const { classId: routeClassId } = useParams<{ classId: string }>();
   const { user, isMainAdmin, highestRole, userSchoolRoles } = useAuth();
-  const { selectedSchoolId, selectedClassId: contextClassId, selectedYearId } = useSelection();
+  const { selectedSchoolId: contextSchoolId, selectedClassId: contextClassId, selectedYearId } = useSelection();
   
+  const selectedSchoolId = contextSchoolId || sessionStorage.getItem('selectedSchoolId') || localStorage.getItem('selectedSchoolId');
   const effectiveClassId = contextClassId || routeClassId;
+  
   const [classes, setClasses] = useState<Class[]>([]);
   const selectedClass = classes.find(c => c.id === effectiveClassId);
 
@@ -637,14 +639,14 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
 
         const { data: classesData, error: ce } = await supabase
           .from('classes')
-          .select('*')
+          .select('*, program:program_id(*)')
           .eq('school_id', selectedSchoolId);
         if (ce) throw ce;
 
         const mappedClasses = mapList(classesData || [], mappers.class);
         
         let filteredClasses = mappedClasses;
-        if (!isMainAdmin) {
+        if (!isAdminUser) {
           const teachingClassIds = formattedAssignments
             .filter((a: any) => a.teacherId === user.id)
             .map((a: any) => a.classId);
@@ -1834,6 +1836,7 @@ setStudents(uniqueStudents);
             const name = (cls.name || '').trim().toUpperCase();
             const programName = (cls.program?.name || '').trim().toLowerCase();
             const gradeLevel = cls.gradeLevel;
+            const durationYears = cls.program?.durationYears || cls.program?.duration_years;
 
             // - svi 1. razredi: 35
             if (gradeLevel === 1 || name.startsWith('1.')) return 35;
@@ -1844,13 +1847,31 @@ setStudents(uniqueStudents);
             // - 4.K: 35
             if (name.includes('4.K')) return 35;
 
-            // - 3.A, 3.B, 3.C (Kuhar, Konobar, Slastičar): 32
-            if (gradeLevel === 3 && (
-              name.includes('3.A') || name.includes('3.B') || name.includes('3.C') ||
-              programName.includes('kuhar') || programName.includes('konobar') || 
-              programName.includes('slastičar') || programName.includes('slasticar')
-            )) {
-              return 32;
+            // Ako je razred 3. (Kuhar, Konobar, Slastičar) koji traju 3 godine - oni imaju 32 tjedna.
+            // 4-godišnji programi u 3. razredu imaju 35 tjedana.
+            if (gradeLevel === 3 || name.startsWith('3.')) {
+              if (durationYears === 4) return 35;
+              if (durationYears === 3) return 32;
+
+              // Fallback based on name if duration is not available
+              if (
+                programName.includes('komercijalist') || 
+                programName.includes('ekonomist') || 
+                programName.includes('gimnazija') ||
+                programName.includes('tehničar') ||
+                programName.includes('tehnicar')
+              ) {
+                return 35;
+              }
+              // By default, if it's 3.A, 3.B, 3.C and not explicitly 4-year, return 32 (assuming 3-year vocational)
+              if (name.includes('3.A') || name.includes('3.B') || name.includes('3.C')) {
+                // If it's literally 3.C and we know it's a 4-year program from the prompt, force 35:
+                if (name.includes('3.C') && (programName.includes('komercijalist') || !programName)) {
+                   return 35; 
+                }
+                return 32;
+              }
+              return 35;
             }
 
             // - svi završni 4. razredi osim 4.K: 32 (including 4.D, 4.I, etc.)
@@ -1971,7 +1992,10 @@ setStudents(uniqueStudents);
                            {w.weekType === 'SCHOOL_HOLIDAY' ? (
                              <span className="text-amber-600/70 italic font-semibold">Nema dežurstava za praznike</span>
                            ) : (
-                             Array.from(new Set(w.onDutyStudentIds || [])).map(sid => students.find(s => s.id === sid)?.name).filter(Boolean).join(', ') || 'Nema dežurnih'
+                             Array.from(new Set(w.onDutyStudentIds || [])).map(sid => {
+                               const studentObj = students.find(s => s.id === sid);
+                               return studentObj ? formatPersonName(studentObj) : null;
+                             }).filter(Boolean).join(', ') || 'Nema dežurnih'
                            )}
                         </td>
                        <td className="px-4 py-2 text-center text-right flex justify-end">
@@ -2091,7 +2115,17 @@ setStudents(uniqueStudents);
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {sortStudentsBySurname(students).map(s => {
+                    {!selectedWeek && (
+                      <tr>
+                        <td colSpan={100} className="p-12 text-center text-gray-400 italic">Nema radnih tjedana za ovaj razred.</td>
+                      </tr>
+                    )}
+                    {selectedWeek && students.length === 0 && (
+                      <tr>
+                        <td colSpan={(selectedWeek?.teachingDays?.length || 0) + 2} className="p-12 text-center text-gray-400 italic">Nema učenika u razredu.</td>
+                      </tr>
+                    )}
+                    {selectedWeek && sortStudentsBySurname(students).map(s => {
                       let total = 0;
                       return (
                         <tr key={`absence-row-${s.id}`} className="hover:bg-gray-50 transition-colors">
@@ -2133,8 +2167,14 @@ setStudents(uniqueStudents);
              </div>
           </div>
         )}
+        {view === 'ABSENCES' && !selectedClass && (
+           <div className="w-full bg-white border border-gray-300 p-8 text-center text-gray-500 font-bold uppercase text-xs">
+             Molimo odaberite razred za pregled izostanaka.
+           </div>
+        )}
 
         {/* EXAMS VIEW */}
+        <div className="p-2 bg-yellow-100 text-[10px]">DEBUG: ClassId={effectiveClassId}, View={view}, SelectedClass={selectedClass?.name || 'undefined'}</div>
         {view === 'EXAMS' && selectedClass && (
           <div className="w-full">
              <div className="bg-white border border-gray-300 shadow-sm overflow-hidden">
@@ -2194,6 +2234,12 @@ setStudents(uniqueStudents);
              </div>
           </div>
         )}
+        {view === 'EXAMS' && !selectedClass && (
+           <div className="w-full bg-white border border-gray-300 p-8 text-center text-gray-500 font-bold uppercase text-xs">
+             Molimo odaberite razred za pregled ispita.
+           </div>
+        )}
+
         {/* SCHEDULE VIEW */}
         {view === 'SCHEDULE' && selectedClass && (
           <div className="w-full space-y-8 pb-20">
@@ -2292,6 +2338,12 @@ setStudents(uniqueStudents);
             </div>
           </div>
         )}
+        {view === 'SCHEDULE' && !selectedClass && (
+           <div className="w-full bg-white border border-gray-300 p-8 text-center text-gray-500 font-bold uppercase text-xs">
+             Molimo odaberite razred za pregled rasporeda.
+           </div>
+        )}
+
         {/* LEKTIRA VIEW */}
         {view === 'LEKTIRA' && selectedClass && (
           <div className="w-full space-y-4">
@@ -2422,6 +2474,12 @@ setStudents(uniqueStudents);
             </div>
           </div>
         )}
+
+          {view === 'LEKTIRA' && !selectedClass && (
+             <div className="w-full bg-white border border-gray-300 p-8 text-center text-gray-500 font-bold uppercase text-xs">
+               Molimo odaberite razred za prikaz lektire.
+             </div>
+          )}
 
         {/* LEKTIRA MODAL */}
         {showLektiraModal && (
@@ -3200,7 +3258,6 @@ setStudents(uniqueStudents);
                       onChange={e => setExamForm({...examForm, type: e.target.value as any})}
                     >
                       <option value="PISMENA">Pismena provjera</option>
-                      <option value="USMENA">Usmena provjera</option>
                     </select>
                  </div>
               </div>
@@ -3374,7 +3431,7 @@ setStudents(uniqueStudents);
                        }}
                      >
                        <option value="">- Odaberi 1. redara -</option>
-                       {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                       {sortStudentsBySurname(students).map(s => <option key={s.id} value={s.id}>{formatPersonName(s)}</option>)}
                      </select>
                    <select
                      className="w-full border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none font-bold"
@@ -3386,7 +3443,7 @@ setStudents(uniqueStudents);
                      }}
                    >
                      <option value="">- Odaberi 2. redara -</option>
-                     {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                     {sortStudentsBySurname(students).map(s => <option key={s.id} value={s.id}>{formatPersonName(s)}</option>)}
                    </select>
                  </div>
                </div>
@@ -3471,7 +3528,7 @@ setStudents(uniqueStudents);
                         value={cellSubjectForm.subjectId}
                         onChange={e => {
                           const subId = e.target.value;
-                          const assignment = subjectAssignments.find(a => a.subjectId === subId);
+                          const assignment = subjectAssignments.find(a => a.subjectId === subId && a.classId === effectiveClassId);
                           setCellSubjectForm({
                             ...cellSubjectForm, 
                             subjectId: subId,
@@ -3574,21 +3631,21 @@ function ScheduleGrid({ title, shift, periods, days, onCellClick, getCellSubject
         <table className="w-full border-collapse table-fixed min-w-[800px]">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-300">
-              <th className="w-20 border-r border-gray-300 bg-gray-100"></th>
-              {periods.map((p: any) => (
-                <th key={p} className="p-2 text-[10px] font-bold text-gray-500 uppercase border-r border-gray-300 last:border-r-0">
-                  {p}. sat
+              <th className="w-20 border-r border-gray-300 bg-gray-100 p-2 text-[10px] font-bold text-gray-500 uppercase">Sat</th>
+              {days.map((day: any) => (
+                <th key={day} className="p-2 text-[10px] font-bold text-gray-500 uppercase border-r border-gray-300 last:border-r-0">
+                  {day}
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {days.map((day: any) => (
-              <tr key={day} className="border-b border-gray-300 last:border-b-0">
+            {periods.map((period: any) => (
+              <tr key={period} className="border-b border-gray-300 last:border-b-0">
                 <td className="bg-gray-100 border-r border-gray-300 p-2 text-center align-middle font-bold text-[10px] text-gray-500 uppercase">
-                   {day}
+                  {period}. sat
                 </td>
-                {periods.map((period: any) => {
+                {days.map((day: any) => {
                   const subjects = getCellSubjects(day, shift, period);
                   return (
                     <td 

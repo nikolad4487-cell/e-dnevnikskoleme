@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, Grade, Subject, StudentNote, Exam, FinalGrade, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary, specialExamTypeLabels } from '../../types';
-import { cn, formatName, getSurname, formatSubjectDisplayName, finalGradeLabels, sortStudentsBySurname } from '../../lib/utils';
+import { cn, formatName, getSurname, formatSubjectDisplayName, formatSubjectName, finalGradeLabels, sortStudentsBySurname } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2, Check } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
@@ -2995,7 +2995,7 @@ function GradingElementsModal({ isOpen, onClose, subject, classId, schoolId, tea
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[400] p-4">
       <div className="bg-white max-w-md w-full border border-gray-400 shadow-2xl">
         <div className="p-3 bg-[#005c8d] text-white flex justify-between items-center text-[11px] font-black uppercase tracking-widest">
-          <span>Elementi ocjenjivanja: {subject.name}</span>
+          <span>Elementi ocjenjivanja: {formatSubjectName(subject)}</span>
           <button onClick={onClose} className="hover:text-amber-300 transition-colors"><X size={16}/></button>
         </div>
         <div className="p-6 space-y-6">
