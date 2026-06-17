@@ -1755,7 +1755,7 @@ setStudents(uniqueStudents);
             </div>
           )}
 
-          {view === 'WEEKS' && canManageWeeks && (
+          {view === 'WEEKS' && (
             <button 
               onClick={handleAddWeek}
               className="bg-white text-[#005c8d] px-3 py-1 border border-white font-bold text-[10px] uppercase hover:bg-blue-50 transition-colors"
@@ -1827,8 +1827,6 @@ setStudents(uniqueStudents);
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-4 bg-[#f0f2f5]">
-        <div className="p-2 bg-yellow-100 text-[10px]">DEBUG: ClassId={effectiveClassId}, View={view}, SelectedClass={selectedClass?.name}</div>
-        
         {/* WEEKS LIST */}
         {view === 'WEEKS' && (() => {
           const getRequiredWeeks = (cls: any) => {
