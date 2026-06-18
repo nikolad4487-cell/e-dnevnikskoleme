@@ -47,8 +47,7 @@ export async function POST(req: Request) {
 
     // 1. Sign in with Supabase
     // Use a hardcoded technical password for all staff as a temporary fix
-    const technicalPassword = '123456'; 
-    const passwordOrPin = (loginType === 'STAFF') ? technicalPassword : password;
+    const passwordOrPin = password; // Directly use the password (which is the PIN for staff)
 
     const { data, error } = await supabaseAdmin.auth.signInWithPassword({
       email: DemoresolvedEmail,
