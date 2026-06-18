@@ -69,9 +69,6 @@ export function ScheduleGrid({
                              return (
                                <div key={s.id} className="bg-white border border-gray-200 p-1">
                                  <div className="font-bold text-[#005c8d] uppercase leading-tight">{formatSubjectName(sub)}</div>
-                                 <div className="text-[8px] text-gray-400 font-bold uppercase">
-                                   {formatPersonName(tea)} {s.classroom && `• ${s.classroom}`}
-                                 </div>
                                </div>
                              );
                           })}
