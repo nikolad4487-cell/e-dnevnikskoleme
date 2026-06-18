@@ -500,47 +500,49 @@ export default function OcjenePage() {
         </div>
 
         {/* Lektire za predmet */}
-        <div className="space-y-6 pt-6">
-          <div className="flex items-center gap-2 border-b-2 border-slate-100 pb-2">
-            <BookOpen size={16} className="text-[#005c8d]" />
-            <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest">Lektire / Obrađena djela</h2>
-          </div>
+        {activeSubject.isCroatianLanguage && (
+          <div className="space-y-6 pt-6">
+            <div className="flex items-center gap-2 border-b-2 border-slate-100 pb-2">
+              <BookOpen size={16} className="text-[#005c8d]" />
+              <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest">Lektire / Obrađena djela</h2>
+            </div>
 
-          <div className="bg-white border border-slate-300 overflow-hidden shadow-sm">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-300 text-slate-400">
-                  <th className="p-4 text-[9px] font-black uppercase tracking-widest text-center w-32 border-r border-slate-200">Datum obrade</th>
-                  <th className="p-4 text-[9px] font-black uppercase tracking-widest border-r border-slate-200 w-1/3 text-left">Naslov djela</th>
-                  <th className="p-4 text-[9px] font-black uppercase tracking-widest text-left">Način obrade / Detalji</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 font-medium">
-                {subjectLektire && subjectLektire.length > 0 ? (
-                  subjectLektire.map(lek => (
-                    <tr key={lek.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-4 text-center text-xs font-bold text-slate-400 border-r border-slate-200">
-                        {lek.processed_at ? new Date(lek.processed_at).toLocaleDateString('hr-HR') : '—'}
-                      </td>
-                      <td className="p-4 text-xs font-bold text-slate-800 border-r border-slate-200">
-                        {lek.title}
-                      </td>
-                      <td className="p-4 text-xs text-slate-600 italic whitespace-pre-wrap leading-relaxed">
-                        {lek.processing_details || '—'}
+            <div className="bg-white border border-slate-300 overflow-hidden shadow-sm">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-300 text-slate-400">
+                    <th className="p-4 text-[9px] font-black uppercase tracking-widest text-center w-32 border-r border-slate-200">Datum obrade</th>
+                    <th className="p-4 text-[9px] font-black uppercase tracking-widest border-r border-slate-200 w-1/3 text-left">Naslov djela</th>
+                    <th className="p-4 text-[9px] font-black uppercase tracking-widest text-left">Način obrade / Detalji</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 font-medium">
+                  {subjectLektire && subjectLektire.length > 0 ? (
+                    subjectLektire.map(lek => (
+                      <tr key={lek.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-4 text-center text-xs font-bold text-slate-400 border-r border-slate-200">
+                          {lek.processed_at ? new Date(lek.processed_at).toLocaleDateString('hr-HR') : '—'}
+                        </td>
+                        <td className="p-4 text-xs font-bold text-slate-800 border-r border-slate-200">
+                          {lek.title}
+                        </td>
+                        <td className="p-4 text-xs text-slate-600 italic whitespace-pre-wrap leading-relaxed">
+                          {lek.processing_details || '—'}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={3} className="p-12 text-center text-slate-300 font-black uppercase tracking-widest text-[10px]">
+                        Nema unesenih lektira za ovaj predmet.
                       </td>
                     </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={3} className="p-12 text-center text-slate-300 font-black uppercase tracking-widest text-[10px]">
-                      Nema unesenih lektira za ovaj predmet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Special exams section */}
         {specialExams.filter(se => se.subjectId === activeSubject.id).length > 0 && (

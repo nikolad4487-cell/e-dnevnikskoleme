@@ -23,6 +23,7 @@ export default function TeacherIzostanciPage() {
   const [students, setStudents] = useState<User[]>([]);
   const [lessons, setLessons] = useState<Lesson[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isHomeroomTeacher, setIsHomeroomTeacher] = useState(false);
   
   const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
   const [justifyingDate, setJustifyingDate] = useState<string | null>(null);
@@ -55,6 +56,19 @@ export default function TeacherIzostanciPage() {
   const fetchData = async () => {
     setLoading(true);
     try {
+      if (effectiveClassId) {
+        const { data: classData } = await supabase
+          .from('classes')
+          .select('homeroom_teacher_id')
+          .eq('id', effectiveClassId)
+          .maybeSingle();
+        if (classData && classData.homeroom_teacher_id === user?.id) {
+          setIsHomeroomTeacher(true);
+        } else {
+          setIsHomeroomTeacher(false);
+        }
+      }
+
       const { data: enrollData } = await supabase
         .from('student_class_enrollments')
         .select('student:user_profiles(*)')
@@ -225,6 +239,7 @@ export default function TeacherIzostanciPage() {
             onJustify={(date: string) => setJustifyingDate(date)}
             onDelete={(id: string) => setDeleteDialog({ isOpen: true, id, loading: false })}
             showDeleteButton={isMainAdmin || highestRole === Role.ADMIN}
+            showJustifyButton={isMainAdmin || highestRole === Role.ADMIN || isHomeroomTeacher}
           />
         )}
       </div>
@@ -242,7 +257,7 @@ export default function TeacherIzostanciPage() {
   );
 }
 
-const StudentDetailView = ({ student, absences, lessons, onJustify, onDelete, showDeleteButton }: any) => {
+const StudentDetailView = ({ student, absences, lessons, onJustify, onDelete, showDeleteButton, showJustifyButton }: any) => {
     // Group absences by date
     const grouped = absences.reduce((acc: any, a: any) => {
         if (!acc[a.date]) acc[a.date] = [];
@@ -292,7 +307,7 @@ const StudentDetailView = ({ student, absences, lessons, onJustify, onDelete, sh
                                 );
                             })}
                             <td className="p-2 text-center flex gap-1 justify-center">
-                                {hasPending && <button onClick={() => onJustify(date)} className="bg-[#005c8d] text-white px-2 py-1 uppercase text-[9px] font-bold">Opravdaj</button>}
+                                {hasPending && showJustifyButton && <button onClick={() => onJustify(date)} className="bg-[#005c8d] text-white px-2 py-1 uppercase text-[9px] font-bold">Opravdaj</button>}
                                 {showDeleteButton && <button onClick={() => onDelete(absList[0].id)} className="bg-red-600 text-white px-2 py-1 uppercase text-[9px] font-bold"><Trash2 size={10} /></button>}
                             </td>
                         </tr>

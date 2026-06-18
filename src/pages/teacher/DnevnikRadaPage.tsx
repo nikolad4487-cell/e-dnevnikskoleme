@@ -5,9 +5,10 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
-import { cn, getSurname, formatPersonName, sortStudentsBySurname, formatSubjectDisplayName } from '../../lib/utils';
+import { cn, getSurname, formatPersonName, sortStudentsBySurname, formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
 import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, UserX } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
+import { ScheduleGrid as SharedScheduleGrid } from '../../components/ScheduleGrid';
 import { toast } from 'react-hot-toast';
 import { usePageTitle } from '../../hooks/usePageTitle';
 
@@ -178,6 +179,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [activeLessonTab, setActiveLessonTab] = useState<'SADRZAJ' | 'IZOSTANCI' | 'MATERIJALI'>('SADRZAJ');
   const [editingHour, setEditingHour] = useState<number | null>(null);
   const [showExamModal, setShowExamModal] = useState(false);
+  const [editingExam, setEditingExam] = useState<Exam | null>(null);
   const [examForm, setExamForm] = useState<Partial<Exam>>({
     subjectId: '',
     date: '',
@@ -216,18 +218,49 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
 
   const canAccessLektira = isAdminUser || teachesCroatian;
 
+  const canCreateExam = useMemo(() => {
+    if (!user || !effectiveClassId) return false;
+    if (isAdminUser) return true;
+    return subjectAssignments.some(a => a.classId === effectiveClassId && a.teacherId === user.id);
+  }, [user, isAdminUser, effectiveClassId, subjectAssignments]);
+
+  const canEditExam = useMemo(() => {
+    return (exam: any) => {
+      if (!user) return false;
+      if (isAdminUser) return true;
+      const isCreator = exam.createdBy === user.id || exam.teacherId === user.id;
+      return isCreator;
+    };
+  }, [user, isAdminUser]);
+
+  const canDeleteExam = useMemo(() => {
+    return (exam: any) => {
+      if (!user) return false;
+      if (isAdminUser) return true;
+      const isCreator = exam.createdBy === user.id || exam.teacherId === user.id;
+      return isCreator;
+    };
+  }, [user, isAdminUser]);
+
+  const canDeleteWeek = useMemo(() => {
+    if (!user || !effectiveClassId) return false;
+    if (isAdminUser) return true;
+    const isHomeroom = selectedClass ? (selectedClass.homeroomTeacherId === user.id || (selectedClass as any).homeroom_teacher_id === user.id) : false;
+    return isHomeroom;
+  }, [user, isAdminUser, selectedClass, effectiveClassId]);
+
   const canManageWeeks = useMemo(() => {
     if (!user || !effectiveClassId) return false;
-    if (isMainAdmin || highestRole === Role.ADMIN) return true;
+    if (isMainAdmin || highestRole === Role.ADMIN || isSchoolAdmin) return true;
     
-    const isHomeroom = selectedClass ? selectedClass.homeroomTeacherId === user.id : false;
-    const isDeputy = selectedClass ? selectedClass.deputyTeacherId === user.id : false;
+    const isHomeroom = selectedClass ? (selectedClass.homeroomTeacherId === user.id || (selectedClass as any).homeroom_teacher_id === user.id) : false;
+    const isDeputy = selectedClass ? (selectedClass.deputyTeacherId === user.id || (selectedClass as any).deputy_teacher_id === user.id) : false;
     const isTeachingThisClass = subjectAssignments.some(
       a => a.classId === effectiveClassId && a.teacherId === user.id
     );
 
     return isHomeroom || isDeputy || isTeachingThisClass;
-  }, [user, isMainAdmin, selectedClass, effectiveClassId, subjectAssignments]);
+  }, [user, isMainAdmin, isSchoolAdmin, highestRole, selectedClass, effectiveClassId, subjectAssignments]);
 
   const getAutoDutyStudents = (weekNum: number) => {
     if (!students || students.length === 0) return [];
@@ -441,7 +474,13 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
       // Add cache-busting timestamp parameter
       url.searchParams.append('_t', Date.now().toString());
       
-      const res = await fetch(url.toString());
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || '';
+      const res = await fetch(url.toString(), {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       if (res.ok) {
         const data = await res.json();
         console.log("LOAD READINGS FILTERS", {
@@ -1088,6 +1127,10 @@ setStudents(uniqueStudents);
 
   const handleSaveWeek = async () => {
     if (!effectiveClassId) return;
+    if (!canManageWeeks) {
+      toast.error('Nemate ovlasti za spremanje radnih tjedana!');
+      return;
+    }
     
     // Ensure we are using current class context correctly
     const currentClass = classes.find(c => c.id === effectiveClassId);
@@ -1406,6 +1449,11 @@ setStudents(uniqueStudents);
 
         toast.success('Sat je uspješno obrisan.');
       } else if (deleteDialog.type === 'EXAM') {
+        const examToDelete = currentClassExams.find(ex => ex.id === deleteDialog.id);
+        if (examToDelete && !canDeleteExam(examToDelete)) {
+          toast.error('Možete obrisati samo provjere koje ste Vi kreirali!');
+          return;
+        }
         const { error } = await supabase
           .from('exams')
           .delete()
@@ -1415,6 +1463,10 @@ setStudents(uniqueStudents);
         setCurrentClassExams(prev => prev.filter(ex => ex.id !== deleteDialog.id));
         toast.success('Ispit je uspješno obrisan.');
       } else if (deleteDialog.type === 'WEEK') {
+        if (!canDeleteWeek) {
+          toast.error('Nemate ovlasti za brisanje radnih tjedana!');
+          return;
+        }
         const { error } = await supabase
           .from('work_weeks')
           .delete()
@@ -1703,25 +1755,60 @@ setStudents(uniqueStudents);
   const saveExam = async () => {
     if (!effectiveClassId || !examForm.date || !examForm.subjectId) return;
     try {
-      const { data, error } = await supabase
-        .from('exams')
-        .insert({
-          subject_id: examForm.subjectId,
-          exam_date: examForm.date,
-          exam_type: examForm.type,
-          description: examForm.description,
-          class_id: effectiveClassId,
-          school_id: selectedSchoolId,
-          created_at: new Date().toISOString()
-        })
-        .select()
-        .maybeSingle();
-      if (error || !data) throw error || new Error("Exam creation failed");
+      if (editingExam) {
+        if (!canEditExam(editingExam)) {
+          toast.error('Možete mijenjati samo provjere koje ste Vi kreirali!');
+          return;
+        }
+        const { data, error } = await supabase
+          .from('exams')
+          .update({
+            subject_id: examForm.subjectId,
+            exam_date: examForm.date,
+            exam_type: examForm.type,
+            description: examForm.description,
+            school_id: selectedSchoolId,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', editingExam.id)
+          .select()
+          .maybeSingle();
+        if (error || !data) throw error || new Error("Exam update failed");
 
-      setCurrentClassExams(prev => [...prev, mappers.exam(data)]);
-      setShowExamModal(false);
-      setExamForm({ subjectId: '', date: '', type: 'PISANA', description: '' });
-      toast.success('Pisana provjera je uspješno planirana.');
+        setCurrentClassExams(prev => prev.map(ex => ex.id === editingExam.id ? mappers.exam(data) : ex));
+        setShowExamModal(false);
+        setEditingExam(null);
+        setExamForm({ subjectId: '', date: '', type: 'PISANA', description: '' });
+        toast.success('Pisana provjera je uspješno izmijenjena.');
+      } else {
+        if (!canCreateExam) {
+          toast.error('Nemate ovlasti za planiranje ove provjere!');
+          return;
+        }
+        const { data, error } = await supabase
+          .from('exams')
+          .insert({
+            subject_id: examForm.subjectId,
+            text: examForm.description, // some schemas use description or text, we can specify what is used
+            exam_date: examForm.date,
+            exam_type: examForm.type,
+            description: examForm.description,
+            class_id: effectiveClassId,
+            school_id: selectedSchoolId,
+            created_by: user?.id,
+            teacher_id: user?.id,
+            created_at: new Date().toISOString()
+          })
+          .select()
+          .maybeSingle();
+        if (error || !data) throw error || new Error("Exam creation failed");
+
+        setCurrentClassExams(prev => [...prev, mappers.exam(data)]);
+        setShowExamModal(false);
+        setEditingExam(null);
+        setExamForm({ subjectId: '', date: '', type: 'PISANA', description: '' });
+        toast.success('Pisana provjera je uspješno planirana.');
+      }
     } catch (err) {
       console.error(err);
       toast.error('Greška pri spremanju ispita');
@@ -1757,7 +1844,7 @@ setStudents(uniqueStudents);
             </div>
           )}
 
-          {view === 'WEEKS' && (
+          {view === 'WEEKS' && canManageWeeks && (
             <button 
               onClick={handleAddWeek}
               className="bg-white text-[#005c8d] px-3 py-1 border border-white font-bold text-[10px] uppercase hover:bg-blue-50 transition-colors"
@@ -1949,7 +2036,7 @@ setStudents(uniqueStudents);
                        <th className="px-4 py-2 font-bold uppercase text-gray-500 border-r border-gray-300">Naziv tjedna</th>
                        <th className="px-4 py-2 font-bold uppercase text-gray-500 w-64 border-r border-gray-300">Period i tip / razlog</th>
                        <th className="px-4 py-2 font-bold uppercase text-gray-500 border-r border-gray-300">Dežurni učenici</th>
-                       <th className="px-4 py-2 font-bold uppercase text-gray-500 text-center w-24">Akcije</th>
+                       <th className="px-4 py-2 font-bold uppercase text-gray-500 text-center w-36">Akcije</th>
                      </tr>
                    </thead>
                    <tbody className="divide-y divide-gray-200">
@@ -1998,31 +2085,38 @@ setStudents(uniqueStudents);
                              }).filter(Boolean).join(', ') || 'Nema dežurnih'
                            )}
                         </td>
-                       <td className="px-4 py-2 text-center text-right flex justify-end">
-                          {canManageWeeks && (
-                            <div className="flex items-center gap-1 justify-end">
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditWeek(w);
-                                }}
-                                className="p-1 px-2 text-gray-300 hover:text-[#005c8d] hover:bg-white border border-transparent hover:border-gray-200 transition-all rounded-sm"
-                                title="Uredi"
-                              >
-                                <Edit2 size={14} />
-                              </button>
-                              <button 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setDeleteDialog({ isOpen: true, id: w.id, type: 'WEEK', loading: false });
-                                }}
-                                className="p-1 px-2 text-gray-300 hover:text-red-500 hover:bg-white border border-transparent hover:border-gray-200 transition-all rounded-sm"
-                                title="Obriši"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            </div>
-                          )}
+                       <td className="px-4 py-2 text-center border-l border-gray-200">
+                         <div className="flex items-center justify-center gap-2">
+                           {canManageWeeks && (
+                             <button 
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 handleEditWeek(w);
+                               }}
+                               className="text-[#005c8d] hover:text-[#004a71] p-1 flex items-center gap-1.5 text-[11px] font-bold uppercase transition-all"
+                               title="Uredi"
+                             >
+                               <Edit2 size={13} />
+                               <span>Uredi</span>
+                             </button>
+                           )}
+                           {canDeleteWeek && (
+                             <button 
+                               onClick={(e) => {
+                                 e.stopPropagation();
+                                 setDeleteDialog({ isOpen: true, id: w.id, type: 'WEEK', loading: false });
+                               }}
+                               className="text-red-500 hover:text-red-700 p-1 flex items-center gap-1.5 text-[11px] font-bold uppercase transition-all"
+                               title="Obriši"
+                             >
+                               <Trash2 size={13} />
+                               <span>Obriši</span>
+                             </button>
+                           )}
+                           {!canManageWeeks && !canDeleteWeek && (
+                             <span className="text-gray-400 text-[10px] italic">Nema ovlasti</span>
+                           )}
+                         </div>
                        </td>
                      </tr>
                    ))}
@@ -2174,18 +2268,24 @@ setStudents(uniqueStudents);
         )}
 
         {/* EXAMS VIEW */}
-        <div className="p-2 bg-yellow-100 text-[10px]">DEBUG: ClassId={effectiveClassId}, View={view}, SelectedClass={selectedClass?.name || 'undefined'}</div>
+
         {view === 'EXAMS' && selectedClass && (
           <div className="w-full">
              <div className="bg-white border border-gray-300 shadow-sm overflow-hidden">
                 <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-[#005c8d] text-[11px] uppercase tracking-tight flex items-center justify-between">
                    <span>Plan pisanih provjera</span>
-                   <button 
-                     onClick={() => setShowExamModal(true)}
-                     className="bg-[#005c8d] text-white px-3 py-1 font-bold text-[10px] uppercase hover:bg-[#004a70]"
-                   >
-                     + Planiraj provjeru
-                   </button>
+                   {canCreateExam && (
+                     <button 
+                       onClick={() => {
+                         setEditingExam(null);
+                         setExamForm({ subjectId: '', date: '', type: 'PISANA', description: '' });
+                         setShowExamModal(true);
+                       }}
+                       className="bg-[#005c8d] text-white px-3 py-1 font-bold text-[10px] uppercase hover:bg-[#004a70]"
+                     >
+                       + Planiraj provjeru
+                     </button>
+                   )}
                 </div>
                 <table className="w-full border-collapse ed-table-dense">
                   <thead>
@@ -2194,7 +2294,7 @@ setStudents(uniqueStudents);
                       <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500 border-r border-gray-300">Predmet</th>
                       <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500 border-r border-gray-300">Vrsta</th>
                       <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500">Opis</th>
-                      <th className="p-2 text-center w-12"></th>
+                      <th className="p-2 text-center w-36 text-[10px] font-bold uppercase text-gray-500">Akcije</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -2203,7 +2303,7 @@ setStudents(uniqueStudents);
                        return (
                          <tr key={exam.id} className="hover:bg-gray-50 transition-colors">
                            <td className="p-2 text-gray-700 font-bold border-r border-gray-200">{new Date(exam.date).toLocaleDateString('hr-HR')}</td>
-                           <td className="p-2 font-bold text-[#005c8d] uppercase border-r border-gray-200">{subject?.name}</td>
+                           <td className="p-2 font-bold text-[#005c8d] uppercase border-r border-gray-200">{formatSubjectName(subject)}</td>
                            <td className="p-2 border-r border-gray-200">
                              <span className={cn(
                                "px-2 py-0.5 text-[9px] font-bold uppercase border",
@@ -2212,14 +2312,42 @@ setStudents(uniqueStudents);
                                {exam.type}
                              </span>
                            </td>
-                           <td className="p-2 text-gray-600">{exam.description}</td>
-                           <td className="p-2 text-center">
-                             <button 
-                               onClick={() => setDeleteDialog({ isOpen: true, id: exam.id, type: 'EXAM', loading: false })}
-                               className="text-gray-300 hover:text-red-500 p-1"
-                             >
-                               <Trash2 size={12} />
-                             </button>
+                           <td className="p-2 text-gray-600 border-r border-gray-300">{exam.description}</td>
+                           <td className="p-2 text-center h-full">
+                             <div className="flex items-center justify-center gap-2">
+                               {canEditExam(exam) && (
+                                 <button 
+                                   onClick={() => {
+                                     setEditingExam(exam);
+                                     setExamForm({
+                                       subjectId: exam.subjectId,
+                                       date: exam.date ? String(exam.date).split('T')[0] : '',
+                                       type: exam.type,
+                                       description: exam.description || ''
+                                     });
+                                     setShowExamModal(true);
+                                   }}
+                                   className="text-[#005c8d] hover:text-[#004a71] p-1 flex items-center gap-1.5 text-[10px] font-bold uppercase transition-all"
+                                   title="Uredi"
+                                 >
+                                   <Edit2 size={12} />
+                                   <span>Uredi</span>
+                                 </button>
+                               )}
+                               {canDeleteExam(exam) && (
+                                 <button 
+                                   onClick={() => setDeleteDialog({ isOpen: true, id: exam.id, type: 'EXAM', loading: false })}
+                                   className="text-red-500 hover:text-red-700 p-1 flex items-center gap-1.5 text-[10px] font-bold uppercase transition-all"
+                                   title="Obriši"
+                                 >
+                                   <Trash2 size={12} />
+                                   <span>Obriši</span>
+                                 </button>
+                               )}
+                               {!canEditExam(exam) && !canDeleteExam(exam) && (
+                                 <span className="text-gray-400 text-[10px] italic">Nema ovlasti</span>
+                                )}
+                             </div>
                            </td>
                          </tr>
                        );
@@ -2304,7 +2432,7 @@ setStudents(uniqueStudents);
                         isMismatch ? "bg-red-50 border-red-500" : "bg-green-50 border-green-500"
                       )}>
                         <div>
-                          <div className="text-[10px] font-black uppercase text-gray-700">{subject?.name}</div>
+                          <div className="text-[10px] font-black uppercase text-gray-700">{formatSubjectName(subject)}</div>
                           <div className="text-[9px] font-bold text-gray-500 mt-0.5">
                             Planirano: {plan.weeklyHours}h | U rasporedu: {count}h
                           </div>
@@ -2390,7 +2518,7 @@ setStudents(uniqueStudents);
                     return (
                       <tr key={lek.id} className="hover:bg-slate-50 transition-colors">
                         <td className="p-3 border-r border-gray-200 font-bold uppercase text-[#005c8d]">
-                          {subject?.name || 'Hrvatski jezik'}
+                          {formatSubjectName(subject || { name: 'Hrvatski jezik' })}
                         </td>
                         <td className="p-3 border-r border-gray-200 text-slate-500">
                           {lek.updated_at 
@@ -2629,7 +2757,7 @@ setStudents(uniqueStudents);
                                 >
                                   <List size={10} strokeWidth={3} />
                                   <div className="absolute left-full ml-1 px-2 py-1 bg-gray-800 text-white text-[8px] rounded opacity-0 group-hover/hint:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg">
-                                     {scheduledSubjs.map(ss => allSubjects.find(s=>s.id===ss.subjectId)?.name).join(', ')}
+                                   {scheduledSubjs.map(ss => formatSubjectName(allSubjects.find(s=>s.id===ss.subjectId))).join(', ')}
                                   </div>
                                 </button>
                               </div>
@@ -2650,7 +2778,7 @@ setStudents(uniqueStudents);
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="flex-1 animate-fadeIn">
                                         <div className="font-bold text-[#005c8d] uppercase mb-0.5">
-                                          {(sub?.name || 'Predmet').toUpperCase()} - {lesson.teacherDisplayName && !lesson.teacherDisplayName.includes('undefined') ? lesson.teacherDisplayName : (teacher ? formatPersonName(teacher) : 'Nepoznat nastavnik')}
+                                          {formatSubjectName(sub || { name: 'Predmet' }).toUpperCase()} - {lesson.teacherDisplayName && !lesson.teacherDisplayName.includes('undefined') ? lesson.teacherDisplayName : (teacher ? formatPersonName(teacher) : 'Nepoznat nastavnik')}
                                           {lesson.groupName && ['GROUP_A', 'GROUP_B'].includes(lesson.groupName.toUpperCase()) ? <span className="text-gray-400 font-normal italic ml-1">({lesson.groupName === 'GROUP_A' ? 'Grupa A' : 'Grupa B'})</span> : (
                                             (lesson.groupName === 'grupa a' || lesson.groupName === 'Grupa A') ? <span className="text-gray-400 font-normal italic ml-1">(Grupa A)</span> :
                                             (lesson.groupName === 'grupa b' || lesson.groupName === 'Grupa B') ? <span className="text-gray-400 font-normal italic ml-1">(Grupa B)</span> : ''
@@ -2976,7 +3104,7 @@ setStudents(uniqueStudents);
                               const isMySubject = subjectAssignments.some(a => a.subjectId === s.id && a.classId === effectiveClassId && a.teacherId === user?.id);
                               return (
                                 <option key={s.id} value={s.id}>
-                                  {s.name} {isMySubject ? '(Moji sat)' : ''}
+                                  {formatSubjectName(s)} {isMySubject ? '(Moji sat)' : ''}
                                 </option>
                               );
                             })}
@@ -3148,7 +3276,7 @@ setStudents(uniqueStudents);
             
             <div className="p-4 bg-red-50/50 border-b border-gray-200 shrink-0 text-[11px]">
               <div className="font-bold text-gray-700 uppercase">
-                Predmet: <span className="text-red-800">{absenceEntryLesson.hour}. sat / {allSubjects.find(s => s.id === absenceEntryLesson.subjectId)?.name || 'Nepoznato'}</span>
+                Predmet: <span className="text-red-800">{absenceEntryLesson.hour}. sat / {formatSubjectName(allSubjects.find(s => s.id === absenceEntryLesson.subjectId)) || 'Nepoznato'}</span>
               </div>
               <p className="text-[10px] text-gray-500 mt-1 italic leading-tight">
                 Označite učenike koji nisu prisutni na ovom nastavnom satu.
@@ -3225,8 +3353,8 @@ setStudents(uniqueStudents);
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 text-[11px]">
           <div className="bg-white border border-gray-300 w-full max-w-lg shadow-[10px_10px_0px_rgba(0,0,0,0.05)]">
             <div className="bg-[#005c8d] p-2 text-white flex items-center justify-between">
-              <h3 className="text-[11px] font-bold uppercase tracking-tight">Planiranje provjere</h3>
-              <button onClick={() => setShowExamModal(false)} className="hover:text-red-200"><X size={16} /></button>
+              <h3 className="text-[11px] font-bold uppercase tracking-tight">{editingExam ? 'Uredite provjeru' : 'Planiranje provjere'}</h3>
+              <button onClick={() => { setShowExamModal(false); setEditingExam(null); }} className="hover:text-red-200"><X size={16} /></button>
             </div>
             <div className="p-4 space-y-4">
               <div className="space-y-1">
@@ -3237,7 +3365,12 @@ setStudents(uniqueStudents);
                   onChange={e => setExamForm({...examForm, subjectId: e.target.value})}
                 >
                   <option value="">-- Odaberi predmet --</option>
-                  {allSubjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {allSubjects
+                    .filter(s => {
+                      if (isAdminUser) return true;
+                      return subjectAssignments.some(a => a.classId === effectiveClassId && a.subjectId === s.id && a.teacherId === user?.id);
+                    })
+                    .map(s => <option key={s.id} value={s.id}>{formatSubjectName(s)}</option>)}
                 </select>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -3274,7 +3407,7 @@ setStudents(uniqueStudents);
             </div>
             <div className="bg-gray-50 border-t border-gray-300 p-3 flex justify-end gap-2">
               <button 
-                onClick={() => setShowExamModal(false)}
+                onClick={() => { setShowExamModal(false); setEditingExam(null); }}
                 className="px-4 py-1.5 border border-gray-300 text-gray-600 font-bold text-[10px] uppercase hover:bg-white"
               >
                 Odustani
@@ -3283,7 +3416,7 @@ setStudents(uniqueStudents);
                 onClick={saveExam}
                 className="px-6 py-1.5 bg-[#005c8d] text-white border border-[#004a70] font-bold text-[10px] uppercase hover:bg-[#004a70]"
               >
-                Spremi plan
+                {editingExam ? 'Spremi promjene' : 'Spremi plan'}
               </button>
             </div>
           </div>
@@ -3540,7 +3673,7 @@ setStudents(uniqueStudents);
                         <option value="">-- Odaberi predmet --</option>
                         {allSubjects
                           .filter(s => subjectAssignments.some(a => a.subjectId === s.id && a.classId === effectiveClassId))
-                          .map(s => <option key={s.id} value={s.id}>{s.name}</option>)
+                          .map(s => <option key={s.id} value={s.id}>{formatSubjectName(s)}</option>)
                         }
                       </select>
                    </div>
@@ -3581,7 +3714,7 @@ setStudents(uniqueStudents);
                     return (
                       <div key={s.id} className="py-2 flex items-center justify-between">
                         <div>
-                          <div className="text-[11px] font-black text-[#005c8d] uppercase">{sub?.name}</div>
+                          <div className="text-[11px] font-black text-[#005c8d] uppercase">{formatSubjectName(sub)}</div>
                           <div className="text-[9px] text-gray-400 font-bold uppercase">{formatPersonName(tea)} {s.classroom && `• ${s.classroom}`}</div>
                         </div>
                         <button 
@@ -3619,6 +3752,22 @@ setStudents(uniqueStudents);
 }
 
 function ScheduleGrid({ title, shift, periods, days, onCellClick, getCellSubjects, allSubjects, teachers, readOnly }: any) {
+  return (
+    <SharedScheduleGrid 
+      title={title}
+      shift={shift}
+      periods={periods}
+      days={days}
+      onCellClick={onCellClick}
+      getCellSubjects={getCellSubjects}
+      allSubjects={allSubjects}
+      teachers={teachers}
+      readOnly={readOnly}
+    />
+  );
+}
+
+function OldScheduleGrid_Unused({ title, shift, periods, days, onCellClick, getCellSubjects, allSubjects, teachers, readOnly }: any) {
   return (
     <div className="bg-white border border-gray-300">
       <div className="bg-[#f8f9fa] p-2 border-b border-gray-300">
@@ -3662,7 +3811,7 @@ function ScheduleGrid({ title, shift, periods, days, onCellClick, getCellSubject
                             const tea = teachers.find((t: any) => t.id === s.teacherId);
                             return (
                               <div key={s.id} className="bg-white border border-gray-200 p-1">
-                                <div className="font-bold text-[#005c8d] uppercase leading-tight">{sub?.name}</div>
+                                <div className="font-bold text-[#005c8d] uppercase leading-tight">{formatSubjectName(sub)}</div>
                                 <div className="text-[8px] text-gray-400 font-bold uppercase">{formatPersonName(tea)} {s.classroom && `• ${s.classroom}`}</div>
                               </div>
                             );

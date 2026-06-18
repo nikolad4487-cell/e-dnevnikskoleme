@@ -1069,12 +1069,61 @@ async function startServer() {
 
 
   // 1. Lektire APIs
+  const checkLektirePermission = async (authHeader: string | undefined, classId: string): Promise<{ authorized: boolean; error?: string; userId?: string }> => {
+    if (!supabaseAdmin) return { authorized: false, error: "Database admin client not configured" };
+    if (!authHeader) return { authorized: false, error: "Missing authorization header" };
+    
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    if (authError || !user) return { authorized: false, error: "Invalid token" };
+
+    const userId = user.id;
+
+    // 1. Check if user is an Administrator
+    const { data: roles } = await supabaseAdmin
+      .from('user_school_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .in('role', ['MAIN_ADMIN', 'ADMIN', 'SCHOOL_ADMIN']);
+
+    if (roles && roles.length > 0) {
+      return { authorized: true, userId };
+    }
+
+    // 2. Check if user is a Croatian Language teacher for classId
+    // Get Croatian language subjects
+    const { data: subjects } = await supabaseAdmin
+      .from('subjects')
+      .select('id')
+      .ilike('name', '%hrvatski%');
+
+    if (subjects && subjects.length > 0) {
+      const subjectIds = subjects.map(s => s.id);
+      const { data: assignment } = await supabaseAdmin
+        .from('class_subject_teachers')
+        .select('id')
+        .eq('class_id', classId)
+        .eq('teacher_id', userId)
+        .in('subject_id', subjectIds)
+        .limit(1);
+
+      if (assignment && assignment.length > 0) {
+        return { authorized: true, userId };
+      }
+    }
+
+    return { authorized: false, error: "Nemate ovlasti za pristup lektiri za ovaj razred.", userId };
+  };
+
   app.get("/api/lektire", async (req, res) => {
     try {
       const { classId, subjectId, schoolId, schoolYearId } = req.query;
       if (!classId) return res.status(400).json({ error: "classId is required" });
       
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+
+      const permCheck = await checkLektirePermission(req.headers.authorization, classId as string);
+      if (!permCheck.authorized) return res.status(403).json({ error: permCheck.error });
 
       let query = supabaseAdmin.from("reading_assignments").select("*").eq("class_id", classId);
       
@@ -1113,6 +1162,9 @@ async function startServer() {
       if (!classId || !subjectId || !title) {
         return res.status(400).json({ error: "Missing required fields" });
       }
+
+      const permCheck = await checkLektirePermission(req.headers.authorization, classId);
+      if (!permCheck.authorized) return res.status(403).json({ error: permCheck.error });
       
       const payload = {
         class_id: classId,
@@ -1122,8 +1174,8 @@ async function startServer() {
         processing_method: null,
         processing_details: processingDetails || null,
         processed_at: completedDate || new Date().toISOString(),
-        created_by: createdBy || null,
-        teacher_id: teacherId || null,
+        created_by: createdBy || permCheck.userId || null,
+        teacher_id: teacherId || permCheck.userId || null,
         school_id: schoolId || null,
         school_year_id: schoolYearId || null
       };
@@ -1155,6 +1207,20 @@ async function startServer() {
       const { id } = req.params;
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       
+      // Fetch existing reading assignment to get class_id
+      const { data: existing, error: findError } = await supabaseAdmin
+        .from("reading_assignments")
+        .select("class_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (findError || !existing) {
+        return res.status(404).json({ error: "Lektira nije pronađena." });
+      }
+
+      const permCheck = await checkLektirePermission(req.headers.authorization, existing.class_id);
+      if (!permCheck.authorized) return res.status(403).json({ error: permCheck.error });
+
       const { title, completedDate, processingDetails } = req.body;
       
       const payload = {
@@ -1191,6 +1257,21 @@ async function startServer() {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       const { id } = req.params;
+
+      // Fetch existing reading assignment to get class_id
+      const { data: existing, error: findError } = await supabaseAdmin
+        .from("reading_assignments")
+        .select("class_id")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (findError || !existing) {
+        return res.status(404).json({ error: "Lektira nije pronađena." });
+      }
+
+      const permCheck = await checkLektirePermission(req.headers.authorization, existing.class_id);
+      if (!permCheck.authorized) return res.status(403).json({ error: permCheck.error });
+
       const { error } = await supabaseAdmin
         .from("reading_assignments")
         .delete()

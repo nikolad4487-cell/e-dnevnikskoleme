@@ -48,7 +48,7 @@ export default function RasporedPage() {
         setStudentData(student);
 
         // Determine effective classId
-        const studentClassId = student?.class_id || student?.classId || selectedClassId;
+        const studentClassId = selectedClassId || student?.class_id || student?.classId;
 
         if (studentClassId) {
           // Fetch Class info
@@ -97,28 +97,32 @@ export default function RasporedPage() {
             setScheduleSubjects([]);
             setTeacherProfiles([]);
           }
-        }
 
-        // Fetch Subjects mapping table for subject names
-        const { data: subData } = await supabase.from('subjects').select('*');
-        const { data: classSubjs } = await supabase
-          .from('class_subjects')
-          .select('subject_id, subject_type')
-          .eq('class_id', selectedClassId || '');
+          // Fetch Subjects mapping table for subject names
+          const { data: subData } = await supabase.from('subjects').select('*');
+          const { data: classSubjs } = await supabase
+            .from('class_subjects')
+            .select('subject_id, subject_type')
+            .eq('class_id', studentClassId);
 
-        const csMap = new Map<string, string>();
-        if (classSubjs) {
-          for (const cs of classSubjs) {
-            csMap.set(cs.subject_id, cs.subject_type || 'REQUIRED');
+          const csMap = new Map<string, string>();
+          if (classSubjs) {
+            for (const cs of classSubjs) {
+              csMap.set(cs.subject_id, cs.subject_type || 'REQUIRED');
+            }
           }
+          setSubjects((subData || []).map(row => {
+            const sub = mappers.subject(row);
+            const typeValue = csMap.get(sub.id) || 'REQUIRED';
+            return {
+              ...sub,
+              subjectType: typeValue,
+              subject_type: typeValue,
+              type: typeValue,
+              name: formatSubjectDisplayName(sub.name, typeValue)
+            };
+          }));
         }
-        setSubjects((subData || []).map(row => {
-          const sub = mappers.subject(row);
-          return {
-            ...sub,
-            name: formatSubjectDisplayName(sub.name, csMap.get(sub.id) || 'REQUIRED')
-          };
-        }));
 
       } catch (err) {
         console.error("Error fetching schedule data:", err);
@@ -128,6 +132,34 @@ export default function RasporedPage() {
     };
 
     fetchData();
+
+    // Subscribe to real-time changes in schedule cells and subjects for live updates
+    const channelCells = supabase
+      .channel('student-schedule-cells-live')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'schedule_cells'
+      }, () => {
+        fetchData();
+      })
+      .subscribe();
+
+    const channelSubjects = supabase
+      .channel('student-schedule-subj-live')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'schedule_cell_subjects'
+      }, () => {
+        fetchData();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channelCells);
+      supabase.removeChannel(channelSubjects);
+    };
   }, [targetStudentId, selectedClassId]);
 
   // Debug Logging Requirements
@@ -143,7 +175,7 @@ export default function RasporedPage() {
     }
   }, [studentData, scheduleCells, scheduleSubjects]);
 
-  const days = ['PON', 'UTO', 'SRI', 'ČET', 'PET'];
+  const days = ['PON', 'UTO', 'SRI', 'ČET', 'PET', 'SUB'];
   const morningPeriods = [1, 2, 3, 4, 5, 6, 7, 8];
   const afternoonPeriods = [0, 1, 2, 3, 4, 5, 6, 7];
 

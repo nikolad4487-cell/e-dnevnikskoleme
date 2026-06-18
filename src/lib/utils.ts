@@ -97,16 +97,13 @@ export function formatSubjectDisplayName(subjectName: string, subjectType: strin
     .replace(/\s*\(practice\)\s*$/i, '')
     .trim();
     
-  if (!subjectType) return cleaned;
-  const t = subjectType.toUpperCase().trim();
-  
-  if (t === 'REDOVNI') return cleaned;
+  const t = normalizeSubjectType(subjectType);
   
   if (t === 'IZBORNI') return `${cleaned} (izborni)`;
   
-  if (t === 'PRAKSA' || t === 'PRACTICE') return `${cleaned} (praksa)`;
+  if (t === 'PRAKSA') return `${cleaned} (praksa)`;
   
-  return `${cleaned} (${subjectType.toLowerCase()})`;
+  return cleaned;
 }
 
 export function formatSubjectName(subject: any) {
@@ -142,10 +139,7 @@ export function getClassSubjectDisplayName(classSubject: any) {
     classSubject.subjectType
   );
 
-  if (type === "IZBORNI") return `${name} (izborni)`;
-  if (type === "PRAKSA") return `${name} (praksa)`;
-
-  return name;
+  return formatSubjectDisplayName(name, type);
 }
 
 export function sanitizeSubjectType(type: string | null | undefined): 'REDOVNI' | 'IZBORNI' {

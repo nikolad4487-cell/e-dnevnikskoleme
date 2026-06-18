@@ -1,0 +1,2 @@
+src/pages/admin/SubjectManagementPage.tsx:211:                      setName(subject.name);
+src/pages/student/OcjenePage.tsx:301:                  key={subject.name}

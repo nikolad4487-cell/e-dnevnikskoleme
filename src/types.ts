@@ -110,6 +110,8 @@ export type Subject = {
   name: string;
   code?: string;
   gradingElements?: string[];
+  isCroatianLanguage?: boolean;
+  subjectType?: string;
 };
 
 export type ClassSubject = {

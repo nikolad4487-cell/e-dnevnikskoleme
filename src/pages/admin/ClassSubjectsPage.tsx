@@ -16,7 +16,7 @@ import {
 import { toast } from 'react-hot-toast';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
-import { formatSubjectDisplayName, sanitizeSubjectType, getForcedSubjectType } from '../../lib/utils';
+import { formatSubjectDisplayName, sanitizeSubjectType, getForcedSubjectType, formatSubjectName } from '../../lib/utils';
 
 export default function ClassSubjectsPage() {
   const { selectedSchoolId, selectedClassId } = useSelection();
@@ -445,7 +445,7 @@ export default function ClassSubjectsPage() {
                   >
                     <option value="">Odaberi predmet...</option>
                     {allSubjects.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.code})</option>
+                      <option key={s.id} value={s.id}>{formatSubjectName(s)} ({s.code})</option>
                     ))}
                   </select>
                 </div>

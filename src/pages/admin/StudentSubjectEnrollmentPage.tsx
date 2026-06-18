@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Subject, Role } from '../../types';
-import { getSurname, matchesSearch, sortStudentsBySurname } from '../../lib/utils';
+import { getSurname, matchesSearch, sortStudentsBySurname, formatSubjectName } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
@@ -347,7 +347,7 @@ export default function StudentSubjectEnrollmentPage() {
                 {subjects.map(s => (
                   <th key={s.id} className="p-4 border-r min-w-[120px] group relative">
                     <div className="flex flex-col gap-1">
-                      <span className="text-[9px] font-black text-slate-900 uppercase leading-none">{s.name}</span>
+                      <span className="text-[9px] font-black text-slate-900 uppercase leading-none">{formatSubjectName(s)}</span>
                       <span className="text-[8px] font-bold text-slate-400 uppercase">{s.code}</span>
                     </div>
                     <button 
@@ -474,7 +474,7 @@ export default function StudentSubjectEnrollmentPage() {
                         <div className={`w-5 h-5 rounded flex items-center justify-center border-2 transition-colors \${isChecked ? 'bg-[#005c8d] border-[#005c8d]' : 'border-slate-300 group-hover:border-slate-400'}`}>
                           {isChecked && <Check size={14} className="text-white" strokeWidth={3} />}
                         </div>
-                        <span className="text-sm font-bold text-slate-700">{sub.name}</span>
+                        <span className="text-sm font-bold text-slate-700">{formatSubjectName(sub)}</span>
                       </label>
                     );
                   })}

@@ -88,12 +88,27 @@ export const mappers = {
     schoolYearIsActive: raw.school_year_relation?.is_active,
   }),
 
-  subject: (raw: any) => ({
-    id: raw.id,
-    schoolId: raw.school_id,
-    name: raw.name,
-    code: raw.code,
-  }),
+  subject: (raw: any) => {
+    const isHr = !!(
+      (raw.name && raw.name.toLowerCase().includes('hrvatski')) || 
+      (raw.code && raw.code.toUpperCase() === 'HRV') || 
+      (raw.is_croatian_language === true) || 
+      (raw.isCroatianLanguage === true) ||
+      (raw.subject_type === 'CroatianLanguage' || raw.subjectType === 'CroatianLanguage')
+    );
+    return {
+      id: raw.id,
+      schoolId: raw.school_id,
+      name: raw.name,
+      code: raw.code,
+      isCroatianLanguage: isHr,
+      is_croatian_language: isHr,
+      IsCroatianLanguage: isHr,
+      subjectType: isHr ? 'CroatianLanguage' : 'Standard',
+      subject_type: isHr ? 'CroatianLanguage' : 'Standard',
+      SubjectType: isHr ? 'CroatianLanguage' : 'Standard',
+    };
+  },
 
   lesson: (raw: any) => ({
     id: raw.id,

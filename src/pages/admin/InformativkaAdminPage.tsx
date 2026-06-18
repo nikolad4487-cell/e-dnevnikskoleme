@@ -147,7 +147,7 @@ export default function InformativkaAdminPage({ classId: propClassId }: Informat
                  .select('id')
                  .eq('class_id', classId)
                  .eq('subject_id', subjectId)
-                 .maybeSingle();
+                 .then(res => ({ data: (res.data && res.data.length > 0 ? res.data[0] : null) }));
 
             if (!existing) {
                 const payload = {

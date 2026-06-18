@@ -145,13 +145,14 @@ export default function InformativkaPage() {
 
       for (const cs of classSubjects) {
         let channelId;
-        const { data: existingChannel } = await supabase
+        const { data: existingChannelList } = await supabase
           .from('chat_groups')
           .select('id')
           .eq('type', 'SUBJECT_CHANNEL')
           .eq('class_id', selectedClassId)
-          .eq('subject_id', cs.subject_id)
-          .maybeSingle();
+          .eq('subject_id', cs.subject_id);
+
+        const existingChannel = existingChannelList && existingChannelList.length > 0 ? existingChannelList[0] : null;
 
         if (!existingChannel) {
           const subjectName = Array.isArray(cs.subject) ? (cs.subject[0] as any)?.name : (cs.subject as any)?.name;
