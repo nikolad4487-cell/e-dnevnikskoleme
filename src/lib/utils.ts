@@ -220,11 +220,11 @@ export function normalizeText(value: string | null | undefined): string {
 export function getForcedSubjectType(subjectName: string, selectedType: string): 'REDOVNI' | 'IZBORNI' | 'PRAKSA' {
   const name = normalizeText(subjectName);
   
-  if (name === "prakticna nastava") {
+  if (name.includes("prakticna nastava") || name.includes("praksa")) {
     return "PRAKSA";
   }
   
-  if (name === "etika" || name === "vjeronauk") {
+  if (name.includes("izborni") || name === "etika" || name === "vjeronauk") {
     return "IZBORNI";
   }
   
