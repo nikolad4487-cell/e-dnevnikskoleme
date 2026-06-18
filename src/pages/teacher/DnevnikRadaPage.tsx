@@ -3672,7 +3672,12 @@ setStudents(uniqueStudents);
                       >
                         <option value="">-- Odaberi predmet --</option>
                         {allSubjects
-                          .filter(s => subjectAssignments.some(a => a.subjectId === s.id && a.classId === effectiveClassId))
+                          .filter(s => 
+                            subjectAssignments.some(a => a.subjectId === s.id && a.classId === effectiveClassId) ||
+                            isMainAdmin ||
+                            user?.id === (selectedClass as any)?.homeroom_teacher_id ||
+                            user?.id === selectedClass?.homeroomTeacherId
+                          )
                           .map(s => <option key={s.id} value={s.id}>{formatSubjectName(s)}</option>)
                         }
                       </select>
