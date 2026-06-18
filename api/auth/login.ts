@@ -25,6 +25,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { email, password, totpCode, loginType } = body;
 
+    console.log(`[LOGIN_API] HOST ${req.headers.get('host') || 'unknown'}`);
     console.log(`[LOGIN_API] Attempting login for raw email: ${email} (${loginType})`);
 
     // 0. Smart username/domain resolution before lookup
@@ -34,20 +35,25 @@ export async function POST(req: Request) {
     // Let's attempt to look up the profile in user_profiles by local part first
     // to resolve their actual stored email (e.g. if we get "boris.sreckovic@eskole.me" 
     // or "boris.sreckovic", we find "boris.sreckovic@skolehr.xyz")
-    const { data: dbResolvedProfile } = await supabaseAdmin
+    const { data: dbResolvedProfile, error: resolveError } = await supabaseAdmin
       .from('user_profiles')
-      .select('email')
+      .select('email, status')
       .ilike('email', `${localPart}@%`)
       .maybeSingle();
+
+    if (resolveError) {
+      console.error("[LOGIN_API] Email resolution error:", resolveError);
+    }
       
     if (dbResolvedProfile && dbResolvedProfile.email) {
       console.log(`[LOGIN_API] Smart-resolved email: ${DemoresolvedEmail} -> ${dbResolvedProfile.email}`);
       DemoresolvedEmail = dbResolvedProfile.email;
     }
+    console.log("[LOGIN_API] normalizedEmail", DemoresolvedEmail);
 
-    // 1. Sign in with Supabase
-    // Use a hardcoded technical password for all staff as a temporary fix
-    const passwordOrPin = password; // Directly use the password (which is the PIN for staff)
+    // 1. Sign in with Supabase using the password/PIN the user actually entered.
+    // Staff accounts use the same four-digit PIN as their Supabase Auth password.
+    const passwordOrPin = password;
 
     const { data, error } = await supabaseAdmin.auth.signInWithPassword({
       email: DemoresolvedEmail,
@@ -84,10 +90,20 @@ export async function POST(req: Request) {
       });
     }
 
-    console.log("[LOGIN_API] Profile found:", !!profile, profile.id);
+    console.log("[LOGIN_API] profileFound", !!profile);
     console.log("[LOGIN_API] User Email:", profile.email);
-    console.log("[LOGIN_API] Role:", profile.role, "Access Role:", profile.access_role);
-    console.log("[LOGIN_API] Has pin_hash:", !!profile.pin_hash);
+    console.log("[LOGIN_API] profileRole", profile.role, profile.access_role);
+    console.log("[LOGIN_API] hasPinHash", !!profile.pin_hash);
+    console.log("[LOGIN_API] requiresAuthenticatorSetup", !!profile.requires_authenticator_setup);
+    console.log("[LOGIN_API] hasAuthenticatorSecret", !!profile.authenticator_secret);
+
+    if (profile.status && profile.status !== 'ACTIVE') {
+      console.error("[LOGIN_API] User account disabled:", profile.status);
+      return new Response(JSON.stringify({ error: "Korisnički račun nije aktivan." }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
 
     // Verify PIN if staff
     if (loginType === 'STAFF') {
@@ -100,7 +116,7 @@ export async function POST(req: Request) {
       }
       // Wait, is cryptography package or helper used? We can run bcrypt.compare directly
       const isPinValid = await bcrypt.compare(password, profile.pin_hash);
-      console.log("[LOGIN_API] PIN check result:", isPinValid);
+      console.log("[LOGIN_API] pinCheck", isPinValid);
       if (!isPinValid) {
          return new Response(JSON.stringify({ error: "Neispravan PIN." }), {
            status: 401,
@@ -128,6 +144,19 @@ export async function POST(req: Request) {
 
     console.log(`[LOGIN_API] User ${DemoresolvedEmail} has resolved roles:`, userSchoolRoles);
 
+    if (loginType === 'STAFF') {
+      const hasStaffRole = userSchoolRoles.some((role: string) =>
+        ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
+      );
+      if (!hasStaffRole) {
+        console.error("[LOGIN_API] Staff login requested but no staff role found", userSchoolRoles);
+        return new Response(JSON.stringify({ error: "Korisnik nema nastavničku ili administratorsku ulogu." }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // 4. Verify TOTP if staff
     if (loginType === 'STAFF') {
       const isActuallyStaff = userSchoolRoles.some((role: string) => 
@@ -154,6 +183,8 @@ export async function POST(req: Request) {
           } else {
             isValid = authenticator.check(totpCode, profile.authenticator_secret);
           }
+
+          console.log("[LOGIN_API] totpCheck", isValid);
 
           if (!isValid) {
             return new Response(JSON.stringify({ error: "Neispravan autentifikator kod." }), { 

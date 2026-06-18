@@ -119,7 +119,7 @@ export default function LoginPage() {
       }
 
       const result = await response.json();
-      console.log("LOGIN API RESULT", result);
+      console.log("LOGIN API RESULT", JSON.stringify(result, null, 2));
 
       if (!response.ok) {
         throw new Error(result.error || 'Greška pri prijavi.');
