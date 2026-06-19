@@ -99,7 +99,8 @@ export function formatSubjectDisplayName(subjectName: string, subjectType: strin
     .replace(/\s*\(practice\)\s*$/i, '')
     .trim();
     
-  const t = normalizeSubjectType(subjectType);
+  const resolvedType = getForcedSubjectType(cleaned, subjectType);
+  const t = normalizeSubjectType(resolvedType);
   
   if (t === 'IZBORNI') return `${cleaned} (Izborni)`;
   
@@ -226,7 +227,7 @@ export function getForcedSubjectType(subjectName: string, selectedType: string):
     return "PRAKSA";
   }
   
-  if (name.includes("izborni") || name === "etika" || name === "vjeronauk") {
+  if (name.includes("izborni") || name.includes("etika") || name.includes("vjeronauk")) {
     return "IZBORNI";
   }
   
