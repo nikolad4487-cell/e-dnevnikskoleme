@@ -2557,47 +2557,6 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     }
   });
 
-  // Debug route
-  app.get("/api/admin/run-pin-hash-migration", async (req, res) => {
-    try {
-      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
-      const sql = 'alter table public.user_profiles add column if not exists pin_hash text;';
-      const { error } = await supabaseAdmin.rpc('exec_sql', { sql_statement: sql });
-      if (error) throw error;
-      res.json({ success: true });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.get("/api/debug-db", async (req, res) => {
-    try {
-      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
-      
-      // Get table columns
-      const { data: columns, error: colError } = await supabaseAdmin.rpc('exec_sql', {
-        sql_statement: `
-          SELECT column_name, data_type 
-          FROM information_schema.columns 
-          WHERE table_name IN ('school_events', 'final_exam_defense_schedule');
-        `
-      });
-
-      // Get RLS policies
-      const { data: policies, error: polError } = await supabaseAdmin.rpc('exec_sql', {
-        sql_statement: `
-          SELECT policyname, cmd, permissive, roles 
-          FROM pg_policies 
-          WHERE tablename IN ('school_events', 'final_exam_defense_schedule');
-        `
-      });
-
-      res.json({ columns, policies });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
   // Admin update user endpoint
   app.patch("/api/admin/update-user", async (req, res) => {
     try {
@@ -3109,24 +3068,6 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     } catch (err: any) {
       console.error("[RESET_STUDENT_PASS] Error:", err);
       res.status(500).json({ error: err.message });
-    }
-  });
-
-  // Vite middleware for development
-  app.post("/api/admin/fix-classes", async (req, res) => {
-    try {
-      if (supabaseAdmin) {
-        const sql = `
-          DROP POLICY IF EXISTS "Authenticated manage classes" ON public.classes;
-          CREATE POLICY "Authenticated manage classes" ON public.classes FOR ALL TO authenticated USING (true);
-        `;
-        const { error } = await supabaseAdmin.rpc('exec_sql', { query: sql });
-        res.json({ success: true, error });
-      } else {
-        res.status(500).json({ error: "supabaseAdmin not available" });
-      }
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
     }
   });
 

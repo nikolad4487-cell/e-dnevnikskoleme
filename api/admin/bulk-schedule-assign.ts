@@ -40,53 +40,49 @@ export async function POST(req: Request) {
       });
     }
 
-    // construct transactional plpgsql block to execute via exec_sql
-    const escapedClassId = classId.replace(/'/g, "''");
-    const escapedSubjectId = subjectId.replace(/'/g, "''");
-    const escapedTeacherId = teacherId.replace(/'/g, "''");
-    const escapedDayOfWeek = dayOfWeek.replace(/'/g, "''");
-    const escapedShift = shift.replace(/'/g, "''");
-    const escapedClassroom = classroom ? `'${classroom.replace(/'/g, "''")}'` : 'NULL';
+    // Assign each consecutive period
+    for (let p = start; p <= end; p++) {
+      // 1. Upsert or find schedule_cell
+      const { data: cell, error: cellErr } = await supabaseAdmin
+        .from('schedule_cells')
+        .upsert({
+          class_id: classId,
+          day_of_week: dayOfWeek,
+          shift: shift,
+          period_number: p
+        }, {
+          onConflict: 'class_id,day_of_week,shift,period_number'
+        })
+        .select()
+        .maybeSingle();
 
-    const sql = `
-DO $$
-DECLARE
-  cell_id uuid;
-  assigned_subject_id text := '${escapedSubjectId}';
-  assigned_teacher_id uuid := '${escapedTeacherId}';
-  assigned_class_id text := '${escapedClassId}';
-  day text := '${escapedDayOfWeek}';
-  sh text := '${escapedShift}';
-  classroom_val text := ${escapedClassroom};
-  p_num integer;
-BEGIN
-  FOR p_num IN ${start}..${end} LOOP
-    -- Insert cell if not exists, and get id
-    INSERT INTO public.schedule_cells (class_id, day_of_week, shift, period_number)
-    VALUES (assigned_class_id, day, sh, p_num)
-    ON CONFLICT (class_id, day_of_week, shift, period_number) 
-    DO UPDATE SET updated_at = NOW()
-    RETURNING id INTO cell_id;
+      if (cellErr || !cell) {
+        throw new Error(cellErr?.message || `Neuspjelo kreiranje ćelije za period ${p}`);
+      }
 
-    -- Delete existing subjects from schedule_cell_subjects for this cell to avoid duplicate key conflicts
-    DELETE FROM public.schedule_cell_subjects WHERE schedule_cell_id = cell_id;
+      // 2. Delete any existing schedule_cell_subjects entries for this cell
+      const { error: delErr } = await supabaseAdmin
+        .from('schedule_cell_subjects')
+        .delete()
+        .eq('schedule_cell_id', cell.id);
 
-    -- Insert new subject
-    INSERT INTO public.schedule_cell_subjects (schedule_cell_id, subject_id, teacher_id, classroom)
-    VALUES (cell_id, assigned_subject_id, assigned_teacher_id, classroom_val);
-  END LOOP;
-END;
-$$;
-`;
+      if (delErr) {
+        throw delErr;
+      }
 
-    const { error: rpcError } = await supabaseAdmin.rpc('exec_sql', { query: sql });
-    
-    if (rpcError) {
-      console.error("[BULK_SCHEDULE_ASSIGN_API] Database error:", rpcError);
-      return new Response(JSON.stringify({ success: false, error: `Problem kod spremanja u bazu: ${rpcError.message}` }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+      // 3. Insert new schedule_cell_subjects
+      const { error: insErr } = await supabaseAdmin
+        .from('schedule_cell_subjects')
+        .insert({
+          schedule_cell_id: cell.id,
+          subject_id: subjectId,
+          teacher_id: teacherId || null,
+          classroom: classroom || null
+        });
+
+      if (insErr) {
+        throw insErr;
+      }
     }
 
     return new Response(JSON.stringify({ success: true, message: "Raspored je uspješno kreiran u bloku." }), {
@@ -125,30 +121,31 @@ export async function DELETE(req: Request) {
       });
     }
 
-    const escapedClassId = classId.replace(/'/g, "''");
-    const escapedSubjectId = subjectId.replace(/'/g, "''");
-    const escapedDayOfWeek = dayOfWeek.replace(/'/g, "''");
-    const escapedShift = shift.replace(/'/g, "''");
+    // Find all schedule_cells for this class, day and shift
+    const { data: cells, error: cellsErr } = await supabaseAdmin
+      .from('schedule_cells')
+      .select('id')
+      .eq('class_id', classId)
+      .eq('day_of_week', dayOfWeek)
+      .eq('shift', shift);
 
-    const sql = `
-DELETE FROM public.schedule_cell_subjects
-WHERE subject_id = '${escapedSubjectId}'
-  AND schedule_cell_id IN (
-    SELECT id FROM public.schedule_cells
-    WHERE class_id = '${escapedClassId}'
-      AND day_of_week = '${escapedDayOfWeek}'
-      AND shift = '${escapedShift}'
-  );
-`;
+    if (cellsErr) {
+      throw cellsErr;
+    }
 
-    const { error: rpcError } = await supabaseAdmin.rpc('exec_sql', { query: sql });
-    
-    if (rpcError) {
-      console.error("[BULK_SCHEDULE_DELETE_API] Database error:", rpcError);
-      return new Response(JSON.stringify({ success: false, error: `Problem kod brisanja bloka: ${rpcError.message}` }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    if (cells && cells.length > 0) {
+      const cellIds = cells.map((c: any) => c.id);
+
+      // Delete subject assignments matching this subjectId in these cells
+      const { error: delErr } = await supabaseAdmin
+        .from('schedule_cell_subjects')
+        .delete()
+        .in('schedule_cell_id', cellIds)
+        .eq('subject_id', subjectId);
+
+      if (delErr) {
+        throw delErr;
+      }
     }
 
     return new Response(JSON.stringify({ success: true, message: "Cijeli blok predmeta je uspješno obrisan." }), {
