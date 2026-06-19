@@ -112,6 +112,8 @@ export default function ScheduleManagementPage() {
         .from('class_subject_teachers')
         .select(`
           id,
+          subject_id,
+          teacher_id,
           subject:subjects(*),
           teacher:user_profiles(*)
         `)
@@ -234,8 +236,8 @@ export default function ScheduleManagementPage() {
           shift,
           startPeriod: start,
           consecutivePeriods: count,
-          subjectId: assignment.subject_id,
-          teacherId: assignment.teacher_id,
+          subjectId: assignment.subject_id || assignment.subject?.id,
+          teacherId: assignment.teacher_id || assignment.teacher?.id,
           classroom: modalClassroom || null
         })
       });
