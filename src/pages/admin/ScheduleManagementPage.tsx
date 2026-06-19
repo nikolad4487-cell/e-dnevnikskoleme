@@ -109,29 +109,40 @@ export default function ScheduleManagementPage() {
         }
       }
 
-      // 1. Fetch Class Subjects (to know which subjects can be put in schedule)
-      const { data: classSubjects } = await supabase
+      // 1. Fetch Class Subjects (Metadata - Canonical list)
+      const { data: classSubjectsRaw } = await supabase
+        .from('class_subjects')
+        .select(`
+          subject_id, 
+          subject_type,
+          subject:subjects(*)
+        `)
+        .eq('class_id', selectedClassId);
+
+      // 2. Fetch Assignments to join teachers
+      const { data: assignments } = await supabase
         .from('class_subject_teachers')
         .select(`
-          id,
           subject_id,
           teacher_id,
-          subject:subjects(*),
           teacher:user_profiles(*)
         `)
         .eq('class_id', selectedClassId);
-      
-      // Filter subjects based on class_subjects metadata
-      const filteredClassSubjects = (classSubjects || []).filter(cs => validSubjectIds.has(cs.subject_id));
-      
-      const formattedClassSubjects = filteredClassSubjects.map((cs: any) => {
-        const typeValue = csMap.get(cs.subject?.id || '') || 'REQUIRED';
+
+      const teacherMap = new Map<string, any>();
+      (assignments || []).forEach(a => {
+        teacherMap.set(a.subject_id, a.teacher);
+      });
+
+      const formattedClassSubjects = (classSubjectsRaw || []).map((cs: any) => {
+        const typeValue = cs.subject_type || 'REQUIRED';
         return {
-          ...cs,
+          id: cs.subject_id, // Subject ID used for assignment selection
           subject: cs.subject ? {
             ...cs.subject,
             name: formatSubjectDisplayName(cs.subject.name, typeValue)
-          } : null
+          } : null,
+          teacher: teacherMap.get(cs.subject_id)
         };
       });
       setSubjects(formattedClassSubjects);
@@ -236,8 +247,8 @@ export default function ScheduleManagementPage() {
           shift,
           startPeriod: start,
           consecutivePeriods: count,
-          subjectId: assignment.subject_id || assignment.subject?.id,
-          teacherId: assignment.teacher_id || assignment.teacher?.id,
+          subjectId: assignment.id,
+          teacherId: assignment.teacher?.id || null,
           classroom: modalClassroom || null
         };
       console.log("FRONTEND PAYLOAD", JSON.stringify(payload, null, 2));

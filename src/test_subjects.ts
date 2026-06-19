@@ -7,23 +7,19 @@ const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_S
 const supabase = createClient(url, key);
 
 async function run() {
-  const { data: classes, error: cError } = await supabase.from('classes').select('id, name').limit(1);
-  if (cError || !classes || classes.length === 0) { console.error(cError); return; }
-  const clsId = classes[0].id;
+  // Find a class to test
+  const { data: cls, error: cError } = await supabase.from('classes').select('*').eq('name', '2.A').single();
+  if (cError) { console.error(cError); return; }
+  const clsId = cls.id;
   
-  console.log("Testing class:", classes[0]);
+  console.log("Testing class:", cls);
   
-  const { data: cSubjects, error: csError } = await supabase
-      .from('class_subjects')
-      .select('subject_id')
-      .eq('class_id', clsId);
-  console.log("class_subjects subjects:", cSubjects?.map(s => s.subject_id));
-    
-  const { data: cstSubjects, error: cstError } = await supabase
+  const { data: assignments, error: aError } = await supabase
       .from('class_subject_teachers')
-      .select('subject_id')
+      .select('subject_id, subject:subjects(name)')
       .eq('class_id', clsId);
-  console.log("class_subject_teachers subjects:", cstSubjects?.map(s => s.subject_id));
+  
+  console.log("Assignments for 2.A:", JSON.stringify(assignments, null, 2));
 }
 
 run();
