@@ -402,6 +402,41 @@ async function startServer() {
       }
   });
 
+  // Sync class subjects endpoint
+  app.post("/api/admin/sync-class-subjects", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { classId } = req.body;
+      if (!classId) return res.status(400).json({ success: false, error: "Missing classId" });
+
+      const { data: canonicalSubjects, error: csError } = await supabaseAdmin
+        .from('class_subjects')
+        .select('subject_id')
+        .eq('class_id', classId);
+      if (csError) throw csError;
+      
+      const canonicalIds = new Set((canonicalSubjects || []).map(cs => cs.subject_id));
+
+      const { data: assignments, error: astError } = await supabaseAdmin
+        .from('class_subject_teachers')
+        .select('id, subject_id')
+        .eq('class_id', classId);
+      if (astError) throw astError;
+
+      const toDelete = (assignments || []).filter(a => !canonicalIds.has(a.subject_id));
+      let deletedCount = 0;
+      for (const item of toDelete) {
+        await supabaseAdmin.from('class_subject_teachers').delete().eq('id', item.id);
+        deletedCount++;
+      }
+      
+      res.json({ success: true, results: { deleted: deletedCount } });
+    } catch (err: any) {
+      console.error("Sync error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Overall Success Audit Logs
   app.post("/api/overall-success-audit-logs", async (req, res) => {
     try {

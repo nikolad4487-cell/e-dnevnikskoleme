@@ -110,7 +110,8 @@ export default function ScheduleManagementPage() {
       }
 
       // 1. Fetch Class Subjects (Metadata - Canonical list)
-      console.log("DEBUG: Fetching class_subjects for classId:", selectedClassId, "schoolId:", selectedSchoolId);
+      console.log("selectedSchoolId:", selectedSchoolId);
+      console.log("selectedClassId:", selectedClassId);
       const { data: classSubjectsRaw, error: csError } = await supabase
         .from('class_subjects')
         .select(`
@@ -121,7 +122,7 @@ export default function ScheduleManagementPage() {
         .eq('class_id', selectedClassId)
         .eq('school_id', selectedSchoolId);
       
-      console.log("DEBUG: classSubjectsRaw:", classSubjectsRaw);
+      console.log("classSubjectsRaw:", classSubjectsRaw);
       console.log("DEBUG: classSubjectsError:", csError);
 
       // 2. Fetch Assignments to join teachers
@@ -155,6 +156,8 @@ export default function ScheduleManagementPage() {
           teacher: teacherMap.get(cs.subject_id)
         };
       });
+      console.log("DEBUG: Final classSubjectsRaw before formatting:", classSubjectsRaw);
+      console.log("DEBUG: Final formattedClassSubjects:", formattedClassSubjects);
       setSubjects(formattedClassSubjects);
 
       // 2. Fetch Schedule Cells
