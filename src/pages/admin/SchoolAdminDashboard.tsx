@@ -15,7 +15,8 @@ import {
   BarChart3,
   UserPlus,
   MessageSquare,
-  Archive
+  Archive,
+  Clock
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -82,6 +83,7 @@ export default function SchoolAdminDashboard() {
     { id: 'godine', name: 'Školske godine', icon: Calendar, color: 'bg-emerald-500', link: '/admin-skole/skolske-godine' },
     { id: 'kalendar-skole', name: 'Školski kalendar', icon: Calendar, color: 'bg-blue-600', link: '/admin-skole/kalendar' },
     { id: 'razredi', name: 'Razredni odjeli', icon: GraduationCap, color: 'bg-blue-500', link: '/admin-skole/razredi' },
+    { id: 'raspored', name: 'Raspored sati', icon: Clock, color: 'bg-[#005c8d]', link: '/admin-skole/raspored' },
     { id: 'korisnici', name: 'Korisnici / Nastavnici', icon: Users, color: 'bg-indigo-500', link: '/admin-skole/korisnici' },
     { id: 'ucenici', name: 'Učenici u školi', icon: Users, color: 'bg-teal-500', link: '/admin-skole/ucenici' },
     { id: 'predmeti', name: 'Globalni predmeti', icon: BookOpen, color: 'bg-amber-500', link: '/admin-skole/predmeti' },

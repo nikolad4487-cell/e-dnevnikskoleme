@@ -6,7 +6,7 @@ import { useSelection } from '../../contexts/SelectionContext';
 import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
 import { cn, getSurname, formatPersonName, sortStudentsBySurname, formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
-import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, UserX } from 'lucide-react';
+import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, UserX, AlertTriangle } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { ScheduleGrid as SharedScheduleGrid } from '../../components/ScheduleGrid';
 import { toast } from 'react-hot-toast';
@@ -293,6 +293,12 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     const hrSub = allSubjects.find(s => s.name.toLowerCase().includes('hrvatski'));
     return hrSub ? hrSub.id : '';
   };
+  const [reloadScheduleTrigger, setReloadScheduleTrigger] = useState(0);
+  const [consecutivePeriods, setConsecutivePeriods] = useState(1);
+  const [isDeleteBlockModalOpen, setIsDeleteBlockModalOpen] = useState(false);
+  const [deleteBlockSubjectId, setDeleteBlockSubjectId] = useState('');
+  const [deleteSingleSubjectId, setDeleteSingleSubjectId] = useState('');
+
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingCell, setEditingCell] = useState<{ dayOfWeek: string, shift: 'MORNING' | 'AFTERNOON', periodNumber: number } | null>(null);
   const [cellSubjectForm, setCellSubjectForm] = useState({
@@ -822,7 +828,7 @@ setStudents(uniqueStudents);
       }
     };
     fetchScheduleData();
-  }, [effectiveClassId]);
+  }, [effectiveClassId, reloadScheduleTrigger]);
 
   const fetchAbsencesForDay = async () => {
     if (!selectedDate || !effectiveClassId) return;
@@ -951,72 +957,35 @@ setStudents(uniqueStudents);
     const teacherId = assignment.teacherId;
 
     try {
-      let cellId = '';
-      const existingCell = scheduleCells.find(c => 
-        c.dayOfWeek === editingCell.dayOfWeek && 
-        c.shift === editingCell.shift && 
-        c.periodNumber === editingCell.periodNumber
-      );
-
-      if (existingCell) {
-        cellId = existingCell.id;
-      } else {
-        const payload = {
-          class_id: effectiveClassId,
-          day_of_week: editingCell.dayOfWeek,
+      const res = await fetch('/api/admin/bulk-schedule-assign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          classId: effectiveClassId,
+          dayOfWeek: editingCell.dayOfWeek,
           shift: editingCell.shift,
-          period_number: editingCell.periodNumber
-        };
-        console.log("schedule cell upsert payload", payload);
-        console.log("onConflict", "class_id,day_of_week,shift,period_number");
-
-        const { data: newCellData, error: ce } = await supabase
-          .from('schedule_cells')
-          .upsert(payload, {
-            onConflict: "class_id,day_of_week,shift,period_number"
-          })
-          .select()
-          .maybeSingle();
-
-        if (ce || !newCellData) throw ce || new Error("Cell creation failed");
-        cellId = newCellData.id;
-        
-        let newCell = mappers.scheduleCell(newCellData);
-        setScheduleCells([...scheduleCells, newCell]);
-      }
-
-      // Check if this subject is already in this cell
-      const alreadyInCell = scheduleSubjects.some(ss => 
-        ss.scheduleCellId === cellId && 
-        ss.subjectId === cellSubjectForm.subjectId
-      );
-
-      if (alreadyInCell) {
-        toast.error('Ovaj predmet je već u ovom terminu.');
-        return;
-      }
-
-      const { data: subData, error: se } = await supabase
-        .from('schedule_cell_subjects')
-        .insert({
-          schedule_cell_id: cellId,
-          subject_id: cellSubjectForm.subjectId,
-          teacher_id: teacherId, // Automatically assigned
-          classroom: cellSubjectForm.classroom
+          startPeriod: editingCell.periodNumber,
+          consecutivePeriods: consecutivePeriods,
+          subjectId: cellSubjectForm.subjectId,
+          teacherId: teacherId,
+          classroom: cellSubjectForm.classroom || null
         })
-        .select()
-        .maybeSingle();
+      });
 
-      if (se || !subData) throw se || new Error("Subject assignment failed");
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        throw new Error(resData.error || 'Neuspjelo spremanje rasporeda.');
+      }
 
-      const mappedSub = mappers.scheduleCellSubject(subData);
-      setScheduleSubjects([...scheduleSubjects, mappedSub]);
-      
+      toast.success('Raspored uspješno spremljen');
       setCellSubjectForm({ subjectId: '', teacherId: '', classroom: '' });
-      toast.success('Predmet dodan u raspored');
-    } catch (err) {
+      setConsecutivePeriods(1);
+      setReloadScheduleTrigger(prev => prev + 1);
+    } catch (err: any) {
       console.error(err);
-      toast.error('Greška pri spremanju rasporeda');
+      toast.error(err.message || 'Greška pri spremanju rasporeda');
     }
   };
 
@@ -1032,6 +1001,70 @@ setStudents(uniqueStudents);
     } catch (err) {
       console.error(err);
       toast.error('Greška pri brisanju iz rasporeda');
+    }
+  };
+
+  const handleDeleteScheduleSubjectClick = (assignedSubject: any) => {
+    if (!canManageClass && !isAdminUser) {
+      toast.error('Nemate dozvolu za mijenjanje rasporeda.');
+      return;
+    }
+
+    const subjectId = assignedSubject.subjectId;
+    const sameSubjectCells = scheduleSubjects.filter(ss => {
+      const parentCell = scheduleCells.find(c => c.id === ss.scheduleCellId);
+      return parentCell && 
+             parentCell.dayOfWeek === editingCell?.dayOfWeek && 
+             parentCell.shift === editingCell?.shift && 
+             ss.subjectId === subjectId;
+    });
+
+    if (sameSubjectCells.length > 1) {
+      setDeleteBlockSubjectId(subjectId);
+      setDeleteSingleSubjectId(assignedSubject.id);
+      setIsDeleteBlockModalOpen(true);
+    } else {
+      confirmSingleDelete(assignedSubject.id);
+    }
+  };
+
+  const confirmSingleDelete = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('schedule_cell_subjects')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      setScheduleSubjects(scheduleSubjects.filter(ss => ss.id !== id));
+      toast.success('Sat obrisan iz rasporeda');
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const confirmBlockDelete = async () => {
+    try {
+      const searchParams = new URLSearchParams({
+        classId: effectiveClassId,
+        dayOfWeek: editingCell?.dayOfWeek || '',
+        shift: editingCell?.shift || '',
+        subjectId: deleteBlockSubjectId
+      });
+
+      const res = await fetch(`/api/admin/bulk-schedule-assign?${searchParams.toString()}`, {
+        method: 'DELETE'
+      });
+
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        throw new Error(resData.error || 'Neuspjelo brisanje bloka.');
+      }
+
+      toast.success('Cijeli blok predmeta je uspješno obrisan.');
+      setIsDeleteBlockModalOpen(false);
+      setReloadScheduleTrigger(prev => prev + 1);
+    } catch (err: any) {
+      toast.error(err.message);
     }
   };
 
@@ -3692,6 +3725,16 @@ setStudents(uniqueStudents);
                       </div>
                    </div>
                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-gray-400 uppercase">Uzastopnih sati (1-8)</label>
+                      <select
+                        value={consecutivePeriods}
+                        onChange={e => setConsecutivePeriods(Number(e.target.value))}
+                        className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none mb-2"
+                      >
+                        {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                          <option key={n} value={n}>{n} {n === 1 ? 'sat' : n >= 2 && n <= 4 ? 'sata' : 'sati'}</option>
+                        ))}
+                      </select>
                       <label className="text-[9px] font-black text-gray-400 uppercase">Učionica (opcionalno)</label>
                       <input 
                         type="text"
@@ -3723,7 +3766,7 @@ setStudents(uniqueStudents);
                           <div className="text-[9px] text-gray-400 font-bold uppercase">{formatPersonName(tea)} {s.classroom && `• ${s.classroom}`}</div>
                         </div>
                         <button 
-                          onClick={() => handleRemoveScheduleSubject(s.id)}
+                          onClick={() => handleDeleteScheduleSubjectClick(s)}
                           className="text-gray-300 hover:text-red-500 p-1"
                         >
                           <Trash2 size={14}/>
@@ -3752,6 +3795,52 @@ setStudents(uniqueStudents);
         loading={deleteDialog.loading}
         showTotp={deleteDialog.type === 'LESSON' && (isMainAdmin || highestRole === Role.ADMIN || (selectedClass && (selectedClass.homeroomTeacherId === user?.id || selectedClass.deputyTeacherId === user?.id)))}
       />
+
+      {/* Choice Dialog for Single vs Block Deletion */}
+      {isDeleteBlockModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[250] p-4 text-left">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-sm w-full overflow-hidden p-6 font-sans">
+            <div className="flex gap-3 bg-rose-50 border border-rose-100 rounded-xl p-4 mb-5 text-left">
+              <AlertTriangle className="text-rose-500 shrink-0 mt-0.5" size={20} />
+              <div>
+                <h4 className="text-xs font-black text-rose-800 uppercase tracking-wide">Pronađen je blok ponavljanja</h4>
+                <p className="text-xs font-medium text-rose-600 mt-1">
+                  Ovaj predmet se pojavljuje više puta u istom danu. Želite li obrisati:
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 font-sans">
+              <button
+                onClick={() => {
+                  confirmSingleDelete(deleteSingleSubjectId);
+                  setIsDeleteBlockModalOpen(false);
+                }}
+                className="w-full text-left px-4 py-3 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 rounded-xl text-slate-700 font-bold text-xs"
+              >
+                <div className="uppercase font-black text-slate-800 text-[10px] tracking-wide mb-1">Obriši samo ovaj sat</div>
+                Ukloni isključivo selektirani sat iz rasporeda.
+              </button>
+              <button
+                onClick={confirmBlockDelete}
+                className="w-full text-left px-4 py-3 border border-rose-200 hover:border-rose-300 hover:bg-rose-50 rounded-xl text-rose-700 font-bold text-xs"
+              >
+                <div className="uppercase font-black text-rose-800 text-[10px] tracking-wide mb-1">Obriši cijeli blok</div>
+                Ukloni sve sate ovog predmeta u danu/smjeni.
+              </button>
+            </div>
+
+            <div className="mt-5 flex justify-end gap-3 font-sans border-t pt-4">
+              <button
+                onClick={() => setIsDeleteBlockModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-wider"
+              >
+                Zatvori
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

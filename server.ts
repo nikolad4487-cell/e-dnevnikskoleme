@@ -206,6 +206,116 @@ async function startServer() {
     });
   });
 
+  // Bulk schedule assignment POST endpoint
+  app.post("/api/admin/bulk-schedule-assign", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { classId, dayOfWeek, shift, startPeriod, consecutivePeriods, subjectId, teacherId, classroom } = req.body;
+      
+      if (!classId || !dayOfWeek || !shift || !startPeriod || !consecutivePeriods || !subjectId) {
+        return res.status(400).json({ success: false, error: "Nedostaju obavezni podaci za dodjelu rasporeda" });
+      }
+
+      const start = Number(startPeriod);
+      const count = Number(consecutivePeriods);
+      const end = start + count - 1;
+
+      // Assign each consecutive period
+      for (let p = start; p <= end; p++) {
+        // 1. Upsert or find schedule_cell
+        const { data: cell, error: cellErr } = await supabaseAdmin
+          .from('schedule_cells')
+          .upsert({
+            class_id: classId,
+            day_of_week: dayOfWeek,
+            shift: shift,
+            period_number: p
+          }, {
+            onConflict: 'class_id,day_of_week,shift,period_number'
+          })
+          .select()
+          .maybeSingle();
+
+        if (cellErr || !cell) {
+          throw new Error(cellErr?.message || `Neuspjelo kreiranje ćelije za period ${p}`);
+        }
+
+        // 2. Delete any existing schedule_cell_subjects entries for this cell
+        const { error: delErr } = await supabaseAdmin
+          .from('schedule_cell_subjects')
+          .delete()
+          .eq('schedule_cell_id', cell.id);
+
+        if (delErr) {
+          throw delErr;
+        }
+
+        // 3. Insert new schedule_cell_subjects
+        const { error: insErr } = await supabaseAdmin
+          .from('schedule_cell_subjects')
+          .insert({
+            schedule_cell_id: cell.id,
+            subject_id: subjectId,
+            teacher_id: teacherId || null,
+            classroom: classroom || null
+          });
+
+        if (insErr) {
+          throw insErr;
+        }
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[SERVER] Bulk Schedule Assign Error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Bulk schedule assignment DELETE endpoint
+  app.delete("/api/admin/bulk-schedule-assign", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { classId, dayOfWeek, shift, subjectId } = req.query;
+
+      if (!classId || !dayOfWeek || !shift || !subjectId) {
+        return res.status(400).json({ success: false, error: "Nedostaju parametri pretrage za brisanje bloka" });
+      }
+
+      // Find all schedule_cells for this class, day and shift
+      const { data: cells, error: cellsErr } = await supabaseAdmin
+        .from('schedule_cells')
+        .select('id')
+        .eq('class_id', classId)
+        .eq('day_of_week', dayOfWeek)
+        .eq('shift', shift);
+
+      if (cellsErr) {
+        throw cellsErr;
+      }
+
+      if (cells && cells.length > 0) {
+        const cellIds = cells.map((c: any) => c.id);
+
+        // Delete subject assignments matching this subjectId in these cells
+        const { error: delErr } = await supabaseAdmin
+          .from('schedule_cell_subjects')
+          .delete()
+          .in('schedule_cell_id', cellIds)
+          .eq('subject_id', subjectId);
+
+        if (delErr) {
+          throw delErr;
+        }
+      }
+
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[SERVER] Bulk Schedule Delete Error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Audit Log
   app.post("/api/audit-log", async (req, res) => {
       try {
