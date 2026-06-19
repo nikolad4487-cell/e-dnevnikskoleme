@@ -12,14 +12,19 @@ async function run() {
   if (cError) { console.error(cError); return; }
   const clsId = cls.id;
   
-  console.log("Testing class:", cls);
+  console.log("Testing class:", cls.name, cls.id);
   
-  const { data: assignments, error: aError } = await supabase
-      .from('class_subject_teachers')
-      .select('subject_id, subject:subjects(name)')
+  const { data: cs, error: csError } = await supabase
+      .from('class_subjects')
+      .select('subject_id')
       .eq('class_id', clsId);
-  
-  console.log("Assignments for 2.A:", JSON.stringify(assignments, null, 2));
+  console.log("Entries in class_subjects:", cs?.map(s => s.subject_id));
+
+  const { data: cst, error: cstError } = await supabase
+      .from('class_subject_teachers')
+      .select('subject_id')
+      .eq('class_id', clsId);
+  console.log("Entries in class_subject_teachers:", cst?.map(s => s.subject_id));
 }
 
 run();

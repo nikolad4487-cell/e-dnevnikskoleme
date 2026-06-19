@@ -110,24 +110,34 @@ export default function ScheduleManagementPage() {
       }
 
       // 1. Fetch Class Subjects (Metadata - Canonical list)
-      const { data: classSubjectsRaw } = await supabase
+      console.log("DEBUG: Fetching class_subjects for classId:", selectedClassId, "schoolId:", selectedSchoolId);
+      const { data: classSubjectsRaw, error: csError } = await supabase
         .from('class_subjects')
         .select(`
           subject_id, 
           subject_type,
-          subject:subjects(*)
+          subject:subjects(id, name, code)
         `)
-        .eq('class_id', selectedClassId);
+        .eq('class_id', selectedClassId)
+        .eq('school_id', selectedSchoolId);
+      
+      console.log("DEBUG: classSubjectsRaw:", classSubjectsRaw);
+      console.log("DEBUG: classSubjectsError:", csError);
 
       // 2. Fetch Assignments to join teachers
-      const { data: assignments } = await supabase
+      console.log("DEBUG: Fetching class_subject_teachers for classId:", selectedClassId, "schoolId:", selectedSchoolId);
+      const { data: assignments, error: assignError } = await supabase
         .from('class_subject_teachers')
         .select(`
           subject_id,
           teacher_id,
-          teacher:user_profiles(*)
+          teacher:user_profiles(id, name)
         `)
-        .eq('class_id', selectedClassId);
+        .eq('class_id', selectedClassId)
+        .eq('school_id', selectedSchoolId);
+
+      console.log("DEBUG: assignments:", assignments);
+      console.log("DEBUG: assignError:", assignError);
 
       const teacherMap = new Map<string, any>();
       (assignments || []).forEach(a => {
@@ -154,11 +164,12 @@ export default function ScheduleManagementPage() {
           *,
           subjects:schedule_cell_subjects(
             *,
-            subject:subjects(*),
-            teacher:user_profiles(*)
+            subject:subjects(id, name, code),
+            teacher:user_profiles(id, name)
           )
         `)
         .eq('class_id', selectedClassId)
+        .eq('school_id', selectedSchoolId)
         .eq('shift', shift);
       
       const formattedCells = (cells || []).map(cell => {
