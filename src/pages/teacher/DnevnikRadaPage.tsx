@@ -3704,9 +3704,8 @@ setStudents(uniqueStudents);
                         className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                       >
                         <option value="">-- Odaberi predmet --</option>
-                        {allSubjects
-                          .filter(s => 
-                            subjectAssignments.some(a => a.subjectId === s.id && a.classId === effectiveClassId)
+                        {allSubjects?.filter(s => 
+                            subjectAssignments?.some(a => a.subjectId === s.id && a.classId === effectiveClassId)
                           )
                           .map(s => <option key={s.id} value={s.id}>{formatSubjectName(s)}</option>)
                         }

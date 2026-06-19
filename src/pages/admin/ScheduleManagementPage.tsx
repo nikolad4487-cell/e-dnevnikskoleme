@@ -95,15 +95,15 @@ export default function ScheduleManagementPage() {
       setLoading(true);
       
       // Fetch Subject Types to format names correctly
-      const { data: classSubjectsRaw } = await supabase
+      const { data: basicClassSubjects } = await supabase
         .from('class_subjects')
         .select('subject_id, subject_type')
         .eq('class_id', selectedClassId);
 
       const csMap = new Map<string, string>();
       const validSubjectIds = new Set<string>();
-      if (classSubjectsRaw) {
-        for (const cs of classSubjectsRaw) {
+      if (basicClassSubjects) {
+        for (const cs of basicClassSubjects) {
           csMap.set(cs.subject_id, cs.subject_type || 'REQUIRED');
           validSubjectIds.add(cs.subject_id);
         }
