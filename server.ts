@@ -326,6 +326,59 @@ async function startServer() {
     }
   });
 
+  // Sync class subjects endpoint
+  app.post("/api/admin/sync-class-subjects", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { classId } = req.body;
+      if (!classId) return res.status(400).json({ success: false, error: "Missing classId" });
+
+      // Get class details to get school_id
+      const { data: cls } = await supabaseAdmin.from('classes').select('school_id').eq('id', classId).single();
+      const schoolId = cls?.school_id;
+
+      // 1. Get Canonical subjects from class_subjects
+      const { data: canonicalSubjects, error: csError } = await supabaseAdmin
+        .from('class_subjects')
+        .select('subject_id')
+        .eq('class_id', classId);
+      if (csError) throw csError;
+      
+      const canonicalIds = new Set((canonicalSubjects || []).map(cs => cs.subject_id));
+
+      // 2. Get Current entries from class_subject_teachers
+      const { data: assignments, error: astError } = await supabaseAdmin
+        .from('class_subject_teachers')
+        .select('id, subject_id')
+        .eq('class_id', classId);
+      if (astError) throw astError;
+
+      // 3. Perform Sync
+      // A. Delete orphans (subject_id not in canonical)
+      const toDelete = (assignments || []).filter(a => !canonicalIds.has(a.subject_id));
+      for (const item of toDelete) {
+        await supabaseAdmin.from('class_subject_teachers').delete().eq('id', item.id);
+      }
+      
+      // B. Ensure existence in class_subject_teachers (subject_id in canonical but not assigned)
+      const currentAssignedIds = new Set((assignments || []).map(a => a.subject_id));
+      const toAdd = Array.from(canonicalIds).filter(id => !currentAssignedIds.has(id));
+      
+      for (const subjectId of toAdd) {
+         await supabaseAdmin.from('class_subject_teachers').insert([{
+             class_id: classId,
+             subject_id: subjectId,
+             school_id: schoolId
+         }]);
+      }
+
+      res.json({ success: true, results: { deleted: toDelete.length, added: toAdd.length } });
+    } catch (err: any) {
+      console.error("Sync error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
   // Audit Log
   app.post("/api/audit-log", async (req, res) => {
       try {

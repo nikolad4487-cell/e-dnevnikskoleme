@@ -11,7 +11,8 @@ import {
   BookOpen, 
   GraduationCap, 
   User as UserIcon,
-  Search
+  Search,
+  RefreshCw
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -165,6 +166,26 @@ export default function ClassSubjectsPage() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSync = async () => {
+    try {
+        setLoading(true);
+        const res = await fetch('/api/admin/sync-class-subjects', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ classId })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error);
+        
+        toast.success(`Sinkronizacija uspješna: dodano ${data.results.added}, obrisano ${data.results.deleted}`);
+        fetchData(); // Reload assignments
+    } catch(err: any) {
+        toast.error('Sync failed: ' + err.message);
+    } finally {
+        setLoading(false);
     }
   };
 
@@ -421,6 +442,12 @@ export default function ClassSubjectsPage() {
               {currentClass?.name}
             </div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none">Predmeti razreda</h1>
+            <button 
+              onClick={handleSync}
+              className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 font-black text-xs uppercase hover:bg-amber-600 transition-colors rounded-xl"
+            >
+              <RefreshCw size={14} /> Sinkroniziraj
+            </button>
           </div>
           <p className="text-slate-500 font-medium text-sm">Dodjela nastavnih predmeta i njihovih izvođača razrednom odjelu</p>
         </div>
