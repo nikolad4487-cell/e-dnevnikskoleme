@@ -101,9 +101,11 @@ export default function ScheduleManagementPage() {
         .eq('class_id', selectedClassId);
 
       const csMap = new Map<string, string>();
+      const validSubjectIds = new Set<string>();
       if (classSubjectsRaw) {
         for (const cs of classSubjectsRaw) {
           csMap.set(cs.subject_id, cs.subject_type || 'REQUIRED');
+          validSubjectIds.add(cs.subject_id);
         }
       }
 
@@ -119,7 +121,10 @@ export default function ScheduleManagementPage() {
         `)
         .eq('class_id', selectedClassId);
       
-      const formattedClassSubjects = (classSubjects || []).map((cs: any) => {
+      // Filter subjects based on class_subjects metadata
+      const filteredClassSubjects = (classSubjects || []).filter(cs => validSubjectIds.has(cs.subject_id));
+      
+      const formattedClassSubjects = filteredClassSubjects.map((cs: any) => {
         const typeValue = csMap.get(cs.subject?.id || '') || 'REQUIRED';
         return {
           ...cs,
@@ -225,12 +230,7 @@ export default function ScheduleManagementPage() {
 
     try {
       setIsSaving(true);
-      const res = await fetch('/api/admin/bulk-schedule-assign', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
+      const payload = {
           classId: selectedClassId,
           dayOfWeek: selectedDay,
           shift,
@@ -239,7 +239,14 @@ export default function ScheduleManagementPage() {
           subjectId: assignment.subject_id || assignment.subject?.id,
           teacherId: assignment.teacher_id || assignment.teacher?.id,
           classroom: modalClassroom || null
-        })
+        };
+      console.log("FRONTEND PAYLOAD", JSON.stringify(payload, null, 2));
+      const res = await fetch('/api/admin/bulk-schedule-assign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
       });
 
       const resData = await res.json();

@@ -211,9 +211,19 @@ async function startServer() {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       const { classId, dayOfWeek, shift, startPeriod, consecutivePeriods, subjectId, teacherId, classroom } = req.body;
+      console.log("BACKEND BODY", req.body);
       
-      if (!classId || !dayOfWeek || !shift || !startPeriod || !consecutivePeriods || !subjectId) {
-        return res.status(400).json({ success: false, error: "Nedostaju obavezni podaci za dodjelu rasporeda" });
+      const missing = [];
+      if (classId == null) missing.push('classId');
+      if (dayOfWeek == null) missing.push('dayOfWeek');
+      if (shift == null) missing.push('shift');
+      if (startPeriod == null) missing.push('startPeriod');
+      if (consecutivePeriods == null) missing.push('consecutivePeriods');
+      if (subjectId == null) missing.push('subjectId');
+      
+      if (missing.length > 0) {
+        console.error("Missing required parameters in body:", JSON.stringify(req.body), "Missing:", missing);
+        return res.status(400).json({ success: false, error: `Nedostaju obavezni podaci za dodjelu rasporeda: ${missing.join(', ')}` });
       }
 
       const start = Number(startPeriod);
@@ -2873,14 +2883,31 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       }
 
       // 1. Sign in with Supabase
-      // Use a hardcoded technical password for all staff as a temporary fix
-      const technicalPassword = '123456'; 
-      const passwordOrPin = (loginType === 'STAFF') ? technicalPassword : password;
+      // Try '1234' first as the standard password, falling back to '123456' for compatibility
+      let authResult;
+      if (loginType === 'STAFF') {
+        let res = await supabaseAdmin.auth.signInWithPassword({
+          email: DemoresolvedEmail,
+          password: '1234'
+        });
+        if (res.error && res.error.message === 'Invalid login credentials') {
+          const retryRes = await supabaseAdmin.auth.signInWithPassword({
+            email: DemoresolvedEmail,
+            password: '123456'
+          });
+          if (!retryRes.error) {
+            res = retryRes;
+          }
+        }
+        authResult = res;
+      } else {
+        authResult = await supabaseAdmin.auth.signInWithPassword({
+          email: DemoresolvedEmail,
+          password: password
+        });
+      }
 
-      const { data, error } = await supabaseAdmin.auth.signInWithPassword({
-        email: DemoresolvedEmail,
-        password: passwordOrPin
-      });
+      const { data, error } = authResult;
 
       if (error) {
         console.error(`[LOGIN_API] Supabase signIn Error for ${DemoresolvedEmail}:`, error.message);

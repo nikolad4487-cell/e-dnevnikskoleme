@@ -46,13 +46,31 @@ export async function POST(req: Request) {
     }
 
     // 1. Sign in with Supabase
-    // Use a hardcoded technical password for all staff as a temporary fix
-    const passwordOrPin = password; // Directly use the password (which is the PIN for staff)
+    // Try '1234' first as the standard password, falling back to '123456' for compatibility
+    let authResult;
+    if (loginType === 'STAFF') {
+      let res = await supabaseAdmin.auth.signInWithPassword({
+        email: DemoresolvedEmail,
+        password: '1234'
+      });
+      if (res.error && res.error.message === 'Invalid login credentials') {
+        const retryRes = await supabaseAdmin.auth.signInWithPassword({
+          email: DemoresolvedEmail,
+          password: '123456'
+        });
+        if (!retryRes.error) {
+          res = retryRes;
+        }
+      }
+      authResult = res;
+    } else {
+      authResult = await supabaseAdmin.auth.signInWithPassword({
+        email: DemoresolvedEmail,
+        password: password
+      });
+    }
 
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
-      email: DemoresolvedEmail,
-      password: passwordOrPin
-    });
+    const { data, error } = authResult;
 
     if (error) {
       console.error(`[LOGIN_API] Supabase signIn Error for ${DemoresolvedEmail}:`, error.message);
