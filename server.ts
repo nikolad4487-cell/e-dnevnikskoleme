@@ -3771,6 +3771,11 @@ Generiraj JSON objekt sa sljedećom strukturom:
         const distPath = path.join(process.cwd(), 'dist');
         app.use(express.static(distPath));
         app.get('*', (req, res) => {
+            const ext = path.extname(req.path);
+            const isSourceOrApi = req.path.startsWith('/src') || req.path.startsWith('/api') || req.path.startsWith('/node_modules');
+            if ((ext && ext !== '.html') || isSourceOrApi) {
+                return res.status(404).send('Not Found');
+            }
             res.sendFile(path.join(distPath, 'index.html'));
         });
     }
