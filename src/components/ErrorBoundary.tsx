@@ -1,4 +1,4 @@
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 
 // Helper component for catching rendering errors
@@ -11,7 +11,7 @@ interface State {
   errorMessage: string;
 }
 
-export class ErrorBoundary extends React.Component<Props, State> {
+export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
     errorMessage: ""
