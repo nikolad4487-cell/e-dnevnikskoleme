@@ -2,6 +2,7 @@ import * as React from 'react';
 import { ErrorInfo, ReactNode } from 'react';
 import { supabase } from '../lib/supabase';
 
+// Helper component for catching rendering errors
 interface Props {
   children?: ReactNode;
 }

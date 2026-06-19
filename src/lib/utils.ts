@@ -92,16 +92,18 @@ export function formatSubjectDisplayName(subjectName: string, subjectType: strin
   const cleaned = subjectName
     .replace(/\s*\(required\)\s*$/i, '')
     .replace(/\s*\(izborni\)\s*$/i, '')
+    .replace(/\s*\(Izborni\)\s*$/i, '')
     .replace(/\s*\(elective\)\s*$/i, '')
     .replace(/\s*\(praksa\)\s*$/i, '')
+    .replace(/\s*\(Praksa\)\s*$/i, '')
     .replace(/\s*\(practice\)\s*$/i, '')
     .trim();
     
   const t = normalizeSubjectType(subjectType);
   
-  if (t === 'IZBORNI') return `${cleaned} (izborni)`;
+  if (t === 'IZBORNI') return `${cleaned} (Izborni)`;
   
-  if (t === 'PRAKSA') return `${cleaned} (praksa)`;
+  if (t === 'PRAKSA') return `${cleaned} (Praksa)`;
   
   return cleaned;
 }

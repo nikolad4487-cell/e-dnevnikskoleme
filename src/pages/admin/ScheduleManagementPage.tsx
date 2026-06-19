@@ -13,10 +13,14 @@ import {
   Save,
   Download,
   Printer,
-  CalendarDays
+  CalendarDays,
+  X,
+  AlertTriangle,
+  HelpCircle
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import { formatSubjectDisplayName } from '../../lib/utils';
 
 const DAYS = [
   { id: 'MONDAY', name: 'Ponedjeljak' },
@@ -38,6 +42,24 @@ export default function ScheduleManagementPage() {
   const [schedule, setSchedule] = useState<any[]>([]); // Schedule entries
   const [loading, setLoading] = useState(false);
   const [shift, setShift] = useState<'MORNING' | 'AFTERNOON'>('MORNING');
+
+  // Assignment Modal States
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+  const [selectedDay, setSelectedDay] = useState('');
+  const [selectedPeriod, setSelectedPeriod] = useState(1);
+  const [modalSubjectAssignmentId, setModalSubjectAssignmentId] = useState('');
+  const [modalConsecutive, setModalConsecutive] = useState(1);
+  const [modalClassroom, setModalClassroom] = useState('');
+  const [validationError, setValidationError] = useState('');
+  const [conflicts, setConflicts] = useState<{ period: number; subjectName: string }[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Delete/Clear Block Modal States
+  const [isDeleteBlockModalOpen, setIsDeleteBlockModalOpen] = useState(false);
+  const [deleteCellId, setDeleteCellId] = useState('');
+  const [deleteSubjectId, setDeleteSubjectId] = useState('');
+  const [deleteSubjectName, setDeleteSubjectName] = useState('');
+  const [deleteDay, setDeleteDay] = useState('');
 
   const isAnyAdmin = isMainAdmin || userSchoolRoles.some(r => r.schoolId === selectedSchoolId && (r.role === Role.SCHOOL_ADMIN || r.role === Role.ADMIN));
 
@@ -72,6 +94,19 @@ export default function ScheduleManagementPage() {
     try {
       setLoading(true);
       
+      // Fetch Subject Types to format names correctly
+      const { data: classSubjectsRaw } = await supabase
+        .from('class_subjects')
+        .select('subject_id, subject_type')
+        .eq('class_id', selectedClassId);
+
+      const csMap = new Map<string, string>();
+      if (classSubjectsRaw) {
+        for (const cs of classSubjectsRaw) {
+          csMap.set(cs.subject_id, cs.subject_type || 'REQUIRED');
+        }
+      }
+
       // 1. Fetch Class Subjects (to know which subjects can be put in schedule)
       const { data: classSubjects } = await supabase
         .from('class_subject_teachers')
@@ -82,7 +117,17 @@ export default function ScheduleManagementPage() {
         `)
         .eq('class_id', selectedClassId);
       
-      setSubjects(classSubjects || []);
+      const formattedClassSubjects = (classSubjects || []).map((cs: any) => {
+        const typeValue = csMap.get(cs.subject?.id || '') || 'REQUIRED';
+        return {
+          ...cs,
+          subject: cs.subject ? {
+            ...cs.subject,
+            name: formatSubjectDisplayName(cs.subject.name, typeValue)
+          } : null
+        };
+      });
+      setSubjects(formattedClassSubjects);
 
       // 2. Fetch Schedule Cells
       const { data: cells } = await supabase
@@ -98,7 +143,23 @@ export default function ScheduleManagementPage() {
         .eq('class_id', selectedClassId)
         .eq('shift', shift);
       
-      setSchedule(cells || []);
+      const formattedCells = (cells || []).map(cell => {
+        const formattedCellSubjects = (cell.subjects || []).map((cs: any) => {
+          const typeValue = csMap.get(cs.subject?.id || '') || 'REQUIRED';
+          return {
+            ...cs,
+            subject: cs.subject ? {
+              ...cs.subject,
+              name: formatSubjectDisplayName(cs.subject.name, typeValue)
+            } : null
+          };
+        });
+        return {
+          ...cell,
+          subjects: formattedCellSubjects
+        };
+      });
+      setSchedule(formattedCells);
     } catch (err: any) {
       toast.error('Problem kod učitavanja rasporeda');
     } finally {
@@ -106,57 +167,115 @@ export default function ScheduleManagementPage() {
     }
   };
 
-  const handleSetSubject = async (dayOfWeek: string, periodNumber: number, subjectAssignmentId: string) => {
-    if (!isAnyAdmin) {
-      toast.error('Nemate dozvolu za mijenjanje rasporeda.');
+  const openAssignModal = (dayId: string, periodNumber: number) => {
+    setSelectedDay(dayId);
+    setSelectedPeriod(periodNumber);
+    setModalSubjectAssignmentId('');
+    setModalConsecutive(1);
+    setModalClassroom('');
+    setValidationError('');
+    setConflicts([]);
+    setIsAssignModalOpen(true);
+  };
+
+  const handleBulkAssign = async (bypassConflicts = false) => {
+    if (!modalSubjectAssignmentId) {
+      setValidationError('Molimo odaberite predmet.');
       return;
     }
-    if (!subjectAssignmentId) return;
-    
-    try {
-      // 1. Find or create cell
-      let cell = schedule.find(c => c.day_of_week === dayOfWeek && c.period_number === periodNumber);
-      
-      if (!cell) {
-        const payload = {
-          class_id: selectedClassId,
-          day_of_week: dayOfWeek,
-          shift,
-          period_number: periodNumber
-        };
-        console.log("schedule cell upsert payload", payload);
-        console.log("onConflict", "class_id,day_of_week,shift,period_number");
 
-        const { data: newCell, error: cellError } = await supabase
-          .from('schedule_cells')
-          .upsert(payload, {
-            onConflict: "class_id,day_of_week,shift,period_number"
-          })
-          .select()
-          .maybeSingle();
-        
-        if (cellError || !newCell) throw cellError || new Error("Cell creation failed");
-        cell = newCell;
+    const assignment = subjects.find(s => s.id === modalSubjectAssignmentId);
+    if (!assignment) {
+      setValidationError('Neispravan odabir predmeta.');
+      return;
+    }
+
+    const start = selectedPeriod;
+    const count = Number(modalConsecutive);
+    const end = start + count - 1;
+
+    if (end > 7) {
+      setValidationError(`Nema dovoljno preostalih sati u danu. Maksimalna pozicija je 7. sat (odabrali ste do ${end}. sata).`);
+      return;
+    }
+
+    setValidationError('');
+
+    // Check for occupied slots
+    if (!bypassConflicts) {
+      const foundConflicts: { period: number; subjectName: string }[] = [];
+      for (let p = start; p <= end; p++) {
+        const cell = schedule.find(c => c.day_of_week === selectedDay && c.period_number === p);
+        const assigned = cell?.subjects?.[0];
+        if (assigned) {
+          foundConflicts.push({
+            period: p,
+            subjectName: assigned.subject?.name || 'Nepoznat predmet'
+          });
+        }
       }
 
-      // 2. Add subject to cell
-      const assignment = subjects.find(s => s.id === subjectAssignmentId);
-      if (!assignment) return;
+      if (foundConflicts.length > 0) {
+        setConflicts(foundConflicts);
+        return; // Triggers displaying conflict warning step inside the modal
+      }
+    }
 
-      const { error: subError } = await supabase
-        .from('schedule_cell_subjects')
-        .upsert({
-          schedule_cell_id: cell.id,
-          subject_id: assignment.subject_id,
-          teacher_id: assignment.teacher_id,
-        }, { onConflict: 'schedule_cell_id,subject_id' }); // Simple one subject per cell for now
-      
-      if (subError) throw subError;
+    try {
+      setIsSaving(true);
+      const res = await fetch('/api/admin/bulk-schedule-assign', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          classId: selectedClassId,
+          dayOfWeek: selectedDay,
+          shift,
+          startPeriod: start,
+          consecutivePeriods: count,
+          subjectId: assignment.subject_id,
+          teacherId: assignment.teacher_id,
+          classroom: modalClassroom || null
+        })
+      });
 
-      toast.success('Spremljeno');
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        throw new Error(resData.error || 'Neuspjelo spremanje rasporeda.');
+      }
+
+      toast.success('Raspored uspješno spremljen');
+      setIsAssignModalOpen(false);
       fetchClassData();
     } catch (err: any) {
       toast.error(err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteClick = (cell: any, assignedSubject: any, dayId: string) => {
+    if (!isAnyAdmin) {
+      toast.error('Nemate dozvolu za brisanje rasporeda.');
+      return;
+    }
+
+    const subjectId = assignedSubject.subject_id;
+    // Check if there are other cells on the same day with matching subject to trigger block-delete question
+    const sameSubjectCells = schedule.filter(c => 
+      c.day_of_week === dayId && 
+      c.subjects?.some((s: any) => s.subject_id === subjectId)
+    );
+
+    if (sameSubjectCells.length > 1) {
+      setDeleteCellId(cell.id);
+      setDeleteSubjectId(subjectId);
+      setDeleteSubjectName(assignedSubject.subject?.name || 'predmeta');
+      setDeleteDay(dayId);
+      setIsDeleteBlockModalOpen(true);
+    } else {
+      clearCell(cell.id);
     }
   };
 
@@ -168,10 +287,39 @@ export default function ScheduleManagementPage() {
     try {
       const { error } = await supabase.from('schedule_cell_subjects').delete().eq('schedule_cell_id', cellId);
       if (error) throw error;
-      toast.success('Obrisano');
+      toast.success('Sat obrisan iz rasporeda');
       fetchClassData();
     } catch (err: any) {
       toast.error(err.message);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    try {
+      setIsSaving(true);
+      const searchParams = new URLSearchParams({
+        classId: selectedClassId,
+        dayOfWeek: deleteDay,
+        shift,
+        subjectId: deleteSubjectId
+      });
+
+      const res = await fetch(`/api/admin/bulk-schedule-assign?${searchParams.toString()}`, {
+        method: 'DELETE'
+      });
+
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        throw new Error(resData.error || 'Neuspjelo brisanje bloka.');
+      }
+
+      toast.success('Cijeli blok predmeta je uspješno obrisan.');
+      setIsDeleteBlockModalOpen(false);
+      fetchClassData();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -258,9 +406,14 @@ export default function ScheduleManagementPage() {
                              {assignedSubject ? (
                                <div className="bg-blue-50 border border-blue-100 rounded-xl p-2 h-full flex flex-col justify-center text-center shadow-sm relative pr-6">
                                   <div className="text-[10px] font-black text-blue-900 uppercase leading-none mb-1">{assignedSubject.subject?.name}</div>
-                                  <div className="text-[9px] font-bold text-blue-400 uppercase leading-none truncate">{assignedSubject.teacher?.name}</div>
+                                  <div className="text-[9px] font-bold text-blue-500 uppercase leading-none truncate mb-1">{assignedSubject.teacher?.name}</div>
+                                  {assignedSubject.classroom && (
+                                    <span className="text-[8px] font-bold text-slate-500 uppercase bg-slate-200/50 rounded px-1 py-0.5 inline-block self-center">
+                                      Uč: {assignedSubject.classroom}
+                                    </span>
+                                  )}
                                   <button 
-                                    onClick={() => clearCell(cell.id)}
+                                    onClick={() => handleDeleteClick(cell, assignedSubject, day.id)}
                                     className={`absolute top-1 right-1 text-blue-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 ${!isAnyAdmin && 'hidden'}`}
                                   >
                                     <Trash2 size={12} />
@@ -268,15 +421,13 @@ export default function ScheduleManagementPage() {
                                </div>
                              ) : (
                                isAnyAdmin ? (
-                                 <select 
-                                   onChange={(e) => handleSetSubject(day.id, num, e.target.value)}
-                                   className="w-full bg-slate-50 border border-transparent hover:border-slate-200 rounded-xl p-2 text-[10px] font-bold text-slate-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all outline-none"
+                                 <button 
+                                   onClick={() => openAssignModal(day.id, num)}
+                                   className="w-full h-full bg-slate-50 border-2 border-dashed border-slate-200 hover:border-[#005c8d]/50 hover:bg-[#005c8d]/5 hover:text-[#005c8d] rounded-xl flex items-center justify-center text-slate-400 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all cursor-pointer text-xs font-black/50"
+                                   title="Dodaj sat"
                                  >
-                                   <option value="">+</option>
-                                   {subjects.map(s => (
-                                     <option key={s.id} value={s.id}>{s.subject?.name}</option>
-                                   ))}
-                                 </select>
+                                   <Plus size={16} />
+                                  </button>
                                ) : (
                                  <div className="text-[9px] text-slate-200 uppercase font-black tracking-widest text-center py-2">—</div>
                                )
@@ -302,6 +453,197 @@ export default function ScheduleManagementPage() {
            >
              <Save size={14} /> Spremi promjene
            </button>
+
+      {/* Dynamic Bulk Lesson Assignment Modal */}
+      {isAssignModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in animate-duration-150 text-left">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-md w-full overflow-hidden transform scale-100 transition-all font-sans text-left">
+            {/* Header */}
+            <div className="bg-slate-50 border-b border-slate-100 p-5 flex justify-between items-center text-left">
+              <div>
+                <h3 className="text-sm font-black text-slate-800 uppercase tracking-wider">
+                  {conflicts.length > 0 ? 'Upozorenje o preklapanju' : 'Dodaj nastavu u raspored'}
+                </h3>
+                <p className="text-xs font-bold text-slate-400 mt-0.5">
+                  {DAYS.find(d => d.id === selectedDay)?.name} — {selectedPeriod}. sat {shift === 'MORNING' ? '(Jutarnja)' : '(Popodnevna)'}
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsAssignModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 transition-colors"
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            {conflicts.length > 0 ? (
+              <div className="p-6 text-left">
+                <div className="flex gap-3 bg-amber-50 border border-amber-100 rounded-xl p-4 mb-4 text-left">
+                  <AlertTriangle className="text-amber-500 shrink-0 mt-0.5 animate-bounce" size={20} />
+                  <div>
+                    <h4 className="text-xs font-black text-amber-800 uppercase tracking-wide">Pronađeni su popunjeni sati</h4>
+                    <p className="text-xs font-medium text-amber-600 mt-1">
+                      Sljedeći predviđeni sati su već popunjeni u rasporedu:
+                    </p>
+                    <ul className="list-disc pl-4 text-xs font-bold text-amber-950 mt-2 space-y-1">
+                      {conflicts.map(c => (
+                        <li key={c.period}>{c.period}. sat ({c.subjectName})</li>
+                      ))}
+                    </ul>
+                    <p className="text-xs font-medium text-amber-600 mt-2">
+                      Želite li ih svejedno prepisati (stari unosi će biti pobrisani u korist novog)?
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-2 text-left">
+                  <button
+                    onClick={() => setConflicts([])}
+                    className="px-4 py-2 bg-slate-50 border-2 border-slate-100 hover:bg-slate-100 rounded-xl text-xs font-black uppercase text-slate-500 transition-all font-sans"
+                    type="button"
+                  >
+                    Natrag
+                  </button>
+                  <button
+                    onClick={() => handleBulkAssign(true)}
+                    disabled={isSaving}
+                    className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-md font-sans"
+                    type="button"
+                  >
+                    {isSaving ? 'Spremanje...' : 'Prepiši i spremi'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-6 space-y-4 text-left">
+                {validationError && (
+                  <div className="p-3 bg-red-50 border border-red-100 text-red-600 rounded-xl text-xs font-bold font-sans">
+                    {validationError}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 font-sans">Odaberite predmet s nastavnikom</label>
+                  <select
+                    value={modalSubjectAssignmentId}
+                    onChange={e => {
+                      setModalSubjectAssignmentId(e.target.value);
+                      setValidationError('');
+                    }}
+                    className="w-full bg-slate-50 border-2 border-slate-100 hover:border-slate-200 rounded-xl p-3 font-semibold text-slate-800 text-sm outline-none focus:border-[#005c8d] transition-colors font-sans"
+                  >
+                    <option value="">-- Odaberi predmet --</option>
+                    {subjects.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.subject?.name} ({s.teacher?.name || 'Bez nastavnika'})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 text-left font-sans">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 font-sans">Uzastopnih sati (1-8)</label>
+                    <select
+                      value={modalConsecutive}
+                      onChange={e => {
+                        setModalConsecutive(Number(e.target.value));
+                        setValidationError('');
+                      }}
+                      className="w-full bg-slate-50 border-2 border-slate-100 hover:border-slate-200 rounded-xl p-3 font-semibold text-slate-800 text-sm outline-none focus:border-[#005c8d] transition-colors font-sans"
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
+                        <option key={n} value={n}>{n} {n === 1 ? 'sat' : n >= 2 && n <= 4 ? 'sata' : 'sati'}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 font-sans">Učionica (opcionalno)</label>
+                    <input
+                      type="text"
+                      placeholder="npr. 12, Kabinet"
+                      value={modalClassroom}
+                      onChange={e => setModalClassroom(e.target.value)}
+                      className="w-full bg-slate-50 border-2 border-slate-100 hover:border-slate-200 rounded-xl p-3 font-semibold text-slate-800 text-sm outline-none focus:border-[#005c8d] transition-colors font-sans"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 text-left">
+                  <button
+                    onClick={() => setIsAssignModalOpen(false)}
+                    className="px-4 py-2.5 bg-slate-50 border-2 border-slate-100 hover:bg-slate-100 rounded-xl text-xs font-black uppercase text-slate-400 transition-all font-sans"
+                    type="button"
+                  >
+                    Odustani
+                  </button>
+                  <button
+                    onClick={() => handleBulkAssign(false)}
+                    disabled={isSaving}
+                    className="px-6 py-2.5 bg-[#005c8d] hover:bg-[#004b73] text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all shadow-md hover:shadow-lg font-sans"
+                    type="button"
+                  >
+                    {isSaving ? 'Spremanje...' : 'Spremi unose'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Delete Block Modal */}
+      {isDeleteBlockModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in animate-duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 max-w-sm w-full overflow-hidden transform scale-100 transition-all font-sans text-left">
+            <div className="bg-red-50 border-b border-red-100 p-5 text-center">
+              <HelpCircle className="text-red-500 mx-auto mb-2 animate-pulse" size={32} />
+              <h3 className="text-sm font-black text-red-800 uppercase tracking-wider">Brisanje nastave</h3>
+              <p className="text-xs font-bold text-slate-500 mt-1">
+                Pronađen je povezani blok predmeta <strong className="text-slate-800 font-extrabold">{deleteSubjectName}</strong>.
+              </p>
+            </div>
+
+            <div className="p-6 space-y-4 text-center">
+              <p className="text-xs text-slate-600 font-medium text-center font-sans">
+                Želite li ukloniti samo ovaj pojedinačni sat ili cijeli uzastopni blok za taj dan?
+              </p>
+
+              <div className="flex flex-col gap-2 text-left">
+                <button
+                  onClick={() => {
+                    setIsDeleteBlockModalOpen(false);
+                    clearCell(deleteCellId);
+                  }}
+                  disabled={isSaving}
+                  className="w-full py-3 bg-white border-2 border-slate-200 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-black uppercase tracking-wider transition-all font-sans text-center"
+                  type="button"
+                >
+                  Samo pojedinačni sat
+                </button>
+                <button
+                  onClick={handleBulkDelete}
+                  disabled={isSaving}
+                  className="w-full py-3 bg-red-600 text-white hover:bg-red-700 rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md font-sans text-center"
+                  type="button"
+                >
+                  {isSaving ? 'Brisanje bloka...' : 'Cijeli uzastopni blok'}
+                </button>
+                <button
+                  onClick={() => setIsDeleteBlockModalOpen(false)}
+                  className="w-full py-2.5 text-xs text-slate-400 font-black uppercase tracking-widest hover:text-slate-600 transition-colors font-sans text-center"
+                  type="button"
+                >
+                  Odustani
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
         </div>
       )}
     </div>
