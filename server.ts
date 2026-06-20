@@ -1558,7 +1558,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/student-pedagogical-profile", async (req, res) => {
+  const handleStudentPedagogicalProfile = async (req: any, res: any) => {
     try {
       const payload = req.body;
       const { studentId } = payload;
@@ -1621,7 +1621,11 @@ async function startServer() {
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
-  });
+  };
+
+  app.post("/api/student-pedagogical-profile", handleStudentPedagogicalProfile);
+  app.put("/api/student-pedagogical-profile", handleStudentPedagogicalProfile);
+  app.patch("/api/student-pedagogical-profile", handleStudentPedagogicalProfile);
 
   app.get("/api/student-pedagogical-year-notes", async (req, res) => {
     try {

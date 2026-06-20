@@ -14,6 +14,7 @@ import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { sortStudentsBySurname } from '../../lib/utils';
 
 interface StudentPedagogicalProfile {
+  id?: string;
   student_id: string;
   education_program: string;
   visit_reason: string;
@@ -567,9 +568,10 @@ export default function PedagoskaDokumentacijaPage() {
         let dbProfileUpdate: any;
 
         try {
+          const method = profile?.id ? 'PUT' : 'POST';
           const [resUpdate, dbUpdate] = await Promise.all([
             fetch('/api/student-pedagogical-profile', {
-              method: 'POST',
+              method: method,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 studentId: selectedStudent.id,
@@ -634,8 +636,9 @@ export default function PedagoskaDokumentacijaPage() {
         const val = editSingleTextField.value;
         const field = editSingleTextField.fieldName;
         
+        const method = profile?.id ? 'PUT' : 'POST';
         const response = await fetch('/api/student-pedagogical-profile', {
-          method: 'POST',
+          method: method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             studentId: selectedStudent.id,
