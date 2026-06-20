@@ -250,14 +250,16 @@ async function startServer() {
           throw new Error(cellErr?.message || `Neuspjelo kreiranje ćelije za period ${p}`);
         }
 
-        // 2. Delete any existing schedule_cell_subjects entries for this cell
-        const { error: delErr } = await supabaseAdmin
-          .from('schedule_cell_subjects')
-          .delete()
-          .eq('schedule_cell_id', cell.id);
-
-        if (delErr) {
-          throw delErr;
+        // 2. Delete any existing schedule_cell_subjects entries for this cell if not adding
+        if (!req.body.shouldAdd) {
+            const { error: delErr } = await supabaseAdmin
+              .from('schedule_cell_subjects')
+              .delete()
+              .eq('schedule_cell_id', cell.id);
+    
+            if (delErr) {
+              throw delErr;
+            }
         }
 
         // 3. Insert new schedule_cell_subjects

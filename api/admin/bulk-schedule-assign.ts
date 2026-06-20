@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       classroom 
     } = body;
 
-    if (!classId || !dayOfWeek || !shift || !startPeriod || !consecutivePeriods || !subjectId || !teacherId) {
+    if (classId == null || dayOfWeek == null || shift == null || startPeriod == null || consecutivePeriods == null || subjectId == null) {
       return new Response(JSON.stringify({ success: false, error: "Missing required parameters." }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     const end = start + count - 1;
 
     // Validate period numbers
-    if (isNaN(start) || isNaN(count) || start < 1 || count < 1) {
+    if (isNaN(start) || isNaN(count) || start < 0 || count < 1) {
       return new Response(JSON.stringify({ success: false, error: "Invalid start period or consecutive periods count." }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
@@ -60,14 +60,16 @@ export async function POST(req: Request) {
         throw new Error(cellErr?.message || `Neuspjelo kreiranje ćelije za period ${p}`);
       }
 
-      // 2. Delete any existing schedule_cell_subjects entries for this cell
-      const { error: delErr } = await supabaseAdmin
-        .from('schedule_cell_subjects')
-        .delete()
-        .eq('schedule_cell_id', cell.id);
+      // 2. Delete any existing schedule_cell_subjects entries for this cell if not adding
+      if (!body.shouldAdd) {
+        const { error: delErr } = await supabaseAdmin
+          .from('schedule_cell_subjects')
+          .delete()
+          .eq('schedule_cell_id', cell.id);
 
-      if (delErr) {
-        throw delErr;
+        if (delErr) {
+          throw delErr;
+        }
       }
 
       // 3. Insert new schedule_cell_subjects
