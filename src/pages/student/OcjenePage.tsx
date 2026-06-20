@@ -343,7 +343,15 @@ export default function OcjenePage() {
   }
 
   // --- SUBJECT DETAIL VIEW ---
-  const activeSubject = subjects.find(s => s.id === selectedSubject)!;
+  const activeSubject = subjects.find(s => s.id === selectedSubject);
+  if (!activeSubject) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8">
+        <p className="text-sm text-slate-500 font-bold uppercase">Predmet nije pronađen</p>
+        <button onClick={() => setSelectedSubject(null)} className="mt-4 px-4 py-2 bg-[#005c8d] text-white text-xs font-bold rounded">ODABIR PREDMETA</button>
+      </div>
+    );
+  }
   const activeGrades = grades.filter(g => g.subjectId === activeSubject.id);
   const activeFinalGrades = finalGrades.filter(g => g.subjectId === activeSubject.id);
   const average = activeGrades.length > 0 

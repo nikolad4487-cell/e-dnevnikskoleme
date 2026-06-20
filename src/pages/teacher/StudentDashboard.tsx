@@ -62,7 +62,8 @@ export default function StudentDashboard() {
           .from('student_subject_enrollments')
           .select('subject_id')
           .eq('student_id', studentId)
-          .eq('class_id', classId);
+          .eq('class_id', classId)
+          .eq('status', 'ACTIVE');
 
         const enrolledSubjectIds = new Set<string>(
           studentEnrolledSubjects ? studentEnrolledSubjects.map((se: any) => se.subject_id) : []
@@ -134,8 +135,8 @@ export default function StudentDashboard() {
             if (seenSubjectIds.has(cs.subject_id)) return;
             seenSubjectIds.add(cs.subject_id);
 
-            // Filter: limit to enrolled subjects if enrollment table has data for this student
-            if (enrolledSubjectIds.size > 0 && !enrolledSubjectIds.has(cs.subject_id)) {
+            // Filter: limit strictly to subjects that this student actively attends
+            if (!enrolledSubjectIds.has(cs.subject_id)) {
               return;
             }
 
@@ -162,8 +163,8 @@ export default function StudentDashboard() {
           mappedSubjects.sort((a, b) => a.name.localeCompare(b.name));
         }
 
-        if (mappedSubjects.length === 0) {
-          // Fallback to defaults so the teacher doesn't see a blank page
+        if (mappedSubjects.length === 0 && (!classSubs || classSubs.length === 0)) {
+          // Fallback to defaults so the teacher doesn't see a blank page if no DB config
           mappedSubjects = defaultSubjectsList;
         }
 

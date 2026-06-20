@@ -1085,7 +1085,7 @@ setStudents(uniqueStudents);
     const day = dayNames[date.getDay()];
     
     let shift: 'MORNING' | 'AFTERNOON' = 'MORNING';
-    if (selectedWeek.shift === 'Popodne') shift = 'AFTERNOON';
+    if (selectedWeek.shift === 'Popodne' || (selectedWeek.shift as string) === 'AFTERNOON') shift = 'AFTERNOON';
     
     // Period structure cross-check
     if (shift === 'MORNING' && hour === 0) shift = 'AFTERNOON';
@@ -2768,66 +2768,69 @@ setStudents(uniqueStudents);
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {[0, 1, 2, 3, 4, 5, 6, 7, 8].map(hour => {
-                    const lessons = dailyLessons.filter(l => l.hour === hour);
-                    const isOccupied = lessons.length > 0;
-                    const scheduledSubjs = getScheduledSubjectsForNow(hour);
-                    const hasSchedule = scheduledSubjs.length > 0;
-                    
-                    return (
-                      <tr key={hour} className="group hover:bg-[#f0f9ff] transition-colors min-h-[40px]">
-                        <td className="border-r border-gray-200 p-2 text-center align-middle bg-gray-50/20">
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="text-sm font-bold text-[#005c8d]">{hour}.</span>
-                            {hasSchedule && (
-                              <div className="relative group/hint flex items-center">
-                                <button 
-                                  onClick={() => {
-                                    const first = scheduledSubjs[0];
-                                    openLessonModal(hour, undefined, { subjectId: first.subjectId, teacherId: first.teacherId || (user?.id || '') });
-                                  }}
-                                  className="text-[#005c8d]/30 hover:text-[#005c8d] transition-colors cursor-pointer"
-                                >
-                                  <List size={10} strokeWidth={3} />
-                                  <div className="absolute left-full ml-1 px-2 py-1 bg-gray-800 text-white text-[8px] rounded opacity-0 group-hover/hint:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg">
-                                   {scheduledSubjs.map(ss => formatSubjectName(allSubjects.find(s=>s.id===ss.subjectId))).join(', ')}
-                                  </div>
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="border-r border-gray-200 p-2 align-middle overflow-hidden">
-                          <div className="flex flex-col gap-2">
-                            {isOccupied ? (
-                              lessons.map((lesson, idx) => {
-                                const sub = allSubjects.find(s => s.id === lesson.subjectId);
-                                const teacher = teachers.find(t => t.id === lesson.teacherId);
-                                const canEdit = isMainAdmin || lesson.teacherId === user?.id;
-                                const lessonAbsences = dailyAbsences.filter(a => a.lessonId === lesson.id);
-                                
-                                return (
-                                  <div key={lesson.id} className={cn("text-[11px] leading-tight flex flex-col gap-1", idx > 0 && "pt-2 border-t border-gray-100")}>
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="flex-1 animate-fadeIn">
-                                        <div className="font-bold text-[#005c8d] uppercase mb-0.5">
-                                          {formatSubjectName(sub || { name: 'Predmet' }).toUpperCase()} - {lesson.teacherDisplayName && !lesson.teacherDisplayName.includes('undefined') ? lesson.teacherDisplayName : (teacher ? formatPersonName(teacher) : 'Nepoznat nastavnik')}
-                                          {lesson.groupName && ['GROUP_A', 'GROUP_B'].includes(lesson.groupName.toUpperCase()) ? <span className="text-gray-400 font-normal italic ml-1">({lesson.groupName === 'GROUP_A' ? 'Grupa A' : 'Grupa B'})</span> : (
-                                            (lesson.groupName === 'grupa a' || lesson.groupName === 'Grupa A') ? <span className="text-gray-400 font-normal italic ml-1">(Grupa A)</span> :
-                                            (lesson.groupName === 'grupa b' || lesson.groupName === 'Grupa B') ? <span className="text-gray-400 font-normal italic ml-1">(Grupa B)</span> : ''
-                                          )}
-                                          {!lesson.isHeld && " - SAT NIJE ODRŽAN"}
-                                        </div>
-                                        {lesson.topic ? (
-                                          <div className="text-[10px] text-gray-500 italic whitespace-pre-wrap leading-snug">
-                                            {lesson.topic}
+                  {(() => {
+                    const isAfternoonWeek = selectedWeek.shift === 'Popodne' || (selectedWeek.shift as string) === 'AFTERNOON';
+                    const activePeriods = isAfternoonWeek ? [0, 1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5, 6, 7, 8];
+                    return activePeriods.map(hour => {
+                      const lessons = dailyLessons.filter(l => l.hour === hour);
+                      const isOccupied = lessons.length > 0;
+                      const scheduledSubjs = getScheduledSubjectsForNow(hour);
+                      const hasSchedule = scheduledSubjs.length > 0;
+                      
+                      return (
+                        <tr key={hour} className="group hover:bg-[#f0f9ff] transition-colors min-h-[40px]">
+                          <td className="border-r border-gray-200 p-2 text-center align-middle bg-gray-50/20">
+                            <div className="flex items-center justify-center gap-1">
+                              <span className="text-sm font-bold text-[#005c8d]">{hour}.</span>
+                              {hasSchedule && (
+                                <div className="relative group/hint flex items-center">
+                                  <button 
+                                    onClick={() => {
+                                      const first = scheduledSubjs[0];
+                                      openLessonModal(hour, undefined, { subjectId: first.subjectId, teacherId: first.teacherId || (user?.id || '') });
+                                    }}
+                                    className="text-[#005c8d]/30 hover:text-[#005c8d] transition-colors cursor-pointer"
+                                  >
+                                    <List size={10} strokeWidth={3} />
+                                    <div className="absolute left-full ml-1 px-2 py-1 bg-gray-800 text-white text-[8px] rounded opacity-0 group-hover/hint:opacity-100 pointer-events-none whitespace-nowrap z-50 shadow-lg">
+                                     {scheduledSubjs.map(ss => formatSubjectName(allSubjects.find(s=>s.id===ss.subjectId))).join(', ')}
+                                    </div>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="border-r border-gray-200 p-2 align-middle overflow-hidden">
+                            <div className="flex flex-col gap-2">
+                              {isOccupied ? (
+                                lessons.map((lesson, idx) => {
+                                  const sub = allSubjects.find(s => s.id === lesson.subjectId);
+                                  const teacher = teachers.find(t => t.id === lesson.teacherId);
+                                  const canEdit = isMainAdmin || lesson.teacherId === user?.id;
+                                  const lessonAbsences = dailyAbsences.filter(a => a.lessonId === lesson.id);
+                                  
+                                  return (
+                                    <div key={lesson.id} className={cn("text-[11px] leading-tight flex flex-col gap-1", idx > 0 && "pt-2 border-t border-gray-100")}>
+                                      <div className="flex items-start justify-between gap-2">
+                                        <div className="flex-1 animate-fadeIn">
+                                          <div className="font-bold text-[#005c8d] uppercase mb-0.5">
+                                            {formatSubjectName(sub || { name: 'Predmet' }).toUpperCase()} - {lesson.teacherDisplayName && !lesson.teacherDisplayName.includes('undefined') ? lesson.teacherDisplayName : (teacher ? formatPersonName(teacher) : 'Nepoznat nastavnik')}
+                                            {lesson.groupName && ['GROUP_A', 'GROUP_B'].includes(lesson.groupName.toUpperCase()) ? <span className="text-gray-400 font-normal italic ml-1">({lesson.groupName === 'GROUP_A' ? 'Grupa A' : 'Grupa B'})</span> : (
+                                              (lesson.groupName === 'grupa a' || lesson.groupName === 'Grupa A') ? <span className="text-gray-400 font-normal italic ml-1">(Grupa A)</span> :
+                                              (lesson.groupName === 'grupa b' || lesson.groupName === 'Grupa B') ? <span className="text-gray-400 font-normal italic ml-1">(Grupa B)</span> : ''
+                                            )}
+                                            {!lesson.isHeld && " - SAT NIJE ODRŽAN"}
                                           </div>
-                                        ) : null}
-
-                                        {/* Gumb "Unesi izostanak" i prikaz izostanaka za dan/sat */}
-                                        <div className="mt-2 p-2 bg-red-50/40 border border-red-100/55 rounded flex flex-col gap-1.5">
-                                          <div className="flex items-center justify-between gap-4">
-                                            <span className="text-[9px] font-black uppercase text-red-700 tracking-wider flex items-center gap-1">
+                                          {lesson.topic ? (
+                                            <div className="text-[10px] text-gray-500 italic whitespace-pre-wrap leading-snug">
+                                              {lesson.topic}
+                                            </div>
+                                          ) : null}
+  
+                                          {/* Gumb "Unesi izostanak" i prikaz izostanaka za dan/sat */}
+                                          <div className="mt-2 p-2 bg-red-50/40 border border-red-100/55 rounded flex flex-col gap-1.5">
+                                            <div className="flex items-center justify-between gap-4">
+                                              <span className="text-[9px] font-black uppercase text-red-700 tracking-wider flex items-center gap-1">
                                               <Clock size={10} /> Izostanci za sat:
                                             </span>
                                             {canEdit && (
@@ -2954,8 +2957,9 @@ setStudents(uniqueStudents);
                         </td>
                       </tr>
                     );
-                  })}
-                </tbody>
+                  });
+                })()}
+              </tbody>
               </table>
             </div>
 

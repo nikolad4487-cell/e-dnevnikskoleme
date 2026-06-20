@@ -129,6 +129,7 @@ export default function StudentSubjectDetail() {
   const [subject, setSubject] = useState<any>(null);
   const [classroom, setClassroom] = useState<any>(null);
   const [studentIndex, setStudentIndex] = useState<number>(0);
+  const [isEnrolled, setIsEnrolled] = useState(true);
   const [allClassStudents, setAllClassStudents] = useState<any[]>([]);
 
   // Editing states
@@ -225,7 +226,11 @@ export default function StudentSubjectDetail() {
         supabase.from('user_profiles').select('*').eq('id', studentId).single(),
         supabase.from('subjects').select('*').eq('id', subjectId).single(),
         supabase.from('classes').select('*').eq('id', classId).single(),
-        supabase.from('student_class_enrollments').select('student_id, student:user_profiles(*)').eq('class_id', classId),
+        supabase.from('student_subject_enrollments')
+          .select('student_id, student:user_profiles(*)')
+          .eq('class_id', classId)
+          .eq('subject_id', subjectId)
+          .eq('status', 'ACTIVE'),
         supabase.from('grading_elements').select('name').eq('class_id', classId).eq('subject_id', subjectId),
         supabase.from('grades').select('*').eq('student_id', studentId).eq('subject_id', subjectId).eq('class_id', classId),
         supabase.from('final_grades').select('*').eq('student_id', studentId).eq('subject_id', subjectId).eq('class_id', classId),
@@ -267,14 +272,20 @@ export default function StudentSubjectDetail() {
       }
       if (classData) setClassroom(classData);
 
+      let enrolled = true;
       if (enrollments && enrollments.length > 0) {
         const sorted = sortStudentsBySurname(enrollments);
         setAllClassStudents(sorted);
         const currentIndex = sorted.findIndex(s => s.student_id === studentId);
         if (currentIndex !== -1) {
           setStudentIndex(currentIndex + 1);
+        } else {
+          enrolled = false;
         }
+      } else {
+        enrolled = false;
       }
+      setIsEnrolled(enrolled);
 
       const elementNames = gemData?.map(g => g.name) || [];
       setGradingElements(elementNames);
@@ -905,6 +916,24 @@ export default function StudentSubjectDetail() {
         <div className="flex flex-col items-center gap-2">
           <Loader2 className="w-8 h-8 animate-spin text-[#005c8d]" />
           <span className="text-xs uppercase font-extrabold text-[#005c8d]">Učitavanje podataka predmeta...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isEnrolled) {
+    return (
+      <div className="p-16 flex flex-col items-center justify-center bg-white h-full min-h-[400px]">
+        <div className="flex flex-col items-center gap-4 text-center max-w-md">
+          <span className="text-4xl text-gray-400">⚠️</span>
+          <h2 className="text-lg font-bold text-gray-900">Učenik nije upisan u ovaj predmet</h2>
+          <p className="text-xs text-gray-500">Ovaj učenik nema aktivan upis u odabrani izborni ili fakultativni predmet.</p>
+          <button
+            onClick={() => window.history.back()}
+            className="mt-2 px-4 py-2 bg-[#005c8d] text-white text-xs font-bold uppercase hover:bg-opacity-90 rounded transition-colors"
+          >
+            Natrag
+          </button>
         </div>
       </div>
     );
