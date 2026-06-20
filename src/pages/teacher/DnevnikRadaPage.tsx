@@ -3853,6 +3853,7 @@ function ScheduleGrid({ title, shift, periods, days, onCellClick, getCellSubject
       allSubjects={allSubjects}
       teachers={teachers}
       readOnly={readOnly}
+      showTeachers={false}
     />
   );
 }
