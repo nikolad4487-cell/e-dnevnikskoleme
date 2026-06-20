@@ -31,7 +31,8 @@ const DAYS = [
   { id: 'FRIDAY', name: 'Petak' }
 ];
 
-const PERIODS = [0, 1, 2, 3, 4, 5, 6, 7];
+const MORNING_PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
+const AFTERNOON_PERIODS = [0, 1, 2, 3, 4, 5, 6, 7];
 
 export default function ScheduleManagementPage() {
   const { selectedSchoolId } = useSelection();
@@ -43,6 +44,8 @@ export default function ScheduleManagementPage() {
   const [schedule, setSchedule] = useState<any[]>([]); // Schedule entries
   const [loading, setLoading] = useState(false);
   const [shift, setShift] = useState<'MORNING' | 'AFTERNOON'>('MORNING');
+
+  const activePeriods = shift === 'MORNING' ? MORNING_PERIODS : AFTERNOON_PERIODS;
 
   // Assignment Modal States
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
@@ -254,8 +257,9 @@ export default function ScheduleManagementPage() {
     const count = Number(modalConsecutive);
     const end = start + count - 1;
 
-    if (end > 7) {
-      setValidationError(`Nema dovoljno preostalih sati u danu. Maksimalna pozicija je 7. sat (odabrali ste do ${end}. sata).`);
+    const maxPeriod = shift === 'MORNING' ? 8 : 7;
+    if (end > maxPeriod) {
+      setValidationError(`Nema dovoljno preostalih sati u danu. Maksimalna pozicija je ${maxPeriod}. sat (odabrali ste do ${end}. sata).`);
       return;
     }
 
@@ -458,7 +462,7 @@ export default function ScheduleManagementPage() {
                 </tr>
              </thead>
              <tbody className="divide-y divide-slate-50">
-                {PERIODS.map(num => (
+                {activePeriods.map(num => (
                    <tr key={num} className="hover:bg-slate-50/30">
                       <td className="p-4 border-r text-center font-black text-slate-400 bg-slate-50/50">{num}.</td>
                       {DAYS.map(day => {
@@ -468,7 +472,15 @@ export default function ScheduleManagementPage() {
                         return (
                           <td key={day.id} className="p-2 border-r group relative h-24">
                              {cell?.subjects && cell.subjects.length > 0 ? (
-                           <div className="bg-blue-50 border border-blue-100 rounded-xl p-2 h-full flex flex-col justify-start text-center shadow-sm overflow-y-auto">
+                           <div 
+                              onClick={() => isAnyAdmin && openAssignModal(day.id, num)}
+                              className={`rounded-xl p-2 h-full flex flex-col justify-start text-center shadow-sm overflow-y-auto ${
+                                isAnyAdmin 
+                                  ? 'bg-blue-50/70 border-2 border-blue-100 hover:bg-blue-100/50 hover:border-[#005c8d]/30 hover:shadow-md transition-all cursor-pointer' 
+                                  : 'bg-blue-50 border border-blue-100 font-sans'
+                              }`}
+                              title={isAnyAdmin ? "Uredi ili dodaj predmete u ovu ćeliju" : undefined}
+                           >
                              {cell.subjects.map((sub: any) => (
                                <div key={sub.id} className="border-b last:border-b-0 border-blue-100/50 py-1 relative group/subject">
                                   <div className="text-[10px] font-black text-blue-900 uppercase leading-none mb-0.5">{sub.subject?.name}</div>
@@ -479,7 +491,10 @@ export default function ScheduleManagementPage() {
                                     </span>
                                   )}
                                   <button 
-                                    onClick={() => handleDeleteClick(cell, sub, day.id)}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteClick(cell, sub, day.id);
+                                    }}
                                     className={`absolute top-0 right-0 text-blue-300 hover:text-red-500 transition-colors opacity-0 group-hover/subject:opacity-100 ${!isAnyAdmin && 'hidden'}`}
                                   >
                                     <Trash2 size={10} />

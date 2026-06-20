@@ -76,22 +76,35 @@ export default function RasporedPage() {
           setScheduleCells(cells);
 
           if (cells.length > 0) {
+            // Fetch student enrollments for this class
+            const { data: enrollmentsData } = await supabase
+              .from('student_subject_enrollments')
+              .select('subject_id')
+              .eq('student_id', targetStudentId)
+              .eq('class_id', studentClassId);
+            const enrolledSubjectIds = new Set((enrollmentsData || []).map(e => e.subject_id));
+
             const cellIds = cells.map(c => c.id);
             const { data: subjsData } = await supabase
               .from('schedule_cell_subjects')
               .select('*')
               .in('schedule_cell_id', cellIds);
             const mappedSubjects = (subjsData || []).map(row => mappers.scheduleCellSubject(row));
-            setScheduleSubjects(mappedSubjects);
+            
+            // Filter schedule subjects to only show the ones the student is actively enrolled in
+            const filteredSubjects = mappedSubjects.filter(s => enrolledSubjectIds.has(s.subjectId));
+            setScheduleSubjects(filteredSubjects);
 
             // Fetch Teacher names for those subjects
-            const teacherIds = [...new Set(mappedSubjects.map(s => s.teacherId).filter(Boolean))];
+            const teacherIds = [...new Set(filteredSubjects.map(s => s.teacherId).filter(Boolean))];
             if (teacherIds.length > 0) {
               const { data: tProfiles } = await supabase
                 .from('user_profiles')
                 .select('*')
                 .in('id', teacherIds);
               setTeacherProfiles(tProfiles || []);
+            } else {
+              setTeacherProfiles([]);
             }
           } else {
             setScheduleSubjects([]);
