@@ -58,6 +58,7 @@ export default function PedagoskaDokumentacijaPage() {
   const [activeClass, setActiveClass] = useState<any>(null);
   const [students, setStudents] = useState<any[]>([]);
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [classProgramName, setClassProgramName] = useState<string>('');
 
   usePageTitle(selectedStudent ? `Pedagoška dokumentacija - ${selectedStudent.name}` : "Pedagoška dokumentacija");
 
@@ -176,10 +177,10 @@ export default function PedagoskaDokumentacijaPage() {
   const loadClassData = async (cId: string) => {
     setLoading(true);
     try {
-      // 1. Fetch Class
+      // 1. Fetch Class with program_id relation
       const { data: rawClass, error: classError } = await supabase
         .from('classes')
-        .select('*')
+        .select('*, program:program_id(*)')
         .eq('id', cId)
         .maybeSingle();
 
@@ -189,6 +190,28 @@ export default function PedagoskaDokumentacijaPage() {
 
       const mappedClass = mappers.class(rawClass);
       setActiveClass(mappedClass);
+
+      // Resolve program name robustly
+      let fetchedProgramName = '';
+      if (rawClass) {
+        if (rawClass.program) {
+          fetchedProgramName = rawClass.program.name || '';
+        } else if (rawClass.program_id) {
+          try {
+            const { data: progData } = await supabase
+              .from('programs')
+              .select('name')
+              .eq('id', rawClass.program_id)
+              .maybeSingle();
+            if (progData) {
+              fetchedProgramName = progData.name || '';
+            }
+          } catch (err) {
+            console.warn("Could not load program via fallback", err);
+          }
+        }
+      }
+      setClassProgramName(fetchedProgramName);
 
       // 2. Fetch Students
       const { data: enrollData, error: enrollError } = await supabase
@@ -575,7 +598,7 @@ export default function PedagoskaDokumentacijaPage() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 studentId: selectedStudent.id,
-                education_program: editProfileForm.education_program,
+                education_program: classProgramName,
                 visit_reason: editProfileForm.visit_reason,
                 disabilities: editProfileForm.disabilities,
                 accommodations: editProfileForm.accommodations,
@@ -830,7 +853,7 @@ export default function PedagoskaDokumentacijaPage() {
                           {activeClass?.name}
                         </span>
                         <span>
-                          program: {profile.education_program || 'Nije specificirano'}
+                          program: {classProgramName || 'Nije definiran'}
                         </span>
                       </div>
                     </div>
@@ -846,11 +869,28 @@ export default function PedagoskaDokumentacijaPage() {
                   )}
                 </div>
 
+                {/* Warning notification if class has no program defined */}
+                {!classProgramName && (
+                  <div className="mt-4 p-4 bg-amber-50 border border-amber-200 text-amber-800 rounded-md text-xs font-semibold flex items-start gap-2.5 shadow-sm">
+                    <span className="text-lg leading-none">⚠️</span>
+                    <div>
+                      <p className="font-bold uppercase tracking-tight text-amber-900">Upozorenje: Program obrazovanja nije definiran</p>
+                      <p className="text-[11px] text-amber-700 font-medium mt-0.5 animate-pulse">
+                        U postavkama ovog razreda nije konfiguriran program obrazovanja. Administrator ili razrednik treba ga postaviti u izborniku "Administracija - Upravljanje razredima".
+                      </p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Grid details (Decoupled & organized) */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6 bg-slate-50/50 p-4 border border-gray-200/65 rounded-md text-xs font-bold shadow-inner">
                   <div>
-                    <span className="text-[8.5px] font-black uppercase text-slate-400 tracking-wider block mb-1">Program obrazovanja (trajni podatak)</span>
-                    <p className="text-slate-800 uppercase tracking-tight">{profile.education_program || '--'}</p>
+                    <span className="text-[8.5px] font-black uppercase text-slate-400 tracking-wider block mb-1">Program obrazovanja (razred)</span>
+                    {classProgramName ? (
+                      <p className="text-slate-800 uppercase tracking-tight">{classProgramName}</p>
+                    ) : (
+                      <p className="text-rose-600 font-extrabold uppercase tracking-tight text-[10px] bg-rose-50 px-2 py-0.5 border border-rose-100 rounded self-start inline-block">Nije definiran ⚠️</p>
+                    )}
                   </div>
                   <div>
                     <span className="text-[8.5px] font-black uppercase text-slate-400 tracking-wider block mb-1">Prilagodba programa</span>
@@ -1719,13 +1759,10 @@ export default function PedagoskaDokumentacijaPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <span className="block text-[9px] font-black uppercase text-gray-400 tracking-wider mb-1">Program obrazovanja</span>
-                      <input 
-                        type="text" 
-                        value={editProfileForm.education_program}
-                        onChange={(e) => setEditProfileForm({ ...editProfileForm, education_program: e.target.value })}
-                        className="w-full border border-gray-300 p-2.5 rounded font-black uppercase text-slate-800 focus:outline-[#005c8d]"
-                        placeholder="Npr. KUHAR, ELEKTROTEHNIČAR..."
-                      />
+                      <div className="w-full bg-slate-50 border border-slate-200 p-2.5 rounded font-black text-xs uppercase text-slate-500 flex items-center justify-between">
+                        <span>{classProgramName || 'Nije definiran u postavkama razreda'}</span>
+                        <span className="text-[8px] font-semibold text-[#005c8d] bg-sky-50 px-2 py-0.5 border border-sky-100 rounded">IZ RAZREDA</span>
+                      </div>
                     </div>
                     <div>
                       <span className="block text-[9px] font-black uppercase text-gray-400 tracking-wider mb-1">Primarni razlog dolaska / prijave</span>
