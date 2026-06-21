@@ -1,0 +1,143 @@
+name: Apply class student adjustment badges
+
+on:
+  push:
+    branches:
+      - feature/class-student-adjustment-badges
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[adjustment-badges-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/class-student-adjustment-badges
+          fetch-depth: 0
+
+      - name: Add adjustment badges
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('src/pages/admin/ClassStudentsPage.tsx')
+          source = path.read_text(encoding='utf-8')
+
+          source = source.replace(
+            "import { useNavigate, useParams, useSearchParams } from 'react-router-dom';\n\nexport default function ClassStudentsPage() {",
+            """import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+
+type StudentWithAdjustment = User & {
+  programAdjustment?: string | null;
+};
+
+function AdjustmentBadge({ value }: { value?: string | null }) {
+  if (!value || value === 'NONE') return null;
+
+  const isIndividualization = value === 'REGULAR_WITH_INDIVIDUALIZATION';
+  const label = isIndividualization ? 'Individualizacija' : 'Prilagodba';
+  const title = isIndividualization
+    ? 'Redovni program uz individualizaciju'
+    : 'Redovni program uz prilagodbu';
+
+  return (
+    <span
+      title={title}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-wide whitespace-nowrap ${
+        isIndividualization
+          ? 'border-violet-200 bg-violet-50 text-violet-700'
+          : 'border-amber-200 bg-amber-50 text-amber-700'
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+export default function ClassStudentsPage() {""",
+            1
+          )
+
+          source = source.replace(
+            "const [classStudents, setClassStudents] = useState<User[]>([]);\n  const [availableStudents, setAvailableStudents] = useState<User[]>([]);",
+            "const [classStudents, setClassStudents] = useState<StudentWithAdjustment[]>([]);\n  const [availableStudents, setAvailableStudents] = useState<StudentWithAdjustment[]>([]);",
+            1
+          )
+
+          source = source.replace(
+            """        email: row.student.email,
+        globalRole: Role.STUDENT
+      })) as User[];""",
+            """        email: row.student.email,
+        globalRole: Role.STUDENT,
+        programAdjustment: row.student.program_adjustment || 'NONE'
+      })) as StudentWithAdjustment[];""",
+            1
+          )
+
+          source = source.replace(
+            """            globalRole: Role.STUDENT,
+            classId: enrollment?.class_id
+          };""",
+            """            globalRole: Role.STUDENT,
+            classId: enrollment?.class_id,
+            programAdjustment: u.program_adjustment || 'NONE'
+          };""",
+            1
+          )
+
+          source = source.replace(
+            """                          <p className=\"font-bold text-slate-900 text-sm\">{s.name}</p>
+                          <p className=\"text-[10px] text-slate-400 uppercase font-black\">{s.classId ? 'Već u drugom razredu' : 'Nije raspoređen'}</p>""",
+            """                          <div className=\"flex flex-wrap items-center gap-2\">
+                            <p className=\"font-bold text-slate-900 text-sm\">{s.name}</p>
+                            <AdjustmentBadge value={s.programAdjustment} />
+                          </div>
+                          <p className=\"text-[10px] text-slate-400 uppercase font-black\">{s.classId ? 'Već u drugom razredu' : 'Nije raspoređen'}</p>""",
+            1
+          )
+
+          source = source.replace(
+            """                        <p className=\"font-black text-slate-900 text-sm tracking-tight uppercase\">{s.name}</p>""",
+            """                        <div className=\"flex flex-wrap items-center gap-2\">
+                          <p className=\"font-black text-slate-900 text-sm tracking-tight uppercase\">{s.name}</p>
+                          <AdjustmentBadge value={s.programAdjustment} />
+                        </div>""",
+            1
+          )
+
+          required = [
+            'type StudentWithAdjustment',
+            'programAdjustment: row.student.program_adjustment',
+            'programAdjustment: u.program_adjustment',
+            '<AdjustmentBadge value={s.programAdjustment} />'
+          ]
+          missing = [item for item in required if item not in source]
+          if missing:
+            raise SystemExit(f'Missing expected changes: {missing}')
+
+          path.write_text(source, encoding='utf-8')
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit feature and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-class-student-adjustment-badges.yml
+          git add src/pages/admin/ClassStudentsPage.tsx
+          git commit -m "feat: show program adjustments beside class students [adjustment-badges-applied]"
+          git push origin HEAD:feature/class-student-adjustment-badges
