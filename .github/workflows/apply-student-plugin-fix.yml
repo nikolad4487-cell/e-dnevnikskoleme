@@ -1,0 +1,94 @@
+name: Apply student portal transform fix
+
+on:
+  push:
+    branches:
+      - feature/student-final-thesis-and-mobile-select
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[student-transform-fixed]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/student-final-thesis-and-mobile-select
+          fetch-depth: 0
+
+      - name: Make class card insertion robust
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('vite/studentPortalExperiencePlugin.ts')
+          source = path.read_text(encoding='utf-8')
+
+          start_marker = "  transformed = replaceRequired(\n    transformed,\n    `                   const formattedAverage"
+          end_marker = "\n\n  transformed = replaceRequired(\n    transformed,\n    '                    <div key={cls.id}"
+
+          start = source.find(start_marker)
+          end = source.find(end_marker, start)
+          if start < 0 or end < 0:
+            raise SystemExit('Expected fragile class-card transform block was not found')
+
+          replacement = r'''  if (!transformed.includes('const classMenuItems = [')) {
+            const formattedAverageIndex = transformed.indexOf('const formattedAverage');
+            const remainingSource = formattedAverageIndex >= 0
+              ? transformed.slice(formattedAverageIndex)
+              : '';
+            const returnMatch = remainingSource.match(/\n(\s*)return \(/);
+
+            if (formattedAverageIndex < 0 || !returnMatch || returnMatch.index === undefined) {
+              throw new Error('[student-portal-experience] Expected class final thesis card insertion point was not found.');
+            }
+
+            const returnIndex = formattedAverageIndex + returnMatch.index + 1;
+            const indent = returnMatch[1];
+            const classMenuBlock = `${indent}const classMenuItems = [
+          ${indent}  ...menuItems,
+          ${indent}  ...(isFinalThesisClass({
+          ${indent}    name: cls.name,
+          ${indent}    gradeLevel: cls.gradeLevel,
+          ${indent}    durationYears: cls.durationYears,
+          ${indent}  })
+          ${indent}    ? [{
+          ${indent}        label: 'Završni rad',
+          ${indent}        path: 'zavrsni-rad',
+          ${indent}        icon: GraduationCap,
+          ${indent}        color: 'text-cyan-700 bg-cyan-50 border-cyan-200 hover:bg-cyan-100/70',
+          ${indent}        desktopOnly: true,
+          ${indent}      }]
+          ${indent}    : []),
+          ${indent}];\n\n`;
+
+            transformed =
+              transformed.slice(0, returnIndex) +
+              classMenuBlock +
+              transformed.slice(returnIndex);
+          }'''
+
+          source = source[:start] + replacement + source[end:]
+          path.write_text(source, encoding='utf-8')
+          PY
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+      - name: Commit validated fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-student-plugin-fix.yml
+          git add vite/studentPortalExperiencePlugin.ts
+          git commit -m "fix: make student class card transform robust [student-transform-fixed]"
+          git push origin HEAD:feature/student-final-thesis-and-mobile-select
