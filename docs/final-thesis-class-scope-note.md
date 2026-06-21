@@ -1,0 +1,1 @@
+Kartica Završni radovi ostaje dostupna samo završnim razredima prema trajanju programa; podaci modula i raspored obrane koriste trenutačno odabrani classId.
