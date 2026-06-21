@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix-final-thesis-teacher-sync
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: write
