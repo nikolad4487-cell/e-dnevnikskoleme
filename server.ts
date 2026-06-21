@@ -86,7 +86,13 @@ async function startServer() {
     const app = express();
     const PORT = 3000;
 
-    app.use(express.json());
+    app.use((req: any, res: any, next: any) => {
+      if (req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)) {
+        next();
+      } else {
+        express.json()(req, res, next);
+      }
+    });
 
     // Run startup migrations for final exam defense schedule tables if supabase is available
     if (supabaseAdmin) {
@@ -1647,11 +1653,17 @@ async function startServer() {
 
   const handleStudentPedagogicalProfile = async (req: any, res: any) => {
     try {
-      const payload = req.body;
-      const { studentId } = payload;
+      console.log("[PEDAGOGICAL_PROFILE] Received state update payload:", req.body);
+      const payload = req.body || {};
+      const studentId = payload.studentId || payload.student_id;
+      
       if (!studentId) {
+        console.error("[PEDAGOGICAL_PROFILE] Missing studentId in request body:", payload);
         return res.status(400).json({ error: "studentId is required" });
       }
+
+      const valAdjustment = payload.program_adjustment || payload.programAdjustment || payload.value || "NONE";
+      console.log(`[PEDAGOGICAL_PROFILE] Saving profile for student: ${studentId}, adjustment value: ${valAdjustment}`);
 
       const dbPayload = {
         student_id: studentId,
@@ -1662,40 +1674,53 @@ async function startServer() {
         support_types: payload.support_types || payload.supportTypes || "",
         practical_training: payload.practical_training || payload.practicalTraining || "",
         documentation: payload.documentation || "",
-        program_adjustment: payload.program_adjustment || payload.programAdjustment || "NONE",
         updated_at: new Date().toISOString()
       };
 
       if (supabaseAdmin) {
         try {
-          const adjValue = payload.program_adjustment || payload.programAdjustment || "NONE";
-          await supabaseAdmin
+          console.log(`[PEDAGOGICAL_PROFILE] Updating user_profiles table directly config...`);
+          const { error: profileUpdError } = await supabaseAdmin
             .from("user_profiles")
-            .update({ program_adjustment: adjValue })
+            .update({ program_adjustment: valAdjustment })
             .eq("id", studentId);
+          if (profileUpdError) {
+            console.error("[PEDAGOGICAL_PROFILE] Supabase profile update column error:", profileUpdError);
+          }
         } catch (dbErr) {
-          console.warn("Could not update program_adjustment in user_profiles on Supabase:", dbErr);
+          console.error("[PEDAGOGICAL_PROFILE] Executing user_profiles update caught error:", dbErr);
         }
 
-        const { data, error } = await supabaseAdmin
-          .from("student_pedagogical_profiles")
-          .upsert(dbPayload, { onConflict: "student_id" })
-          .select("*")
-          .maybeSingle();
-        if (!error && data) {
-          return res.json(data);
-        } else {
-          console.log("[INFO] Synchronization fallback: using local JSON storage.");
+        try {
+          console.log(`[PEDAGOGICAL_PROFILE] Inserting/Upserting details into student_pedagogical_profiles table...`);
+          const { data, error } = await supabaseAdmin
+            .from("student_pedagogical_profiles")
+            .upsert(dbPayload, { onConflict: "student_id" })
+            .select("*")
+            .maybeSingle();
+          
+          if (!error && data) {
+            const merged = { ...data, program_adjustment: valAdjustment };
+            console.log("[PEDAGOGICAL_PROFILE] Database record upserted successfully:", merged);
+            return res.json(merged);
+          } else if (error) {
+            console.error("[PEDAGOGICAL_PROFILE] Supabase student_pedagogical_profiles upsert returned error:", error);
+          }
+        } catch (dbErr: any) {
+          console.error("[PEDAGOGICAL_PROFILE] Executing student_pedagogical_profiles table upsert threw exception:", dbErr);
         }
+        
+        console.log("[INFO] Synchronization fallback: using local JSON storage.");
       }
 
       // JSON Fallback
       let list = readJsonFile("student_pedagogical_profiles.json");
-      const idx = list.findIndex(p => p.student_id === studentId);
+      const idx = list.findIndex(p => p.student_id === studentId || p.studentId === studentId);
       const newProfile = {
         id: idx >= 0 ? list[idx].id : Math.random().toString(36).substring(2, 9) + '-' + Date.now(),
         ...dbPayload,
-        created_at: idx >= 0 ? list[idx].created_at : new Date().toISOString()
+        program_adjustment: valAdjustment,
+        created_at: idx >= 0 ? (list[idx].created_at || new Date().toISOString()) : new Date().toISOString()
       };
 
       if (idx >= 0) {
@@ -1703,10 +1728,13 @@ async function startServer() {
       } else {
         list.push(newProfile);
       }
+      
       writeJsonFile("student_pedagogical_profiles.json", list);
+      console.log("[PEDAGOGICAL_PROFILE] Fallback saved successfully:", newProfile);
       res.json(newProfile);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      console.error("[PEDAGOGICAL_PROFILE] CRITICAL error inside handleStudentPedagogicalProfile handler:", err);
+      res.status(500).json({ error: err.message, stack: err.stack });
     }
   };
 
