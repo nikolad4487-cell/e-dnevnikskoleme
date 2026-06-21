@@ -1,0 +1,183 @@
+name: Apply missing pedagogical table fix
+
+on:
+  push:
+    branches:
+      - fix/missing-pedagogical-table
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[pedagogical-table-fix-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/missing-pedagogical-table
+          fetch-depth: 0
+
+      - name: Patch missing-table handling and add corrected migration
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('server.ts')
+          source = path.read_text(encoding='utf-8')
+
+          old_get = '''    if (pedagogicalProfileError) {
+      console.error("[PEDAGOGICAL_PROFILE] Failed to load pedagogical profile:", pedagogicalProfileError);
+      return res.status(500).json({
+        success: false,
+        error: pedagogicalProfileError.message,
+        details: pedagogicalProfileError.details,
+        hint: pedagogicalProfileError.hint,
+        code: pedagogicalProfileError.code
+      });
+    }
+'''
+
+          new_get = '''    if (pedagogicalProfileError && pedagogicalProfileError.code !== "PGRST205") {
+      console.error("[PEDAGOGICAL_PROFILE] Failed to load pedagogical profile:", pedagogicalProfileError);
+      return res.status(500).json({
+        success: false,
+        error: pedagogicalProfileError.message,
+        details: pedagogicalProfileError.details,
+        hint: pedagogicalProfileError.hint,
+        code: pedagogicalProfileError.code
+      });
+    }
+
+    if (pedagogicalProfileError?.code === "PGRST205") {
+      console.warn("[PEDAGOGICAL_PROFILE] Optional student_pedagogical_profiles table is missing; returning program adjustment with default details.");
+    }
+'''
+
+          old_post = '''    if (pedagogicalProfileError) {
+      console.error("[PEDAGOGICAL_PROFILE] student_pedagogical_profiles upsert failed:", pedagogicalProfileError);
+      return res.status(500).json({
+        success: false,
+        error: pedagogicalProfileError.message,
+        details: pedagogicalProfileError.details,
+        hint: pedagogicalProfileError.hint,
+        code: pedagogicalProfileError.code
+      });
+    }
+
+    const result = {
+      ...savedPedagogicalProfile,
+      program_adjustment: updatedUserProfile.program_adjustment || "NONE"
+    };
+'''
+
+          new_post = '''    if (pedagogicalProfileError && pedagogicalProfileError.code !== "PGRST205") {
+      console.error("[PEDAGOGICAL_PROFILE] student_pedagogical_profiles upsert failed:", pedagogicalProfileError);
+      return res.status(500).json({
+        success: false,
+        error: pedagogicalProfileError.message,
+        details: pedagogicalProfileError.details,
+        hint: pedagogicalProfileError.hint,
+        code: pedagogicalProfileError.code
+      });
+    }
+
+    if (pedagogicalProfileError?.code === "PGRST205") {
+      console.warn("[PEDAGOGICAL_PROFILE] Optional student_pedagogical_profiles table is missing; program adjustment was still saved in user_profiles.");
+      return res.json({
+        ...pedagogicalPayload,
+        program_adjustment: updatedUserProfile.program_adjustment || "NONE",
+        details_persisted: false,
+        warning: "Pedagoški profil nije spremljen jer tablica student_pedagogical_profiles još nije izrađena, ali program prilagodbe je uspješno spremljen."
+      });
+    }
+
+    const result = {
+      ...savedPedagogicalProfile,
+      program_adjustment: updatedUserProfile.program_adjustment || "NONE",
+      details_persisted: true
+    };
+'''
+
+          if old_get not in source:
+            raise SystemExit('Expected GET error block was not found')
+          if old_post not in source:
+            raise SystemExit('Expected POST error block was not found')
+
+          source = source.replace(old_get, new_get, 1)
+          source = source.replace(old_post, new_post, 1)
+          path.write_text(source, encoding='utf-8')
+
+          migration = Path('migrations/20260621000000_fix_student_pedagogical_tables.sql')
+          migration.write_text('''-- Corrected idempotent migration for pedagogical profile tables.
+-- The earlier migration used TEXT for UUID foreign keys, which can roll back the whole migration.
+
+CREATE TABLE IF NOT EXISTS public.student_pedagogical_profiles (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  education_program TEXT,
+  visit_reason TEXT,
+  disabilities TEXT,
+  accommodations TEXT,
+  support_types TEXT,
+  practical_training TEXT,
+  documentation TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT unique_student_profile UNIQUE (student_id)
+);
+
+CREATE TABLE IF NOT EXISTS public.student_pedagogical_year_notes (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
+  school_year_id UUID NOT NULL REFERENCES public.school_years(id) ON DELETE CASCADE,
+  class_id UUID NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+  recommendations TEXT,
+  counselor_notes TEXT,
+  yearly_observations JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT unique_student_year_note UNIQUE (student_id, school_year_id, class_id)
+);
+
+ALTER TABLE public.student_pedagogical_profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.student_pedagogical_year_notes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Authenticated manage student_pedagogical_profiles" ON public.student_pedagogical_profiles;
+CREATE POLICY "Authenticated manage student_pedagogical_profiles"
+ON public.student_pedagogical_profiles
+FOR ALL TO authenticated
+USING (true)
+WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Authenticated manage student_pedagogical_year_notes" ON public.student_pedagogical_year_notes;
+CREATE POLICY "Authenticated manage student_pedagogical_year_notes"
+ON public.student_pedagogical_year_notes
+FOR ALL TO authenticated
+USING (true)
+WITH CHECK (true);
+
+GRANT ALL ON public.student_pedagogical_profiles TO service_role;
+GRANT ALL ON public.student_pedagogical_year_notes TO service_role;
+''', encoding='utf-8')
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit fix and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-missing-pedagogical-table-fix.yml
+          git add server.ts migrations/20260621000000_fix_student_pedagogical_tables.sql
+          git commit -m "fix: tolerate missing pedagogical profile table [pedagogical-table-fix-applied]"
+          git push origin HEAD:fix/missing-pedagogical-table
