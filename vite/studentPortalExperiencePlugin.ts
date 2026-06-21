@@ -247,37 +247,41 @@ function transformClassSelectionPage(code: string): string {
     'responsive class selection heading'
   );
 
-  transformed = replaceRequired(
-    transformed,
-    `                   const formattedAverage = typeof overall_average === 'number' 
-                     ? overall_average.toLocaleString('hr-HR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
-                     : null;
+  if (!transformed.includes('const classMenuItems = [')) {
+  const formattedAverageIndex = transformed.indexOf('const formattedAverage');
+  const remainingSource = formattedAverageIndex >= 0
+    ? transformed.slice(formattedAverageIndex)
+    : '';
+  const returnMatch = remainingSource.match(/\n(\s*)return \(/);
 
-                   return (`,
-    `                   const formattedAverage = typeof overall_average === 'number' 
-                     ? overall_average.toLocaleString('hr-HR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) 
-                     : null;
+  if (formattedAverageIndex < 0 || !returnMatch || returnMatch.index === undefined) {
+    throw new Error('[student-portal-experience] Expected class final thesis card insertion point was not found.');
+  }
 
-                   const classMenuItems = [
-                     ...menuItems,
-                     ...(isFinalThesisClass({
-                       name: cls.name,
-                       gradeLevel: cls.gradeLevel,
-                       durationYears: cls.durationYears,
-                     })
-                       ? [{
-                           label: 'Završni rad',
-                           path: 'zavrsni-rad',
-                           icon: GraduationCap,
-                           color: 'text-cyan-700 bg-cyan-50 border-cyan-200 hover:bg-cyan-100/70',
-                           desktopOnly: true,
-                         }]
-                       : []),
-                   ];
+  const returnIndex = formattedAverageIndex + returnMatch.index + 1;
+  const indent = returnMatch[1];
+  const classMenuBlock = `${indent}const classMenuItems = [
+${indent}  ...menuItems,
+${indent}  ...(isFinalThesisClass({
+${indent}    name: cls.name,
+${indent}    gradeLevel: cls.gradeLevel,
+${indent}    durationYears: cls.durationYears,
+${indent}  })
+${indent}    ? [{
+${indent}        label: 'Završni rad',
+${indent}        path: 'zavrsni-rad',
+${indent}        icon: GraduationCap,
+${indent}        color: 'text-cyan-700 bg-cyan-50 border-cyan-200 hover:bg-cyan-100/70',
+${indent}        desktopOnly: true,
+${indent}      }]
+${indent}    : []),
+${indent}];\n\n`;
 
-                   return (`,
-    'class final thesis card item'
-  );
+  transformed =
+    transformed.slice(0, returnIndex) +
+    classMenuBlock +
+    transformed.slice(returnIndex);
+}
 
   transformed = replaceRequired(
     transformed,
