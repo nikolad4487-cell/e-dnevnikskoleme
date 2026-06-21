@@ -484,7 +484,7 @@ export default function ScheduleManagementPage() {
                              {cell.subjects.map((sub: any) => (
                                <div key={sub.id} className="border-b last:border-b-0 border-blue-100/50 py-1 relative group/subject">
                                   <div className="text-[10px] font-black text-blue-900 uppercase leading-none mb-0.5">{sub.subject?.name}</div>
-                                  <div className="text-[8px] font-bold text-blue-500 uppercase leading-none truncate mb-0.5">{sub.teacher?.name}</div>
+
                                   {sub.classroom && (
                                     <span className="text-[8px] font-bold text-slate-500 uppercase bg-slate-200/50 rounded px-1">
                                       Uč: {sub.classroom}

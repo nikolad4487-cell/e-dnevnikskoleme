@@ -234,7 +234,7 @@ export default function RasporedPage() {
               getCellSubjects={getSubjects} 
               allSubjects={subjects}
               teachers={teacherProfiles}
-              showTeachers={true}
+              showTeachers={false}
             />
 
             <ScheduleGrid 
@@ -245,7 +245,7 @@ export default function RasporedPage() {
               getCellSubjects={getSubjects} 
               allSubjects={subjects}
               teachers={teacherProfiles}
-              showTeachers={true}
+              showTeachers={false}
             />
           </>
         )}

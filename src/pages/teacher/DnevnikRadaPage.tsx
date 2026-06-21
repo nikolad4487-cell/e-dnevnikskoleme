@@ -3907,7 +3907,7 @@ function OldScheduleGrid_Unused({ title, shift, periods, days, onCellClick, getC
                             return (
                               <div key={s.id} className="bg-white border border-gray-200 p-1">
                                 <div className="font-bold text-[#005c8d] uppercase leading-tight">{formatSubjectName(sub)}</div>
-                                <div className="text-[8px] text-gray-400 font-bold uppercase">{formatPersonName(tea)} {s.classroom && `• ${s.classroom}`}</div>
+                                {s.classroom && <div className="text-[8px] text-gray-400 font-bold uppercase">Uč: {s.classroom}</div>}
                               </div>
                             );
                          })}

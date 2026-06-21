@@ -71,7 +71,6 @@ export function ScheduleGrid({
                              return (
                                <div key={s.id} className="bg-white border border-gray-200 p-1 rounded-lg text-center shadow-xs">
                                  <div className="font-bold text-[#005c8d] uppercase leading-tight">{formatSubjectName(sub)}</div>
-                                 {showTeachers && tea && <div className="text-[8px] font-bold text-[#005c8d]/60 uppercase mt-0.5 truncate">{formatPersonName(tea)}</div>}
                                  {s.classroom && <div className="text-[8px] font-black text-gray-400 bg-gray-100 rounded inline-block px-1 mt-0.5">Uč: {s.classroom}</div>}
                                </div>
                              );
