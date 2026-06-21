@@ -6,6 +6,7 @@ import { preserveSelectedStudentPlugin } from './vite/preserveSelectedStudentPlu
 import { studentPortalExperiencePlugin } from './vite/studentPortalExperiencePlugin';
 import { hideFinalThesisFor4KPlugin } from './vite/hideFinalThesisFor4KPlugin';
 import { classScopedFinalThesisPlugin } from './vite/classScopedFinalThesisPlugin';
+import { finalThesisPersistencePlugin } from './vite/finalThesisPersistencePlugin';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
@@ -16,6 +17,7 @@ export default defineConfig(({mode}) => {
       studentPortalExperiencePlugin(),
       hideFinalThesisFor4KPlugin(),
       classScopedFinalThesisPlugin(),
+      finalThesisPersistencePlugin(),
       react(),
       tailwindcss(),
     ],
