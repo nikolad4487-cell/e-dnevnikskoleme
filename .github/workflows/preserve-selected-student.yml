@@ -1,0 +1,99 @@
+name: Preserve selected student after save
+
+on:
+  push:
+    branches:
+      - keep-selected-student
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[preserve-student-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: keep-selected-student
+          fetch-depth: 0
+
+      - name: Preserve selected student
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('src/pages/teacher/PedagoskaDokumentacijaPage.tsx')
+          source = path.read_text(encoding='utf-8')
+
+          old_selection = '''      // 3. Selection default
+      if (sortedStudents.length > 0) {
+        setSelectedStudent(sortedStudents[0]);
+        loadStudentPedagogicalData(sortedStudents[0].id, cId, mappedClass.school_year_id);
+      } else {
+        setSelectedStudent(null);
+        resetPedagogicalState();
+      }
+'''
+
+          new_selection = '''      // 3. Keep the currently selected student when class data is refreshed.
+      if (sortedStudents.length > 0) {
+        const studentToSelect =
+          sortedStudents.find(student => student.id === selectedStudent?.id) ||
+          sortedStudents[0];
+
+        setSelectedStudent(studentToSelect);
+        await loadStudentPedagogicalData(studentToSelect.id, cId, mappedClass.school_year_id);
+      } else {
+        setSelectedStudent(null);
+        resetPedagogicalState();
+      }
+'''
+
+          old_refresh = '''        // 3. Complete actual refetch from the API / Supabase
+        await loadClassData(activeClass.id);
+        await loadStudentPedagogicalData(selectedStudent.id, activeClass.id, activeClass.school_year_id);
+'''
+
+          new_refresh = '''        // Refresh only the selected student's datasets. Reloading the whole class
+        // would reset the selection to the first student in the list.
+        await loadStudentPedagogicalData(
+          selectedStudent.id,
+          activeClass.id,
+          activeClass.school_year_id
+        );
+'''
+
+          if old_selection not in source:
+            raise SystemExit('Expected class selection block was not found')
+          if old_refresh not in source:
+            raise SystemExit('Expected post-save refresh block was not found')
+
+          source = source.replace(old_selection, new_selection, 1)
+          source = source.replace(old_refresh, new_refresh, 1)
+
+          if 'await loadClassData(activeClass.id);' in source:
+            raise SystemExit('Whole-class reload still remains after profile save')
+
+          path.write_text(source, encoding='utf-8')
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Commit fix and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/preserve-selected-student.yml
+          git add src/pages/teacher/PedagoskaDokumentacijaPage.tsx
+          git commit -m "fix: preserve selected student after pedagogical save [preserve-student-applied]"
+          git push origin HEAD:keep-selected-student
