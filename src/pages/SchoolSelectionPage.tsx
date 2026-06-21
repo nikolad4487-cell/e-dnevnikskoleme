@@ -132,15 +132,16 @@ export default function SchoolSelectionPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f9fa] font-sans flex flex-col">
+    <div className="min-h-screen bg-[#f8fafc] font-sans flex flex-col">
       <Header showNav={false} />
-      <div className="flex-1 max-w-5xl mx-auto py-12 px-6 w-full">
-        <div className="mb-10 text-center">
-          <h1 className="text-2xl font-black text-[#005c8d] uppercase tracking-tight mb-2">Odabir škole</h1>
+      <div className="flex-1 max-w-5xl mx-auto py-6 md:py-12 px-4 md:px-6 w-full">
+        <div className="mb-6 md:mb-10 text-center">
+          <h1 className="text-xl md:text-2xl font-black text-[#005c8d] uppercase tracking-tight mb-1.5 md:mb-2">Odabir škole</h1>
           <div className="w-12 h-1 bg-[#005c8d] mx-auto opacity-20"></div>
         </div>
 
-        <div className="bg-white border border-[#dee2e6] rounded-sm overflow-hidden shadow-sm">
+        {/* Desktop view table */}
+        <div className="hidden md:block bg-white border border-[#dee2e6] rounded-xl overflow-hidden shadow-sm">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-[#f1f3f5] border-b border-[#dee2e6]">
@@ -196,9 +197,72 @@ export default function SchoolSelectionPage() {
           </table>
         </div>
 
+        {/* Mobile Layout cards */}
+        <div className="block md:hidden space-y-4">
+          {schools.length === 0 ? (
+            <div className="p-8 text-center text-slate-400 italic bg-white border border-slate-200 rounded-xl">
+              Nema pronađenih škola za vaš korisnički račun.
+            </div>
+          ) : (
+            schools.map(school => (
+              <div key={school.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs hover:shadow-md transition-all flex flex-col gap-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-bold text-slate-900 text-base flex items-center gap-1.5">
+                      <span className="text-lg">🏫</span> {school.name}
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-0.5">{school.city || '—'}</p>
+                  </div>
+                  <div>
+                    {school.status === 'ARCHIVED' ? (
+                      <span className="text-[9px] font-black uppercase tracking-tight py-1 px-1.5 bg-amber-50 text-amber-700 border border-amber-100 rounded">
+                        Arhivirana
+                      </span>
+                    ) : (
+                      <span className="text-[9px] font-black uppercase tracking-tight py-1 px-1.5 bg-green-50 text-green-700 border border-green-100 rounded">
+                        Trenutna
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-100 pt-2.5">
+                  <div>
+                    <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Vrsta škole</span>
+                    <span className="font-semibold text-slate-700">
+                      {school.type === 'PRIMARY' ? 'Osnovna škola' : 'Srednja škola'}
+                    </span>
+                  </div>
+                  {school.subtype && (
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Tip</span>
+                      <span className="font-semibold text-slate-700">{school.subtype}</span>
+                    </div>
+                  )}
+                </div>
+
+                {school.address && (
+                  <div className="text-xs text-slate-600 bg-slate-50 p-2 rounded border border-slate-100">
+                    <span className="text-[9px] text-slate-400 font-black uppercase tracking-wider block mb-0.5">Adresa</span>
+                    <span className="font-medium">{school.address}</span>
+                  </div>
+                )}
+
+                <button
+                  onClick={() => handleSelect(school.id)}
+                  className="w-full bg-[#005c8d] text-white py-3 px-4 rounded-lg text-xs font-black uppercase tracking-widest hover:bg-[#004a70] transition-all flex items-center justify-center gap-1.5 select-none active:scale-98"
+                >
+                  Otvori školu
+                  <ArrowRight size={14} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+
         {isMainAdmin && (
-          <div className="mt-8 flex justify-center">
-             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
+          <div className="mt-6 flex justify-center text-center">
+             <p className="text-[9.5px] text-slate-400 font-black uppercase tracking-widest px-4">
                Prijavljeni ste kao administrator sustava i vidite sve škole.
              </p>
           </div>

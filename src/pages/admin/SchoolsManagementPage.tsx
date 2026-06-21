@@ -217,29 +217,29 @@ export default function SchoolsManagementPage() {
   };
 
   return (
-    <div className="p-6 font-sans bg-[#f8f9fa] min-h-screen">
+    <div className="p-4 md:p-6 font-sans bg-[#f8fafc] min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-[#dee2e6] pb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 md:mb-8 border-b border-[#dee2e6] pb-4 md:pb-6">
           <div>
-            <div className="flex items-center gap-2 text-[#005c8d] text-xs font-black uppercase tracking-widest mb-2 cursor-pointer hover:underline" onClick={() => navigate('/admin-skole')}>
-              <ArrowLeft size={14} /> Natrag u administraciju
+            <div className="flex items-center gap-2 text-[#005c8d] text-xs font-black uppercase tracking-widest mb-1.5 md:mb-2 cursor-pointer hover:underline" onClick={() => navigate('/admin-skole')}>
+              <ArrowLeft size={14} /> Natrag
             </div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none mb-2">Popis i upravljanje školama</h1>
-            <p className="text-slate-500 font-medium text-sm">Cjelovita administracija registriranih obrazovnih ustanova</p>
+            <h1 className="text-xl md:text-3xl font-black text-slate-900 tracking-tighter uppercase leading-tight mb-1.5">Popis i upravljanje školama</h1>
+            <p className="text-slate-500 font-medium text-xs md:text-sm">Cjelovita administracija registriranih obrazovnih ustanova</p>
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <button 
               onClick={() => navigate('/select-school')}
-              className="bg-white text-slate-700 border border-slate-300 px-5 py-3 rounded-sm font-black uppercase tracking-wider text-[10px] hover:bg-slate-50 transition-all cursor-pointer shadow-sm"
+              className="bg-white text-slate-700 border border-slate-300 px-4 py-2.5 rounded-md font-black uppercase tracking-wider text-[10px] hover:bg-slate-50 transition-all cursor-pointer shadow-xs whitespace-nowrap"
             >
-              Promijeni aktivnu školu
+              Uđi u školu
             </button>
             {hasEditPrivilege && (
               <button 
                 id="add-school-btn"
                 onClick={() => handleOpenModal()}
-                className="bg-[#005c8d] text-white px-5 py-3 rounded-sm font-black uppercase tracking-wider text-[10px] flex items-center gap-2 hover:bg-[#004a71] transition-all cursor-pointer shadow-sm active:scale-95"
+                className="bg-[#005c8d] text-white px-4 py-2.5 rounded-md font-black uppercase tracking-wider text-[10px] flex items-center justify-center gap-2 hover:bg-[#004a71] transition-all cursor-pointer shadow-xs active:scale-95"
               >
                 <Plus size={14} strokeWidth={3} />
                 Nova škola
@@ -253,114 +253,210 @@ export default function SchoolsManagementPage() {
             <SchoolIcon size={48} />
           </div>
         ) : (
-          <div className="bg-white border border-[#dee2e6] rounded-sm overflow-hidden shadow-sm">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#f1f3f5] border-b border-[#dee2e6] text-[11px] font-black uppercase tracking-wider text-slate-600">
-                  <th className="px-6 py-4">Naziv škole</th>
-                  <th className="px-6 py-4">Grad</th>
-                  <th className="px-6 py-4">Ravnatelj / OIB</th>
-                  <th className="px-6 py-4 text-center">Učenici</th>
-                  <th className="px-6 py-4 text-center">Nastavnici</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Akcije</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#dee2e6]">
-                {schools.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic">
-                      Nema registriranih škola u sustavu.
-                    </td>
+          <div className="space-y-4">
+            {/* Desktop view */}
+            <div className="hidden md:block bg-white border border-[#dee2e6] rounded-xl overflow-hidden shadow-sm">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-[#f1f3f5] border-b border-[#dee2e6] text-[11px] font-black uppercase tracking-wider text-slate-600">
+                    <th className="px-6 py-4">Naziv škole</th>
+                    <th className="px-6 py-4">Grad</th>
+                    <th className="px-6 py-4">Ravnatelj / OIB</th>
+                    <th className="px-6 py-4 text-center">Učenici</th>
+                    <th className="px-6 py-4 text-center">Nastavnici</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4 text-right">Akcije</th>
                   </tr>
-                ) : (
-                  schools.map(school => {
-                    const parsed = parseSchoolAddress(school.address);
-                    const stats = roleCounts[school.id] || { students: 0, teachers: 0 };
-                    const isArchived = parsed.status === 'ARCHIVED';
+                </thead>
+                <tbody className="divide-y divide-[#dee2e6]">
+                  {schools.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-slate-400 italic">
+                        Nema registriranih škola u sustavu.
+                      </td>
+                    </tr>
+                  ) : (
+                    schools.map(school => {
+                      const parsed = parseSchoolAddress(school.address);
+                      const stats = roleCounts[school.id] || { students: 0, teachers: 0 };
+                      const isArchived = parsed.status === 'ARCHIVED';
 
-                    return (
-                      <tr key={school.id} className="hover:bg-[#f8f9fa] transition-colors group">
-                        <td className="px-6 py-5">
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 bg-slate-100 rounded-sm flex items-center justify-center text-[#005c8d]">
-                              <SchoolIcon size={16} strokeWidth={2.5} />
-                            </div>
-                            <div>
-                              <div className="font-extrabold text-slate-800 text-sm uppercase leading-snug">{school.name}</div>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-[9px] font-black uppercase tracking-tight text-slate-500">
-                                  {school.type === 'PRIMARY' ? 'Osnovna' : 'Srednja'}
-                                </span>
-                                {school.subtype && (
-                                  <span className="text-[9px] font-bold text-[#005c8d] uppercase tracking-tight">
-                                    • {school.subtype === 'GENERAL' ? 'Gimnazija' : 'Strukovna'}
+                      return (
+                        <tr key={school.id} className="hover:bg-[#f8f9fa] transition-colors group">
+                          <td className="px-6 py-5">
+                            <div className="flex items-start gap-3">
+                              <div className="w-8 h-8 bg-slate-100 rounded-sm flex items-center justify-center text-[#005c8d]">
+                                <SchoolIcon size={16} strokeWidth={2.5} />
+                              </div>
+                              <div>
+                                <div className="font-extrabold text-slate-800 text-sm uppercase leading-snug">{school.name}</div>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[9px] font-black uppercase tracking-tight text-slate-500">
+                                    {school.type === 'PRIMARY' ? 'Osnovna' : 'Srednja'}
                                   </span>
-                                )}
+                                  {school.subtype && (
+                                    <span className="text-[9px] font-bold text-[#005c8d] uppercase tracking-tight">
+                                      • {school.subtype === 'GENERAL' ? 'Gimnazija' : 'Strukovna'}
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className="text-xs font-bold text-slate-700">{school.city || '—'}</span>
+                            <div className="text-[10px] text-slate-400 max-w-xs truncate">{parsed.address || '—'}</div>
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className="text-xs font-extrabold text-slate-700 uppercase">{parsed.principal || '—'}</div>
+                            <div className="text-[10px] text-slate-400">OIB: {parsed.oib || '—'}</div>
+                          </td>
+                          <td className="px-6 py-5 text-center font-extrabold text-xs text-slate-700">
+                            {stats.students}
+                          </td>
+                          <td className="px-6 py-5 text-center font-extrabold text-xs text-slate-700">
+                            {stats.teachers}
+                          </td>
+                          <td className="px-6 py-5">
+                            {isArchived ? (
+                              <span className="text-[9px] font-black uppercase tracking-wider py-1 px-2.5 bg-amber-100 text-amber-800 rounded">
+                                ARHIVIRANA
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-black uppercase tracking-wider py-1 px-2.5 bg-green-100 text-green-800 rounded">
+                                AKTIVNA
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-5 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => handleSelectSchool(school.id)}
+                                className="inline-flex items-center gap-1 bg-[#005c8d] text-white py-1.5 px-3 rounded-sm text-[9px] font-black uppercase tracking-widest hover:bg-[#004a70] transition-colors cursor-pointer"
+                                title="Otvori školu"
+                              >
+                                Otvori
+                              </button>
+                              {hasEditPrivilege && (
+                                <>
+                                  <button
+                                    onClick={() => handleOpenModal(school)}
+                                    className="p-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-sm cursor-pointer transition-colors"
+                                    title="Uredi"
+                                  >
+                                    <Edit2 size={13} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDelete(school.id)}
+                                    className="p-1 px-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-sm cursor-pointer transition-colors"
+                                    title="Obriši"
+                                  >
+                                    <Trash2 size={13} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile View Card List */}
+            <div className="block md:hidden space-y-4">
+              {schools.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 italic bg-white border border-slate-200 rounded-xl">
+                  Nema registriranih škola u sustavu.
+                </div>
+              ) : (
+                schools.map(school => {
+                  const parsed = parseSchoolAddress(school.address);
+                  const stats = roleCounts[school.id] || { students: 0, teachers: 0 };
+                  const isArchived = parsed.status === 'ARCHIVED';
+
+                  return (
+                    <div key={school.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex flex-col gap-3">
+                      <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                        <div className="flex items-start gap-2">
+                          <span className="text-xl">🏫</span>
+                          <div>
+                            <h3 className="font-extrabold text-slate-950 text-sm leading-tight uppercase">{school.name}</h3>
+                            <span className="inline-block mt-1 text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
+                              {school.type === 'PRIMARY' ? 'Osnovna' : 'Srednja'} {school.subtype === 'GENERAL' ? '(Gimnazija)' : school.subtype === 'VOCATIONAL' ? '(Strukovna)' : ''}
+                            </span>
                           </div>
-                        </td>
-                        <td className="px-6 py-5">
-                          <span className="text-xs font-bold text-slate-700">{school.city || '—'}</span>
-                          <div className="text-[10px] text-slate-400 max-w-xs truncate">{parsed.address || '—'}</div>
-                        </td>
-                        <td className="px-6 py-5">
-                          <div className="text-xs font-extrabold text-slate-700 uppercase">{parsed.principal || '—'}</div>
-                          <div className="text-[10px] text-slate-400">OIB: {parsed.oib || '—'}</div>
-                        </td>
-                        <td className="px-6 py-5 text-center font-extrabold text-xs text-slate-700">
-                          {stats.students}
-                        </td>
-                        <td className="px-6 py-5 text-center font-extrabold text-xs text-slate-700">
-                          {stats.teachers}
-                        </td>
-                        <td className="px-6 py-5">
+                        </div>
+
+                        <div>
                           {isArchived ? (
-                            <span className="text-[9px] font-black uppercase tracking-wider py-1 px-2.5 bg-amber-100 text-amber-800 rounded">
-                              ARHIVIRANA
+                            <span className="text-[9px] font-black uppercase tracking-widest py-0.5 px-2 bg-amber-50 text-amber-700 border border-amber-100 rounded">
+                              Arhivirana
                             </span>
                           ) : (
-                            <span className="text-[9px] font-black uppercase tracking-wider py-1 px-2.5 bg-green-100 text-green-800 rounded">
-                              AKTIVNA
+                            <span className="text-[9px] font-black uppercase tracking-widest py-0.5 px-2 bg-green-50 text-green-700 border border-green-100 rounded">
+                              Aktivna
                             </span>
                           )}
-                        </td>
-                        <td className="px-6 py-5 text-right">
-                          <div className="flex items-center justify-end gap-1.5">
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 text-xs text-slate-600">
+                        <div>
+                          <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wide block">Grad</span>
+                          <span className="font-bold text-slate-800">{school.city || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wide block">Adresa</span>
+                          <span className="font-medium truncate block" title={parsed.address}>{parsed.address || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wide block">Ravnatelj</span>
+                          <span className="font-bold text-slate-800 text-xs block truncate" title={parsed.principal}>{parsed.principal || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wide block">OIB</span>
+                          <span className="font-mono text-slate-700 block">{parsed.oib || '—'}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wide block">Učenici / Nastavnici</span>
+                          <span className="font-bold text-slate-800 block text-xs">👨‍🎓 {stats.students} / 👩‍🏫 {stats.teachers}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 border-t border-slate-100 pt-3 mt-1.5">
+                        <button
+                          onClick={() => handleSelectSchool(school.id)}
+                          className="flex-1 bg-[#005c8d] text-white py-2.5 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-[#004a70] transition-colors flex items-center justify-center gap-1 focus:none"
+                        >
+                          Otvori portal
+                        </button>
+                        {hasEditPrivilege && (
+                          <div className="flex gap-1.5">
                             <button
-                              onClick={() => handleSelectSchool(school.id)}
-                              className="inline-flex items-center gap-1 bg-[#005c8d] text-white py-1.5 px-3 rounded-sm text-[9px] font-black uppercase tracking-widest hover:bg-[#004a70] transition-colors cursor-pointer"
-                              title="Otvori školu"
+                              onClick={() => handleOpenModal(school)}
+                              className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors"
+                              title="Uredi"
                             >
-                              OtvorI
+                              <Edit2 size={13} />
                             </button>
-                            {hasEditPrivilege && (
-                              <>
-                                <button
-                                  onClick={() => handleOpenModal(school)}
-                                  className="p-1 px-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-sm cursor-pointer transition-colors"
-                                  title="Uredi"
-                                >
-                                  <Edit2 size={13} />
-                                </button>
-                                <button
-                                  onClick={() => handleDelete(school.id)}
-                                  className="p-1 px-2 bg-red-100 hover:bg-red-200 text-red-600 rounded-sm cursor-pointer transition-colors"
-                                  title="Obriši"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
-                              </>
-                            )}
+                            <button
+                              onClick={() => handleDelete(school.id)}
+                              className="p-2.5 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors"
+                              title="Obriši"
+                            >
+                              <Trash2 size={13} />
+                            </button>
                           </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -368,23 +464,23 @@ export default function SchoolsManagementPage() {
       {/* Form Dialog Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-sm shadow-2xl overflow-hidden border border-[#dee2e6] animate-in fade-in duration-150">
-            <div className="bg-[#005c8d] p-6 text-white flex items-center justify-between">
-              <h2 className="text-lg font-black uppercase tracking-tight">
+          <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl overflow-hidden border border-[#dee2e6] animate-in fade-in duration-150 flex flex-col max-h-[90vh]">
+            <div className="bg-[#005c8d] p-4 md:p-5 text-white flex items-center justify-between shrink-0">
+              <h2 className="text-sm md:text-base font-black uppercase tracking-tight">
                 {editingSchool ? 'Uredi školu' : 'Nova škola'}
               </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-white/80 hover:text-white font-extrabold text-sm uppercase">[ Zatvori ]</button>
+              <button onClick={() => setIsModalOpen(false)} className="text-white/80 hover:text-white font-black text-xs uppercase tracking-wider">[ Zatvori ]</button>
             </div>
             
-            <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
+            <form onSubmit={handleSubmit} className="p-4 md:p-6 space-y-4 overflow-y-auto flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
                   <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Naziv škole</label>
                   <input 
                     type="text" 
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                     placeholder="npr. Srednja škola Glina"
                     required
                   />
@@ -395,7 +491,7 @@ export default function SchoolsManagementPage() {
                   <select
                     value={type}
                     onChange={e => setType(e.target.value as SchoolType)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none transition-all"
                   >
                     <option value="PRIMARY">Osnovna škola</option>
                     <option value="SECONDARY">Srednja škola</option>
@@ -408,7 +504,7 @@ export default function SchoolsManagementPage() {
                     <select
                       value={subtype || ''}
                       onChange={e => setSubtype((e.target.value || null) as SecondarySubtype | null)}
-                      className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none transition-all"
+                      className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none transition-all"
                     >
                       <option value="">Nema (Općenito)</option>
                       <option value="GENERAL">Gimnazija</option>
@@ -418,14 +514,14 @@ export default function SchoolsManagementPage() {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Grad</label>
                   <input 
                     type="text" 
                     value={city}
                     onChange={e => setCity(e.target.value)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                     placeholder="npr. Glina"
                     required
                   />
@@ -437,13 +533,13 @@ export default function SchoolsManagementPage() {
                     type="text" 
                     value={address}
                     onChange={e => setAddress(e.target.value)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                     placeholder="npr. Frankopanska 30"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">OIB škole</label>
                   <input 
@@ -454,7 +550,7 @@ export default function SchoolsManagementPage() {
                       const value = e.target.value.replace(/\D/g, '');
                       setOib(value.slice(0, 11));
                     }}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                     placeholder="11-znamenkasti broj"
                   />
                 </div>
@@ -465,20 +561,20 @@ export default function SchoolsManagementPage() {
                     type="text" 
                     value={principal}
                     onChange={e => setPrincipal(e.target.value)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                     placeholder="Ime i prezime ravnatelja"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div className="col-span-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="sm:col-span-2">
                   <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">E-mail adresa ureda</label>
                   <input 
                     type="email" 
                     value={email}
                     onChange={e => setEmail(e.target.value)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                     placeholder="ureda@skole.hr"
                   />
                 </div>
@@ -489,7 +585,7 @@ export default function SchoolsManagementPage() {
                     type="text" 
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                     placeholder="npr. 044/555-666"
                   />
                 </div>
@@ -497,7 +593,7 @@ export default function SchoolsManagementPage() {
 
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Status škole u programu</label>
-                <div className="flex gap-4">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mt-1">
                   <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-800">
                     <input 
                       type="radio" 
@@ -507,7 +603,7 @@ export default function SchoolsManagementPage() {
                       onChange={() => setStatus('ACTIVE')}
                       className="accent-[#005c8d]"
                     />
-                    Aktivna škola (koristi se tekući rad)
+                    Aktivna škola
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer font-bold text-xs text-slate-800">
                     <input 
@@ -523,19 +619,19 @@ export default function SchoolsManagementPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4 border-t border-[#dee2e6]">
+              <div className="flex gap-3 pt-4 border-t border-[#dee2e6] mt-4 shrink-0">
                 <button 
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-sm font-black uppercase tracking-wider text-[10px] hover:bg-slate-200 transition-colors cursor-pointer text-center"
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-lg font-black uppercase tracking-wider text-[10px] hover:bg-slate-200 transition-colors cursor-pointer text-center"
                 >
                   Odustani
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 bg-[#005c8d] text-white py-3 rounded-sm font-black uppercase tracking-wider text-[10px] hover:bg-[#004a71] transition-colors cursor-pointer text-center shadow-md"
+                  className="flex-1 bg-[#005c8d] text-white py-3 rounded-lg font-black uppercase tracking-wider text-[10px] hover:bg-[#004a71] transition-colors cursor-pointer text-center shadow-md active:scale-98"
                 >
-                  Spremi podatke
+                  Spremi
                 </button>
               </div>
             </form>

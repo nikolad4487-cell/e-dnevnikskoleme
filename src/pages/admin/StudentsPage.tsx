@@ -465,50 +465,50 @@ export default function StudentsPage() {
   const filteredStudents = sortStudentsBySurname(rawFiltered);
 
   return (
-    <div className="p-6 font-sans bg-[#f8f9fa] min-h-screen">
+    <div className="p-4 md:p-6 font-sans bg-[#f8fafc] min-h-screen">
       <div className="max-w-7xl mx-auto">
         
         {/* Navigation & Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-[#dee2e6] pb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-[#dee2e6] pb-4">
           <div>
-            <div className="flex items-center gap-2 text-[#005c8d] text-xs font-black uppercase tracking-widest mb-2 cursor-pointer hover:underline" onClick={() => navigate('/admin-skole')}>
-              <ArrowLeft size={14} /> Natrag u administraciju
+            <div className="flex items-center gap-2 text-[#005c8d] text-xs font-black uppercase tracking-widest mb-1.5 cursor-pointer hover:underline" onClick={() => navigate('/admin-skole')}>
+              <ArrowLeft size={14} /> Natrag
             </div>
-            <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none mb-2">Učenici škole</h1>
-            <p className="text-slate-500 font-medium text-sm">Upravljanje upisima učenika, razrednim odjelima i osobnim podacima</p>
+            <h1 className="text-xl md:text-3xl font-black text-slate-900 tracking-tighter uppercase leading-tight mb-1">Učenici škole</h1>
+            <p className="text-slate-500 font-medium text-xs md:text-sm">Upravljanje upisima učenika, razrednim odjelima i osobnim podacima</p>
           </div>
           
           <div>
             <button 
               id="add-student-btn"
               onClick={() => handleOpenForm()}
-              className="bg-[#005c8d] text-white px-5 py-3 rounded-sm font-black uppercase tracking-wider text-[10px] flex items-center gap-2 hover:bg-[#004a71] transition-all cursor-pointer shadow-sm active:scale-95"
+              className="w-full sm:w-auto bg-[#005c8d] text-white px-4 py-2.5 rounded-md font-black uppercase tracking-wider text-[10px] flex items-center justify-center gap-2 hover:bg-[#004a71] transition-all cursor-pointer shadow-xs active:scale-95"
             >
               <Plus size={14} strokeWidth={3} />
-              Dodaj novog učenika
+              Novi učenik
             </button>
           </div>
         </div>
 
         {/* Filters panel */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="md:col-span-2 bg-white px-4 py-3 rounded-sm border border-[#dee2e6] shadow-xs flex items-center gap-3">
-            <Search size={18} className="text-slate-300" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+          <div className="sm:col-span-2 bg-white px-3 py-2 rounded-md border border-[#dee2e6] shadow-xs flex items-center gap-2.5">
+            <Search size={16} className="text-slate-300 shrink-0" />
             <input 
               type="text" 
               placeholder="Pretraži učenike po imenu, emailu ili OIB-u..." 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="bg-transparent border-none outline-none font-bold text-slate-900 text-xs w-full"
+              className="bg-transparent border-none outline-none font-bold text-slate-900 text-xs w-full p-1"
             />
           </div>
 
-          <div className="bg-white px-4 py-3 rounded-sm border border-[#dee2e6] shadow-xs flex items-center gap-3">
-            <Filter size={18} className="text-slate-300" />
+          <div className="bg-white px-3 py-2 rounded-md border border-[#dee2e6] shadow-xs flex items-center gap-2.5">
+            <Filter size={16} className="text-slate-300 shrink-0" />
             <select 
               value={classFilter}
               onChange={e => setClassFilter(e.target.value)}
-              className="bg-transparent border-none outline-none font-black text-slate-900 text-xs uppercase tracking-wider w-full"
+              className="bg-transparent border-none outline-none font-black text-slate-900 text-xs uppercase tracking-wider w-full p-1"
             >
               <option value="ALL">Svi razredi</option>
               {classes.map(c => (
@@ -526,78 +526,80 @@ export default function StudentsPage() {
             <GraduationCap size={48} className="animate-bounce" />
           </div>
         ) : !schoolId ? (
-          <div className="bg-amber-50 border border-amber-200 text-amber-800 p-6 text-center rounded-sm text-sm font-bold">
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 p-6 text-center rounded-xl text-sm font-bold">
             Greška: Nije odabrana aktivna škola. Navigirajte na popis škola kako biste je definirali.
           </div>
         ) : filteredStudents.length === 0 ? (
-          <div className="bg-white border border-[#dee2e6] rounded-sm p-12 text-center shadow-xs">
+          <div className="bg-white border border-[#dee2e6] rounded-xl p-12 text-center shadow-xs">
             <User size={40} className="mx-auto text-slate-300 mb-4" />
             <div className="text-sm font-extrabold text-slate-700 uppercase tracking-tight mb-2">Nema pronađenih učenika</div>
             <p className="text-xs text-slate-400 max-w-sm mx-auto">Izmijenite filtere pretraživanja ili kreirajte novog učenika.</p>
           </div>
         ) : (
-          <div className="bg-white border border-[#dee2e6] rounded-sm overflow-hidden shadow-xs">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#f1f3f5] border-b border-[#dee2e6] text-[11px] font-black uppercase tracking-wider text-slate-600">
-                  <th className="px-6 py-4">Ime i prezime</th>
-                  <th className="px-6 py-4">Kontakt e-mail</th>
-                  <th className="px-6 py-4">OIB</th>
-                  <th className="px-6 py-4">Razredni odjel</th>
-                  <th className="px-6 py-4">Školska godina</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Akcije</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#dee2e6]">
-                {filteredStudents.map(student => {
-                  const inactive = student.status === 'INACTIVE';
-                  
-                  return (
-                    <tr key={student.id} className="hover:bg-[#f8f9fa] transition-colors">
-                      <td className="px-6 py-4 font-extrabold text-slate-800 text-sm uppercase">
-                        {student.name}
-                      </td>
-                      <td className="px-6 py-4 text-xs font-bold text-slate-600">
-                        <span className="flex items-center gap-1.5">
-                          <Mail size={13} className="text-slate-400 shrink-0" />
-                          {student.email || '—'}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-xs font-bold text-slate-700 font-mono">
-                        {student.oib || '—'}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="bg-slate-100 text-slate-800 text-[10px] font-black uppercase px-2 py-1 rounded">
-                          {student.className}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-xs font-bold text-slate-500">
-                        {student.schoolYearName || '—'}
-                      </td>
-                      <td className="px-6 py-4">
-                        {inactive ? (
-                          <span className="bg-red-50 text-red-700 text-[9px] font-black uppercase px-2 py-0.5 rounded border border-red-200">
-                            NEAKTIVAN
+          <div className="space-y-4">
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white border border-[#dee2e6] rounded-xl overflow-hidden shadow-xs">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-[#f1f3f5] border-b border-[#dee2e6] text-[11px] font-black uppercase tracking-wider text-slate-600">
+                    <th className="px-6 py-4">Ime i prezime</th>
+                    <th className="px-6 py-4">Kontakt e-mail</th>
+                    <th className="px-6 py-4">OIB</th>
+                    <th className="px-6 py-4">Razredni odjel</th>
+                    <th className="px-6 py-4">Školska godina</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4 text-right">Akcije</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#dee2e6]">
+                  {filteredStudents.map(student => {
+                    const inactive = student.status === 'INACTIVE';
+                    
+                    return (
+                      <tr key={student.id} className="hover:bg-[#f8f9fa] transition-colors">
+                        <td className="px-6 py-4 font-extrabold text-slate-800 text-sm uppercase">
+                          {student.name}
+                        </td>
+                        <td className="px-6 py-4 text-xs font-bold text-slate-600">
+                          <span className="flex items-center gap-1.5">
+                            <Mail size={13} className="text-slate-400 shrink-0" />
+                            {student.email || '—'}
                           </span>
-                        ) : (
-                          <span className="bg-green-50 text-green-700 text-[9px] font-black uppercase px-2 py-0.5 rounded border border-green-200">
-                            AKTIVAN
+                        </td>
+                        <td className="px-6 py-4 text-xs font-bold text-slate-700 font-mono">
+                          {student.oib || '—'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="bg-slate-100 text-slate-800 text-[10px] font-black uppercase px-2 py-1 rounded">
+                            {student.className}
                           </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => handleOpenMove(student)}
-                            className="bg-white text-slate-800 border border-slate-300 hover:bg-slate-50 py-1.5 px-3 rounded-sm text-[9px] font-black uppercase tracking-widest flex items-center gap-1 transition-colors cursor-pointer"
-                            title="Premjesti u razred"
-                          >
-                            <MoveRight size={10} strokeWidth={3} /> Premjesti
-                          </button>
-                          
-                          <button
-                            onClick={() => handleOpenForm(student)}
+                        </td>
+                        <td className="px-6 py-4 text-xs font-bold text-slate-500">
+                          {student.schoolYearName || '—'}
+                        </td>
+                        <td className="px-6 py-4">
+                          {inactive ? (
+                            <span className="bg-red-50 text-red-700 text-[9px] font-black uppercase px-2 py-0.5 rounded border border-red-200">
+                              NEAKTIVAN
+                            </span>
+                          ) : (
+                            <span className="bg-green-50 text-green-700 text-[9px] font-black uppercase px-2 py-0.5 rounded border border-green-200">
+                              AKTIVAN
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => handleOpenMove(student)}
+                              className="bg-white text-slate-800 border border-slate-300 hover:bg-slate-50 py-1.5 px-3 rounded-sm text-[9px] font-black uppercase tracking-widest flex items-center gap-1 transition-colors cursor-pointer"
+                              title="Premjesti u razred"
+                            >
+                              <MoveRight size={10} strokeWidth={3} /> Premjesti
+                            </button>
+                            
+                            <button
+                              onClick={() => handleOpenForm(student)}
                             className="p-1.5 px-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-sm cursor-pointer transition-colors"
                             title="Uredi"
                           >
@@ -619,30 +621,108 @@ export default function StudentsPage() {
               </tbody>
             </table>
           </div>
-        )}
+
+          {/* Mobile view card list */}
+          <div className="block md:hidden space-y-4">
+            {filteredStudents.map(student => {
+              const inactive = student.status === 'INACTIVE';
+              return (
+                <div key={student.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-xs flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-2 border-b border-slate-100 pb-2.5">
+                    <div className="flex items-start gap-2">
+                      <span className="text-xl">👨‍🎓</span>
+                      <div>
+                        <h3 className="font-extrabold text-slate-950 text-sm leading-tight uppercase">{student.name}</h3>
+                        <p className="text-xs text-slate-500 mt-0.5">{student.email || '—'}</p>
+                      </div>
+                    </div>
+                    <div>
+                      {inactive ? (
+                        <span className="text-[9px] font-black uppercase tracking-widest py-0.5 px-2 bg-red-50 text-red-700 border border-red-100 rounded">
+                          Neaktivan
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-black uppercase tracking-widest py-0.5 px-2 bg-green-50 text-green-700 border border-green-100 rounded">
+                          Aktivan
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 text-xs text-slate-600 font-medium">
+                    <div>
+                      <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wide block">Razredni odjel</span>
+                      <span className="font-bold text-slate-800 text-xs px-2 py-0.5 bg-slate-100 rounded inline-block mt-0.5 uppercase">{student.className}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wide block">Školska godina</span>
+                      <span className="font-semibold text-slate-700 inline-block mt-0.5">{student.schoolYearName || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wide block">OIB</span>
+                      <span className="font-mono text-slate-700 block mt-0.5">{student.oib || '—'}</span>
+                    </div>
+                    {student.mobile && (
+                      <div>
+                        <span className="text-[9px] text-slate-400 font-extrabold uppercase tracking-wide block">Mobitel</span>
+                        <span className="font-medium text-slate-700 block mt-0.5">{student.mobile}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 border-t border-slate-100 pt-3 mt-1.5 justify-end">
+                    <button
+                      onClick={() => handleOpenMove(student)}
+                      className="flex-1 bg-white text-slate-800 border border-slate-300 hover:bg-slate-50 py-2 px-3 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-1.5 transition-colors"
+                    >
+                      <MoveRight size={11} strokeWidth={2.5} /> Premjesti
+                    </button>
+                    <div className="flex gap-1.5">
+                      <button
+                        onClick={() => handleOpenForm(student)}
+                        className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg transition-colors"
+                        title="Uredi"
+                      >
+                        <Edit2 size={13} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteStudent(student)}
+                        className="p-2.5 bg-red-100 hover:bg-red-200 text-red-600 rounded-lg transition-colors"
+                        title="Obriši"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       </div>
 
       {/* Slide overlay / Form Dialog for Add/Edit */}
       {isFormOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-lg rounded-sm shadow-2xl overflow-hidden border border-[#dee2e6] animate-in fade-in duration-150">
-            <div className="bg-[#005c8d] p-6 text-white flex items-center justify-between">
-              <h2 className="text-base font-black uppercase tracking-tight">
+          <div className="bg-white w-full max-w-lg rounded-xl shadow-2xl overflow-hidden border border-[#dee2e6] animate-in fade-in duration-150 flex flex-col max-h-[90vh]">
+            <div className="bg-[#005c8d] p-4 md:p-5 text-white flex items-center justify-between shrink-0">
+              <h2 className="text-sm md:text-base font-black uppercase tracking-tight">
                 {selectedStudent ? 'Uredi učenika' : 'Novi učenik'}
               </h2>
-              <button onClick={() => setIsFormOpen(false)} className="text-white/80 hover:text-white font-extrabold text-xs uppercase">[ Zatvori ]</button>
+              <button onClick={() => setIsFormOpen(false)} className="text-white/80 hover:text-white font-black text-xs uppercase tracking-wider">[ Zatvori ]</button>
             </div>
 
-            <form onSubmit={handleSaveStudent} className="p-6 space-y-4 max-h-[85vh] overflow-y-auto">
+            <form onSubmit={handleSaveStudent} className="p-4 md:p-6 space-y-4 overflow-y-auto flex-1">
               
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Ime</label>
                   <input 
                     type="text" 
                     value={ime}
                     onChange={e => setIme(e.target.value)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                     required
                   />
                 </div>
@@ -653,7 +733,7 @@ export default function StudentsPage() {
                     type="text" 
                     value={prezime}
                     onChange={e => setPrezime(e.target.value)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                     required
                   />
                 </div>
@@ -666,11 +746,11 @@ export default function StudentsPage() {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="Ostavite prazno za automatsko generiranje"
-                  className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                  className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">OIB</label>
                   <input 
@@ -678,7 +758,7 @@ export default function StudentsPage() {
                     value={oib}
                     onChange={e => setOib(e.target.value)}
                     maxLength={11}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                   />
                 </div>
 
@@ -688,19 +768,19 @@ export default function StudentsPage() {
                     type="text" 
                     value={mobile}
                     onChange={e => setMobile(e.target.value)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Datum rođenja</label>
                   <input 
                     type="date" 
                     value={dob}
                     onChange={e => setDob(e.target.value)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                   />
                 </div>
 
@@ -710,7 +790,7 @@ export default function StudentsPage() {
                     type="text" 
                     value={pob}
                     onChange={e => setPob(e.target.value)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                   />
                 </div>
               </div>
@@ -721,17 +801,17 @@ export default function StudentsPage() {
                   type="text" 
                   value={address}
                   onChange={e => setAddress(e.target.value)}
-                  className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
+                  className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] focus:bg-white outline-none transition-all"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Upisan u razred (Inicijalno)</label>
                   <select
                     value={selectedClassId}
                     onChange={e => setSelectedClassId(e.target.value)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none"
                   >
                     <option value="">— Neraspoređen —</option>
                     {classes.map(c => (
@@ -745,7 +825,7 @@ export default function StudentsPage() {
                   <select
                     value={status}
                     onChange={e => setStatus(e.target.value)}
-                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none"
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none"
                   >
                     <option value="ACTIVE">Aktivno pohađanje</option>
                     <option value="INACTIVE">Neaktivno (Ispisan/Arhiviran)</option>
@@ -753,19 +833,19 @@ export default function StudentsPage() {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-4 border-t border-[#dee2e6]">
+              <div className="flex gap-3 pt-4 border-t border-[#dee2e6] mt-4 shrink-0">
                 <button 
                   type="button"
                   onClick={() => setIsFormOpen(false)}
-                  className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-sm font-black uppercase tracking-wider text-[10px] hover:bg-slate-200 transition-colors cursor-pointer"
+                  className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-lg font-black uppercase tracking-wider text-[10px] hover:bg-slate-200 transition-colors cursor-pointer text-center"
                 >
                   Odustani
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 bg-[#005c8d] text-white py-3 rounded-sm font-black uppercase tracking-wider text-[10px] hover:bg-[#004a71] transition-all cursor-pointer shadow-md text-center"
+                  className="flex-1 bg-[#005c8d] text-white py-3 rounded-lg font-black uppercase tracking-wider text-[10px] hover:bg-[#004a71] transition-all cursor-pointer shadow-md text-center active:scale-98"
                 >
-                  Spremi podatke
+                  Spremi
                 </button>
               </div>
 
@@ -777,13 +857,13 @@ export default function StudentsPage() {
       {/* Move Class Modal Dialog */}
       {isMoveOpen && selectedStudent && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-sm shadow-2xl overflow-hidden border border-[#dee2e6] animate-in fade-in duration-150">
-            <div className="bg-[#005c8d] p-5 text-white flex items-center justify-between">
+          <div className="bg-white w-full max-w-sm rounded-xl shadow-2xl overflow-hidden border border-[#dee2e6] animate-in fade-in duration-150">
+            <div className="bg-[#005c8d] p-4 text-white flex items-center justify-between">
               <h2 className="text-sm font-black uppercase tracking-tight">Premjesti učenika</h2>
-              <button onClick={() => setIsMoveOpen(false)} className="text-white/80 hover:text-white font-extrabold text-xs uppercase">[ Zatvori ]</button>
+              <button onClick={() => setIsMoveOpen(false)} className="text-white/80 hover:text-white font-black text-xs uppercase tracking-wider">[ Zatvori ]</button>
             </div>
 
-            <form onSubmit={handleMoveClass} className="p-5 space-y-4">
+            <form onSubmit={handleMoveClass} className="p-4 space-y-4">
               <div>
                 <p className="text-xs text-slate-500 mb-2">Premještanje učenika:</p>
                 <p className="font-extrabold text-sm uppercase text-slate-800 border-b pb-2 mb-4">{selectedStudent.name}</p>
@@ -792,7 +872,7 @@ export default function StudentsPage() {
                 <select
                   value={moveToClassId}
                   onChange={e => setMoveToClassId(e.target.value)}
-                  className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none"
+                  className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none"
                   required
                 >
                   <option value="">— Neraspoređen —</option>
@@ -801,7 +881,7 @@ export default function StudentsPage() {
                   ))}
                 </select>
                 
-                <p className="text-[10px] text-amber-600 mt-2 flex gap-1.5 items-start">
+                <p className="text-[10px] text-amber-600 mt-2 flex gap-1.5 items-start leading-normal">
                   <AlertCircle size={12} className="shrink-0 mt-0.5" />
                   <span>
                     Ova promjena će premjestiti učenika u odabrani razredni odjel unutar pripadajuće školske godine.
@@ -809,17 +889,17 @@ export default function StudentsPage() {
                 </p>
               </div>
 
-              <div className="flex gap-2 pt-4 border-t border-[#dee2e6]">
+              <div className="flex gap-2 pt-4 border-t border-[#dee2e6] mt-4">
                 <button 
                   type="button"
                   onClick={() => setIsMoveOpen(false)}
-                  className="flex-1 bg-slate-100 text-slate-700 py-2.5 rounded-sm font-black uppercase tracking-wider text-[9px] hover:bg-slate-200 transition-colors cursor-pointer"
+                  className="flex-1 bg-slate-100 text-slate-700 py-2.5 rounded-lg font-black uppercase tracking-wider text-[9px] hover:bg-slate-200 transition-colors cursor-pointer"
                 >
                   Odustani
                 </button>
                 <button 
                   type="submit"
-                  className="flex-1 bg-[#005c8d] text-white py-2.5 rounded-sm font-black uppercase tracking-wider text-[9px] hover:bg-[#004a71] transition-all cursor-pointer shadow-md text-center"
+                  className="flex-1 bg-[#005c8d] text-white py-2.5 rounded-lg font-black uppercase tracking-wider text-[9px] hover:bg-[#004a71] transition-all cursor-pointer shadow-sm text-center active:scale-98"
                 >
                   Spremi promjenu
                 </button>
