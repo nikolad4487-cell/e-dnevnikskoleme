@@ -120,31 +120,39 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
   };
 
   return (
-    <header className="bg-[#005c8d] text-white z-50 h-[50px] flex items-center justify-between px-4">
+    <header className="bg-[#005c8d] text-white z-50 h-[50px] flex items-center justify-between px-4 sticky top-0 shadow-md">
       {/* Left Structure */}
-      <div className="flex items-center gap-6">
-        <Link to="/" className="font-black text-lg tracking-tight hover:underline">e-Dnevnik</Link>
+      <div className="flex items-center gap-4">
+        <Link to="/" className="font-black text-lg tracking-tight hover:opacity-95 transition-opacity">e-Dnevnik</Link>
         
         {/* Current Context Display */}
-        <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest bg-black/10 px-3 py-1.5 rounded">
-           {schoolLabel && <span>{schoolLabel}</span>}
-           {yearLabel && <><span className="text-white/30">|</span><span className="text-white/80">{yearLabel}</span></>}
-           {!finalHideClass && classLabel && <><span className="text-white/30">|</span><span className="bg-white text-[#005c8d] px-2 py-0.5 rounded-sm font-black">{classLabel}</span></>}
-           
-           {!finalHideClass && showNav && (
-             <>
-               <span className="text-white/30">|</span>
-               <button 
-                 onClick={() => navigate('/select-class')} 
-                 className="flex items-center gap-1 hover:bg-white/20 p-1 px-2 rounded transition-colors text-[10px]"
-                 title="Promijeni razred"
-               >
-                 <Repeat size={12} /> Promijeni
-               </button>
-             </>
-           )}
-        </div>
+        {(schoolLabel || classLabel) && (
+          <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest bg-black/10 px-3 py-1.5 rounded transition-all">
+             {schoolLabel && <span className="hidden md:inline">{schoolLabel}</span>}
+             {yearLabel && <><span className="text-white/30 hidden md:inline">|</span><span className="text-white/80 hidden md:inline">{yearLabel}</span></>}
+             {!finalHideClass && classLabel && (
+               <>
+                 <span className="text-white/30 hidden md:inline">|</span>
+                 <span className="bg-white text-[#005c8d] px-2 py-0.5 rounded-sm font-black text-[10px]">{classLabel}</span>
+               </>
+             )}
+             
+             {!finalHideClass && showNav && (
+               <>
+                 <span className="text-white/30 hidden md:inline">|</span>
+                 <button 
+                   onClick={() => navigate('/select-class')} 
+                   className="hidden md:flex items-center gap-1 hover:bg-white/20 p-1 px-2 rounded transition-colors text-[10px]"
+                   title="Promijeni razred"
+                 >
+                   <Repeat size={12} /> Promijeni
+                 </button>
+               </>
+             )}
+          </div>
+        )}
       </div>
+
 
       {/* User Info Right */}
       <div className="flex items-center gap-4 relative">

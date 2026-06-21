@@ -44,6 +44,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('expired') === 'true') {
+      setSessionExpired(true);
+      // Clean query parameter from URL bar to be clean
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
   
   // The ultimate loading state: either we are trying to sign in, or context is loading data
   const isGlobalLoading = loading || (authLoading && !!supabaseUser);
@@ -268,6 +278,18 @@ export default function LoginPage() {
             {isSeeding && (
               <div className="bg-blue-50 border border-blue-200 p-3 text-blue-700 text-[10px] font-bold uppercase leading-tight mb-5">
                 Priprema demo podataka sustava...
+              </div>
+            )}
+
+            {sessionExpired && (
+              <div className="bg-amber-50 border border-amber-200 p-4 text-amber-800 mb-6 flex flex-col gap-2">
+                <div className="flex items-center gap-2">
+                  <Info size={16} className="text-amber-500" />
+                  <p className="text-[11px] font-bold uppercase tracking-tight">Sesija istekla</p>
+                </div>
+                <div className="bg-white p-2 border border-amber-100 text-[11px] font-bold leading-relaxed text-amber-900">
+                  Vaša sesija je istekla zbog neaktivnosti. Molimo prijavite se ponovno.
+                </div>
               </div>
             )}
 

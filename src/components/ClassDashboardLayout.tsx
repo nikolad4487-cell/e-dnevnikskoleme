@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Menu, LogOut, Search, Settings, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Clock, Calendar } from 'lucide-react';
+import { Menu, LogOut, Search, Settings, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Clock, Calendar, Home } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
@@ -320,44 +320,64 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       </div>
 
       {/* Mobile Bottom Nav */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#005c8d] text-white flex justify-around items-center h-16 border-t border-[#004a70] z-50">
-        {navItems.length <= 5 ? (
-          navItems.map((item) => (
+      {(() => {
+        const homePath = "/select-class";
+        const gradesPath = isStaff 
+          ? (effectiveClassId ? `/class/${effectiveClassId}/imenik` : '/teacher/pretrazivanje')
+          : '/student/ocjene';
+        const schedulePath = isStaff
+          ? (effectiveClassId ? `/class/${effectiveClassId}/raspored` : '/teacher/kalendar')
+          : '/student/raspored';
+
+        const isHomeActive = location.pathname === '/select-class' || location.pathname === '/select-school' || location.pathname === '/select-child' || location.pathname === '/';
+        const isGradesActive = location.pathname.startsWith('/student/ocjene') || location.pathname.includes('/imenik') || location.pathname.includes('/pretrazivanje');
+        const isScheduleActive = location.pathname.startsWith('/student/raspored') || location.pathname.includes('/raspored') || location.pathname.includes('/schedule') || location.pathname.includes('/kalendar');
+
+        return (
+          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#005c8d] text-white flex justify-around items-center h-16 border-t border-[#004a70] z-50 shadow-lg">
             <Link
-              key={item.path}
-              to={item.path}
+              to={homePath}
               className={cn(
-                "flex flex-col items-center justify-center flex-1 h-full gap-1",
-                location.pathname.startsWith(item.path) ? "bg-[#004a70]" : ""
+                "flex flex-col items-center justify-center flex-1 h-full gap-1 active:bg-[#004a70]/40 transition-colors",
+                isHomeActive ? "bg-[#004a70] font-black" : "opacity-80"
               )}
             >
-              <span className="text-[10px] font-medium text-center break-all leading-tight px-1">{item.label}</span>
+              <Home size={18} />
+              <span className="text-[9.5px] font-bold uppercase tracking-wider">Početna</span>
             </Link>
-          ))
-        ) : (
-          <>
-            {navItems.slice(0, 4).map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  "flex flex-col items-center justify-center flex-1 h-full gap-1",
-                  location.pathname.startsWith(item.path) ? "bg-[#004a70]" : ""
-                )}
-              >
-                <span className="text-[10px] font-medium text-center break-all leading-tight px-1">{item.label}</span>
-              </Link>
-            ))}
+
+            <Link
+              to={gradesPath}
+              className={cn(
+                "flex flex-col items-center justify-center flex-1 h-full gap-1 active:bg-[#004a70]/40 transition-colors",
+                isGradesActive ? "bg-[#004a70] font-black" : "opacity-80"
+              )}
+            >
+              <BookOpen size={18} />
+              <span className="text-[9.5px] font-bold uppercase tracking-wider">{isStaff ? "Imenik" : "Ocjene"}</span>
+            </Link>
+
+            <Link
+              to={schedulePath}
+              className={cn(
+                "flex flex-col items-center justify-center flex-1 h-full gap-1 active:bg-[#004a70]/40 transition-colors",
+                isScheduleActive ? "bg-[#004a70] font-black" : "opacity-80"
+              )}
+            >
+              <Calendar size={18} />
+              <span className="text-[9.5px] font-bold uppercase tracking-wider">Raspored</span>
+            </Link>
+
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="flex flex-col items-center justify-center flex-1 h-full gap-1 hover:bg-[#004a70]"
+              className="flex flex-col items-center justify-center flex-1 h-full gap-1 active:bg-[#004a70]/40 transition-colors cursor-pointer"
             >
               <Menu size={18} />
-              <span className="text-[10px] font-medium">Izbornik</span>
+              <span className="text-[9.5px] font-bold uppercase tracking-wider">Više</span>
             </button>
-          </>
-        )}
-      </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -3,14 +3,13 @@ import { useAuth } from '../contexts/AuthContext';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertCircle, Clock } from 'lucide-react';
-import { Role } from '../types';
 
 const INACTIVITY_LIMIT = 45 * 60 * 1000; // 45 minutes
-const WARNING_THRESHOLD = 43 * 60 * 1000; // 43 minutes
-const COUNTDOWN_TIME = 2 * 60; // 2 minutes in seconds
+const WARNING_THRESHOLD = 40 * 60 * 1000; // 40 minutes (when modal appears)
+const COUNTDOWN_TIME = 5 * 60; // 5 minutes in seconds
 
 export default function InactivityTracker() {
-  const { user, signOut, isStaff, isMainAdmin } = useAuth();
+  const { user, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -20,65 +19,207 @@ export default function InactivityTracker() {
   const lastActivityRef = useRef<number>(Date.now());
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
+  const lastStateWriteRef = useRef<number>(0);
+  const isLoggingOutRef = useRef<boolean>(false);
 
   const isLoginPage = location.pathname === '/login';
 
-  const logout = useCallback(async () => {
+  // Create BroadcastChannel for cross-tab synchronization
+  const channelRef = useRef<BroadcastChannel | null>(null);
+
+  useEffect(() => {
+    // Only instantiate in browser environment
+    if (typeof window !== 'undefined') {
+      channelRef.current = new BroadcastChannel('session_inactivity_sync');
+    }
+    return () => {
+      if (channelRef.current) {
+        channelRef.current.close();
+      }
+    };
+  }, []);
+
+  const logoutAndRedirect = useCallback(async (isExpired: boolean) => {
+    if (isLoggingOutRef.current) return;
+    isLoggingOutRef.current = true;
+
     setShowModal(false);
-    await signOut();
-    navigate('/login');
+    localStorage.removeItem('lastActivity');
+    localStorage.removeItem('auth.lastActivity');
+    
+    try {
+      await signOut();
+    } catch (err) {
+      console.error("Error during auto-signout:", err);
+    }
+
+    if (isExpired) {
+      navigate('/login?expired=true', { replace: true });
+    } else {
+      navigate('/login', { replace: true });
+    }
+    isLoggingOutRef.current = false;
   }, [signOut, navigate]);
 
-  const resetTimer = useCallback(() => {
-    lastActivityRef.current = Date.now();
+  const resetTimerLocal = useCallback((timestamp: number, notifyOthers: boolean = false) => {
+    lastActivityRef.current = timestamp;
+    localStorage.setItem('lastActivity', timestamp.toString());
+    localStorage.setItem('auth.lastActivity', timestamp.toString());
+    lastStateWriteRef.current = timestamp;
+    
     if (showModal) {
       setShowModal(false);
       setTimeLeft(COUNTDOWN_TIME);
     }
+
+    if (notifyOthers && channelRef.current) {
+      channelRef.current.postMessage({ type: 'RESET_TIMER', timestamp });
+    }
   }, [showModal]);
 
+  const resetTimerFromCurrentActivity = useCallback(() => {
+    resetTimerLocal(Date.now(), true);
+  }, [resetTimerLocal]);
+
+  // Handle user activity from events (only tracker when modal is closed)
+  const handleUserActivity = useCallback(() => {
+    if (showModal) return; // Do not register background activity while warning is showing
+    const now = Date.now();
+    lastActivityRef.current = now;
+    
+    // Throttle writes to localStorage & BroadcastChannel (once every 2 seconds)
+    if (now - lastStateWriteRef.current > 2000) {
+      resetTimerLocal(now, true);
+    }
+  }, [showModal, resetTimerLocal]);
+
+  // Hook into route changes for reset
   useEffect(() => {
-    if (!user || isLoginPage || !isStaff) {
+    if (user && !isLoginPage) {
+      resetTimerFromCurrentActivity();
+    }
+  }, [location.pathname, user, isLoginPage]);
+
+  // Cleanly observe API fetches via standard PerformanceResourceTiming API
+  // Without ever violating the rule of replacing window.fetch / overwriting native APIs!
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    try {
+      const observer = new PerformanceObserver((list) => {
+        const entries = list.getEntries();
+        for (const entry of entries) {
+          if (entry.entryType === 'resource') {
+            const resEntry = entry as PerformanceResourceTiming;
+            if (resEntry.name.includes('/api/') || resEntry.name.includes('/rest/v1/')) {
+              // Reset the timer as client-initiated API activity arose
+              window.dispatchEvent(new CustomEvent('user-api-activity'));
+            }
+          }
+        }
+      });
+      observer.observe({ entryTypes: ['resource'] });
+      return () => {
+        observer.disconnect();
+      };
+    } catch (e) {
+      console.warn("[InactivityTracker] PerformanceObserver resource monitoring not supported by container runtime", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    // We track inactivity for ALL authenticated users across the whole app
+    if (!user || isLoginPage) {
       if (timerRef.current) clearInterval(timerRef.current);
       if (countdownRef.current) clearInterval(countdownRef.current);
+      setShowModal(false);
       return;
     }
 
+    // Set initial activity timestamp on mount/login
+    const initialTime = Date.now();
+    resetTimerLocal(initialTime, false);
+
     const checkInactivity = () => {
+      if (isLoggingOutRef.current) return;
+
+      // Robust multi-tab sync: read the latest activity time from localStorage
+      const savedActivityStr = localStorage.getItem('auth.lastActivity');
+      const latestActivity = savedActivityStr ? parseInt(savedActivityStr, 10) : lastActivityRef.current;
+      
       const now = Date.now();
-      const inactiveTime = now - lastActivityRef.current;
+      const inactiveTime = now - latestActivity;
 
       if (inactiveTime >= INACTIVITY_LIMIT) {
-        logout();
+        if (channelRef.current) {
+          channelRef.current.postMessage({ type: 'FORCE_LOGOUT_EXPIRED' });
+        }
+        logoutAndRedirect(true);
       } else if (inactiveTime >= WARNING_THRESHOLD) {
-        if (!showModal) setShowModal(true);
+        if (!showModal) {
+          setShowModal(true);
+          // Set exact time left in countdown
+          const remainingSecs = Math.max(0, Math.ceil((INACTIVITY_LIMIT - inactiveTime) / 1000));
+          setTimeLeft(remainingSecs > 0 ? remainingSecs : COUNTDOWN_TIME);
+        }
+      } else {
+        // If another tab was active, close modal automatically
+        if (showModal) {
+          setShowModal(false);
+        }
       }
     };
 
-    // Events to track activity
-    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    // Listen to BroadcastChannel messages
+    if (channelRef.current) {
+      channelRef.current.onmessage = (event) => {
+        if (!event || !event.data) return;
+        const { type, timestamp } = event.data;
+        if (type === 'RESET_TIMER' && timestamp) {
+          resetTimerLocal(timestamp, false);
+        } else if (type === 'FORCE_LOGOUT_EXPIRED') {
+          logoutAndRedirect(true);
+        } else if (type === 'FORCE_LOGOUT_MANUAL') {
+          logoutAndRedirect(false);
+        }
+      };
+    }
+
+    const handleUnauthorizedApiResponse = () => {
+      logoutAndRedirect(true);
+    };
+
+    window.addEventListener('unauthorized-api-response', handleUnauthorizedApiResponse);
+
+    // Events to track activity (including route transitions and successful API fetches)
+    const events = ['click', 'mousedown', 'mousemove', 'keypress', 'keydown', 'scroll', 'touchstart', 'user-api-activity'];
     events.forEach(event => {
-      window.addEventListener(event, resetTimer);
+      window.addEventListener(event, handleUserActivity);
     });
 
-    timerRef.current = setInterval(checkInactivity, 10000); // Check every 10 seconds
+    // Check inactivity state every 5 seconds for responsive feedback
+    timerRef.current = setInterval(checkInactivity, 5000);
 
     return () => {
       events.forEach(event => {
-        window.removeEventListener(event, resetTimer);
+        window.removeEventListener(event, handleUserActivity);
       });
+      window.removeEventListener('unauthorized-api-response', handleUnauthorizedApiResponse);
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [user, isLoginPage, isStaff, logout, resetTimer, showModal]);
+  }, [user, isLoginPage, logoutAndRedirect, handleUserActivity, showModal, resetTimerLocal]);
 
-  // Countdown timer for the modal
+  // Countdown timer when the modal is visible
   useEffect(() => {
     if (showModal) {
       countdownRef.current = setInterval(() => {
         setTimeLeft(prev => {
           if (prev <= 1) {
             clearInterval(countdownRef.current!);
-            logout();
+            if (channelRef.current) {
+              channelRef.current.postMessage({ type: 'FORCE_LOGOUT_EXPIRED' });
+            }
+            logoutAndRedirect(true);
             return 0;
           }
           return prev - 1;
@@ -92,63 +233,72 @@ export default function InactivityTracker() {
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current);
     };
-  }, [showModal, logout]);
+  }, [showModal, logoutAndRedirect]);
 
+  // Handles manual "Odjavi se" within the warning modal
+  const handleManualLogout = () => {
+    if (channelRef.current) {
+      channelRef.current.postMessage({ type: 'FORCE_LOGOUT_MANUAL' });
+    }
+    logoutAndRedirect(false);
+  };
+
+  // Format time in strictly MM:SS format (e.g., 05:00, 04:59)
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    return `${mins} minuta i ${secs.toString().padStart(2, '0')} sekundi`;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   if (!showModal) return null;
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-sans">
         <motion.div 
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.95 }}
-          className="bg-white w-full max-w-md shadow-2xl overflow-hidden"
+          className="bg-white w-full max-w-md shadow-2xl overflow-hidden rounded-lg border border-slate-200 text-left"
         >
-          {/* Croatian e-Dnevnik Style Header */}
+          {/* Croatian e-Dnevnik Design Header */}
           <div className="bg-[#005c8d] px-6 py-4 flex items-center gap-3">
-            <Clock className="text-white" size={24} />
-            <h2 className="text-white font-black text-sm uppercase tracking-wider">Automatska odjava</h2>
+            <Clock className="text-white shrink-0 animate-pulse" size={20} />
+            <span className="text-white font-black text-xs uppercase tracking-widest">Upozorenje o neaktivnosti</span>
           </div>
           
-          <div className="p-8 text-center">
-            <div className="mb-6 flex justify-center">
-              <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center text-[#005c8d]">
-                <AlertCircle size={32} />
+          <div className="p-6 text-center">
+            <div className="mb-4 flex justify-center">
+              <div className="w-14 h-14 bg-amber-50 rounded-full flex items-center justify-center text-amber-500 border border-amber-100 shadow-sm">
+                <AlertCircle size={28} />
               </div>
             </div>
             
             <p className="text-slate-700 font-bold text-sm leading-relaxed mb-6">
-              Zbog sigurnosnih razloga, uskoro ćete biti automatski odjavljeni iz e-Dnevnik aplikacije.
-              <br /><br />
-              Za nastavak rada kliknite gumb 'Nastavi rad'.
+              Uskoro ćete biti odjavljeni radi neaktivnosti.
+              <br />
+              Možete nastaviti rad ili se odmah odjaviti.
             </p>
             
-            <div className="bg-slate-50 border border-slate-100 p-4 mb-8">
-              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-1">Vrijeme do automatske odjave:</p>
-              <p className="text-[#005c8d] font-black text-lg tabular-nums">
+            <div className="bg-slate-50 border border-slate-100 rounded p-4 mb-6">
+              <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest block mb-1">Preostalo vrijeme:</span>
+              <span className="text-[#005c8d] font-black text-2xl tabular-nums tracking-wider block">
                 {formatTime(timeLeft)}
-              </p>
+              </span>
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2.5">
               <button
-                onClick={resetTimer}
-                className="w-full bg-[#005c8d] hover:bg-[#004a70] text-white py-4 px-6 text-xs font-black uppercase tracking-widest transition-all shadow-lg"
+                onClick={resetTimerFromCurrentActivity}
+                className="w-full bg-[#005c8d] hover:bg-[#004a70] text-white py-3.5 px-6 text-xs font-black uppercase tracking-widest transition-all rounded shadow-md cursor-pointer active:scale-95"
               >
                 Nastavi rad
               </button>
               <button
-                onClick={logout}
-                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 px-6 text-xs font-black uppercase tracking-widest transition-colors"
+                onClick={handleManualLogout}
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 px-6 text-xs font-black uppercase tracking-widest transition-colors rounded cursor-pointer active:scale-95"
               >
-                Odustani
+                Odjavi se
               </button>
             </div>
           </div>

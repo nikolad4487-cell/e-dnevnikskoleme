@@ -2,53 +2,125 @@
 
 @theme {
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --radius-sm: 0px;
-  --radius-md: 0px;
-  --radius-lg: 0px;
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: none;
-  --shadow-lg: none;
-  --shadow-xl: none;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.06), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
+  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 16px -6px rgba(0, 0, 0, 0.04);
+  --shadow-xl: 0 20px 40px -10px rgba(0, 0, 0, 0.08), 0 12px 20px -8px rgba(0, 0, 0, 0.04);
 }
 
 @layer base {
   body {
-    @apply text-gray-800 bg-[#f0f2f5] text-[13px] leading-normal;
+    @apply text-slate-800 bg-[#f8fafc] text-[13.5px] leading-relaxed antialiased selection:bg-[#005c8d]/25 selection:text-[#005c8d];
   }
   
+  /* Modern accessible scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-100/50;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded hover:bg-slate-400/80 transition-colors;
+  }
+
   table {
-    @apply w-full border-collapse;
+    @apply w-full border-collapse text-[13px];
   }
   
   th {
-    @apply bg-[#f8f9fa] border border-gray-300 px-3 py-2 text-left font-bold text-gray-600;
+    @apply bg-slate-50 border-b border-l-0 border-r-0 border-slate-200 px-4 py-3 text-left font-semibold text-slate-500 uppercase tracking-wider text-[11px];
   }
   
   td {
-    @apply border border-gray-300 px-3 py-2;
+    @apply border-b border-l-0 border-r-0 border-slate-100 px-4 py-3 bg-white text-slate-700 align-middle;
   }
 
-  input, select, textarea {
-    @apply border border-gray-300 rounded-none px-2 py-1 focus:border-[#005c8d] focus:outline-none bg-white;
+  tr {
+    @apply hover:bg-slate-50/50 transition-colors;
   }
 
-  button {
-    @apply cursor-pointer;
+  input[type="text"], input[type="password"], input[type="email"], input[type="number"], select, textarea {
+    @apply w-full min-h-[46px] border border-slate-200 rounded-md px-4 py-2 bg-white text-[13.5px] transition-all outline-none shadow-sm placeholder:text-slate-400 focus:ring-2 focus:ring-[#005c8d]/20 focus:border-[#005c8d] disabled:opacity-50 disabled:bg-slate-50;
+  }
+
+  /* Form Labels */
+  label {
+    @apply block text-[11.5px] font-bold text-slate-500 uppercase tracking-wider mb-2;
+  }
+
+  button, a {
+    @apply transition-all duration-250 ease-out;
+  }
+
+  /* Focus Indicator for Accessibility */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-[#005c8d] ring-offset-2;
   }
 }
 
+/* Reusable Enterprise Utility Classes */
 .ed-card {
-  @apply bg-white border border-gray-300 shadow-sm mb-4;
+  @apply bg-white border border-slate-200/80 rounded-xl shadow-sm overflow-hidden mb-6 hover:shadow-md transition-shadow duration-300;
 }
 
 .ed-header {
-  @apply bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-gray-700 flex justify-between items-center;
+  @apply bg-slate-50/80 border-b border-slate-200/85 px-5 py-4 font-bold text-[#005c8d] flex justify-between items-center text-[13px] uppercase tracking-wider;
 }
 
 .ed-content {
-  @apply p-4;
+  @apply p-5;
 }
 
-.ed-table-dense td, .ed-table-dense th {
-  @apply py-1 px-2 text-[12px];
+.ed-table-dense td {
+  @apply py-2 px-3 text-[12px];
 }
+
+.ed-table-dense th {
+  @apply py-2 px-3 text-[10px];
+}
+
+/* Fluid Typography Helpers using clamp() */
+.fluid-title-1 {
+  font-size: clamp(1.5rem, 3cwb, 2rem); /* 24px - 32px */
+  @apply font-black tracking-tight text-slate-900 leading-none;
+}
+
+.fluid-title-2 {
+  font-size: clamp(1.25rem, 2.5cwb, 1.75rem); /* 20px - 28px */
+  @apply font-bold tracking-tight text-slate-800;
+}
+
+.fluid-title-3 {
+  font-size: clamp(1.125rem, 2cwb, 1.5rem); /* 18px - 24px */
+  @apply font-semibold tracking-tight text-slate-800;
+}
+
+/* Responsive Table Wrapper with gradient shadows */
+.table-responsive-wrapper {
+  @apply w-full overflow-x-auto rounded-lg border border-slate-200/70 shadow-sm bg-white;
+}
+
+/* Custom interactive components styling */
+.btn-primary {
+  @apply bg-[#005c8d] hover:bg-[#004a70] text-white font-bold uppercase tracking-widest text-[11px] h-[44px] px-6 rounded-md shadow-sm transition-all flex items-center justify-center gap-2 hover:shadow active:scale-98 disabled:opacity-50 disabled:pointer-events-none;
+}
+
+.btn-secondary {
+  @apply bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 font-bold uppercase tracking-widest text-[11px] h-[44px] px-6 rounded-md transition-all flex items-center justify-center gap-2 active:scale-98 disabled:opacity-50 disabled:pointer-events-none;
+}
+
+.btn-danger {
+  @apply bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold uppercase tracking-widest text-[11px] h-[44px] px-6 rounded-md transition-all flex items-center justify-center gap-2 active:scale-98;
+}
+
+/* Form groups spacing */
+.form-group {
+  @apply mb-5 flex flex-col gap-1;
+}
+

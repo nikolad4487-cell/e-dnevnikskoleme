@@ -116,6 +116,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        // Check for inactivity on browser/tab start
+        const lastSavedActivityStr = localStorage.getItem('auth.lastActivity') || localStorage.getItem('lastActivity');
+        const INACTIVITY_LIMIT_MS = 45 * 60 * 1000;
+        let shouldForceLogout = false;
+
+        if (session && lastSavedActivityStr) {
+          const lastSavedActivity = parseInt(lastSavedActivityStr, 10);
+          const timePassed = Date.now() - lastSavedActivity;
+          if (timePassed > INACTIVITY_LIMIT_MS) {
+            shouldForceLogout = true;
+          }
+        }
+
+        if (session && shouldForceLogout) {
+          console.warn('[AUTH] Session expired due to inactivity while application was closed/off. Signing out.');
+          await supabase.auth.signOut();
+          localStorage.removeItem('lastActivity');
+          localStorage.removeItem('auth.lastActivity');
+          localStorage.removeItem('selectedSchoolId');
+          localStorage.removeItem('selectedClassId');
+          localStorage.removeItem('selectedChildId');
+          sessionStorage.clear();
+          if (mounted) {
+            setSession(null);
+            setSupabaseUser(null);
+            setUser(null);
+            setLoading(false);
+            setAuthInitialized(true);
+          }
+          return;
+        }
+
         if (!session) {
           console.log('[AUTH] No initial session found.');
           if (mounted) {
@@ -125,6 +157,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } else {
           console.log('[AUTH] Initial session found for:', session.user.id);
+          // Update lastActivity timestamp to now on successful run
+          const nowTime = Date.now().toString();
+          localStorage.setItem('lastActivity', nowTime);
+          localStorage.setItem('auth.lastActivity', nowTime);
           setError(null);
           setSession(session);
           setSupabaseUser(session.user);
@@ -425,6 +461,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem('selectedSchoolId');
       localStorage.removeItem('selectedClassId');
       localStorage.removeItem('selectedChildId');
+      localStorage.removeItem('lastActivity');
+      localStorage.removeItem('auth.lastActivity');
+      sessionStorage.clear();
     } catch (e) {
       console.error('Sign out error:', e);
     } finally {

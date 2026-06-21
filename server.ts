@@ -132,6 +132,93 @@ async function startServer() {
       next();
     });
 
+    // In-memory caches for backend session inactivity monitoring
+    const tokenUserCacheForInactivity = new Map<string, { userId: string; expires: number }>();
+    const userLastActivityMap = new Map<string, number>();
+    const INACTIVITY_LIMIT_MS = 45 * 60 * 1000;
+
+    app.use(async (req, res, next) => {
+      // 1. Only intercept /api/* routes, excluding non-session/pre-session setup endpoints
+      if (!req.url.startsWith("/api/")) {
+        return next();
+      }
+
+      const excludedRoutes = [
+        "/api/auth/login",
+        "/api/verify-totp",
+        "/api/verify-totp-test"
+      ];
+
+      // Check if the current URL starts with any excluded path
+      const isExcluded = excludedRoutes.some(route => req.url.startsWith(route));
+      if (isExcluded) {
+        return next();
+      }
+
+      // 2. Check authorization header
+      const authHeader = req.headers.authorization;
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return next();
+      }
+
+      const token = authHeader.replace("Bearer ", "");
+      if (!token) {
+        return next();
+      }
+
+      try {
+        // Resolve userId from cache or Supabase Auth
+        let userId: string | null = null;
+        const now = Date.now();
+        const cached = tokenUserCacheForInactivity.get(token);
+
+        if (cached && cached.expires > now) {
+          userId = cached.userId;
+        } else if (supabaseAdmin) {
+          const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+          if (!authError && user) {
+            userId = user.id;
+            tokenUserCacheForInactivity.set(token, {
+              userId: user.id,
+              expires: now + 30000 // Cache resolved user ID for 30 seconds for high-performance
+            });
+          }
+        }
+
+        if (userId) {
+          // Check last activity
+          const lastActivity = userLastActivityMap.get(userId);
+          const clientLastActivityHeader = req.headers["x-last-activity"];
+
+          if (lastActivity) {
+            const passed = now - lastActivity;
+            if (passed > INACTIVITY_LIMIT_MS) {
+              console.warn(`[BACKEND INACTIVITY] Session expired for user ${userId}. ${passed}ms since last activity.`);
+              userLastActivityMap.delete(userId);
+              return res.status(401).json({ error: "Session expired due to inactivity" });
+            }
+          } else if (clientLastActivityHeader) {
+            // Fallback to client-asserted last activity (highly robust across server reboots)
+            const clientTime = parseInt(clientLastActivityHeader as string, 10);
+            if (!isNaN(clientTime)) {
+              const passed = now - clientTime;
+              if (passed > INACTIVITY_LIMIT_MS) {
+                console.warn(`[BACKEND INACTIVITY] Session expired (client header) for user ${userId}. ${passed}ms since client last activity.`);
+                return res.status(401).json({ error: "Session expired due to inactivity" });
+              }
+            }
+          }
+
+          // Active session: reset timer on both server and mark active
+          userLastActivityMap.set(userId, now);
+        }
+      } catch (err) {
+        console.error("[BACKEND INACTIVITY] Error checking session inactivity in middleware:", err);
+      }
+
+      next();
+    });
+
   // TOTP Verification
   app.post("/api/verify-totp", async (req, res) => {
     try {

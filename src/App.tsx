@@ -163,8 +163,7 @@ export default function App() {
           <RoutePersister />
           <TitleManager />
           <Toaster position="top-right" />
-          {/* InactivityTracker disabled temporarily to prevent loops */}
-          {/* <InactivityTracker /> */}
+          <InactivityTracker />
           <Suspense fallback={<div className="flex items-center justify-center min-h-screen font-sans">Učitavanje...</div>}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
