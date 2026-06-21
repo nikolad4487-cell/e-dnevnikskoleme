@@ -120,7 +120,7 @@ export function classScopedFinalThesisPlugin(): Plugin {
       if (enrollmentError) throw enrollmentError;
 
       const classStudents = (enrollmentData || [])
-        .map((row: any) => row.student)
+        .map((row: any) => Array.isArray(row.student) ? row.student[0] : row.student)
         .filter(Boolean);
       setStudents(classStudents);`,
         'class student query'
