@@ -97,3 +97,5 @@ jobs:
           git add src/pages/teacher/PedagoskaDokumentacijaPage.tsx
           git commit -m "fix: preserve selected student after pedagogical save [preserve-student-applied]"
           git push origin HEAD:feature/class-student-adjustment-badges
+
+# Touch: trigger workflow through the contents API.
