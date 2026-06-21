@@ -8,7 +8,7 @@ import QRCode from "qrcode";
 import fs from "fs";
 import crypto from "crypto";
 import { GoogleGenAI, Type } from "@google/genai";
-import { verifyPin, hashPin } from "./src/pinUtils";
+import { verifyPin, hashPin } from "./src/pinUtils.js";
 
 dotenv.config();
 
