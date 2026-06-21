@@ -991,80 +991,70 @@ export default function StudentSubjectDetail() {
         </div>
       )}
 
-      <div className="flex flex-col xl:flex-row gap-6 mt-4">
-        {/* COMPREHENSIVE LEFT SIDEBAR WITH e-Dnevnik BOXES */}
-        <div className="w-full xl:w-64 shrink-0 space-y-4">
-          {/* Main Sidebar Links Box */}
-          <div>
-            <div className="bg-[#005c8d] text-white text-xs font-black px-4 py-2.5 uppercase tracking-wider rounded-t border border-[#005c8d]">
-              IZBORNIK
-            </div>
-            <div className="border border-t-0 border-gray-200 bg-gray-50/50 p-2 flex flex-col gap-1 rounded-b">
+      <div className="flex flex-col gap-6 mt-4">
+        {/* Full-width interactive action bar instead of left menu */}
+        <div className="bg-slate-50 border border-gray-200 rounded p-3 flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2 items-center justify-between border-b border-gray-200 pb-3">
+            <div className="flex flex-wrap gap-2">
               <button 
                 onClick={() => navigate(`/class/${classId}/imenik`)} 
-                className="flex items-center gap-2.5 w-full text-left p-2.5 text-xs font-semibold text-gray-700 hover:bg-white hover:text-[#005c8d] border border-transparent hover:border-gray-100 rounded transition-all duration-150"
+                className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase text-gray-600 bg-white hover:bg-gray-100 hover:text-gray-900 border border-gray-300 rounded transition-all duration-150 shadow-xs"
               >
-                <Users className="w-4 h-4 text-gray-400 shrink-0" />
+                <Users className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                 Imenik učenika
               </button>
               <button 
                 onClick={() => navigate(`/class/${classId}/student/${studentId}`)} 
-                className="flex items-center gap-2.5 w-full text-left p-2.5 text-xs font-semibold text-gray-700 hover:bg-white hover:text-[#005c8d] border border-transparent hover:border-gray-100 rounded transition-all duration-150"
+                className="flex items-center gap-2 px-4 py-2 text-xs font-extrabold uppercase text-[#005c8d] bg-sky-50 border border-sky-300 rounded shadow-xs"
               >
-                <BookOpen className="w-4 h-4 text-gray-400 shrink-0" />
+                <BookOpen className="w-3.5 h-3.5 text-[#005c8d] shrink-0" />
                 Pregled predmeta
               </button>
               <button 
                 onClick={() => navigate(`/class/${classId}/biljeske`)} 
-                className="flex items-center gap-2.5 w-full text-left p-2.5 text-xs font-semibold text-gray-700 hover:bg-white hover:text-[#005c8d] border border-transparent hover:border-gray-100 rounded transition-all duration-150"
+                className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase text-gray-600 bg-white hover:bg-gray-100 hover:text-gray-900 border border-gray-300 rounded transition-all duration-150 shadow-xs"
               >
-                <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+                <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" />
                 Bilješke
               </button>
             </div>
+
+            <button 
+              onClick={() => navigate(`/class/${classId}/imenik`)} 
+              className="flex items-center gap-2 px-4 py-2 text-xs font-extrabold uppercase text-gray-500 hover:text-red-700 bg-white hover:bg-red-50 border border-gray-300 hover:border-red-200 rounded transition-all shadow-xs"
+            >
+              <XCircle className="w-3.5 h-3.5 text-red-500 animate-pulse" />
+              ZATVORI KARTICU
+            </button>
           </div>
 
-          {/* Quick actions box (Radnje) */}
           {canEdit && (
-            <div>
-              <div className="bg-slate-800 text-white text-xs font-black px-4 py-2 uppercase tracking-wider rounded-t">
-                RADNJE
-              </div>
-              <div className="border border-t-0 border-gray-200 bg-white p-3 flex flex-col gap-2 rounded-b">
-                <button 
-                  onClick={() => setShowGroupGradesModal(true)}
-                  className="flex items-center justify-center gap-1.5 w-full py-2 border border-[#005c8d] hover:bg-sky-50 text-[#005c8d] font-extrabold text-[10px] uppercase rounded shadow-xs select-none transition-all"
-                >
-                  Grupni unos ocjena
-                </button>
-                <button 
-                  onClick={() => setShowGroupNotesModal(true)}
-                  className="flex items-center justify-center gap-1.5 w-full py-2 border border-[#005c8d] hover:bg-sky-50 text-[#005c8d] font-extrabold text-[10px] uppercase rounded shadow-xs select-none transition-all"
-                >
-                  Grupni unos bilješki
-                </button>
-                <button 
-                  onClick={() => setShowGroupFinalGradesModal(true)}
-                  className="flex items-center justify-center gap-1.5 w-full py-2 border border-slate-300 hover:bg-slate-50 text-slate-800 font-extrabold text-[10px] uppercase rounded shadow-xs select-none transition-all"
-                >
-                  Grupno zaključivanje ocjena
-                </button>
-              </div>
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-[10px] font-black uppercase text-gray-400 tracking-wider mr-1">Grupne Radnje:</span>
+              <button 
+                onClick={() => setShowGroupGradesModal(true)}
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 border border-[#005c8d] bg-white hover:bg-sky-50 text-[#005c8d] font-extrabold text-[10px] uppercase rounded shadow-xs transition-all"
+              >
+                Grupni unos ocjena
+              </button>
+              <button 
+                onClick={() => setShowGroupNotesModal(true)}
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 border border-[#005c8d] bg-white hover:bg-sky-50 text-[#005c8d] font-extrabold text-[10px] uppercase rounded shadow-xs transition-all"
+              >
+                Grupni unos bilješki
+              </button>
+              <button 
+                onClick={() => setShowGroupFinalGradesModal(true)}
+                className="flex items-center justify-center gap-1.5 px-3 py-1.5 border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-extrabold text-[10px] uppercase rounded shadow-xs transition-all"
+              >
+                Grupno zaključivanje ocjena
+              </button>
             </div>
           )}
-
-          {/* Close Card */}
-          <button 
-            onClick={() => navigate(`/class/${classId}/imenik`)} 
-            className="flex items-center justify-center gap-2 w-full p-2.5 text-xs font-black text-gray-600 hover:text-red-700 bg-white hover:bg-red-50/50 border border-gray-300 hover:border-red-200 rounded transition-all shadow-xs uppercase tracking-wider"
-          >
-            <XCircle className="w-4 h-4 text-red-500" />
-            ZATVORI KARTICU
-          </button>
         </div>
 
         {/* COMPACT GRADES ELEMENTS GRID & LOG CONTROLS */}
-        <div className="flex-1 space-y-6">
+        <div className="w-full space-y-6">
           
           {/* Main Grades Table */}
           <div className="bg-white border border-gray-300 rounded-sm shadow-xs overflow-hidden">

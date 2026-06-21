@@ -276,47 +276,44 @@ export default function StudentDashboard() {
         </div>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 mt-4">
-        {/* LEFT COMPARTMENT SIDEBAR styled in true e-Dnevnik fashion */}
-        <div className="w-full lg:w-64 shrink-0">
-          <div className="bg-[#005c8d] text-white text-xs font-black px-4 py-2.5 uppercase tracking-wider rounded-t border border-[#005c8d]">
-            IZBORNIK
-          </div>
-          <div className="border border-t-0 border-gray-200 bg-gray-50/50 p-2 flex flex-col gap-1 rounded-b">
+      <div className="flex flex-col gap-6 mt-4">
+        {/* Full-width interactive action bar instead of left menu */}
+        <div className="bg-slate-50 border border-gray-200 rounded p-2.5 flex flex-wrap gap-2 items-center justify-between">
+          <div className="flex flex-wrap gap-2">
             <button 
               onClick={() => navigate(`/class/${classId}/imenik`)} 
-              className="flex items-center gap-2.5 w-full text-left p-2.5 text-xs font-semibold text-gray-700 hover:bg-white hover:text-[#005c8d] border border-transparent hover:border-gray-100 rounded transition-all duration-150"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase text-gray-600 bg-white hover:bg-gray-100 hover:text-gray-900 border border-gray-300 rounded transition-all duration-150 shadow-xs"
             >
-              <Users className="w-4 h-4 text-gray-400 shrink-0" />
+              <Users className="w-3.5 h-3.5 text-gray-400 shrink-0" />
               Imenik učenika
             </button>
             <button 
-              className="flex items-center gap-2.5 w-full text-left p-2.5 text-xs font-black text-[#005c8d] bg-white border border-[#005c8d]/20 rounded shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-extrabold uppercase text-[#005c8d] bg-sky-50 border border-sky-300 rounded shadow-xs"
               disabled
             >
-              <BookOpen className="w-4 h-4 text-[#005c8d] shrink-0" />
+              <BookOpen className="w-3.5 h-3.5 text-[#005c8d] shrink-0" />
               Pregled predmeta
             </button>
             <button 
               onClick={() => navigate(`/class/${classId}/biljeske`, { state: { studentId } })} 
-              className="flex items-center gap-2.5 w-full text-left p-2.5 text-xs font-semibold text-gray-700 hover:bg-white hover:text-[#005c8d] border border-transparent hover:border-gray-100 rounded transition-all duration-150"
+              className="flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase text-gray-600 bg-white hover:bg-gray-100 hover:text-gray-900 border border-gray-300 rounded transition-all duration-150 shadow-xs"
             >
-              <FileText className="w-4 h-4 text-gray-400 shrink-0" />
+              <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" />
               Bilješke
             </button>
-            <hr className="my-1.5 border-gray-200" />
-            <button 
-              onClick={() => navigate(`/class/${classId}/imenik`)} 
-              className="flex items-center justify-center gap-2 w-full p-2 text-xs font-bold text-gray-600 hover:text-red-700 bg-white hover:bg-red-50/50 border border-gray-200 hover:border-red-100 rounded transition-all shadow-xs"
-            >
-              <XCircle className="w-4 h-4 text-red-500" />
-              ZATVORI KARTICU
-            </button>
           </div>
+
+          <button 
+            onClick={() => navigate(`/class/${classId}/imenik`)} 
+            className="flex items-center gap-2 px-4 py-2 text-xs font-extrabold uppercase text-gray-500 hover:text-red-700 bg-white hover:bg-red-50 border border-gray-300 hover:border-red-200 rounded transition-all shadow-xs"
+          >
+            <XCircle className="w-3.5 h-3.5 text-red-500" />
+            ZATVORI KARTICU
+          </button>
         </div>
 
         {/* RIGHT COMPARTMENT: SUBJECTS LISTING */}
-        <div className="flex-1">
+        <div className="w-full">
           <div className="border border-gray-200 rounded-sm overflow-hidden shadow-xs">
             <table className="w-full text-left border-collapse bg-white">
               <thead>

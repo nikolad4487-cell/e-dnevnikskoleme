@@ -120,7 +120,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
   };
 
   return (
-    <header className="bg-[#005c8d] text-white z-50 h-[50px] flex items-center justify-between px-4 sticky top-0 shadow-md">
+    <header className="bg-[#005c8d] text-white z-50 h-[50px] hidden lg:flex items-center justify-between px-4 sticky top-0 shadow-md">
       {/* Left Structure */}
       <div className="flex items-center gap-4">
         <Link to="/" className="font-black text-lg tracking-tight hover:opacity-95 transition-opacity">e-Dnevnik</Link>

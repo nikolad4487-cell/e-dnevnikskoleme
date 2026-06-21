@@ -227,7 +227,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       
       {/* Main Teacher Nav (Global) */}
       {isStaff && effectiveClassId && (
-        <div className="bg-white border-b border-[#dee2e6] h-14 flex items-center justify-between px-6 shadow-sm z-30">
+        <div className="bg-white border-b border-[#dee2e6] h-14 hidden lg:flex items-center justify-between px-6 shadow-sm z-30">
            <div className="flex items-center gap-1 h-full">
              {teacherNavList.map(tab => (
                <Link
@@ -250,69 +250,157 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-row">
-        {/* Mobile Sidebar Overlay */}
+        {/* Mobile Sidebar Overlay (Sliding "Više" Menu) */}
         {isMobileMenuOpen && (
-          <div className="md:hidden fixed inset-0 z-[60] flex">
-            <div className="fixed inset-0 bg-black/50" onClick={() => setIsMobileMenuOpen(false)}></div>
-            <div className="relative w-72 h-full bg-[#005c8d] text-white flex flex-col shadow-xl animate-in slide-in-from-left duration-300">
+          <div className="lg:hidden fixed inset-0 z-[60] flex">
+            <div className="fixed inset-0 bg-black/60 backdrop-blur-xs" onClick={() => setIsMobileMenuOpen(false)}></div>
+            <div className="relative w-80 max-w-[85vw] h-full bg-[#005c8d] text-white flex flex-col shadow-2xl animate-in slide-in-from-left duration-250">
               <div className="p-4 border-b border-[#004a70] flex items-center justify-between">
-                <span className="font-bold uppercase tracking-tight">Izbornik</span>
-                <button onClick={() => setIsMobileMenuOpen(false)} className="p-1 hover:bg-[#004a70]"><LogOut size={20} className="rotate-180" /></button>
+                <span className="font-black uppercase tracking-widest text-[#00a8ff] text-xs">Izbornik Aplikacije</span>
+                <button onClick={() => setIsMobileMenuOpen(false)} className="p-1 hover:bg-[#004a70] rounded-sm transition-colors text-white/80 hover:text-white cursor-pointer"><LogOut size={20} className="rotate-180" /></button>
               </div>
               
-              <div className="flex-1 overflow-y-auto py-4">
-                <div className="px-4 mb-4">
-                  <div className="text-[11px] font-bold leading-tight">{formatPersonName(user)}</div>
-                  <div className="text-[9px] text-white/60 uppercase">{formattedRoles}</div>
+              <div className="flex-1 overflow-y-auto py-4 px-3 space-y-5">
+                <div className="bg-[#004a70]/50 rounded p-3 mb-2 border border-[#004a70]/30 mr-1">
+                  <div className="text-[12px] font-black leading-tight text-white">{formatPersonName(user)}</div>
+                  <div className="text-[9.5px] text-sky-200/80 font-bold uppercase tracking-wider mt-0.5">{formattedRoles}</div>
                 </div>
 
-                <nav className="flex flex-col">
-                  {navItems.map((item) => (
-                    <Link
-                      key={item.path}
-                      to={item.path}
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className={cn(
-                        "px-4 py-3 text-[12px] font-bold uppercase tracking-wide border-l-4 transition-colors",
-                        location.pathname.startsWith(item.path) 
-                          ? "bg-[#004a70] border-white" 
-                           : "border-transparent hover:bg-[#004a70]"
-                      )}
-                    >
-                      {item.label}
-                    </Link>
-                  ))}
-                </nav>
+                {(() => {
+                  const categories = [];
+
+                  if (isAdminPath) {
+                    categories.push({
+                      title: 'Administracija',
+                      items: ADMIN_NAV.map(item => ({ label: item.label, path: item.path, icon: <Settings size={14} /> }))
+                    });
+                  } else if (isStaff) {
+                    if (effectiveClassId) {
+                      categories.push({
+                        title: 'Nastava & Ocjenjivanje',
+                        items: [
+                          { label: 'Imenik / Učenici', path: `/class/${effectiveClassId}/imenik`, icon: <BookOpen size={14} /> },
+                          { label: 'Pregled rada u razredu', path: `/class/${effectiveClassId}/pregled-rada`, icon: <List size={14} /> },
+                          { label: 'Dnevnik rada', path: `/class/${effectiveClassId}/dnevnik-rada`, icon: <ClipboardList size={14} /> },
+                          { label: 'Izostanci', path: `/class/${effectiveClassId}/izostanci`, icon: <Clock size={14} /> },
+                        ]
+                      });
+                      categories.push({
+                        title: 'Zapisnici & Dokumentacija',
+                        items: [
+                          { label: 'Zapisnici sastanaka', path: `/class/${effectiveClassId}/zapisnici`, icon: <FileText size={14} /> },
+                          { label: 'Pedagoška dokumentacija', path: `/class/${effectiveClassId}/pedagoska-dokumentacija`, icon: <FileText size={14} /> },
+                          ...(canAccessThesis ? [{ label: 'Završni radovi', path: '/teacher/zavrsni-radovi', icon: <FileSpreadsheet size={14} /> }] : []),
+                          { label: 'Raspored sati', path: `/class/${effectiveClassId}/raspored`, icon: <Calendar size={14} /> },
+                          { label: 'Admin razreda', path: `/class/${effectiveClassId}/admin`, icon: <Settings size={14} /> },
+                        ]
+                      });
+                    } else {
+                      categories.push({
+                        title: 'Nastava & Alati',
+                        items: [
+                          { label: 'Pretraživanje', path: '/teacher/pretrazivanje', icon: <Search size={14} /> },
+                          ...(canAccessThesis ? [{ label: 'Završni radovi', path: '/teacher/zavrsni-radovi', icon: <FileSpreadsheet size={14} /> }] : []),
+                        ]
+                      });
+                    }
+
+                    categories.push({
+                      title: 'Školske informacije',
+                      items: [
+                        { label: 'Digitalni Dosje učenika', path: '/teacher/student-dosje', icon: <FileText size={14} /> },
+                        { label: 'Kalendar škole', path: '/teacher/kalendar', icon: <Calendar size={14} /> },
+                        { label: 'Dokumenti škole', path: '/teacher/dokumenti', icon: <FileText size={14} /> },
+                        { label: 'Obavijesti / Informativka', path: effectiveClassId ? `/class/${effectiveClassId}/informativka` : '/teacher/informativka', icon: <ClipboardList size={14} /> },
+                      ]
+                    });
+                    
+                    if (isSchoolAdmin) {
+                      categories.push({
+                        title: 'Administracija škole',
+                        items: [
+                          { label: 'Pregled sustava', path: '/admin-skole', icon: <Settings size={14} /> },
+                          { label: 'Korisnici / Nastavnici', path: '/admin-skole/korisnici', icon: <Settings size={14} /> },
+                          { label: 'Učenici', path: '/admin-skole/ucenici', icon: <Settings size={14} /> },
+                          { label: 'Razredi', path: '/admin-skole/razredi', icon: <Settings size={14} /> },
+                          { label: 'Predmeti', path: '/admin-skole/predmeti', icon: <Settings size={14} /> },
+                          { label: 'Kalendar rada', path: '/admin-skole/kalendar', icon: <Calendar size={14} /> },
+                          { label: 'Upravljanje rasporedom', path: '/admin-skole/raspored', icon: <Calendar size={14} /> },
+                          { label: 'Matična knjiga', path: '/admin-skole/maticna-knjiga', icon: <FileText size={14} /> },
+                          { label: 'Arhiva', path: '/admin-skole/arhiva', icon: <FileText size={14} /> },
+                        ]
+                      });
+                    }
+                  } else {
+                    categories.push({
+                      title: 'Nastava & Učenik',
+                      items: [
+                        { label: 'Ocjene', path: '/student/ocjene', icon: <BookOpen size={14} /> },
+                        { label: 'Bilješke', path: '/student/biljeske', icon: <FileText size={14} /> },
+                        { label: 'Ispiti', path: '/student/ispiti', icon: <FileText size={14} /> },
+                        { label: 'Izostanci', path: '/student/izostanci', icon: <Clock size={14} /> },
+                      ]
+                    });
+                    categories.push({
+                      title: 'Raspored & Alati',
+                      items: [
+                        { label: 'Raspored', path: '/student/raspored', icon: <Calendar size={14} /> },
+                        { label: 'Kalendar škole', path: '/student/kalendar', icon: <Calendar size={14} /> },
+                        { label: 'Informativka / Obavijesti', path: '/student/informativka', icon: <ClipboardList size={14} /> },
+                        ...(canAccessThesis ? [{ label: 'Završni rad', path: '/student/zavrsni-rad', icon: <FileSpreadsheet size={14} /> }] : []),
+                      ]
+                    });
+                    categories.push({
+                      title: 'Korisnički račun',
+                      items: [
+                        { label: 'Osobni podaci', path: '/student/osobni-podaci', icon: <Settings size={14} /> },
+                        { label: 'Postavke', path: '/student/postavke', icon: <Settings size={14} /> },
+                      ]
+                    });
+                  }
+
+                  categories.push({
+                    title: 'Sustav',
+                    items: [
+                      { label: 'Početna / Odabir razreda', path: '/select-class', icon: <Home size={14} /> },
+                      ...(isStaff ? [{ label: 'Postavke profila', path: '/teacher/postavke', icon: <Settings size={14} /> }] : []),
+                    ]
+                  });
+
+                  return categories.map((cat, idx) => (
+                    <div key={idx} className="space-y-1">
+                      <span className="text-[9px] font-black uppercase text-sky-200 tracking-widest block px-1 my-1 opacity-70">{cat.title}</span>
+                      <div className="flex flex-col gap-1">
+                        {cat.items.map((item) => (
+                          <Link
+                            key={item.path}
+                            to={item.path}
+                            onClick={() => setIsMobileMenuOpen(false)}
+                            className={cn(
+                              "flex items-center gap-3 px-3 py-2.5 rounded text-[11px] font-bold uppercase tracking-wider transition-colors",
+                              location.pathname.startsWith(item.path) 
+                                ? "bg-[#004a70] text-sky-100" 
+                                : "text-white/85 hover:bg-[#004a70]/50"
+                            )}
+                          >
+                            {item.icon}
+                            {item.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  ));
+                })()}
               </div>
 
-              <div className="p-4 border-t border-[#004a70]">
-                <button onClick={handleLogout} className="w-full py-2 bg-red-600/20 hover:bg-red-600/40 text-red-100 rounded text-[10px] font-black uppercase tracking-widest border border-red-500/30">Odjava</button>
+              <div className="p-4 border-t border-[#004a70] bg-[#004a70]/20">
+                <button onClick={handleLogout} className="w-full py-2.5 bg-red-600/30 hover:bg-red-600/50 text-red-100 rounded text-[10px] font-black uppercase tracking-widest border border-red-500/20 transition-all cursor-pointer">Odjava</button>
               </div>
             </div>
           </div>
         )}
 
-        {/* Student Sidebar (desktop only) */}
-        {!isStaff && !isAdminPath && (
-          <aside className="w-64 bg-white border-r border-gray-200 hidden md:flex flex-col p-4 gap-2">
-            {studentNavFiltered.map((item) => (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  "flex items-center gap-3 px-4 py-3 text-[12px] font-bold uppercase tracking-wide rounded-lg transition-colors",
-                  location.pathname.startsWith(item.path)
-                    ? "bg-blue-50 text-[#005c8d]"
-                    : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
-                )}
-              >
-                {item.label}
-              </Link>
-            ))}
-          </aside>
-        )}
-
-        <main className="flex-1 flex flex-col w-full mb-16 md:mb-0">
+        <main className="flex-1 flex flex-col w-full mb-16 lg:mb-0">
           <div key={effectiveClassId || 'none'} className="bg-white border-b border-r border-[#005c8d]/20 flex-1 flex flex-col min-h-0">
             {children}
           </div>
@@ -322,24 +410,20 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       {/* Mobile Bottom Nav */}
       {(() => {
         const homePath = "/select-class";
-        const gradesPath = isStaff 
-          ? (effectiveClassId ? `/class/${effectiveClassId}/imenik` : '/teacher/pretrazivanje')
-          : '/student/ocjene';
-        const schedulePath = isStaff
-          ? (effectiveClassId ? `/class/${effectiveClassId}/raspored` : '/teacher/kalendar')
-          : '/student/raspored';
+        const notificationsPath = isStaff 
+          ? (effectiveClassId ? `/class/${effectiveClassId}/informativka` : '/teacher/informativka')
+          : '/student/informativka';
 
         const isHomeActive = location.pathname === '/select-class' || location.pathname === '/select-school' || location.pathname === '/select-child' || location.pathname === '/';
-        const isGradesActive = location.pathname.startsWith('/student/ocjene') || location.pathname.includes('/imenik') || location.pathname.includes('/pretrazivanje');
-        const isScheduleActive = location.pathname.startsWith('/student/raspored') || location.pathname.includes('/raspored') || location.pathname.includes('/schedule') || location.pathname.includes('/kalendar');
+        const isNotificationsActive = location.pathname.includes('/informativka');
 
         return (
-          <div className="md:hidden fixed bottom-0 left-0 right-0 bg-[#005c8d] text-white flex justify-around items-center h-16 border-t border-[#004a70] z-50 shadow-lg">
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#005c8d] text-white flex justify-around items-center h-16 border-t border-[#004a70] z-50 shadow-lg select-none">
             <Link
               to={homePath}
               className={cn(
-                "flex flex-col items-center justify-center flex-1 h-full gap-1 active:bg-[#004a70]/40 transition-colors",
-                isHomeActive ? "bg-[#004a70] font-black" : "opacity-80"
+                "flex flex-col items-center justify-center flex-1 h-full gap-1 active:bg-[#004a70]/40 transition-all duration-150",
+                isHomeActive ? "bg-[#004a70]/80 font-black text-[#00a8ff]" : "opacity-80"
               )}
             >
               <Home size={18} />
@@ -347,30 +431,19 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
             </Link>
 
             <Link
-              to={gradesPath}
+              to={notificationsPath}
               className={cn(
-                "flex flex-col items-center justify-center flex-1 h-full gap-1 active:bg-[#004a70]/40 transition-colors",
-                isGradesActive ? "bg-[#004a70] font-black" : "opacity-80"
+                "flex flex-col items-center justify-center flex-1 h-full gap-1 active:bg-[#004a70]/40 transition-all duration-150",
+                isNotificationsActive ? "bg-[#004a70]/80 font-black text-[#00a8ff]" : "opacity-80"
               )}
             >
-              <BookOpen size={18} />
-              <span className="text-[9.5px] font-bold uppercase tracking-wider">{isStaff ? "Imenik" : "Ocjene"}</span>
-            </Link>
-
-            <Link
-              to={schedulePath}
-              className={cn(
-                "flex flex-col items-center justify-center flex-1 h-full gap-1 active:bg-[#004a70]/40 transition-colors",
-                isScheduleActive ? "bg-[#004a70] font-black" : "opacity-80"
-              )}
-            >
-              <Calendar size={18} />
-              <span className="text-[9.5px] font-bold uppercase tracking-wider">Raspored</span>
+              <ClipboardList size={18} />
+              <span className="text-[9.5px] font-bold uppercase tracking-wider">Obavijesti</span>
             </Link>
 
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="flex flex-col items-center justify-center flex-1 h-full gap-1 active:bg-[#004a70]/40 transition-colors cursor-pointer"
+              className="flex flex-col items-center justify-center flex-1 h-full gap-1 active:bg-[#004a70]/40 transition-all duration-150 cursor-pointer"
             >
               <Menu size={18} />
               <span className="text-[9.5px] font-bold uppercase tracking-wider">Više</span>
