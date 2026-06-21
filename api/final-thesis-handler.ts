@@ -34,9 +34,6 @@ const DB_FIELDS = new Set([
   'final_grade',
   'creation_date',
   'defense_date',
-  'defense_time',
-  'defense_classroom',
-  'defense_committee',
   'final_grade_date',
   'creation_graded_by',
   'defense_graded_by',
@@ -57,6 +54,12 @@ const DB_FIELDS = new Set([
   'deregistration_data_entered_at',
   'deregistration_data_entered_by',
 ]);
+
+const OBSOLETE_INDIVIDUAL_DEFENSE_FIELDS = [
+  'defense_time',
+  'defense_classroom',
+  'defense_committee',
+];
 
 function first(value: unknown): string | undefined {
   if (Array.isArray(value)) return value[0] == null ? undefined : String(value[0]);
@@ -79,6 +82,15 @@ function sanitize(data: Record<string, any>): Record<string, any> {
   return Object.fromEntries(
     Object.entries(data).filter(([key, value]) => DB_FIELDS.has(key) && value !== undefined)
   );
+}
+
+function sendDatabaseError(res: any, error: any) {
+  return res.status(500).json({
+    error: error?.message || 'Greška baze podataka.',
+    details: error?.details || null,
+    hint: error?.hint || null,
+    code: error?.code || null,
+  });
 }
 
 async function resolveContext(studentId: string, suppliedClassId?: string | null) {
@@ -128,7 +140,7 @@ async function handleGet(req: any, res: any) {
   if (mentorId) query = query.eq('mentor_id', mentorId);
 
   const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message, code: error.code });
+  if (error) return sendDatabaseError(res, error);
 
   const normalized: any[] = [];
 
@@ -207,12 +219,29 @@ async function handlePost(req: any, res: any) {
     .select()
     .single();
 
-  if (error) return res.status(500).json({ error: error.message, code: error.code });
+  if (error) return sendDatabaseError(res, error);
   return res.status(201).json({ success: true, data, db_persisted: true });
 }
 
 async function handlePut(req: any, res: any, id: string) {
-  const updates = sanitize({ ...parseBody(req.body), updated_at: new Date().toISOString() });
+  const incoming = parseBody(req.body);
+  const obsoleteFields = OBSOLETE_INDIVIDUAL_DEFENSE_FIELDS.filter(
+    (field) => incoming[field] !== undefined
+  );
+
+  if (obsoleteFields.length > 0) {
+    return res.status(409).json({
+      error: 'Pojedinačni raspored obrane više se ne sprema u prijavu završnog rada.',
+      details: 'Termin, učionicu i komisiju unesite u kartici Raspored obrane za odabrani razred.',
+      code: 'USE_CLASS_DEFENSE_SCHEDULE',
+    });
+  }
+
+  const updates = sanitize({ ...incoming, updated_at: new Date().toISOString() });
+  if (Object.keys(updates).length === 1 && updates.updated_at) {
+    return res.status(400).json({ error: 'Nema podržanih podataka za spremanje.' });
+  }
+
   const { data, error } = await supabaseAdmin!
     .from('final_thesis')
     .update(updates)
@@ -220,7 +249,7 @@ async function handlePut(req: any, res: any, id: string) {
     .select()
     .maybeSingle();
 
-  if (error) return res.status(500).json({ error: error.message, code: error.code });
+  if (error) return sendDatabaseError(res, error);
   if (!data) return res.status(404).json({ error: 'Prijava završnog rada nije pronađena.' });
   return res.status(200).json({ success: true, data, db_updated: true });
 }
@@ -233,7 +262,7 @@ async function handleDelete(res: any, id: string) {
     .select('id')
     .maybeSingle();
 
-  if (error) return res.status(500).json({ error: error.message, code: error.code });
+  if (error) return sendDatabaseError(res, error);
   if (!data) return res.status(404).json({ error: 'Prijava završnog rada nije pronađena.' });
   return res.status(200).json({ success: true, db_deleted: true });
 }
@@ -257,6 +286,11 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method not allowed.' });
   } catch (error: any) {
     console.error('FINAL THESIS API ERROR:', error);
-    return res.status(500).json({ error: error?.message || 'Neočekivana greška.' });
+    return res.status(500).json({
+      error: error?.message || 'Neočekivana greška.',
+      details: error?.details || null,
+      hint: error?.hint || null,
+      code: error?.code || null,
+    });
   }
 }
