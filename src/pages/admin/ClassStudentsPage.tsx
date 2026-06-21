@@ -15,6 +15,33 @@ import {
 import { toast } from 'react-hot-toast';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
+type StudentWithAdjustment = User & {
+  programAdjustment?: string | null;
+};
+
+function AdjustmentBadge({ value }: { value?: string | null }) {
+  if (!value || value === 'NONE') return null;
+
+  const isIndividualization = value === 'REGULAR_WITH_INDIVIDUALIZATION';
+  const label = isIndividualization ? 'Individualizacija' : 'Prilagodba';
+  const title = isIndividualization
+    ? 'Redovni program uz individualizaciju'
+    : 'Redovni program uz prilagodbu';
+
+  return (
+    <span
+      title={title}
+      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[8px] font-black uppercase tracking-wide whitespace-nowrap ${
+        isIndividualization
+          ? 'border-violet-200 bg-violet-50 text-violet-700'
+          : 'border-amber-200 bg-amber-50 text-amber-700'
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
 export default function ClassStudentsPage() {
   const { selectedSchoolId, selectedClassId } = useSelection();
   const { isMainAdmin, userSchoolRoles } = useAuth();
@@ -28,8 +55,8 @@ export default function ClassStudentsPage() {
   console.log("ADMIN RAZREDA resolved classId", classId);
   
   const [currentClass, setCurrentClass] = useState<Class | null>(null);
-  const [classStudents, setClassStudents] = useState<User[]>([]);
-  const [availableStudents, setAvailableStudents] = useState<User[]>([]);
+  const [classStudents, setClassStudents] = useState<StudentWithAdjustment[]>([]);
+  const [availableStudents, setAvailableStudents] = useState<StudentWithAdjustment[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -75,8 +102,9 @@ export default function ClassStudentsPage() {
         id: row.student.id,
         name: row.student.name || '',
         email: row.student.email,
-        globalRole: Role.STUDENT
-      })) as User[];
+        globalRole: Role.STUDENT,
+        programAdjustment: row.student.program_adjustment || 'NONE'
+      })) as StudentWithAdjustment[];
       
       setClassStudents(mappedInClass);
 
@@ -112,7 +140,8 @@ export default function ClassStudentsPage() {
             name: u.name || '',
             email: u.email,
             globalRole: Role.STUDENT,
-            classId: enrollment?.class_id
+            classId: enrollment?.class_id,
+            programAdjustment: u.program_adjustment || 'NONE'
           };
         });
 
@@ -292,7 +321,10 @@ export default function ClassStudentsPage() {
                           <UserIcon size={14} />
                         </div>
                         <div>
-                          <p className="font-bold text-slate-900 text-sm">{s.name}</p>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-bold text-slate-900 text-sm">{s.name}</p>
+                            <AdjustmentBadge value={s.programAdjustment} />
+                          </div>
                           <p className="text-[10px] text-slate-400 uppercase font-black">{s.classId ? 'Već u drugom razredu' : 'Nije raspoređen'}</p>
                         </div>
                       </div>
@@ -336,7 +368,10 @@ export default function ClassStudentsPage() {
                         <div className="w-8 h-8 bg-[#005c8d]/10 text-[#005c8d] rounded-full flex items-center justify-center">
                           <UserIcon size={14} />
                         </div>
-                        <p className="font-black text-slate-900 text-sm tracking-tight uppercase">{s.name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-black text-slate-900 text-sm tracking-tight uppercase">{s.name}</p>
+                          <AdjustmentBadge value={s.programAdjustment} />
+                        </div>
                       </div>
                     </td>
                     <td className="p-4 text-right">
