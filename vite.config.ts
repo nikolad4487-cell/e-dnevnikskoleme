@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
 import { preserveSelectedStudentPlugin } from './vite/preserveSelectedStudentPlugin';
+import { studentPortalExperiencePlugin } from './vite/studentPortalExperiencePlugin';
 import { hideFinalThesisFor4KPlugin } from './vite/hideFinalThesisFor4KPlugin';
 import { classScopedFinalThesisPlugin } from './vite/classScopedFinalThesisPlugin';
 
@@ -12,6 +13,7 @@ export default defineConfig(({mode}) => {
     base: '/',
     plugins: [
       preserveSelectedStudentPlugin(),
+      studentPortalExperiencePlugin(),
       hideFinalThesisFor4KPlugin(),
       classScopedFinalThesisPlugin(),
       react(),
