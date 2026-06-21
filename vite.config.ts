@@ -7,6 +7,8 @@ import { studentPortalExperiencePlugin } from './vite/studentPortalExperiencePlu
 import { hideFinalThesisFor4KPlugin } from './vite/hideFinalThesisFor4KPlugin';
 import { classScopedFinalThesisPlugin } from './vite/classScopedFinalThesisPlugin';
 import { finalThesisPersistencePlugin } from './vite/finalThesisPersistencePlugin';
+import { finalThesisUiPlugin } from './vite/finalThesisUiPlugin';
+import { applicationMetadataPlugin } from './vite/applicationMetadataPlugin';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
@@ -18,6 +20,8 @@ export default defineConfig(({mode}) => {
       hideFinalThesisFor4KPlugin(),
       classScopedFinalThesisPlugin(),
       finalThesisPersistencePlugin(),
+      finalThesisUiPlugin(),
+      applicationMetadataPlugin(),
       react(),
       tailwindcss(),
     ],
