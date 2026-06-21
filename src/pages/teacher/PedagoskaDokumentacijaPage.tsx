@@ -269,20 +269,22 @@ export default function PedagoskaDokumentacijaPage() {
     try {
       // A. Load permanent Profile
       const profileRes = await fetch(`/api/student-pedagogical-profile?studentId=${studentId}`);
-      if (profileRes.ok) {
-        const profData = await profileRes.json();
-        setProfile(profData);
-        const profile = profData;
-        console.log("LOAD PEDAGOGICAL PROFILE", profile);
-        console.log("LOADED PROGRAM ADJUSTMENT", profile?.program_adjustment);
+      if (!profileRes.ok) {
+        throw new Error(await profileRes.text());
       }
+      const profData = await profileRes.json();
+      setProfile(profData);
+      const profile = profData;
+      console.log("LOAD PEDAGOGICAL PROFILE", profile);
+      console.log("LOADED PROGRAM ADJUSTMENT", profile?.program_adjustment);
 
       // B. Load yearly Notes
       const notesRes = await fetch(`/api/student-pedagogical-year-notes?studentId=${studentId}&classId=${cId}&schoolYearId=${syId}`);
-      if (notesRes.ok) {
-        const yearData = await notesRes.json();
-        setYearNotes(yearData);
+      if (!notesRes.ok) {
+        throw new Error(await notesRes.text());
       }
+      const yearData = await notesRes.json();
+      setYearNotes(yearData);
 
       // C. Load pedagogical measures
       const { data: pmData, error: pmErr } = await supabase
@@ -626,32 +628,33 @@ export default function PedagoskaDokumentacijaPage() {
           console.error("Failed to update program adjustment in user_profiles", dbProfileUpdate.error);
         }
 
-        if (response.ok) {
-          const freshProfile = await response.json();
-          setProfile(freshProfile);
-          
-          const data = freshProfile;
-          const error = null;
+        if (!response.ok) {
+          const errMsg = await response.text();
           console.log("SAVE PROGRAM ADJUSTMENT studentId", selectedStudent.id);
           console.log("SAVE PROGRAM ADJUSTMENT value", programAdjustment);
-          console.log("SAVE PROGRAM ADJUSTMENT result", data, error);
-
-          // Refresh client states immediately
-          setSelectedStudent(prev => prev ? { ...prev, programAdjustment: valAdjustment } : null);
-          setStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, programAdjustment: valAdjustment } : s));
-
-          // 3. Complete actual refetch from the API / Supabase
-          await loadClassData(activeClass.id);
-          await loadStudentPedagogicalData(selectedStudent.id, activeClass.id, activeClass.school_year_id);
-
-          toast.success("Osnovni karton uspješno spremljen.");
-          setShowModal(false);
-        } else {
-          console.log("SAVE PROGRAM ADJUSTMENT studentId", selectedStudent.id);
-          console.log("SAVE PROGRAM ADJUSTMENT value", programAdjustment);
-          console.log("SAVE PROGRAM ADJUSTMENT result", null, new Error("API response error"));
-          throw new Error();
+          console.log("SAVE PROGRAM ADJUSTMENT result", null, new Error(errMsg || "API response error"));
+          throw new Error(errMsg || "API response error");
         }
+
+        const freshProfile = await response.json();
+        setProfile(freshProfile);
+        
+        const data = freshProfile;
+        const error = null;
+        console.log("SAVE PROGRAM ADJUSTMENT studentId", selectedStudent.id);
+        console.log("SAVE PROGRAM ADJUSTMENT value", programAdjustment);
+        console.log("SAVE PROGRAM ADJUSTMENT result", data, error);
+
+        // Refresh client states immediately
+        setSelectedStudent(prev => prev ? { ...prev, programAdjustment: valAdjustment } : null);
+        setStudents(prev => prev.map(s => s.id === selectedStudent.id ? { ...s, programAdjustment: valAdjustment } : s));
+
+        // 3. Complete actual refetch from the API / Supabase
+        await loadClassData(activeClass.id);
+        await loadStudentPedagogicalData(selectedStudent.id, activeClass.id, activeClass.school_year_id);
+
+        toast.success("Osnovni karton uspješno spremljen.");
+        setShowModal(false);
       }
 
       // 2. SAVE INLINE SINGLE PERMANENT FIELDS
@@ -670,12 +673,14 @@ export default function PedagoskaDokumentacijaPage() {
           })
         });
 
-        if (response.ok) {
-          const freshProfile = await response.json();
-          setProfile(freshProfile);
-          toast.success("Trajni podaci uspješno ažurirani.");
-          setShowModal(false);
-        } else throw new Error();
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        const freshProfile = await response.json();
+        setProfile(freshProfile);
+        toast.success("Trajni podaci uspješno ažurirani.");
+        setShowModal(false);
       }
 
       // 3. SAVE RECOMMENDATIONS (YEAR NOTES)
@@ -693,12 +698,14 @@ export default function PedagoskaDokumentacijaPage() {
           })
         });
 
-        if (response.ok) {
-          const freshNotes = await response.json();
-          setYearNotes(freshNotes);
-          toast.success("Preporuke za rad uspješno spremljene.");
-          setShowModal(false);
-        } else throw new Error();
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        const freshNotes = await response.json();
+        setYearNotes(freshNotes);
+        toast.success("Preporuke za rad uspješno spremljene.");
+        setShowModal(false);
       }
 
       // 4. SAVE LOG ENTRY (YEAR NOTES)
@@ -740,12 +747,14 @@ export default function PedagoskaDokumentacijaPage() {
           })
         });
 
-        if (response.ok) {
-          const freshNotes = await response.json();
-          setYearNotes(freshNotes);
-          toast.success("Bilješka uspješno spremljena.");
-          setShowModal(false);
-        } else throw new Error();
+        if (!response.ok) {
+          throw new Error(await response.text());
+        }
+
+        const freshNotes = await response.json();
+        setYearNotes(freshNotes);
+        toast.success("Bilješka uspješno spremljena.");
+        setShowModal(false);
       }
 
     } catch (err) {
