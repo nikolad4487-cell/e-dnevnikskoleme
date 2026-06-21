@@ -11,6 +11,8 @@
     }
   ],
   "rewrites": [
+    { "source": "/api/final-thesis/:id", "destination": "/api/final-thesis-handler?id=:id" },
+    { "source": "/api/final-thesis", "destination": "/api/final-thesis-handler" },
     { "source": "/api/:path*", "destination": "/api/index" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
