@@ -1,26 +1,24 @@
 import type { Plugin } from 'vite';
 
-const TARGET = '/src/pages/teacher/ImenikPage.tsx';
+const IMENIK_TARGET = '/src/pages/teacher/ImenikPage.tsx';
+const MAPPERS_TARGET = '/src/lib/mappers.ts';
 
-function replaceRequired(code: string, from: string, to: string, label: string): string {
-  if (!code.includes(from)) {
-    throw new Error(`[grade-deletion-permissions] ${label} nije pronađen.`);
-  }
-  return code.replace(from, to);
+function replaceOnce(code: string, from: string, to: string): string {
+  return code.includes(from) ? code.replace(from, to) : code;
 }
 
 function replaceBetween(
   code: string,
   startMarker: string,
   endMarker: string,
-  replacement: string,
-  label: string
+  replacement: string
 ): string {
   const start = code.indexOf(startMarker);
+  if (start < 0) return code;
+
   const end = code.indexOf(endMarker, start);
-  if (start < 0 || end < 0) {
-    throw new Error(`[grade-deletion-permissions] ${label} nije pronađen.`);
-  }
+  if (end < 0) return code;
+
   return code.slice(0, start) + replacement + code.slice(end);
 }
 
@@ -52,7 +50,7 @@ const ADMIN_PERMISSION_BLOCK = `  const canAdminDeleteGrades = useMemo(() => {
     });
   }, [isMainAdmin, highestRole, userSchoolRoles, selectedSchoolId]);`;
 
-const NEW_DELETE_HANDLER = `  const handleDeleteGrade = async (gradeId: string, adminOverride = false) => {
+const DELETE_HANDLER = `  const handleDeleteGrade = async (gradeId: string, adminOverride = false) => {
     const grade = currentGrades.find(g => g.id === gradeId);
     if (!grade) return;
 
@@ -99,16 +97,14 @@ const NEW_DELETE_HANDLER = `  const handleDeleteGrade = async (gradeId: string, 
     });
   };`;
 
-const GRADE_DELETE_CONFIRM_BLOCK = `
+const SECURE_CONFIRM_BLOCK = `
     if (deleteDialog.type === 'GRADE') {
       try {
         const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
 
         const accessToken = sessionData.session?.access_token;
-        if (!accessToken) {
-          throw new Error('Aktivna korisnička sesija nije pronađena.');
-        }
+        if (!accessToken) throw new Error('Aktivna korisnička sesija nije pronađena.');
 
         const response = await fetch('/api/grades/delete', {
           method: 'DELETE',
@@ -150,7 +146,7 @@ const GRADE_DELETE_CONFIRM_BLOCK = `
     }
 `;
 
-const OLD_HISTORY_ACTIONS = `                          {item.type === 'GRADE' ? (
+const OLD_HISTORY_ACTION = `                          {item.type === 'GRADE' ? (
                             <button 
                               onClick={() => handleDeleteGrade(item.id)} 
                               className="text-slate-300 hover:text-red-500 p-1"
@@ -158,17 +154,9 @@ const OLD_HISTORY_ACTIONS = `                          {item.type === 'GRADE' ? 
                             >
                               <Trash2 size={12}/>
                             </button>
-                          ) : (
-                            <button 
-                              onClick={() => handleDeleteNote(item.id)} 
-                              className="text-slate-300 hover:text-red-500 p-1"
-                              title="Obriši bilješku"
-                            >
-                              <Trash2 size={12}/>
-                            </button>
-                          )}`;
+                          ) : (`;
 
-const NEW_HISTORY_ACTIONS = `                          {item.type === 'GRADE' ? (
+const NEW_HISTORY_ACTION = `                          {item.type === 'GRADE' ? (
                             <div className="flex items-center justify-center gap-1">
                               <button
                                 onClick={() => {
@@ -204,94 +192,88 @@ const NEW_HISTORY_ACTIONS = `                          {item.type === 'GRADE' ? 
                                 ) : null;
                               })()}
                             </div>
-                          ) : (
-                            <button 
-                              onClick={() => handleDeleteNote(item.id)} 
-                              className="text-slate-300 hover:text-red-500 p-1"
-                              title="Obriši bilješku"
-                            >
-                              <Trash2 size={12}/>
-                            </button>
-                          )}`;
+                          ) : (`;
 
-export function gradeDeletionPermissionsPlugin(): Plugin {
-  return {
-    name: 'grade-deletion-permissions',
-    enforce: 'pre',
-    transform(code, id) {
-      const cleanId = id.split('?')[0].replace(/\\/g, '/');
-      if (!cleanId.endsWith(TARGET)) return null;
-      if (code.includes('GRADE DELETE API ERROR:')) return null;
+function transformMappers(code: string): string | null {
+  if (code.includes('createdAt: raw.created_at')) return null;
 
-      let transformed = code;
+  const updated = replaceOnce(
+    code,
+    `    isImportant: raw.is_important,
+    date: raw.date,`,
+    `    isImportant: raw.is_important,
+    date: raw.date,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,`
+  );
 
-      transformed = replaceRequired(
-        transformed,
-        "  const { user, isMainAdmin } = useAuth();",
-        "  const { user, isMainAdmin, highestRole, userSchoolRoles } = useAuth();",
-        'useAuth destrukturiranje'
-      );
+  return updated === code ? null : updated;
+}
 
-      const selectionLine = "  const { selectedSchoolId, selectedClassId: contextClassId, isArchived } = useSelection();";
-      transformed = replaceRequired(
-        transformed,
-        selectionLine,
-        selectionLine + '\n\n' + ADMIN_PERMISSION_BLOCK,
-        'administratorska provjera'
-      );
+function transformImenik(code: string): string | null {
+  if (code.includes('GRADE DELETE API ERROR:')) return null;
 
-      transformed = replaceBetween(
-        transformed,
-        '  const handleDeleteGrade = async (gradeId: string, adminOverride = false) => {',
-        '\n\n  const handleDeleteNote = async (noteId: string) => {',
-        NEW_DELETE_HANDLER,
-        'handleDeleteGrade'
-      );
+  let transformed = code;
 
-      transformed = replaceRequired(
-        transformed,
-        "      return;\n    }\n\n    let tableName = '';",
-        "      return;\n    }\n" + GRADE_DELETE_CONFIRM_BLOCK + "\n    let tableName = '';",
-        'sigurno brisanje u confirmDelete'
-      );
+  transformed = replaceOnce(
+    transformed,
+    '  const { user, isMainAdmin } = useAuth();',
+    '  const { user, isMainAdmin, highestRole, userSchoolRoles } = useAuth();'
+  );
 
-      transformed = replaceRequired(
-        transformed,
-        OLD_HISTORY_ACTIONS,
-        NEW_HISTORY_ACTIONS,
-        'akcije u povijesti ocjena'
-      );
+  const selectionLine = '  const { selectedSchoolId, selectedClassId: contextClassId, isArchived } = useSelection();';
+  if (!transformed.includes('const canAdminDeleteGrades = useMemo')) {
+    transformed = replaceOnce(
+      transformed,
+      selectionLine,
+      selectionLine + '\n\n' + ADMIN_PERMISSION_BLOCK
+    );
+  }
 
-      transformed = replaceRequired(
-        transformed,
-        "          isMainAdmin={isMainAdmin}\n          showAdminAuth={showAdminDeleteAuth}",
-        "          isMainAdmin={isMainAdmin}\n          canAdminDeleteGrades={canAdminDeleteGrades}\n          showAdminAuth={showAdminDeleteAuth}",
-        'GradeDetailsModal administratorska ovlast'
-      );
+  transformed = replaceBetween(
+    transformed,
+    '  const handleDeleteGrade = async (gradeId: string, adminOverride = false) => {',
+    '\n\n  const handleDeleteNote = async (noteId: string) => {',
+    DELETE_HANDLER
+  );
 
-      transformed = replaceRequired(
-        transformed,
-        "  isMainAdmin,\n  showAdminAuth,",
-        "  isMainAdmin,\n  canAdminDeleteGrades,\n  showAdminAuth,",
-        'GradeDetailsModal prop'
-      );
+  if (!transformed.includes("if (deleteDialog.type === 'GRADE') {\n      try {\n        const { data: sessionData")) {
+    transformed = replaceOnce(
+      transformed,
+      "      return;\n    }\n\n    let tableName = '';",
+      "      return;\n    }\n" + SECURE_CONFIRM_BLOCK + "\n    let tableName = '';"
+    );
+  }
 
-      transformed = replaceRequired(
-        transformed,
-        `  const selectedClass = classes.find((c: any) => c.id === effectiveClassId);
+  transformed = replaceOnce(transformed, OLD_HISTORY_ACTION, NEW_HISTORY_ACTION);
+
+  transformed = replaceOnce(
+    transformed,
+    '          isMainAdmin={isMainAdmin}\n          showAdminAuth={showAdminDeleteAuth}',
+    '          isMainAdmin={isMainAdmin}\n          canAdminDeleteGrades={canAdminDeleteGrades}\n          showAdminAuth={showAdminDeleteAuth}'
+  );
+
+  transformed = replaceOnce(
+    transformed,
+    '  isMainAdmin,\n  showAdminAuth,',
+    '  isMainAdmin,\n  canAdminDeleteGrades,\n  showAdminAuth,'
+  );
+
+  transformed = replaceOnce(
+    transformed,
+    `  const selectedClass = classes.find((c: any) => c.id === effectiveClassId);
   const isClassAdmin = isMainAdmin || selectedClass?.homeroomTeacherId === user?.id || selectedClass?.deputyTeacherId === user?.id;
   const canDeleteDirectly = diffMinutes <= 45 || (isClassAdmin && diffMinutes <= 45);
   const canDeleteWithAuth = isClassAdmin && diffMinutes > 45;`,
-        `  const gradeTeacherId = grade.teacherId || grade.teacher_id;
+    `  const gradeTeacherId = grade.teacherId || grade.teacher_id;
   const isCreator = gradeTeacherId === user?.id;
   const canDeleteDirectly = diffMinutes <= 45 && (isCreator || canAdminDeleteGrades);
-  const canDeleteWithAuth = canAdminDeleteGrades && diffMinutes > 45;`,
-        'GradeDetailsModal pravila brisanja'
-      );
+  const canDeleteWithAuth = canAdminDeleteGrades && diffMinutes > 45;`
+  );
 
-      transformed = replaceRequired(
-        transformed,
-        `                  <input 
+  transformed = replaceOnce(
+    transformed,
+    `                  <input 
                     type="password" 
                     value={authCode}
                     onChange={e => setAuthCode(e.target.value)}
@@ -299,7 +281,7 @@ export function gradeDeletionPermissionsPlugin(): Plugin {
                     className="w-full border border-red-200 p-2 text-center font-mono tracking-[0.5em] focus:outline-red-500"
                     autoFocus
                   />`,
-        `                  <input
+    `                  <input
                     type="text"
                     inputMode="numeric"
                     autoComplete="one-time-code"
@@ -309,25 +291,43 @@ export function gradeDeletionPermissionsPlugin(): Plugin {
                     placeholder="6-znamenkasti kod"
                     className="w-full border border-red-200 p-2 text-center font-mono tracking-[0.5em] focus:outline-red-500"
                     autoFocus
-                  />`,
-        'polje autentifikatora'
-      );
+                  />`
+  );
 
-      transformed = replaceRequired(
-        transformed,
-        `                {diffMinutes > 45 && !isClassAdmin && (
+  transformed = replaceOnce(
+    transformed,
+    `                {diffMinutes > 45 && !isClassAdmin && (
                   <p className="text-[9px] text-gray-400 italic text-center">Ocjena je starija od 45 minuta i ne može se obrisati.</p>
                 )}`,
-        `                {diffMinutes > 45 && !canAdminDeleteGrades && (
+    `                {diffMinutes > 45 && !canAdminDeleteGrades && (
                   <p className="text-[9px] text-gray-400 italic text-center">Nakon 45 minuta ocjenu može obrisati samo administrator uz kod iz autentifikatora. Možete uređivati samo bilješku.</p>
                 )}
                 {diffMinutes <= 45 && !isCreator && !canAdminDeleteGrades && (
                   <p className="text-[9px] text-gray-400 italic text-center">Ocjenu može obrisati nastavnik koji ju je upisao. Možete uređivati samo bilješku.</p>
-                )}`,
-        'poruke o ovlastima'
-      );
+                )}`
+  );
 
-      return { code: transformed, map: null };
+  return transformed === code ? null : transformed;
+}
+
+export function gradeDeletionPermissionsPlugin(): Plugin {
+  return {
+    name: 'grade-deletion-permissions',
+    enforce: 'pre',
+    transform(code, id) {
+      const cleanId = id.split('?')[0].replace(/\\/g, '/');
+
+      if (cleanId.endsWith(MAPPERS_TARGET)) {
+        const transformed = transformMappers(code);
+        return transformed ? { code: transformed, map: null } : null;
+      }
+
+      if (cleanId.endsWith(IMENIK_TARGET)) {
+        const transformed = transformImenik(code);
+        return transformed ? { code: transformed, map: null } : null;
+      }
+
+      return null;
     },
   };
 }
