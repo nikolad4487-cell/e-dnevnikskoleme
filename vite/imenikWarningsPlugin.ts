@@ -40,42 +40,41 @@ const NEW_WARNING_LOADER = `  const fetchWarningData = async () => {
     if (!effectiveClassId) return;
 
     try {
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      const sinceDate = thirtyDaysAgo.toISOString().slice(0, 10);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
 
-      const [gradesResult, absencesResult] = await Promise.all([
-        supabase
-          .from('grades')
-          .select('student_id, date')
-          .eq('class_id', effectiveClassId)
-          .eq('value', 1)
-          .gte('date', sinceDate),
-        supabase
-          .from('absences')
-          .select('student_id')
-          .eq('class_id', effectiveClassId)
-          .eq('status', 'PENDING'),
-      ]);
-
-      if (gradesResult.error) throw gradesResult.error;
-      if (absencesResult.error) throw absencesResult.error;
-
-      const failingGrades: Record<string, number> = {};
-      for (const grade of gradesResult.data || []) {
-        if (!grade.student_id) continue;
-        failingGrades[grade.student_id] = (failingGrades[grade.student_id] || 0) + 1;
+      if (!accessToken) {
+        throw new Error('Aktivna korisnička sesija nije pronađena.');
       }
 
-      const pendingAbsences: Record<string, boolean> = {};
-      for (const absence of absencesResult.data || []) {
-        if (!absence.student_id) continue;
-        pendingAbsences[absence.student_id] = true;
+      const response = await fetch(
+        '/api/imenik-warnings?classId=' + encodeURIComponent(effectiveClassId),
+        {
+          method: 'GET',
+          headers: {
+            Authorization: 'Bearer ' + accessToken,
+            Accept: 'application/json',
+          },
+          cache: 'no-store',
+        }
+      );
+
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.includes('application/json')) {
+        throw new Error('API za upozorenja nije vratio JSON odgovor.');
       }
 
-      setClassWarnings({ failingGrades, pendingAbsences });
+      const payload = await response.json();
+      if (!response.ok || !payload?.success) {
+        throw new Error(payload?.error || 'Upozorenja nije moguće učitati.');
+      }
+
+      setClassWarnings({
+        failingGrades: payload.failingGrades || {},
+        pendingAbsences: payload.pendingAbsences || {},
+      });
     } catch (error) {
-      console.error('IMENIK WARNING LOAD ERROR:', error);
+      console.error('IMENIK WARNING API ERROR:', error);
       setClassWarnings({ failingGrades: {}, pendingAbsences: {} });
     }
   };`;
@@ -87,11 +86,19 @@ export function imenikWarningsPlugin(): Plugin {
     transform(code, id) {
       const cleanId = id.split('?')[0].replace(/\\/g, '/');
       if (!cleanId.endsWith(TARGET)) return null;
-      if (code.includes('IMENIK WARNING LOAD ERROR:')) return null;
+
+      if (code.includes('IMENIK WARNING API ERROR:')) {
+        return null;
+      }
+
       if (!code.includes(OLD_WARNING_LOADER)) {
         throw new Error('[imenik-warnings] Warning loader was not found.');
       }
-      return { code: code.replace(OLD_WARNING_LOADER, NEW_WARNING_LOADER), map: null };
+
+      return {
+        code: code.replace(OLD_WARNING_LOADER, NEW_WARNING_LOADER),
+        map: null,
+      };
     },
   };
 }
