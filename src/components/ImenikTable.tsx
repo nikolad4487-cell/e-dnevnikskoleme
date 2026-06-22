@@ -1,6 +1,7 @@
 import React from 'react';
 import { TriangleAlert, Clock3 } from 'lucide-react';
 import { sortStudentsBySurname } from '../lib/utils';
+import { supabase } from '../lib/supabase';
 
 interface ClassWarnings {
   failingGrades: Record<string, number>;
@@ -9,6 +10,7 @@ interface ClassWarnings {
 
 export function ImenikTable({
   students,
+  studentEnrollments,
   onStudentClick,
   classWarnings,
 }: {
@@ -18,6 +20,90 @@ export function ImenikTable({
   classWarnings: ClassWarnings;
 }) {
   const sortedStudents = sortStudentsBySurname(students);
+  const [resolvedWarnings, setResolvedWarnings] = React.useState<ClassWarnings>(classWarnings);
+
+  const classId = React.useMemo(() => {
+    const enrollment = (studentEnrollments || []).find((row: any) =>
+      row?.class_id || row?.classId || row?.class?.id
+    );
+
+    return enrollment?.class_id || enrollment?.classId || enrollment?.class?.id || null;
+  }, [studentEnrollments]);
+
+  React.useEffect(() => {
+    setResolvedWarnings((current) => ({
+      failingGrades: {
+        ...current.failingGrades,
+        ...(classWarnings?.failingGrades || {}),
+      },
+      pendingAbsences: {
+        ...current.pendingAbsences,
+        ...(classWarnings?.pendingAbsences || {}),
+      },
+    }));
+  }, [classWarnings]);
+
+  React.useEffect(() => {
+    if (!classId) {
+      console.warn('[IMENIK_WARNINGS] classId nije pronađen iz upisa učenika.');
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadWarnings = async () => {
+      try {
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError) throw sessionError;
+
+        const accessToken = sessionData.session?.access_token;
+        if (!accessToken) {
+          throw new Error('Aktivna korisnička sesija nije pronađena.');
+        }
+
+        const response = await fetch(
+          `/api/imenik-warnings?classId=${encodeURIComponent(classId)}`,
+          {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Accept: 'application/json',
+            },
+            cache: 'no-store',
+          }
+        );
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+          throw new Error(`API za upozorenja nije vratio JSON odgovor (${response.status}).`);
+        }
+
+        const payload = await response.json();
+        console.log('[IMENIK_WARNINGS] API RESPONSE', payload);
+
+        if (!response.ok || !payload?.success) {
+          throw new Error(payload?.error || `Upozorenja nije moguće učitati (${response.status}).`);
+        }
+
+        if (!cancelled) {
+          setResolvedWarnings({
+            failingGrades: payload.failingGrades || {},
+            pendingAbsences: payload.pendingAbsences || {},
+          });
+        }
+      } catch (error) {
+        console.error('[IMENIK_WARNINGS] API ERROR', error);
+      }
+    };
+
+    loadWarnings();
+    window.addEventListener('focus', loadWarnings);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focus', loadWarnings);
+    };
+  }, [classId]);
 
   return (
     <div className="bg-white p-6">
@@ -31,8 +117,6 @@ export function ImenikTable({
         </thead>
         <tbody>
           {sortedStudents.map((student: any, index: number) => {
-            // Imenik receives mapped user profiles, while older callers may still
-            // provide enrollment rows. Support both shapes so warning IDs always match.
             const studentId =
               student.id ||
               student.student_id ||
@@ -48,10 +132,10 @@ export function ImenikTable({
               'Nepoznato ime';
 
             const failingCount = studentId
-              ? classWarnings.failingGrades[studentId] || 0
+              ? resolvedWarnings.failingGrades[studentId] || 0
               : 0;
             const hasPendingAbsence = studentId
-              ? Boolean(classWarnings.pendingAbsences[studentId])
+              ? Boolean(resolvedWarnings.pendingAbsences[studentId])
               : false;
 
             return (
