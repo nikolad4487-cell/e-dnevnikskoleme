@@ -10,6 +10,7 @@ import { finalThesisPersistencePlugin } from './vite/finalThesisPersistencePlugi
 import { finalThesisUiPlugin } from './vite/finalThesisUiPlugin';
 import { applicationMetadataPlugin } from './vite/applicationMetadataPlugin';
 import { imenikWarningsPlugin } from './vite/imenikWarningsPlugin';
+import { gradeDeletionPermissionsPlugin } from './vite/gradeDeletionPermissionsPlugin';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
@@ -24,6 +25,7 @@ export default defineConfig(({mode}) => {
       finalThesisUiPlugin(),
       applicationMetadataPlugin(),
       imenikWarningsPlugin(),
+      gradeDeletionPermissionsPlugin(),
       react(),
       tailwindcss(),
     ],
