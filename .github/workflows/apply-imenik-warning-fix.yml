@@ -1,0 +1,164 @@
+name: Apply imenik warning fix
+
+on:
+  push:
+    branches:
+      - fix-imenik-warnings
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[imenik-warnings-applied]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix-imenik-warnings
+          fetch-depth: 0
+
+      - name: Patch imenik warning loading
+        shell: bash
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          path = Path('src/pages/teacher/ImenikPage.tsx')
+          source = path.read_text(encoding='utf-8')
+
+          start_marker = '  const fetchWarningData = async () => {'
+          end_marker = '\n\n  useEffect(() => {\n    console.log("IMENIK MOUNTED FOR CLASS:"'
+
+          start = source.find(start_marker)
+          end = source.find(end_marker, start)
+          if start < 0 or end < 0:
+            raise SystemExit('Warning data block was not found')
+
+          replacement = '''  const fetchWarningData = async () => {
+    if (!effectiveClassId) return;
+
+    try {
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const thirtyDaysAgoDate = thirtyDaysAgo.toISOString().slice(0, 10);
+
+      const [gradesResult, absencesResult] = await Promise.all([
+        supabase
+          .from('grades')
+          .select('student_id, value, date')
+          .eq('class_id', effectiveClassId)
+          .eq('value', 1)
+          .gte('date', thirtyDaysAgoDate),
+        supabase
+          .from('absences')
+          .select('student_id, status')
+          .eq('class_id', effectiveClassId)
+          .eq('status', 'PENDING'),
+      ]);
+
+      if (gradesResult.error) throw gradesResult.error;
+      if (absencesResult.error) throw absencesResult.error;
+
+      const failingGrades: Record<string, number> = {};
+      (gradesResult.data || []).forEach((grade: any) => {
+        if (!grade.student_id) return;
+        failingGrades[grade.student_id] = (failingGrades[grade.student_id] || 0) + 1;
+      });
+
+      const pendingAbsences: Record<string, boolean> = {};
+      (absencesResult.data || []).forEach((absence: any) => {
+        if (!absence.student_id) return;
+        pendingAbsences[absence.student_id] = true;
+      });
+
+      setClassWarnings({ failingGrades, pendingAbsences });
+    } catch (error) {
+      console.error('IMENIK WARNING LOAD ERROR:', error);
+      setClassWarnings({ failingGrades: {}, pendingAbsences: {} });
+    }
+  };'''
+
+          source = source[:start] + replacement + source[end:]
+
+          anchor = '''  useEffect(() => {
+    if (viewMode === 'STUDENTS' && effectiveClassId) {
+      fetchWarningData();
+    }
+  }, [viewMode, effectiveClassId, activeStudent?.id, activeSubject?.id]);
+'''
+
+          refresh_effect = '''  useEffect(() => {
+    if (!effectiveClassId) return;
+
+    const refreshWarnings = () => {
+      fetchWarningData();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshWarnings();
+      }
+    };
+
+    window.addEventListener('focus', refreshWarnings);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    const channel = supabase
+      .channel(`imenik-warnings-${effectiveClassId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'grades',
+          filter: `class_id=eq.${effectiveClassId}`,
+        },
+        refreshWarnings
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'absences',
+          filter: `class_id=eq.${effectiveClassId}`,
+        },
+        refreshWarnings
+      )
+      .subscribe();
+
+    return () => {
+      window.removeEventListener('focus', refreshWarnings);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      supabase.removeChannel(channel);
+    };
+  }, [effectiveClassId]);
+'''
+
+          if refresh_effect not in source:
+            if anchor not in source:
+              raise SystemExit('Warning refresh effect anchor was not found')
+            source = source.replace(anchor, anchor + '\n' + refresh_effect, 1)
+
+          path.write_text(source, encoding='utf-8')
+          PY
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+      - name: Commit validated fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/apply-imenik-warning-fix.yml
+          git add src/pages/teacher/ImenikPage.tsx src/components/ImenikTable.tsx
+          git commit -m "fix: display imenik grade and absence warnings [imenik-warnings-applied]"
+          git push origin HEAD:fix-imenik-warnings
