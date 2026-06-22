@@ -9,6 +9,7 @@ import { classScopedFinalThesisPlugin } from './vite/classScopedFinalThesisPlugi
 import { finalThesisPersistencePlugin } from './vite/finalThesisPersistencePlugin';
 import { finalThesisUiPlugin } from './vite/finalThesisUiPlugin';
 import { applicationMetadataPlugin } from './vite/applicationMetadataPlugin';
+import { imenikWarningsPlugin } from './vite/imenikWarningsPlugin';
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
@@ -22,6 +23,7 @@ export default defineConfig(({mode}) => {
       finalThesisPersistencePlugin(),
       finalThesisUiPlugin(),
       applicationMetadataPlugin(),
+      imenikWarningsPlugin(),
       react(),
       tailwindcss(),
     ],
@@ -34,8 +36,6 @@ export default defineConfig(({mode}) => {
       },
     },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modify—file watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',
     },
   };
