@@ -1807,15 +1807,67 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
 
   const renderSubjectSelector = () => (
     <div className="p-4 space-y-4">
-      <div className="border-b border-gray-200 pb-2 flex items-end justify-between">
+      <div className="border-b border-gray-200 pb-2 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-gray-900 leading-none">{activeStudent ? formatName(activeStudent) : ''}</h1>
+          <h1 className="text-lg md:text-xl font-bold text-gray-900 leading-none">{activeStudent ? formatName(activeStudent) : ''}</h1>
           <p className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">Učenička kartica - Popis predmeta</p>
         </div>
         {renderNavButtons()}
       </div>
 
-      <div className="bg-white border border-gray-300">
+      {/* Mobile view cards */}
+      <div className="block md:hidden space-y-3">
+        {allSubjects
+          .filter(sub => {
+            const isEnrollActive = enrollments.some(e => e.studentId === activeStudent?.id && e.subjectId === sub.id && e.status === 'ACTIVE');
+            if (!isEnrollActive) return false;
+            
+            const isClassSubject = classSubjects.some(cs => cs.subjectId === sub.id && cs.classId === effectiveClassId);
+            if (!isClassSubject) return false;
+            
+            if (isMainAdmin) return true;
+            const activeClass = classes.find(c => c.id === effectiveClassId);
+            const isHomeroomOrDeputy = activeClass?.homeroomTeacherId === user?.id || activeClass?.deputyTeacherId === user?.id;
+            if (isHomeroomOrDeputy) return true;
+            
+            return subjectAssignments.some(a => a.classId === effectiveClassId && a.subjectId === sub.id && a.teacherId === user?.id);
+          })
+          .map(sub => {
+            const assignments = subjectAssignments.filter(a => a.classId === effectiveClassId && a.subjectId === sub.id);
+            const assignedTeachers = assignments.map(a => teachers.find(t => t.id === a.teacherId)).filter(Boolean) as User[];
+            
+            return (
+              <div 
+                key={sub.id} 
+                onClick={() => { setActiveSubject(sub); setViewMode('GRADES'); }} 
+                className="p-4 border border-gray-200 rounded-lg bg-slate-50 active:bg-slate-100 transition-all shadow-xs cursor-pointer flex flex-col justify-between"
+              >
+                <div className="flex items-start gap-3">
+                  <BookOpen size={16} className="text-slate-400 shrink-0 mt-0.5" />
+                  <div>
+                    <div className="text-sm font-bold text-slate-800 leading-tight">
+                      {(() => {
+                        const cs = classSubjects.find(cs => cs.subjectId === sub.id && cs.classId === effectiveClassId);
+                        return formatSubjectDisplayName(sub.name || '', cs?.subjectType || 'redovni');
+                      })()}
+                    </div>
+                    <div className="text-[10px] text-gray-400 font-normal uppercase tracking-wider mt-1">
+                      {assignedTeachers.length > 0 
+                        ? assignedTeachers.map(t => t.name).join(', ') 
+                        : 'Nema dodijeljenog nastavnika'}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right mt-2 border-t pt-2 border-dashed border-gray-200">
+                  <span className="text-[10px] font-black uppercase text-[#005c8d]">Prikaži ocjene →</span>
+                </div>
+              </div>
+            );
+          })}
+      </div>
+
+      {/* Desktop view table */}
+      <div className="hidden md:block bg-white border border-gray-300">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="bg-gray-100 border-b border-gray-300">
@@ -2324,29 +2376,68 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         {/* TEST CONTENT REMOVED */}
         {viewMode === 'STUDENTS' && (
           students.length > 0 ? (
-            <div className="p-6 bg-white w-full">
-              <h1 className="text-2xl font-bold mb-4">Imenik</h1>
-              <table className="w-full border-collapse border border-gray-300">
-                <thead>
-                  <tr className="bg-gray-100">
-                    <th className="border p-2 text-center w-12">R.BR.</th>
-                    <th className="border p-2 text-left">PREZIME I IME</th>
-                    <th className="border p-2 text-center">UPOZORENJA</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sortStudentsBySurname(students).map((s, i) => (
-                    <tr key={s.id} className="cursor-pointer hover:bg-gray-100" onClick={() => navigate(`/class/${effectiveClassId}/student/${s.id}`)}>
-                      <td className="border p-2 text-center">{i + 1}.</td>
-                      <td className="border p-2">{s.surname ? `${s.surname} ${s.name}` : s.name}</td>
-                      <td className="border p-2 text-center">
-                        {classWarnings.failingGrades[s.id] > 0 && <span className="text-red-600 font-bold">⚠️ {classWarnings.failingGrades[s.id]}</span>}
-                        {classWarnings.pendingAbsences[s.id] && <span className="text-red-500 font-bold ml-2">🕒</span>}
-                      </td>
+            <div className="p-4 md:p-6 bg-white w-full">
+              <h1 className="text-xl md:text-2xl font-bold mb-4 tracking-tight">Imenik</h1>
+              
+              {/* Mobile Card List */}
+              <div className="block md:hidden space-y-3">
+                {sortStudentsBySurname(students).map((s, i) => (
+                  <div
+                    key={s.id}
+                    onClick={() => navigate(`/class/${effectiveClassId}/student/${s.id}`)}
+                    className="p-4 border border-gray-200 rounded-lg bg-slate-50 active:bg-slate-100 transition-all shadow-xs cursor-pointer flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs font-black text-slate-400">{i + 1}.</span>
+                      <div>
+                        <p className="text-sm font-bold text-slate-800 leading-tight">
+                          {s.surname ? `${s.surname} ${s.name}` : s.name}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-black uppercase mt-1 tracking-wider">
+                          Karton učenika
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      {classWarnings.failingGrades[s.id] > 0 && (
+                        <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 flex items-center gap-1">
+                          ⚠️ {classWarnings.failingGrades[s.id]}
+                        </span>
+                      )}
+                      {classWarnings.pendingAbsences[s.id] && (
+                        <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 flex items-center gap-1">
+                          🕒
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Desktop Table View */}
+              <div className="hidden md:block">
+                <table className="w-full border-collapse border border-gray-300">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border p-2 text-center w-12">R.BR.</th>
+                      <th className="border p-2 text-left">PREZIME I IME</th>
+                      <th className="border p-2 text-center">UPOZORENJA</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {sortStudentsBySurname(students).map((s, i) => (
+                      <tr key={s.id} className="cursor-pointer hover:bg-gray-100" onClick={() => navigate(`/class/${effectiveClassId}/student/${s.id}`)}>
+                        <td className="border p-2 text-center">{i + 1}.</td>
+                        <td className="border p-2">{s.surname ? `${s.surname} ${s.name}` : s.name}</td>
+                        <td className="border p-2 text-center">
+                          {classWarnings.failingGrades[s.id] > 0 && <span className="text-red-600 font-bold">⚠️ {classWarnings.failingGrades[s.id]}</span>}
+                          {classWarnings.pendingAbsences[s.id] && <span className="text-red-500 font-bold ml-2">🕒</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : (
             <div className="p-10 text-center">Nema učenika u ovom razredu.</div>

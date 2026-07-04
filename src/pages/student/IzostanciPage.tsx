@@ -427,32 +427,56 @@ export default function IzostanciPage() {
                       {/* Selected month absences */}
                       {selectedMonthKey && (
                         <div>
-                           <div className="grid grid-cols-[60px_1fr_100px_1fr] p-3 bg-gray-50/50 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-gray-200 items-center">
+                           {/* Desktop Headers */}
+                           <div className="hidden md:grid grid-cols-[60px_1fr_100px_1fr] p-3 bg-gray-50/50 text-[10px] font-black text-gray-500 uppercase tracking-widest border-b border-gray-200 items-center">
                              <span>SAT</span>
                              <span>PREDMET</span>
                              <span>STATUS</span>
                              <span>RAZLOG</span>
                            </div>
-                           {groupedAbsences[selectedMonthKey].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || (a.hour || 0) - (b.hour || 0)).map(abs => {
-                             const normStatus = getStatusType(abs.status);
-                             const statusColor = normStatus === 'OPRAVDANO' ? 'bg-green-500' : normStatus === 'NEOPRAVDANO' ? 'bg-red-500' : normStatus === 'CEKA_ODLUKU' ? 'bg-black' : 'bg-yellow-500';
-                             
-                             return (
-                               <div key={abs.id} className="grid grid-cols-[60px_1fr_100px_1fr] items-center p-3 border-b border-slate-100 last:border-b-0 hover:bg-slate-50 gap-2">
-                                 <span className="font-bold text-slate-400 text-xs">{abs.hour}.</span>
-                                 <span className="font-bold text-slate-800 text-sm truncate">{abs.subjectName || 'Sat razrednika'}</span>
-                                 <div className="flex items-center gap-2">
-                                   <span className={cn("w-2 h-2 rounded-full", statusColor)}></span>
-                                   <span className={cn("text-[10px] font-bold uppercase tracking-wider", normStatus === 'OPRAVDANO' ? 'text-green-600' : normStatus === 'NEOPRAVDANO' ? 'text-red-600' : normStatus === 'CEKA_ODLUKU' ? 'text-black' : 'text-yellow-600')}>
-                                       {normStatus === 'OPRAVDANO' ? 'Opravdano' : normStatus === 'NEOPRAVDANO' ? 'Neopravdano' : normStatus === 'CEKA_ODLUKU' ? 'Čeka odluku' : 'Ostalo'}
-                                   </span>
-                                 </div>
-                                 <span className="text-xs text-slate-500 truncate">
-                                {normStatus === 'OPRAVDANO' ? (abs.absenceType || '—') : (abs.note || '—')}
-                              </span>
-                               </div>
-                             );
-                           })}
+
+                           {/* List of absences */}
+                           <div className="space-y-2 md:space-y-0">
+                             {groupedAbsences[selectedMonthKey].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime() || (a.hour || 0) - (b.hour || 0)).map(abs => {
+                               const normStatus = getStatusType(abs.status);
+                               const statusColor = normStatus === 'OPRAVDANO' ? 'bg-green-500' : normStatus === 'NEOPRAVDANO' ? 'bg-red-500' : normStatus === 'CEKA_ODLUKU' ? 'bg-black' : 'bg-yellow-500';
+                               const statusText = normStatus === 'OPRAVDANO' ? 'Opravdano' : normStatus === 'NEOPRAVDANO' ? 'Neopravdano' : normStatus === 'CEKA_ODLUKU' ? 'Čeka odluku' : 'Ostalo';
+                               const statusTextColor = normStatus === 'OPRAVDANO' ? 'text-green-600' : normStatus === 'NEOPRAVDANO' ? 'text-red-600' : normStatus === 'CEKA_ODLUKU' ? 'text-black' : 'text-yellow-600';
+                               const reason = normStatus === 'OPRAVDANO' ? (abs.absenceType || '—') : (abs.note || '—');
+
+                               return (
+                                 <React.Fragment key={abs.id}>
+                                   {/* Mobile Card */}
+                                   <div className="md:hidden p-3 border border-slate-200 bg-white rounded-lg space-y-1.5 shadow-xs">
+                                     <div className="flex justify-between items-center text-[10px] font-bold text-slate-400">
+                                       <span>{abs.hour}. sat ({new Date(abs.date).toLocaleDateString('hr-HR')})</span>
+                                       <div className="flex items-center gap-1.5">
+                                         <span className={cn("w-1.5 h-1.5 rounded-full", statusColor)}></span>
+                                         <span className={cn("font-black uppercase tracking-wider text-[9px]", statusTextColor)}>{statusText}</span>
+                                       </div>
+                                     </div>
+                                     <div className="font-bold text-slate-800 text-sm">{abs.subjectName || 'Sat razrednika'}</div>
+                                     <div className="text-xs text-slate-500 italic">Razlog: {reason}</div>
+                                   </div>
+
+                                   {/* Desktop Row */}
+                                   <div className="hidden md:grid grid-cols-[60px_1fr_100px_1fr] items-center p-3 border-b border-slate-100 last:border-b-0 hover:bg-slate-50 gap-2">
+                                     <span className="font-bold text-slate-400 text-xs">{abs.hour}.</span>
+                                     <span className="font-bold text-slate-800 text-sm truncate">{abs.subjectName || 'Sat razrednika'}</span>
+                                     <div className="flex items-center gap-2">
+                                       <span className={cn("w-2 h-2 rounded-full", statusColor)}></span>
+                                       <span className={cn("text-[10px] font-bold uppercase tracking-wider", statusTextColor)}>
+                                           {statusText}
+                                       </span>
+                                     </div>
+                                     <span className="text-xs text-slate-500 truncate">
+                                        {reason}
+                                     </span>
+                                   </div>
+                                 </React.Fragment>
+                               );
+                             })}
+                           </div>
                         </div>
                       )}
                   </div>

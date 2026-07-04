@@ -472,7 +472,29 @@ export default function OcjenePage() {
             <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest">Bilješke i pojedinačne ocjene</h2>
           </div>
           
-          <div className="bg-white border border-slate-300 overflow-hidden shadow-sm">
+          {/* Mobile view */}
+          <div className="md:hidden space-y-2">
+            {activeGrades.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(g => (
+              <div key={g.id} className="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400">
+                    {new Date(g.date).toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' })}.
+                  </span>
+                  <span className="px-2 py-0.5 bg-blue-50 text-[#005c8d] text-xs font-black rounded-sm">{g.value}</span>
+                </div>
+                <div>
+                  <div className="text-xs font-black text-slate-700">{g.category}</div>
+                  <div className="text-xs text-slate-500 italic mt-1 leading-normal">{g.note || '—'}</div>
+                </div>
+              </div>
+            ))}
+            {activeGrades.length === 0 && (
+              <div className="p-8 text-center text-slate-300 font-bold text-xs uppercase bg-white border border-slate-200 rounded-lg">Nema unesenih ocjena</div>
+            )}
+          </div>
+
+          {/* Desktop view */}
+          <div className="hidden md:block bg-white border border-slate-300 overflow-hidden shadow-sm">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-300 text-slate-400">
@@ -515,7 +537,25 @@ export default function OcjenePage() {
               <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest">Lektire / Obrađena djela</h2>
             </div>
 
-            <div className="bg-white border border-slate-300 overflow-hidden shadow-sm">
+            {/* Mobile view */}
+            <div className="md:hidden space-y-2">
+              {subjectLektire && subjectLektire.length > 0 ? (
+                subjectLektire.map(lek => (
+                  <div key={lek.id} className="bg-white border border-slate-200 rounded-lg p-3 space-y-1">
+                    <div className="flex justify-between items-center text-[10px] text-slate-400 font-bold">
+                      <span>Datum: {lek.processed_at ? new Date(lek.processed_at).toLocaleDateString('hr-HR') : '—'}</span>
+                    </div>
+                    <div className="text-xs font-black text-slate-800">{lek.title}</div>
+                    <div className="text-xs text-slate-600 italic leading-normal mt-1 whitespace-pre-wrap">{lek.processing_details || '—'}</div>
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-slate-300 font-bold text-xs uppercase bg-white border border-slate-200 rounded-lg">Nema unesenih lektira za ovaj predmet.</div>
+              )}
+            </div>
+
+            {/* Desktop view */}
+            <div className="hidden md:block bg-white border border-slate-300 overflow-hidden shadow-sm">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-300 text-slate-400">
@@ -559,7 +599,31 @@ export default function OcjenePage() {
               <h2 className="text-xs font-black text-slate-900 uppercase tracking-widest">Dopunski i razlikovni ispiti</h2>
             </div>
             
-            <div className="bg-white border border-slate-300 overflow-hidden shadow-sm">
+            {/* Mobile view */}
+            <div className="md:hidden space-y-2">
+              {specialExams
+                .filter(se => se.subjectId === activeSubject.id)
+                .sort((a,b) => (String(b.date || "")).localeCompare(a.date))
+                .map(se => {
+                  const teacherStr = teachers[se.teacherId] ? formatPersonName(teachers[se.teacherId]) : (teachers[se.createdBy] ? formatPersonName(teachers[se.createdBy]) : '—');
+                  return (
+                    <div key={se.id} className="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-bold text-slate-400">
+                          {new Date(se.date).toLocaleDateString('hr-HR', { day: '2-digit', month: '2-digit', year: 'numeric' })}.
+                        </span>
+                        <span className="px-2 py-0.5 bg-blue-50 text-[#005c8d] text-xs font-black rounded">{se.gradeValue || '—'}</span>
+                      </div>
+                      <div className="text-xs font-black text-slate-800 uppercase tracking-wide">{specialExamTypeLabels[se.type] || se.type}</div>
+                      <div className="text-xs text-slate-500 font-bold">Nastavnik: {teacherStr}</div>
+                      <div className="text-xs text-slate-600 italic leading-normal mt-1">{se.note || '—'}</div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* Desktop view */}
+            <div className="hidden md:block bg-white border border-slate-300 overflow-hidden shadow-sm">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-300 text-slate-400">

@@ -805,7 +805,7 @@ export default function PedagoskaDokumentacijaPage() {
         <div className="flex-1 flex flex-col lg:flex-row divide-y lg:divide-y-0 lg:divide-x divide-gray-200 overflow-hidden">
           
           {/* Sastavi popis učenika */}
-          <div className="w-full lg:w-80 bg-white flex flex-col shrink-0 overflow-y-auto border-r border-gray-200 shadow-sm">
+          <div className="w-full lg:w-80 bg-white flex flex-col shrink-0 border-r border-gray-200 shadow-sm">
             <div className="p-4 bg-slate-50/50 border-b border-gray-200 flex items-center justify-between">
               <span className="text-[10px] font-black uppercase text-slate-600 tracking-wider flex items-center gap-2">
                 <Users size={14} className="text-slate-500" /> Popis učenika ({students.length})
@@ -815,32 +815,55 @@ export default function PedagoskaDokumentacijaPage() {
             {students.length === 0 ? (
               <div className="p-12 text-center text-xs text-slate-400 font-medium italic">Nema aktivnih učenika u ovom razredu.</div>
             ) : (
-              <div className="divide-y divide-gray-100 flex-1">
-                {students.map(s => {
-                  const isSelected = selectedStudent?.id === s.id;
-                  return (
-                    <button
-                      key={s.id}
-                      onClick={() => handleStudentSelect(s)}
-                      className={`w-full text-left p-3.5 flex items-center gap-3.5 transition-all ${
-                        isSelected 
-                          ? "bg-sky-50/80 font-bold text-[#005c8d] border-l-4 border-[#005c8d] shadow-inner" 
-                          : "hover:bg-slate-50/60 border-l-4 border-transparent text-slate-700 hover:text-slate-900"
-                      }`}
-                    >
-                      <div className={`w-8.5 h-8.5 rounded-full flex items-center justify-center font-black text-[10px] tracking-wide shrink-0 shadow-sm ${
-                        isSelected ? "bg-[#005c8d] text-white" : "bg-slate-100 text-slate-600 border border-slate-200/50"
-                      }`}>
-                        {s.name?.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-semibold leading-none truncate">{s.name}</p>
-                        <p className="text-[8.5px] text-gray-400 font-black uppercase mt-1 tracking-wider">Karton učenika</p>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
+              <>
+                {/* Mobile Selector Dropdown */}
+                <div className="p-3 lg:hidden border-b border-gray-100 bg-slate-50">
+                  <label htmlFor="mobile-student-select" className="sr-only">Odaberi učenika</label>
+                  <select
+                    id="mobile-student-select"
+                    value={selectedStudent?.id || ''}
+                    onChange={(e) => {
+                      const student = students.find(s => s.id === e.target.value);
+                      if (student) handleStudentSelect(student);
+                    }}
+                    className="w-full p-2.5 border border-slate-300 rounded-lg text-sm font-bold text-slate-700 bg-white focus:ring-2 focus:ring-[#005c8d]/20 focus:border-[#005c8d] outline-none transition-all cursor-pointer shadow-xs"
+                  >
+                    {students.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Desktop Sidebar List */}
+                <div className="hidden lg:block divide-y divide-gray-100 overflow-y-auto flex-1">
+                  {students.map(s => {
+                    const isSelected = selectedStudent?.id === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        onClick={() => handleStudentSelect(s)}
+                        className={`w-full text-left p-3.5 flex items-center gap-3.5 transition-all ${
+                          isSelected 
+                            ? "bg-sky-50/80 font-bold text-[#005c8d] border-l-4 border-[#005c8d] shadow-inner" 
+                            : "hover:bg-slate-50/60 border-l-4 border-transparent text-slate-700 hover:text-slate-900"
+                        }`}
+                      >
+                        <div className={`w-8.5 h-8.5 rounded-full flex items-center justify-center font-black text-[10px] tracking-wide shrink-0 shadow-sm ${
+                          isSelected ? "bg-[#005c8d] text-white" : "bg-slate-100 text-slate-600 border border-slate-200/50"
+                        }`}>
+                          {s.name?.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold leading-none truncate">{s.name}</p>
+                          <p className="text-[8.5px] text-gray-400 font-black uppercase mt-1 tracking-wider">Karton učenika</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </div>
 

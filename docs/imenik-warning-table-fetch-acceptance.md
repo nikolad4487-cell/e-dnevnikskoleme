@@ -1,1 +1,0 @@
-Pri otvaranju Imenika komponenta mora pozvati /api/imenik-warnings za aktivni razred, prikazati broj jedinica i oznaku za izostanke koji cekaju opravdanje te ispisati API rezultat ili gresku u konzolu.

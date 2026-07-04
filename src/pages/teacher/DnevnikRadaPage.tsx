@@ -2320,78 +2320,135 @@ setStudents(uniqueStudents);
                      </button>
                    )}
                 </div>
-                <table className="w-full border-collapse ed-table-dense">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-300">
-                      <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500 border-r border-gray-300">Datum</th>
-                      <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500 border-r border-gray-300">Predmet</th>
-                      <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500 border-r border-gray-300">Vrsta</th>
-                      <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500">Opis</th>
-                      <th className="p-2 text-center w-36 text-[10px] font-bold uppercase text-gray-500">Akcije</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                     {currentClassExams.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(exam => {
-                       const subject = allSubjects.find(s => s.id === exam.subjectId);
-                       return (
-                         <tr key={exam.id} className="hover:bg-gray-50 transition-colors">
-                           <td className="p-2 text-gray-700 font-bold border-r border-gray-200">{new Date(exam.date).toLocaleDateString('hr-HR')}</td>
-                           <td className="p-2 font-bold text-[#005c8d] uppercase border-r border-gray-200">{formatSubjectName(subject)}</td>
-                           <td className="p-2 border-r border-gray-200">
-                             <span className={cn(
-                               "px-2 py-0.5 text-[9px] font-bold uppercase border",
-                               exam.type === 'PISANA' ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-purple-50 text-purple-700 border-purple-200"
-                             )}>
-                               {exam.type}
-                             </span>
-                           </td>
-                           <td className="p-2 text-gray-600 border-r border-gray-300">{exam.description}</td>
-                           <td className="p-2 text-center h-full">
-                             <div className="flex items-center justify-center gap-2">
-                               {canEditExam(exam) && (
-                                 <button 
-                                   onClick={() => {
-                                     setEditingExam(exam);
-                                     setExamForm({
-                                       subjectId: exam.subjectId,
-                                       date: exam.date ? String(exam.date).split('T')[0] : '',
-                                       type: exam.type,
-                                       description: exam.description || ''
-                                     });
-                                     setShowExamModal(true);
-                                   }}
-                                   className="text-[#005c8d] hover:text-[#004a71] p-1 flex items-center gap-1.5 text-[10px] font-bold uppercase transition-all"
-                                   title="Uredi"
-                                 >
-                                   <Edit2 size={12} />
-                                   <span>Uredi</span>
-                                 </button>
-                               )}
-                               {canDeleteExam(exam) && (
-                                 <button 
-                                   onClick={() => setDeleteDialog({ isOpen: true, id: exam.id, type: 'EXAM', loading: false })}
-                                   className="text-red-500 hover:text-red-700 p-1 flex items-center gap-1.5 text-[10px] font-bold uppercase transition-all"
-                                   title="Obriši"
-                                 >
-                                   <Trash2 size={12} />
-                                   <span>Obriši</span>
-                                 </button>
-                               )}
-                               {!canEditExam(exam) && !canDeleteExam(exam) && (
-                                 <span className="text-gray-400 text-[10px] italic">Nema ovlasti</span>
-                                )}
-                             </div>
-                           </td>
+                {/* Mobile View for Exams */}
+                <div className="md:hidden space-y-2 p-3 bg-slate-50/50">
+                  {currentClassExams.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(exam => {
+                    const subject = allSubjects.find(s => s.id === exam.subjectId);
+                    return (
+                      <div key={exam.id} className="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] font-black text-slate-500">
+                            {new Date(exam.date).toLocaleDateString('hr-HR')}
+                          </span>
+                          <span className={cn(
+                            "px-1.5 py-0.5 text-[8px] font-black uppercase border rounded-sm",
+                            exam.type === 'PISANA' ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-purple-50 text-purple-700 border-purple-200"
+                          )}>
+                            {exam.type}
+                          </span>
+                        </div>
+                        <div className="font-bold text-sm text-[#005c8d] uppercase">{formatSubjectName(subject)}</div>
+                        <div className="text-xs text-slate-600 italic">Opis: {exam.description}</div>
+                        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                          {canEditExam(exam) && (
+                            <button 
+                              onClick={() => {
+                                setEditingExam(exam);
+                                setExamForm({
+                                  subjectId: exam.subjectId,
+                                  date: exam.date ? String(exam.date).split('T')[0] : '',
+                                  type: exam.type,
+                                  description: exam.description || ''
+                                });
+                                setShowExamModal(true);
+                              }}
+                              className="text-[#005c8d] hover:text-[#004a71] text-xs font-bold"
+                            >
+                              Uredi
+                            </button>
+                          )}
+                          {canDeleteExam(exam) && (
+                            <button 
+                              onClick={() => setDeleteDialog({ isOpen: true, id: exam.id, type: 'EXAM', loading: false })}
+                              className="text-red-600 hover:text-red-800 text-xs font-bold"
+                            >
+                              Obriši
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {currentClassExams.length === 0 && (
+                    <div className="p-8 text-center text-slate-300 font-bold text-xs uppercase bg-white border border-slate-200 rounded-lg">Nema planiranih provjera.</div>
+                  )}
+                </div>
+
+                {/* Desktop View for Exams */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full border-collapse ed-table-dense">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-300">
+                        <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500 border-r border-gray-300">Datum</th>
+                        <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500 border-r border-gray-300">Predmet</th>
+                        <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500 border-r border-gray-300">Vrsta</th>
+                        <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500">Opis</th>
+                        <th className="p-2 text-center w-36 text-[10px] font-bold uppercase text-gray-500">Akcije</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                       {currentClassExams.sort((a,b) => (String(b.date || "")).localeCompare(a.date)).map(exam => {
+                         const subject = allSubjects.find(s => s.id === exam.subjectId);
+                         return (
+                           <tr key={exam.id} className="hover:bg-gray-50 transition-colors">
+                             <td className="p-2 text-gray-700 font-bold border-r border-gray-200">{new Date(exam.date).toLocaleDateString('hr-HR')}</td>
+                             <td className="p-2 font-bold text-[#005c8d] uppercase border-r border-gray-200">{formatSubjectName(subject)}</td>
+                             <td className="p-2 border-r border-gray-200">
+                               <span className={cn(
+                                 "px-2 py-0.5 text-[9px] font-bold uppercase border",
+                                 exam.type === 'PISANA' ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-purple-50 text-purple-700 border-purple-200"
+                               )}>
+                                 {exam.type}
+                               </span>
+                             </td>
+                             <td className="p-2 text-gray-600 border-r border-gray-300">{exam.description}</td>
+                             <td className="p-2 text-center h-full">
+                               <div className="flex items-center justify-center gap-2">
+                                 {canEditExam(exam) && (
+                                   <button 
+                                     onClick={() => {
+                                       setEditingExam(exam);
+                                       setExamForm({
+                                         subjectId: exam.subjectId,
+                                         date: exam.date ? String(exam.date).split('T')[0] : '',
+                                         type: exam.type,
+                                         description: exam.description || ''
+                                       });
+                                       setShowExamModal(true);
+                                     }}
+                                     className="text-[#005c8d] hover:text-[#004a71] p-1 flex items-center gap-1.5 text-[10px] font-bold uppercase transition-all"
+                                     title="Uredi"
+                                   >
+                                     <Edit2 size={12} />
+                                     <span>Uredi</span>
+                                   </button>
+                                 )}
+                                 {canDeleteExam(exam) && (
+                                   <button 
+                                     onClick={() => setDeleteDialog({ isOpen: true, id: exam.id, type: 'EXAM', loading: false })}
+                                     className="text-red-500 hover:text-red-700 p-1 flex items-center gap-1.5 text-[10px] font-bold uppercase transition-all"
+                                     title="Obriši"
+                                   >
+                                     <Trash2 size={12} />
+                                     <span>Obriši</span>
+                                   </button>
+                                 )}
+                                 {!canEditExam(exam) && !canDeleteExam(exam) && (
+                                   <span className="text-gray-400 text-[10px] italic">Nema ovlasti</span>
+                                  )}
+                               </div>
+                             </td>
+                           </tr>
+                         );
+                       })}
+                       {currentClassExams.length === 0 && (
+                         <tr>
+                           <td colSpan={5} className="p-12 text-center text-gray-400 italic">Nema planiranih provjera.</td>
                          </tr>
-                       );
-                     })}
-                     {currentClassExams.length === 0 && (
-                       <tr>
-                         <td colSpan={5} className="p-12 text-center text-gray-400 italic">Nema planiranih provjera.</td>
-                       </tr>
-                     )}
-                  </tbody>
-                </table>
+                       )}
+                    </tbody>
+                  </table>
+                </div>
              </div>
           </div>
         )}
@@ -2533,7 +2590,79 @@ setStudents(uniqueStudents);
               </button>
             </div>
 
-            <div className="bg-white border border-gray-300 shadow-sm overflow-hidden">
+            {/* Mobile Cards for Readings */}
+            <div className="md:hidden space-y-2 p-3 bg-slate-50/50">
+              {lektire.map((lek) => {
+                const subject = allSubjects.find(s => s.id === lek.subjectId || s.id === lek.subject_id);
+                return (
+                  <div key={lek.id} className="bg-white border border-slate-200 rounded-lg p-3 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[9px] font-black text-[#005c8d] uppercase tracking-wider bg-blue-50 px-1.5 py-0.5 rounded">
+                        {formatSubjectName(subject || { name: 'Hrvatski jezik' })}
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-400">
+                        Obrada: {(() => {
+                          if (!lek.processed_at) return '—';
+                          try {
+                            const d = new Date(lek.processed_at);
+                            return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('hr-HR');
+                          } catch {
+                            return '—';
+                          }
+                        })()}
+                      </span>
+                    </div>
+                    <div className="font-bold text-sm text-slate-800">{lek.title}</div>
+                    <div className="text-xs text-slate-600 italic whitespace-pre-wrap">{lek.processing_details || '—'}</div>
+                    <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                      <button
+                        onClick={() => {
+                          setEditingLektira(lek);
+                          let processedDateString = '';
+                          if (lek.processed_at) {
+                            try {
+                              const d = new Date(lek.processed_at);
+                              if (!isNaN(d.getTime())) {
+                                processedDateString = d.toISOString().split('T')[0];
+                              }
+                            } catch (e) {
+                              console.error('Error parsing processed_at date:', e);
+                            }
+                          }
+                          setLektiraForm({
+                            subjectId: lek.subject_id || lek.subjectId || '',
+                            completedDate: processedDateString,
+                            title: lek.title,
+                            processingDetails: lek.processing_details || ''
+                          });
+                          setShowLektiraModal(true);
+                        }}
+                        className="text-[#005c8d] hover:text-[#004a71] text-xs font-bold"
+                      >
+                        Uredi
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleDeleteReading(lek);
+                        }}
+                        className="text-red-600 hover:text-red-800 text-xs font-bold"
+                      >
+                        Obriši
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              {lektire.length === 0 && (
+                <div className="p-8 text-center text-slate-300 font-bold text-xs uppercase bg-white border border-slate-200 rounded-lg">Nema unesenih lektira za ovaj razred.</div>
+              )}
+            </div>
+
+            {/* Desktop View for Readings */}
+            <div className="hidden md:block bg-white border border-gray-300 shadow-sm overflow-hidden">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-300 text-gray-500 text-[10px] uppercase font-bold tracking-wider">

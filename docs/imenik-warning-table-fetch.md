@@ -1,1 +1,0 @@
-ImenikTable samostalno dohvaća upozorenja za aktivni razred preko autentificiranog backend API-ja i ispisuje dijagnostiku u konzolu.

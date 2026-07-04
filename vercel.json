@@ -11,10 +11,6 @@
     }
   ],
   "rewrites": [
-    { "source": "/api/final-thesis/:id", "destination": "/api/final-thesis-handler?id=:id" },
-    { "source": "/api/final-thesis", "destination": "/api/final-thesis-handler" },
-    { "source": "/api/imenik-warnings", "destination": "/api/imenik-warnings-handler" },
-    { "source": "/api/grades/delete", "destination": "/api/imenik-warnings-handler" },
     { "source": "/api/:path*", "destination": "/api/index" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]

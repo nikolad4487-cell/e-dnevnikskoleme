@@ -433,6 +433,32 @@ export default function IzvjestajiPage() {
             </div>
          ) : (
            <div className="bg-white border border-gray-300 shadow-sm overflow-hidden">
+               {/* Mobile view cards */}
+               <div className="block md:hidden divide-y divide-gray-200">
+                   {reportData.map((row, i) => (
+                       <div key={i} className="p-4 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                           <p className="text-sm font-bold text-slate-800 leading-tight">{row.name}</p>
+                           <div className="flex items-center gap-4 mt-2 pt-2 border-t border-dashed border-gray-200/60">
+                               <div>
+                                   <span className="text-[10px] font-black uppercase text-slate-400 block">Prosjek</span>
+                                   <span className="text-sm font-black text-[#005c8d]">{row.avg > 0 ? row.avg : '—'}</span>
+                               </div>
+                               {activeTab === 'STUDENTS' && (
+                                   <div>
+                                       <span className="text-[10px] font-black uppercase text-slate-400 block">Izostanci</span>
+                                       <span className="text-sm font-black text-orange-600">{row.absences || '0'}</span>
+                                   </div>
+                               )}
+                           </div>
+                       </div>
+                   ))}
+                   {reportData.length === 0 && (
+                       <div className="p-8 text-center text-gray-400 text-xs font-bold uppercase">Nema podataka za prikaz</div>
+                   )}
+               </div>
+
+               {/* Desktop view table */}
+               <div className="hidden md:block">
                <table className="w-full text-left border-collapse">
                    <thead>
                        <tr className="bg-[#f8fafc] border-b border-gray-300">
@@ -454,6 +480,7 @@ export default function IzvjestajiPage() {
                        )}
                    </tbody>
                </table>
+               </div>
            </div>
         )}
       </div>

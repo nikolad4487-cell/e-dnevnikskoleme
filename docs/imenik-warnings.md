@@ -1,1 +1,0 @@
-Imenik prikazuje trokut s brojem nedovoljnih ocjena upisanih u posljednjih 30 dana i sat kada učenik ima jedan ili više izostanaka sa statusom PENDING.

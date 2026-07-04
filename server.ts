@@ -15,27 +15,54 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Legacy JSON files are read-only compatibility data. Vercel functions run on a
-// read-only filesystem, so runtime code must never create or modify these files.
+// Flat file JSON DB for fallback / guaranteed local persistence
 const DATA_DIR = path.join(__dirname, "data");
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function initJsonFile(filename: string) {
+  const filePath = path.join(DATA_DIR, filename);
+  if (!fs.existsSync(filePath)) {
+    fs.writeFileSync(filePath, JSON.stringify([], null, 2), "utf-8");
+  }
+}
+
+initJsonFile("lektire.json");
+initJsonFile("pedagoska_dokumentacija.json");
+initJsonFile("student_pedagogical_profiles.json");
+initJsonFile("student_pedagogical_year_notes.json");
+initJsonFile("daily_notes.json");
+initJsonFile("overall_success_audit_logs.json");
+initJsonFile("final_thesis.json");
+initJsonFile("practicum_placements.json");
+initJsonFile("practicum_logs.json");
+initJsonFile("practicum_evaluations.json");
+initJsonFile("student_registrations.json");
+initJsonFile("student_transfers.json");
+initJsonFile("competitions.json");
+initJsonFile("payments.json");
+initJsonFile("final_exam_defense_schedule.json");
+initJsonFile("final_exam_defense_commission_members.json");
 
 function readJsonFile(filename: string): any[] {
   try {
     const filePath = path.join(DATA_DIR, filename);
-    if (!fs.existsSync(filePath)) {
-      return [];
-    }
     const content = fs.readFileSync(filePath, "utf-8");
     return JSON.parse(content);
   } catch (error) {
-    console.error(`Error reading legacy JSON file ${filename}:`, error);
+    console.error(`Error reading flat JSON file ${filename}:`, error);
     return [];
   }
 }
 
-function writeJsonFile(filename: string, _data: any[]): void {
-  // Deliberately disabled. Persistent runtime writes must use Supabase.
-  console.warn(`[SERVER] Skipped legacy JSON write for ${filename}; use Supabase persistence instead.`);
+function writeJsonFile(filename: string, data: any[]) {
+  try {
+    const filePath = path.join(DATA_DIR, filename);
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+  } catch (error) {
+    console.error(`Error writing flat JSON file ${filename}:`, error);
+  }
 }
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
@@ -1549,178 +1576,171 @@ async function startServer() {
 
   // 2. Pedagoska Dokumentacija RESTructured APIs
   app.get("/api/student-pedagogical-profile", async (req, res) => {
-  try {
-    const { studentId } = req.query;
-    if (!studentId || typeof studentId !== "string") {
-      return res.status(400).json({ success: false, error: "studentId is required" });
+    try {
+      const { studentId } = req.query;
+      if (!studentId) {
+        return res.status(400).json({ error: "studentId is required" });
+      }
+
+      // Fetch the real, current program_adjustment directly from the user_profiles table if database is online
+      let dbProgramAdjustment = "NONE";
+      if (supabaseAdmin) {
+        try {
+          const { data: userProf, error: userProfErr } = await supabaseAdmin
+            .from("user_profiles")
+            .select("program_adjustment")
+            .eq("id", studentId)
+            .maybeSingle();
+          if (!userProfErr && userProf) {
+            dbProgramAdjustment = userProf.program_adjustment || "NONE";
+          }
+        } catch (dbErr) {
+          console.warn("Failed to query program_adjustment from user_profiles in GET:", dbErr);
+        }
+      }
+
+      let profile: any = null;
+
+      if (supabaseAdmin) {
+        try {
+          const { data, error } = await supabaseAdmin
+            .from("student_pedagogical_profiles")
+            .select("*")
+            .eq("student_id", studentId)
+            .maybeSingle();
+          if (!error && data) {
+            profile = data;
+          }
+        } catch (dbErr) {
+          // If the table doesn't exist, log a warning instead of breaking
+          console.warn("student_pedagogical_profiles query failed or table doesn't exist:", dbErr);
+        }
+      }
+
+      if (!profile) {
+        // JSON Fallback
+        let list = readJsonFile("student_pedagogical_profiles.json");
+        profile = list.find(p => p.student_id === studentId || p.studentId === studentId);
+        if (!profile) {
+          profile = {
+            student_id: studentId,
+            education_program: "",
+            visit_reason: "",
+            disabilities: "",
+            accommodations: "",
+            support_types: "",
+            practical_training: "",
+            documentation: "",
+            program_adjustment: "NONE",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+        }
+      }
+
+      // ALWAYS override program_adjustment with the real value from user_profiles
+      profile.program_adjustment = dbProgramAdjustment;
+
+      // Console log loaded profile as requested
+      console.log("LOAD PEDAGOGICAL PROFILE", profile);
+      console.log("LOADED PROGRAM ADJUSTMENT", profile?.program_adjustment);
+
+      res.json(profile);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
+  });
 
-    if (!supabaseAdmin) {
-      return res.status(503).json({
-        success: false,
-        error: "Supabase Admin client is not configured on the server."
-      });
+  const handleStudentPedagogicalProfile = async (req: any, res: any) => {
+    try {
+      console.log("[PEDAGOGICAL_PROFILE] Received state update payload:", req.body);
+      const payload = req.body || {};
+      const studentId = payload.studentId || payload.student_id;
+      
+      if (!studentId) {
+        console.error("[PEDAGOGICAL_PROFILE] Missing studentId in request body:", payload);
+        return res.status(400).json({ error: "studentId is required" });
+      }
+
+      const valAdjustment = payload.program_adjustment || payload.programAdjustment || payload.value || "NONE";
+      console.log(`[PEDAGOGICAL_PROFILE] Saving profile for student: ${studentId}, adjustment value: ${valAdjustment}`);
+
+      const dbPayload = {
+        student_id: studentId,
+        education_program: payload.education_program || payload.educationProgram || "",
+        visit_reason: payload.visit_reason || payload.visitReason || "",
+        disabilities: payload.disabilities || "",
+        accommodations: payload.accommodations || "",
+        support_types: payload.support_types || payload.supportTypes || "",
+        practical_training: payload.practical_training || payload.practicalTraining || "",
+        documentation: payload.documentation || "",
+        updated_at: new Date().toISOString()
+      };
+
+      if (supabaseAdmin) {
+        try {
+          console.log(`[PEDAGOGICAL_PROFILE] Updating user_profiles table directly config...`);
+          const { error: profileUpdError } = await supabaseAdmin
+            .from("user_profiles")
+            .update({ program_adjustment: valAdjustment })
+            .eq("id", studentId);
+          if (profileUpdError) {
+            console.error("[PEDAGOGICAL_PROFILE] Supabase profile update column error:", profileUpdError);
+          }
+        } catch (dbErr) {
+          console.error("[PEDAGOGICAL_PROFILE] Executing user_profiles update caught error:", dbErr);
+        }
+
+        try {
+          console.log(`[PEDAGOGICAL_PROFILE] Inserting/Upserting details into student_pedagogical_profiles table...`);
+          const { data, error } = await supabaseAdmin
+            .from("student_pedagogical_profiles")
+            .upsert(dbPayload, { onConflict: "student_id" })
+            .select("*")
+            .maybeSingle();
+          
+          if (!error && data) {
+            const merged = { ...data, program_adjustment: valAdjustment };
+            console.log("[PEDAGOGICAL_PROFILE] Database record upserted successfully:", merged);
+            return res.json(merged);
+          } else if (error) {
+            console.error("[PEDAGOGICAL_PROFILE] Supabase student_pedagogical_profiles upsert returned error:", error);
+          }
+        } catch (dbErr: any) {
+          console.error("[PEDAGOGICAL_PROFILE] Executing student_pedagogical_profiles table upsert threw exception:", dbErr);
+        }
+        
+        console.log("[INFO] Synchronization fallback: using local JSON storage.");
+      }
+
+      // JSON Fallback
+      let list = readJsonFile("student_pedagogical_profiles.json");
+      const idx = list.findIndex(p => p.student_id === studentId || p.studentId === studentId);
+      const newProfile = {
+        id: idx >= 0 ? list[idx].id : Math.random().toString(36).substring(2, 9) + '-' + Date.now(),
+        ...dbPayload,
+        program_adjustment: valAdjustment,
+        created_at: idx >= 0 ? (list[idx].created_at || new Date().toISOString()) : new Date().toISOString()
+      };
+
+      if (idx >= 0) {
+        list[idx] = newProfile;
+      } else {
+        list.push(newProfile);
+      }
+      
+      writeJsonFile("student_pedagogical_profiles.json", list);
+      console.log("[PEDAGOGICAL_PROFILE] Fallback saved successfully:", newProfile);
+      res.json(newProfile);
+    } catch (err: any) {
+      console.error("[PEDAGOGICAL_PROFILE] CRITICAL error inside handleStudentPedagogicalProfile handler:", err);
+      res.status(500).json({ error: err.message, stack: err.stack });
     }
+  };
 
-    const { data: userProfile, error: userProfileError } = await supabaseAdmin
-      .from("user_profiles")
-      .select("id, program_adjustment")
-      .eq("id", studentId)
-      .maybeSingle();
-
-    if (userProfileError) {
-      console.error("[PEDAGOGICAL_PROFILE] Failed to load program adjustment:", userProfileError);
-      return res.status(500).json({
-        success: false,
-        error: userProfileError.message,
-        details: userProfileError.details,
-        hint: userProfileError.hint,
-        code: userProfileError.code
-      });
-    }
-
-    if (!userProfile) {
-      return res.status(404).json({ success: false, error: "Student profile was not found." });
-    }
-
-    const { data: pedagogicalProfile, error: pedagogicalProfileError } = await supabaseAdmin
-      .from("student_pedagogical_profiles")
-      .select("*")
-      .eq("student_id", studentId)
-      .maybeSingle();
-
-    if (pedagogicalProfileError) {
-      console.error("[PEDAGOGICAL_PROFILE] Failed to load pedagogical profile:", pedagogicalProfileError);
-      return res.status(500).json({
-        success: false,
-        error: pedagogicalProfileError.message,
-        details: pedagogicalProfileError.details,
-        hint: pedagogicalProfileError.hint,
-        code: pedagogicalProfileError.code
-      });
-    }
-
-    const profile = {
-      student_id: studentId,
-      education_program: "",
-      visit_reason: "",
-      disabilities: "",
-      accommodations: "",
-      support_types: "",
-      practical_training: "",
-      documentation: "",
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-      ...(pedagogicalProfile || {}),
-      program_adjustment: userProfile.program_adjustment || "NONE"
-    };
-
-    console.log("[PEDAGOGICAL_PROFILE] Loaded Supabase profile for student:", studentId);
-    return res.json(profile);
-  } catch (err: any) {
-    console.error("[PEDAGOGICAL_PROFILE] GET failed:", err);
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-const handleStudentPedagogicalProfile = async (req: any, res: any) => {
-  try {
-    const payload = req.body || {};
-    const studentId = payload.studentId || payload.student_id;
-
-    if (!studentId || typeof studentId !== "string") {
-      return res.status(400).json({ success: false, error: "studentId is required" });
-    }
-
-    if (!supabaseAdmin) {
-      return res.status(503).json({
-        success: false,
-        error: "Supabase Admin client is not configured on the server."
-      });
-    }
-
-    const programAdjustment =
-      payload.program_adjustment || payload.programAdjustment || payload.value || "NONE";
-    const allowedAdjustments = new Set([
-      "NONE",
-      "REGULAR_WITH_ADAPTATION",
-      "REGULAR_WITH_INDIVIDUALIZATION"
-    ]);
-
-    if (!allowedAdjustments.has(programAdjustment)) {
-      return res.status(400).json({
-        success: false,
-        error: `Unsupported program adjustment value: ${programAdjustment}`
-      });
-    }
-
-    const pedagogicalPayload = {
-      student_id: studentId,
-      education_program: payload.education_program || payload.educationProgram || "",
-      visit_reason: payload.visit_reason || payload.visitReason || "",
-      disabilities: payload.disabilities || "",
-      accommodations: payload.accommodations || "",
-      support_types: payload.support_types || payload.supportTypes || "",
-      practical_training: payload.practical_training || payload.practicalTraining || "",
-      documentation: payload.documentation || "",
-      updated_at: new Date().toISOString()
-    };
-
-    const { data: updatedUserProfile, error: userProfileError } = await supabaseAdmin
-      .from("user_profiles")
-      .update({ program_adjustment: programAdjustment })
-      .eq("id", studentId)
-      .select("id, program_adjustment")
-      .maybeSingle();
-
-    if (userProfileError) {
-      console.error("[PEDAGOGICAL_PROFILE] user_profiles update failed:", userProfileError);
-      return res.status(500).json({
-        success: false,
-        error: userProfileError.message,
-        details: userProfileError.details,
-        hint: userProfileError.hint,
-        code: userProfileError.code
-      });
-    }
-
-    if (!updatedUserProfile) {
-      return res.status(404).json({ success: false, error: "Student profile was not found." });
-    }
-
-    const { data: savedPedagogicalProfile, error: pedagogicalProfileError } = await supabaseAdmin
-      .from("student_pedagogical_profiles")
-      .upsert(pedagogicalPayload, { onConflict: "student_id" })
-      .select("*")
-      .single();
-
-    if (pedagogicalProfileError) {
-      console.error("[PEDAGOGICAL_PROFILE] student_pedagogical_profiles upsert failed:", pedagogicalProfileError);
-      return res.status(500).json({
-        success: false,
-        error: pedagogicalProfileError.message,
-        details: pedagogicalProfileError.details,
-        hint: pedagogicalProfileError.hint,
-        code: pedagogicalProfileError.code
-      });
-    }
-
-    const result = {
-      ...savedPedagogicalProfile,
-      program_adjustment: updatedUserProfile.program_adjustment || "NONE"
-    };
-
-    console.log("[PEDAGOGICAL_PROFILE] Saved to Supabase for student:", studentId);
-    return res.json(result);
-  } catch (err: any) {
-    console.error("[PEDAGOGICAL_PROFILE] Save failed:", err);
-    return res.status(500).json({ success: false, error: err.message });
-  }
-};
-
-app.post("/api/student-pedagogical-profile", handleStudentPedagogicalProfile);
-app.put("/api/student-pedagogical-profile", handleStudentPedagogicalProfile);
-app.patch("/api/student-pedagogical-profile", handleStudentPedagogicalProfile);
+  app.post("/api/student-pedagogical-profile", handleStudentPedagogicalProfile);
+  app.put("/api/student-pedagogical-profile", handleStudentPedagogicalProfile);
+  app.patch("/api/student-pedagogical-profile", handleStudentPedagogicalProfile);
 
   app.get("/api/student-pedagogical-year-notes", async (req, res) => {
     try {

@@ -120,29 +120,34 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
   };
 
   return (
-    <header className="bg-[#005c8d] text-white z-50 h-[50px] hidden lg:flex items-center justify-between px-4 sticky top-0 shadow-md">
+    <header className="bg-[#005c8d] text-white z-50 h-[44px] lg:h-[50px] flex items-center justify-between px-3 lg:px-4 sticky top-0 shadow-md">
       {/* Left Structure */}
-      <div className="flex items-center gap-4">
-        <Link to="/" className="font-black text-lg tracking-tight hover:opacity-95 transition-opacity">e-Dnevnik</Link>
+      <div className="flex items-center gap-2 lg:gap-4 min-w-0">
+        <Link to="/" className="font-black text-sm lg:text-lg tracking-tight hover:opacity-95 transition-opacity shrink-0">e-Dnevnik</Link>
         
         {/* Current Context Display */}
         {(schoolLabel || classLabel) && (
-          <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest bg-black/10 px-3 py-1.5 rounded transition-all">
-             {schoolLabel && <span className="hidden md:inline">{schoolLabel}</span>}
-             {yearLabel && <><span className="text-white/30 hidden md:inline">|</span><span className="text-white/80 hidden md:inline">{yearLabel}</span></>}
+          <div className="flex flex-col lg:flex-row lg:items-center gap-0 lg:gap-2 bg-black/10 px-2 lg:px-3 py-0.5 lg:py-1.5 rounded transition-all min-w-0 max-w-[140px] sm:max-w-[260px] md:max-w-md lg:max-w-none">
+             {schoolLabel && (
+               <span className="text-[9px] lg:text-[11px] font-black uppercase tracking-wider lg:tracking-widest leading-tight lg:leading-normal truncate lg:overflow-visible block max-h-[22px] lg:max-h-none line-clamp-2" title={schoolLabel}>
+                 {schoolLabel}
+               </span>
+             )}
+             {yearLabel && <span className="text-white/30 hidden lg:inline">|</span>}
+             {yearLabel && <span className="text-white/80 text-[10px] hidden lg:inline">{yearLabel}</span>}
              {!finalHideClass && classLabel && (
-               <>
-                 <span className="text-white/30 hidden md:inline">|</span>
-                 <span className="bg-white text-[#005c8d] px-2 py-0.5 rounded-sm font-black text-[10px]">{classLabel}</span>
-               </>
+               <div className="flex items-center gap-1 shrink-0">
+                 <span className="text-white/30 hidden lg:inline">|</span>
+                 <span className="bg-white text-[#005c8d] px-1 lg:px-2 py-0.5 rounded-sm font-black text-[8px] lg:text-[10px]">{classLabel}</span>
+               </div>
              )}
              
              {!finalHideClass && showNav && (
                <>
-                 <span className="text-white/30 hidden md:inline">|</span>
+                 <span className="text-white/30 hidden lg:inline">|</span>
                  <button 
                    onClick={() => navigate('/select-class')} 
-                   className="hidden md:flex items-center gap-1 hover:bg-white/20 p-1 px-2 rounded transition-colors text-[10px]"
+                   className="hidden lg:flex items-center gap-1 hover:bg-white/20 p-1 px-2 rounded transition-colors text-[10px]"
                    title="Promijeni razred"
                  >
                    <Repeat size={12} /> Promijeni
@@ -155,20 +160,20 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
 
 
       {/* User Info Right */}
-      <div className="flex items-center gap-4 relative">
+      <div className="flex items-center gap-1.5 lg:gap-4 relative shrink-0">
         <div className="relative" ref={notifRef}>
           <button
             onClick={() => setIsNotifOpen(!isNotifOpen)}
-            className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30 relative"
+            className="w-[44px] h-[44px] lg:w-8 lg:h-8 rounded-full bg-white/0 lg:bg-white/20 flex items-center justify-center hover:bg-white/10 lg:hover:bg-white/30 relative"
           >
             <Bell size={18} />
             {notifications.filter(n => !n.is_read).length > 0 && (
-              <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#005c8d]"></span>
+              <span className="absolute top-2 right-2 lg:top-0 lg:right-0 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[#005c8d]"></span>
             )}
           </button>
           
           {isNotifOpen && (
-            <div className="absolute right-0 top-full mt-2 w-80 bg-white text-gray-800 border border-gray-200 shadow-xl rounded py-2 z-[100] animate-in fade-in zoom-in-95 duration-100 max-h-[400px] overflow-y-auto">
+            <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white text-gray-800 border border-gray-200 shadow-xl rounded py-2 z-[100] animate-in fade-in zoom-in-95 duration-100 max-h-[350px] overflow-y-auto">
               <div className="px-4 pb-2 border-b border-gray-100 font-bold text-sm">Obavijesti</div>
               {notifications.length === 0 ? (
                 <div className="px-4 py-6 text-center text-sm text-gray-500">Nema novih obavijesti.</div>
@@ -189,14 +194,14 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
           )}
         </div>
 
-        <div className="flex items-center gap-4 relative" ref={menuRef}>
-          <div className="text-right">
+        <div className="flex items-center gap-1 lg:gap-4 relative" ref={menuRef}>
+          <div className="text-right hidden lg:block">
                <div className="text-[12px] font-bold leading-tight">{formatPersonName(user)}</div>
                <div className="text-[10px] text-white/70 uppercase">{formattedRoles}</div>
           </div>
           <button 
             onClick={() => setIsMenuOpen(!isMenuOpen)}
-            className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center hover:bg-white/30"
+            className="w-[44px] h-[44px] lg:w-8 lg:h-8 rounded-full bg-white/0 lg:bg-white/20 flex items-center justify-center hover:bg-white/10 lg:hover:bg-white/30"
           >
             <User size={18} />
           </button>
@@ -209,7 +214,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
                   setIsMenuOpen(false);
                   navigate('/student/osobni-podaci');
                 }}
-                className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100"
+                className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
               >
                 <User size={14} />
                 Osobni podaci
@@ -227,14 +232,14 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
                   navigate('/teacher/postavke');
                 }
               }}
-              className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100"
+              className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
             >
               <Settings size={14} />
               Postavke
             </button>
             <button 
               onClick={handleLogout}
-              className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors"
+              className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors min-h-[44px]"
             >
               <LogOut size={14} />
               Odjava

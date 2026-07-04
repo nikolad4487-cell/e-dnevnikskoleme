@@ -1,1 +1,0 @@
-ImenikTable poziva autentificirani API za upozorenja i koristi odgovor za prikaz trokuta s brojem jedinica te sata za izostanke koji cekaju opravdanje.
