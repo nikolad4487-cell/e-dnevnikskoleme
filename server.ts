@@ -4058,6 +4058,7 @@ Generiraj JSON objekt sa sljedećom strukturom:
     console.log(`Server running on http://localhost:${PORT}`);
     fixNullSchoolYears();
   });
+  return app;
   } catch (err) {
     console.error("CRITICAL: Failed to start server:", err);
     process.exit(1);
