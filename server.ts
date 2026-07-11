@@ -16,15 +16,27 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Flat file JSON DB for fallback / guaranteed local persistence
-const DATA_DIR = path.join(__dirname, "data");
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+const isVercel = process.env.VERCEL === "1";
+const DATA_DIR = isVercel 
+  ? path.join("/tmp", "data")
+  : path.join(__dirname, "data");
+
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (err: any) {
+  console.warn(`[SERVER] Warning: Failed to create DATA_DIR at ${DATA_DIR}:`, err.message);
 }
 
 function initJsonFile(filename: string) {
   const filePath = path.join(DATA_DIR, filename);
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, JSON.stringify([], null, 2), "utf-8");
+  try {
+    if (!fs.existsSync(filePath)) {
+      fs.writeFileSync(filePath, JSON.stringify([], null, 2), "utf-8");
+    }
+  } catch (err: any) {
+    console.warn(`[SERVER] Warning: Failed to initialize JSON file ${filename}:`, err.message);
   }
 }
 
@@ -3197,9 +3209,17 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       }
 
       res.json({ session, user: profile, roles: userSchoolRoles });
-    } catch (err: any) {
-      console.error("[LOGIN_API] Error:", err);
-      res.status(500).json({ error: err.message });
+    } catch (error: any) {
+      console.error('[AUTH_LOGIN] Failed:', {
+        name: error instanceof Error ? error.name : 'UnknownError',
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      });
+      res.setHeader('Content-Type', 'application/json');
+      res.status(500).json({
+        success: false,
+        error: 'Prijava trenutno nije moguća.'
+      });
     }
   });
 
@@ -4054,10 +4074,15 @@ Generiraj JSON objekt sa sljedećom strukturom:
     }
   };
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  if (isVercel) {
+    console.log("[SERVER] Running in Vercel environment. Skipping app.listen.");
     fixNullSchoolYears();
-  });
+  } else {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+      fixNullSchoolYears();
+    });
+  }
   return app;
   } catch (err) {
     console.error("CRITICAL: Failed to start server:", err);
