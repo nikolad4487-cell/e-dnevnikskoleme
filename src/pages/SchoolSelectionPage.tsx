@@ -49,7 +49,7 @@ export default function SchoolSelectionPage() {
         
         schoolIds = (childRoles || []).map(r => r.school_id);
       } else {
-        const directSchoolIds = userSchoolRoles.map(r => r.school_id);
+        const directSchoolIds = userSchoolRoles.map(r => r.schoolId || r.school_id).filter(Boolean);
         
         // Fallback for students: check class enrollments if user doesn't have roles
         // This handles cases where student has class enrollment but no school role yet

@@ -34,7 +34,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isSchoolAdmin = isMainAdmin || (userSchoolRoles && userSchoolRoles.some(r => r.school_id === selectedSchoolId && (r.role === 'ADMIN' || r.role === 'SCHOOL_ADMIN')));
+  const isSchoolAdmin = isMainAdmin || (userSchoolRoles && userSchoolRoles.some(r => (r.schoolId === selectedSchoolId || r.school_id === selectedSchoolId) && (r.role === 'ADMIN' || r.role === 'SCHOOL_ADMIN')));
 
   const [events, setEvents] = useState<SchoolEvent[]>([]);
   const [loading, setLoading] = useState(true);

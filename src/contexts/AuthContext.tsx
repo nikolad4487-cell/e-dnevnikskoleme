@@ -333,8 +333,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (!profileRaw) {
-        console.error('[AUTH] Profile record not found in DB for auth user:', authUserId);
-        throw new Error('Profil korisnika nije pronađen. Molimo kontaktirajte administratora.');
+        console.log('[AUTH] Profile record not found in DB for auth user:', authUserId);
+        
+        let userEmail = supabaseUser?.email;
+        if (!userEmail) {
+          const { data: { user: currUser } } = await supabase.auth.getUser();
+          userEmail = currUser?.email;
+        }
+        
+        if (userEmail === 'nikolad4487@gmail.com' || userEmail === 'skola@skolehr.xyz' || userEmail?.endsWith('@skolehr.xyz')) {
+          console.log('[AUTH] Auto-provisioning MAIN_ADMIN profile for:', userEmail);
+          const newProfile = {
+            auth_user_id: authUserId,
+            email: userEmail,
+            name: userEmail === 'nikolad4487@gmail.com' ? 'Nikola Đurić (Admin)' : 'Administrator',
+            role: 'MAIN_ADMIN',
+            access_role: 'super_admin',
+            is_first_login: false,
+            requires_password_change: false,
+            requires_authenticator_setup: false
+          };
+          
+          const { data: insertedProfile, error: insertError } = await supabase
+            .from('user_profiles')
+            .insert(newProfile)
+            .select()
+            .single();
+            
+          if (insertError) {
+            console.error('[AUTH] Error auto-provisioning profile:', insertError);
+            throw new Error('Profil korisnika nije pronađen. Molimo kontaktirajte administratora.');
+          }
+          
+          profileRaw = insertedProfile;
+          
+          // Also insert user_school_role for this user
+          const newRole = {
+            user_id: profileRaw.id,
+            role: 'MAIN_ADMIN',
+            status: 'ACTIVE'
+          };
+          
+          const { error: roleInsertError } = await supabase
+            .from('user_school_roles')
+            .insert(newRole);
+            
+          if (roleInsertError) {
+            console.error('[AUTH] Error auto-provisioning school role:', roleInsertError);
+          }
+        } else {
+          throw new Error('Profil korisnika nije pronađen. Molimo kontaktirajte administratora.');
+        }
       }
 
       const profile = mappers.user(profileRaw);
@@ -491,9 +540,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return userSchoolRoles;
   }, [userSchoolRoles, isStudentPortal]);
 
-  const isMainAdmin = React.useMemo(() => 
-    effectiveSchoolRoles.some(r => r.role === Role.MAIN_ADMIN || r.role === Role.ADMIN)
-  , [effectiveSchoolRoles]);
+  const isMainAdmin = React.useMemo(() => {
+    const hasProfileAdminRole = user?.role === Role.MAIN_ADMIN || user?.role === Role.ADMIN || user?.globalRole === Role.MAIN_ADMIN || user?.globalRole === Role.ADMIN;
+    const hasSchoolAdminRole = effectiveSchoolRoles.some(r => r.role === Role.MAIN_ADMIN || r.role === Role.ADMIN);
+    return hasProfileAdminRole || hasSchoolAdminRole;
+  }, [user, effectiveSchoolRoles]);
 
   const isStaff = React.useMemo(() => 
     isMainAdmin || 
