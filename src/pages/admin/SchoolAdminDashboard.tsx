@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { School, Role } from '../../types';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -22,6 +23,7 @@ import { toast } from 'react-hot-toast';
 
 export default function SchoolAdminDashboard() {
   const { selectedSchoolId } = useSelection();
+  const { userSchoolRoles, isMainAdmin } = useAuth();
   const navigate = useNavigate();
   const [school, setSchool] = useState<School | null>(null);
   const [stats, setStats] = useState({
@@ -31,6 +33,11 @@ export default function SchoolAdminDashboard() {
     subjects: 0
   });
   const [loading, setLoading] = useState(true);
+
+  const schoolsCount = React.useMemo(() => {
+    const uniqueSchoolIds = new Set(userSchoolRoles.map(r => r.schoolId || r.school_id).filter(Boolean));
+    return uniqueSchoolIds.size;
+  }, [userSchoolRoles]);
 
   useEffect(() => {
     if (!selectedSchoolId) {
@@ -108,12 +115,14 @@ export default function SchoolAdminDashboard() {
           <Building2 size={16} className="text-[#005c8d]" />
           <span>Administracija škole: {school?.name}</span>
         </div>
-        <button 
-          onClick={() => navigate('/admin/schools')}
-          className="text-[10px] uppercase font-bold text-[#005c8d] hover:underline"
-        >
-          Promijeni školu
-        </button>
+        {(isMainAdmin || schoolsCount > 1) && (
+          <button 
+            onClick={() => navigate('/admin/schools')}
+            className="text-[10px] uppercase font-bold text-[#005c8d] hover:underline"
+          >
+            Promijeni školu
+          </button>
+        )}
       </div>
 
       <div className="ed-content">

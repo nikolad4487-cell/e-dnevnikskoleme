@@ -77,10 +77,14 @@ export function SelectionProvider({ children }: { children: React.ReactNode }) {
     setSelectedChildId(null);
     setIsArchived(false);
     sessionStorage.removeItem('selectedSchoolId');
+    localStorage.removeItem('selectedSchoolId');
     localStorage.removeItem('selectedYearId');
     sessionStorage.removeItem('selectedClassId');
+    localStorage.removeItem('selectedClassId');
     sessionStorage.removeItem('selectedChildId');
+    localStorage.removeItem('selectedChildId');
     sessionStorage.removeItem('isArchived');
+    localStorage.removeItem('isArchived');
   }, []);
 
   const value = React.useMemo(() => ({

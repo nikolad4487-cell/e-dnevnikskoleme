@@ -75,6 +75,8 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
   };
 
+  const isSchoolSelectionPage = location.pathname === '/select-school';
+  
   useEffect(() => {
     let isMounted = true;
     const fetchLabels = async () => {
@@ -82,15 +84,15 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
       let yLabel = '';
       let cLabel = '';
 
-      if (selectedSchoolId) {
+      if (selectedSchoolId && location.pathname !== '/select-school') {
         const { data: sData } = await supabase.from('schools').select('name').eq('id', selectedSchoolId).single();
         if (sData && isMounted) sLabel = sData.name;
       }
-      if (selectedYearId) {
+      if (selectedYearId && location.pathname !== '/select-school') {
         const { data: yData } = await supabase.from('school_years').select('name').eq('id', selectedYearId).single();
         if (yData && isMounted) yLabel = yData.name;
       }
-      if (selectedClassId) {
+      if (selectedClassId && location.pathname !== '/select-school') {
          const { data: cData } = await supabase.from('classes').select('name, school_year').eq('id', selectedClassId).single();
          if (cData && isMounted) {
            cLabel = cData.name;
@@ -111,7 +113,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
     return () => {
       isMounted = false;
     };
-  }, [selectedSchoolId, selectedYearId, selectedClassId]);
+  }, [selectedSchoolId, selectedYearId, selectedClassId, location.pathname]);
 
   const handleLogout = async () => {
     await signOut();
@@ -126,7 +128,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
         <Link to="/" className="font-black text-sm lg:text-lg tracking-tight hover:opacity-95 transition-opacity shrink-0">e-Dnevnik</Link>
         
         {/* Current Context Display */}
-        {(schoolLabel || classLabel) && (
+        {!isSchoolSelectionPage && (schoolLabel || classLabel) && (
           <div className="flex flex-col lg:flex-row lg:items-center gap-0 lg:gap-2 bg-black/10 px-2 lg:px-3 py-0.5 lg:py-1.5 rounded transition-all min-w-0 max-w-[140px] sm:max-w-[260px] md:max-w-md lg:max-w-none">
              {schoolLabel && (
                <span className="text-[9px] lg:text-[11px] font-black uppercase tracking-wider lg:tracking-widest leading-tight lg:leading-normal truncate lg:overflow-visible block max-h-[22px] lg:max-h-none line-clamp-2" title={schoolLabel}>

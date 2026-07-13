@@ -54,6 +54,11 @@ export default function ClassSelectionPage() {
   const currentSchoolRoles = userSchoolRoles.filter(r => r.schoolId === selectedSchoolId).map(r => r.role);
   const isSchoolAdmin = isMainAdmin || currentSchoolRoles.includes(Role.SCHOOL_ADMIN) || currentSchoolRoles.includes(Role.ADMIN);
 
+  const schoolsCount = React.useMemo(() => {
+    const uniqueSchoolIds = new Set(userSchoolRoles.map(r => r.schoolId || r.school_id).filter(Boolean));
+    return uniqueSchoolIds.size;
+  }, [userSchoolRoles]);
+
   useEffect(() => {
     const init = async () => {
       let schoolId = selectedSchoolId;
@@ -373,13 +378,17 @@ export default function ClassSelectionPage() {
       <Header showNav={false} />
       <div className="flex-1 max-w-5xl mx-auto py-12 px-6 w-full">
         <div className="flex justify-between items-center mb-8">
-          <button 
-            onClick={() => navigate('/select-school')}
-            className="text-[10px] font-black uppercase text-slate-400 hover:text-[#005c8d] transition-colors flex items-center gap-1 bg-white border border-slate-200 px-4 py-2"
-          >
-            <ChevronLeft size={14} />
-            Promijeni školu
-          </button>
+          {(isMainAdmin || schoolsCount > 1) ? (
+            <button 
+              onClick={() => navigate('/select-school')}
+              className="text-[10px] font-black uppercase text-slate-400 hover:text-[#005c8d] transition-colors flex items-center gap-1 bg-white border border-slate-200 px-4 py-2"
+            >
+              <ChevronLeft size={14} />
+              Promijeni školu
+            </button>
+          ) : (
+            <div />
+          )}
 
           {isSchoolAdmin && (
             <button 

@@ -11,10 +11,14 @@ import { parseSchoolAddress } from './admin/SchoolsManagementPage';
 
 export default function SchoolSelectionPage() {
   const { user, isMainAdmin, userSchoolRoles, isParent, isStaff } = useAuth();
-  const { setSelectedSchoolId, selectedChildId } = useSelection();
+  const { setSelectedSchoolId, selectedChildId, clearSelection } = useSelection();
   const [schools, setSchools] = useState<School[]>([]);
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    clearSelection();
+  }, [clearSelection]);
 
   useEffect(() => {
     fetchSchools();
@@ -97,6 +101,8 @@ export default function SchoolSelectionPage() {
       // PH7: If user has one school: → auto enter that school
       if (filteredSchools.length === 1 && !isMainAdmin) {
         handleSelect(filteredSchools[0].id);
+        clearTimeout(timeout);
+        return;
       }
     } catch (error) {
       console.error(error);
@@ -138,6 +144,17 @@ export default function SchoolSelectionPage() {
         <div className="mb-6 md:mb-10 text-center">
           <h1 className="text-xl md:text-2xl font-black text-[#005c8d] uppercase tracking-tight mb-1.5 md:mb-2">Odabir škole</h1>
           <div className="w-12 h-1 bg-[#005c8d] mx-auto opacity-20"></div>
+          
+          {isMainAdmin && (
+            <div className="mt-4 flex justify-center">
+              <button
+                onClick={() => navigate('/admin/schools')}
+                className="bg-green-600 text-white hover:bg-green-700 transition-colors py-2 px-6 rounded-sm text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-sm"
+              >
+                <span>＋</span> Dodaj školu
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Desktop view table */}
