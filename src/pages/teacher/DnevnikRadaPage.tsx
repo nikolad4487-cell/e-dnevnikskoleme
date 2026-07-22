@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import { fetchClassSubjectOptions, type ClassSubjectOption } from '../../lib/classSubjectService';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan } from '../../types';
@@ -39,6 +40,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [allSubjects, setAllSubjects] = useState<any[]>([]);
   const [rawSubjects, setRawSubjects] = useState<any[]>([]);
   const [classSubjects, setClassSubjects] = useState<any[]>([]);
+  const [scheduleSubjectOptions, setScheduleSubjectOptions] = useState<ClassSubjectOption[]>([]);
   const [teachers, setTeachers] = useState<User[]>([]);
   
   const [weeks, setWeeks] = useState<WorkWeek[]>([]);
@@ -892,6 +894,7 @@ setStudents(uniqueStudents);
         if (error) throw error;
 
         setSubjectAssignments(mapList(data || [], mappers.classSubjectTeacher));
+        setScheduleSubjectOptions(await fetchClassSubjectOptions(effectiveClassId));
       } catch (err) {
         console.error(err);
         toast.error('Greška pri učitavanju zaduženja');
@@ -943,18 +946,17 @@ setStudents(uniqueStudents);
   const handleSaveCellSubject = async () => {
     if (!editingCell || !effectiveClassId || !cellSubjectForm.subjectId) return;
     
-    // Find the assignment to get the teacher automatically
-    const assignment = subjectAssignments.find(a => 
+    // The subject list comes from class_subjects; teachers are metadata from class_subject_teachers.
+    const classSubjectOption = scheduleSubjectOptions.find(a =>
       a.subjectId === cellSubjectForm.subjectId && 
       a.classId === effectiveClassId
     );
+    const teacherId = classSubjectOption?.primaryTeacherId || '';
     
-    if (!assignment || !assignment.teacherId) {
+    if (!teacherId) {
       toast.error("Predmet nema dodijeljenog nastavnika u ovom razredu. Molimo nazovite administratora.");
       return;
     }
-
-    const teacherId = assignment.teacherId;
 
     try {
       const res = await fetch('/api/admin/bulk-schedule-assign', {
@@ -3827,20 +3829,20 @@ setStudents(uniqueStudents);
                         value={cellSubjectForm.subjectId}
                         onChange={e => {
                           const subId = e.target.value;
-                          const assignment = subjectAssignments.find(a => a.subjectId === subId && a.classId === effectiveClassId);
+                          const assignment = scheduleSubjectOptions.find(a => a.subjectId === subId && a.classId === effectiveClassId);
                           setCellSubjectForm({
                             ...cellSubjectForm, 
                             subjectId: subId,
-                            teacherId: assignment?.teacherId || ''
+                            teacherId: assignment?.primaryTeacherId || ''
                           });
                         }}
                         className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                       >
                         <option value="">-- Odaberi predmet --</option>
-                        {allSubjects?.filter(s => 
-                            subjectAssignments?.some(a => a.subjectId === s.id && a.classId === effectiveClassId)
-                          )
-                          .map(s => <option key={s.id} value={s.id}>{formatSubjectName(s)}</option>)
+
+                        {scheduleSubjectOptions
+                          .map(s => <option key={s.classSubjectId} value={s.subjectId}>{s.displayName}</option>)
+
                         }
                       </select>
                    </div>

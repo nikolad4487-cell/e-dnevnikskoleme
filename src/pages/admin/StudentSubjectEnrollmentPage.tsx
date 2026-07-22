@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { fetchClassSubjectOptions } from '../../lib/classSubjectService';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Subject, Role } from '../../types';
 import { getSurname, matchesSearch, sortStudentsBySurname, formatSubjectName } from '../../lib/utils';
@@ -83,14 +84,9 @@ export default function StudentSubjectEnrollmentPage() {
     try {
       setLoading(true);
       
-      const { data: classSubjects } = await supabase
-        .from('class_subject_teachers')
-        .select('subject:subjects(*)')
-        .eq('class_id', selectedClassId);
-      
-      const mappedSubjects = (classSubjects || []).map(cs => cs.subject).filter(Boolean) as any[] as Subject[];
-      const uniqueSubjects = Array.from(new Map(mappedSubjects.map((s: any) => [s.id, s])).values());
-      setSubjects(uniqueSubjects);
+      const classSubjectOptions = await fetchClassSubjectOptions(selectedClassId);
+      const mappedSubjects = classSubjectOptions.map(option => option.subject).filter(Boolean) as Subject[];
+      setSubjects(mappedSubjects);
 
       const { data: enrolls } = await supabase
         .from('student_class_enrollments')
