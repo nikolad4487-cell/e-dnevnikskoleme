@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { User, Role } from '../../types';
+import { User, Role, EdnevnikSyncReport } from '../../types';
 import { 
   UserPlus, 
   Search, 
@@ -15,7 +15,11 @@ import {
   Filter,
   CheckCircle2,
   XCircle,
-  Trash2
+  Trash2,
+  RefreshCw,
+  Users,
+  AlertCircle,
+  Check
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -48,6 +52,43 @@ export default function UserManagementPage() {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [bulkRole, setBulkRole] = useState<Role>(Role.STUDENT);
   const [bulkData, setBulkData] = useState('');
+
+  // Sync State
+  const [syncing, setSyncing] = useState(false);
+  const [syncReport, setSyncReport] = useState<EdnevnikSyncReport | null>(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+
+  const handleSyncUsers = async () => {
+    try {
+      setSyncing(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch('/api/admin/sync-ednevnik-users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
+        },
+        body: JSON.stringify({
+          schoolId: selectedSchoolId
+        })
+      });
+
+      const resData = await response.json();
+      if (!response.ok || !resData.success) {
+        throw new Error(resData.error || 'Neuspjela sinkronizacija');
+      }
+
+      setSyncReport(resData.report);
+      setIsReportModalOpen(true);
+      toast.success('Sinkronizacija korisnika uspješno završena!');
+      fetchUsers();
+    } catch (err: any) {
+      console.error("SYNC FAILED:", err);
+      toast.error('Greška pri sinkronizaciji: ' + (err.message || 'Nepoznata greška'));
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const toggleRole = (role: Role) => {
     setSelectedRoles(prev => 
@@ -400,15 +441,23 @@ export default function UserManagementPage() {
         {isAnyAdmin && (
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <button 
+              onClick={handleSyncUsers}
+              disabled={syncing}
+              className="w-full sm:w-auto bg-emerald-600 text-white px-5 py-2.5 rounded-lg font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer"
+            >
+              <RefreshCw className={syncing ? "animate-spin" : ""} size={16} strokeWidth={3} />
+              {syncing ? "Sinkronizacija..." : "Pokreni sinkronizaciju"}
+            </button>
+            <button 
               onClick={() => setIsBulkModalOpen(true)}
-              className="w-full sm:w-auto bg-slate-100 text-[#005c8d] px-5 py-2.5 rounded-lg font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:bg-slate-200 transition-all shadow-xs active:scale-95"
+              className="w-full sm:w-auto bg-slate-100 text-[#005c8d] px-5 py-2.5 rounded-lg font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:bg-slate-200 transition-all shadow-xs active:scale-95 cursor-pointer"
             >
               <UserPlus size={16} strokeWidth={3} />
               Dodaj više
             </button>
             <button 
               onClick={handleOpenCreate}
-              className="w-full sm:w-auto bg-[#005c8d] text-white px-5 py-2.5 rounded-lg font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:bg-[#004a71] transition-all shadow-md active:scale-95"
+              className="w-full sm:w-auto bg-[#005c8d] text-white px-5 py-2.5 rounded-lg font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:bg-[#004a71] transition-all shadow-md active:scale-95 cursor-pointer"
             >
               <UserPlus size={16} strokeWidth={3} />
               Novi korisnik
@@ -810,6 +859,128 @@ export default function UserManagementPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Sync Report Modal */}
+      {isReportModalOpen && syncReport && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden border border-slate-200">
+            {/* Header */}
+            <div className="p-5 bg-gradient-to-r from-emerald-700 to-teal-800 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-white/15 rounded-xl backdrop-blur-md">
+                  <RefreshCw size={22} className="text-white" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-black uppercase tracking-tight">Izvještaj sinkronizacije e-Dnevnika</h3>
+                  <p className="text-emerald-100 text-xs font-medium">Usporedba e-Dnevnika i Supabase baze podataka</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsReportModalOpen(false)}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors text-white font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Summary Cards Grid */}
+            <div className="p-5 bg-slate-50 border-b border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Učenici</span>
+                <span className="text-2xl font-black text-slate-900">{syncReport.summary.students}</span>
+              </div>
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Nastavnici</span>
+                <span className="text-2xl font-black text-[#005c8d]">{syncReport.summary.teachers}</span>
+              </div>
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Administratori</span>
+                <span className="text-2xl font-black text-purple-700">{syncReport.summary.schoolAdmins + syncReport.summary.systemAdmins}</span>
+              </div>
+              <div className="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block mb-1">Ukupno u bazi</span>
+                <span className="text-2xl font-black text-emerald-600">{syncReport.summary.totalUsers}</span>
+              </div>
+            </div>
+
+            {/* Sub-summary Badges */}
+            <div className="px-5 py-3 bg-white border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-3 font-bold">
+                <span className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-[11px]">
+                  + {syncReport.summary.newUsers} novih korisnika kreirano
+                </span>
+                <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-[11px]">
+                  ⚡ {syncReport.summary.updatedUsers} korisnika ažurirano/povezano
+                </span>
+              </div>
+              <span className="text-slate-400 text-[10px] font-mono">
+                {new Date(syncReport.timestamp).toLocaleString('hr-HR')}
+              </span>
+            </div>
+
+            {/* Details Table */}
+            <div className="p-5 overflow-y-auto flex-1 space-y-2">
+              <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 mb-2">Detalji po korisniku</h4>
+              <div className="border border-slate-200 rounded-xl overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100 text-slate-600 font-extrabold uppercase text-[10px] tracking-wider border-b border-slate-200">
+                    <tr>
+                      <th className="p-3">Korisnik / Email</th>
+                      <th className="p-3">Uloga</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3">Poruka</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                    {syncReport.details && syncReport.details.length > 0 ? (
+                      syncReport.details.map((item, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-3">
+                            <div className="font-bold text-slate-900">{item.name || item.email?.split('@')[0]}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">{item.email}</div>
+                          </td>
+                          <td className="p-3">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-bold text-[10px] uppercase">
+                              {item.role || 'USER'}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className={`px-2.5 py-1 rounded-md font-extrabold text-[10px] uppercase tracking-wider inline-flex items-center gap-1 ${
+                              item.status === 'CREATED' ? 'bg-emerald-100 text-emerald-700' :
+                              item.status === 'UPDATED' || item.status === 'LINKED' ? 'bg-blue-100 text-blue-700' :
+                              item.status === 'ERROR' ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              {item.status === 'CREATED' && <Check size={12} />}
+                              {item.status}
+                            </span>
+                          </td>
+                          <td className="p-3 text-[11px] text-slate-500">{item.message}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="p-6 text-center text-slate-400 italic">
+                          Svi korisnici su već u potpunosti sinkronizirani.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-slate-100 border-t border-slate-200 flex justify-end">
+              <button
+                onClick={() => setIsReportModalOpen(false)}
+                className="bg-[#005c8d] text-white px-6 py-2.5 rounded-xl font-black uppercase text-[11px] tracking-wider hover:bg-[#004a71] transition-all shadow-md cursor-pointer"
+              >
+                Zatvori izvještaj
+              </button>
+            </div>
           </div>
         </div>
       )}

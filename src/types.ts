@@ -558,3 +558,25 @@ export interface StudentParentLink {
   created_at: string;
   student?: User;
 }
+
+export interface EdnevnikSyncReport {
+  timestamp: string;
+  triggeredBy?: string;
+  summary: {
+    totalUsers: number;
+    students: number;
+    teachers: number;
+    schoolAdmins: number;
+    systemAdmins: number;
+    newUsers: number;
+    updatedUsers: number;
+  };
+  details: {
+    email: string;
+    name?: string;
+    role: string;
+    status: 'CREATED' | 'LINKED' | 'UPDATED' | 'OK' | 'ERROR';
+    message: string;
+  }[];
+}
+
