@@ -178,6 +178,7 @@ export type Class = {
   homeroom?: User;
   deputy?: User;
   programId?: string;
+  program?: Program;
   programType?: ProgramType;
   classVariant?: ClassVariant;
   isContinuationProgram?: boolean;
@@ -482,6 +483,8 @@ export type Program = {
   id: string;
   schoolId: string;
   name: string;
+  module_or_track?: string | null;
+  moduleOrTrack?: string | null;
   durationYears: number;
   type: ProgramType;
   continuationType?: any;

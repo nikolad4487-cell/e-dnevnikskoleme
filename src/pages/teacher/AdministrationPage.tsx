@@ -7,7 +7,7 @@ import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, Cu
 import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info, FileText } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
-import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortStudentsBySurname, getForcedSubjectType } from '../../lib/utils';
+import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortStudentsBySurname, getForcedSubjectType, getProgramDisplayName } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import CertificateManagementPage from './certificates/CertificateManagementPage';
 import InformativkaAdminPage from '../admin/InformativkaAdminPage';
@@ -3683,7 +3683,7 @@ setAllSubjects(uniqueSub2);
                             >
                               <option value="">-- Odaberi --</option>
                               {filteredPrograms.map(p => (
-                                <option key={p.id} value={p.id}>{p.name}</option>
+                                <option key={p.id} value={p.id}>{getProgramDisplayName(p)}</option>
                               ))}
                             </select>
                             {!classDetailForm.program_id && (
@@ -4578,7 +4578,7 @@ setAllSubjects(uniqueSub2);
                           <option value="">-- Odaberi --</option>
                           {programs.map(p => (
                             <option key={p.id} value={p.id}>
-                              {p.module_or_track ? `${p.name} — ${p.module_or_track}` : p.name}
+                              {getProgramDisplayName(p)}
                             </option>
                           ))}
                         </select>
@@ -4735,7 +4735,7 @@ setAllSubjects(uniqueSub2);
                              className="w-full border border-gray-300 p-2 outline-none focus:border-[#005c8d] font-bold"
                            >
                              <option value="">Odaberi program...</option>
-                             {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                             {programs.map(p => <option key={p.id} value={p.id}>{getProgramDisplayName(p)}</option>)}
                            </select>
                         </div>
                       </div>
@@ -4837,7 +4837,7 @@ setAllSubjects(uniqueSub2);
                         <option value="">Program...</option>
                         {programs.map(p => (
                           <option key={p.id} value={p.id}>
-                            {p.module_or_track ? `${p.name} — ${p.module_or_track}` : p.name}
+                            {getProgramDisplayName(p)}
                           </option>
                         ))}
                       </select>
@@ -5703,7 +5703,7 @@ setAllSubjects(uniqueSub2);
                                return program.type !== 'CONTINUATION_FREE' && program.type !== 'CONTINUATION_PAID';
                              }).map(p => (
                               <option key={p.id} value={p.id}>
-                                {p.module_or_track ? `${p.name} — ${p.module_or_track}` : p.name}
+                                {getProgramDisplayName(p)}
                               </option>
                             ))}
                           </select>

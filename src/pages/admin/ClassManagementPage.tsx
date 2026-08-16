@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { matchesSearch } from '../../lib/utils';
+import { getProgramDisplayName, matchesSearch } from '../../lib/utils';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
@@ -745,7 +745,7 @@ order by name, module_or_track;
                   </option>
                   {programs.map(p => (
                     <option key={p.id} value={p.id}>
-                      {p.module_or_track ? `${p.name} — ${p.module_or_track}` : p.name}
+                      {getProgramDisplayName(p)}
                     </option>
                   ))}
                 </select>

@@ -6,7 +6,7 @@ import { Role, SchoolYear, isSuperAdminUser, hasAnyRole } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, ArrowRight, Calendar, Plus, Award, FileText, UserX, Clock, Building2, Shield, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { cn, formatPersonName } from '../lib/utils';
+import { cn, formatPersonName, getProgramDisplayName } from '../lib/utils';
 import { Header } from '../components/Header';
 
 interface ClassWithDetails {
@@ -24,6 +24,7 @@ interface ClassWithDetails {
   deputyTeacherName?: string;
   userRoleInClass?: 'HOMEROOM' | 'DEPUTY' | 'TEACHER' | 'ADMIN' | 'STUDENT';
   programName?: string;
+  program?: any;
 }
 
 interface SchoolOption {
@@ -297,6 +298,9 @@ export default function ClassSelectionPage() {
                  assignedClassIds.includes(cls.id);
         })
         .map(cls => {
+          const programDisplay = getProgramDisplayName(cls.program, { short: true });
+          console.log("CLASS PROGRAM RAW", cls.program);
+          console.log("CLASS PROGRAM DISPLAY", programDisplay);
           let role: 'HOMEROOM' | 'DEPUTY' | 'TEACHER' | 'ADMIN' = 'TEACHER';
           if (isSchoolAdmin) role = 'ADMIN';
           if (cls.homeroom_teacher_id === user.id) role = 'HOMEROOM';
@@ -316,7 +320,8 @@ export default function ClassSelectionPage() {
             homeroomTeacherName: (cls.homeroom as any)?.name,
             deputyTeacherName: (cls.deputy as any)?.name,
             userRoleInClass: role as any,
-            programName: cls.program?.name || `${cls.grade_level}. razred`
+            program: cls.program,
+            programName: programDisplay || `${cls.grade_level}. razred`
           } as any;
         });
 
@@ -384,6 +389,9 @@ export default function ClassSelectionPage() {
 
       (enrollments || []).forEach((env: any) => {
         if (!seenClasses.has(env.class_id) && (!selectedSchoolId || env.classes?.school_id === selectedSchoolId)) {
+          const programDisplay = getProgramDisplayName(env.classes.program, { short: true });
+          console.log("CLASS PROGRAM RAW", env.classes.program);
+          console.log("CLASS PROGRAM DISPLAY", programDisplay);
           seenClasses.add(env.class_id);
           classesData.push({
             id: env.classes.id,
@@ -399,7 +407,8 @@ export default function ClassSelectionPage() {
             homeroomTeacherName: env.classes.homeroom?.name,
             deputyTeacherName: env.classes.deputy?.name,
             userRoleInClass: 'STUDENT',
-            programName: env.classes.program?.name || `${env.classes.grade_level}. razred`
+            program: env.classes.program,
+            programName: programDisplay || `${env.classes.grade_level}. razred`
           } as any);
         }
       });

@@ -85,6 +85,25 @@ export function formatName(item: any) {
   return formatPersonName(item);
 }
 
+export function cleanModuleOrTrack(value: any): string {
+  return String(value || "")
+    .replace(/^Modul\s+/i, "")
+    .replace(/^Smjer\s+/i, "")
+    .trim();
+}
+
+export function getProgramDisplayName(program: any, options: { short?: boolean } = {}): string {
+  if (!program) return "";
+
+  const name = String(program.name || "").trim();
+  const moduleOrTrack = String(program.module_or_track || program.moduleOrTrack || "").trim();
+
+  if (!moduleOrTrack) return name;
+
+  const displayModule = options.short ? cleanModuleOrTrack(moduleOrTrack) : moduleOrTrack;
+  return `${name} — ${displayModule}`;
+}
+
 export function formatSubjectDisplayName(subjectName: string, subjectType: string) {
   if (!subjectName) return '';
   
