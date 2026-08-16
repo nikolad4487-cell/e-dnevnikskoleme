@@ -152,7 +152,7 @@ export default function ClassStudentsPage() {
 
       // Also automatically enroll student in all subjects of this class
       const { data: assignments } = await supabase
-        .from('class_subjects')
+        .from('class_subject_teachers')
         .select('subject_id')
         .eq('class_id', classId);
       

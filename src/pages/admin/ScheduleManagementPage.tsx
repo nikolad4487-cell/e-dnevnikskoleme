@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { fetchClassSubjectOptions, type ClassSubjectOption } from '../../lib/classSubjectService';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, Subject, User, Role } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
@@ -41,7 +40,7 @@ export default function ScheduleManagementPage() {
   const navigate = useNavigate();
   const [classes, setClasses] = useState<Class[]>([]);
   const [selectedClassId, setSelectedClassId] = useState('');
-  const [subjects, setSubjects] = useState<ClassSubjectOption[]>([]); // Subjects assigned to this class
+  const [subjects, setSubjects] = useState<any[]>([]); // Subjects assigned to this class
   const [schedule, setSchedule] = useState<any[]>([]); // Schedule entries
   const [loading, setLoading] = useState(false);
   const [shift, setShift] = useState<'MORNING' | 'AFTERNOON'>('MORNING');
@@ -99,16 +98,72 @@ export default function ScheduleManagementPage() {
   const fetchClassData = async () => {
     try {
       setLoading(true);
+      
+      // Fetch Subject Types to format names correctly
+      const { data: basicClassSubjects } = await supabase
+        .from('class_subjects')
+        .select('subject_id, subject_type')
+        .eq('class_id', selectedClassId);
 
-      // 1. Fetch class subjects from the single source of truth.
-      const classSubjects = await fetchClassSubjectOptions(selectedClassId);
-      setSubjects(classSubjects);
-
-      // Subject types are used only for formatting already scheduled cells.
       const csMap = new Map<string, string>();
-      classSubjects.forEach((cs) => {
-        csMap.set(cs.subjectId, cs.subjectType || 'REQUIRED');
+      const validSubjectIds = new Set<string>();
+      if (basicClassSubjects) {
+        for (const cs of basicClassSubjects) {
+          csMap.set(cs.subject_id, cs.subject_type || 'REQUIRED');
+          validSubjectIds.add(cs.subject_id);
+        }
+      }
+
+      // 1. Fetch Class Subjects (Metadata - Canonical list)
+      console.log("selectedSchoolId:", selectedSchoolId);
+      console.log("selectedClassId:", selectedClassId);
+      const { data: classSubjectsRaw, error: csError } = await supabase
+        .from('class_subjects')
+        .select(`
+          subject_id, 
+          subject_type,
+          subject:subjects(id, name, code)
+        `)
+        .eq('class_id', selectedClassId)
+        .eq('school_id', selectedSchoolId);
+      
+      console.log("classSubjectsRaw:", classSubjectsRaw);
+      console.log("DEBUG: classSubjectsError:", csError);
+
+      // 2. Fetch Assignments to join teachers
+      console.log("DEBUG: Fetching class_subject_teachers for classId:", selectedClassId, "schoolId:", selectedSchoolId);
+      const { data: assignments, error: assignError } = await supabase
+        .from('class_subject_teachers')
+        .select(`
+          subject_id,
+          teacher_id,
+          teacher:user_profiles(id, name)
+        `)
+        .eq('class_id', selectedClassId)
+        .eq('school_id', selectedSchoolId);
+
+      console.log("DEBUG: assignments:", assignments);
+      console.log("DEBUG: assignError:", assignError);
+
+      const teacherMap = new Map<string, any>();
+      (assignments || []).forEach(a => {
+        teacherMap.set(a.subject_id, a.teacher);
       });
+
+      const formattedClassSubjects = (classSubjectsRaw || []).map((cs: any) => {
+        const typeValue = cs.subject_type || 'REQUIRED';
+        return {
+          id: cs.subject_id, // Subject ID used for assignment selection
+          subject: cs.subject ? {
+            ...cs.subject,
+            name: formatSubjectDisplayName(cs.subject.name, typeValue)
+          } : null,
+          teacher: teacherMap.get(cs.subject_id)
+        };
+      });
+      console.log("DEBUG: Final classSubjectsRaw before formatting:", classSubjectsRaw);
+      console.log("DEBUG: Final formattedClassSubjects:", formattedClassSubjects);
+      setSubjects(formattedClassSubjects);
 
       // 2. Fetch Schedule Cells
       const { data: cells } = await supabase
@@ -167,14 +222,9 @@ export default function ScheduleManagementPage() {
       return;
     }
 
-    const assignment = subjects.find(s => s.subjectId === modalSubjectAssignmentId);
+    const assignment = subjects.find(s => s.id === modalSubjectAssignmentId);
     if (!assignment) {
       setValidationError('Neispravan odabir predmeta.');
-      return;
-    }
-
-    if (!assignment.primaryTeacherId) {
-      setValidationError('Predmet nema dodijeljenog nastavnika. Prvo dodijelite nastavnika u Predmeti razreda.');
       return;
     }
 
@@ -184,8 +234,8 @@ export default function ScheduleManagementPage() {
         const { error } = await supabase
           .from('schedule_cell_subjects')
           .update({
-            subject_id: assignment.subjectId,
-            teacher_id: assignment.primaryTeacherId,
+            subject_id: assignment.id,
+            teacher_id: assignment.teacher?.id || null,
             classroom: modalClassroom || null
           })
           .eq('id', editingSubjectId);
@@ -221,11 +271,11 @@ export default function ScheduleManagementPage() {
       for (let p = start; p <= end; p++) {
         const cell = schedule.find(c => c.day_of_week === selectedDay && c.period_number === p);
         // NEW: Check if the specific subject is ALREADY assigned in this cell
-        const isAlreadyAssigned = cell?.subjects?.some((s: any) => s.subject_id === assignment.subjectId);
+        const isAlreadyAssigned = cell?.subjects?.some((s: any) => s.subject_id === assignment.id);
         if (isAlreadyAssigned) {
           foundConflicts.push({
             period: p,
-            subjectName: assignment.displayName || assignment.subject?.name || 'Nepoznat predmet'
+            subjectName: assignment.subject?.name || 'Nepoznat predmet'
           });
         }
       }
@@ -244,8 +294,8 @@ export default function ScheduleManagementPage() {
           shift,
           startPeriod: start,
           consecutivePeriods: count,
-          subjectId: assignment.subjectId,
-          teacherId: assignment.primaryTeacherId,
+          subjectId: assignment.id,
+          teacherId: assignment.teacher?.id || null,
           classroom: modalClassroom || null,
           shouldAdd: true
         };
@@ -450,7 +500,6 @@ export default function ScheduleManagementPage() {
                                     <Trash2 size={10} />
                                   </button>
                                </div>
-
                              ))}
                            </div>
                          ) : (
@@ -466,7 +515,6 @@ export default function ScheduleManagementPage() {
                              <div className="text-[9px] text-slate-200 uppercase font-black tracking-widest text-center py-2">—</div>
                            )
                          )}
-
                           </td>
                         );
                       })}
@@ -649,8 +697,8 @@ export default function ScheduleManagementPage() {
                   >
                     <option value="">-- Odaberi predmet --</option>
                     {subjects.map(s => (
-                      <option key={s.classSubjectId} value={s.subjectId}>
-                        {s.displayName} ({s.teacher?.name || 'Bez nastavnika'})
+                      <option key={s.id} value={s.id}>
+                        {s.subject?.name} ({s.teacher?.name || 'Bez nastavnika'})
                       </option>
                     ))}
                   </select>

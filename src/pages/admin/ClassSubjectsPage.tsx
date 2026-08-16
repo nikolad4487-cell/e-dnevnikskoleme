@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import { fetchClassSubjectOptions } from '../../lib/classSubjectService';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, Subject, User, Role } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
@@ -106,10 +105,40 @@ export default function ClassSubjectsPage() {
       if (clsError) throw clsError;
       setCurrentClass(cls);
 
+      // Fetch Assignments
+      const { data: assignData, error: assignError } = await supabase
+        .from('class_subject_teachers')
+        .select(`
+          id,
+          class_id,
+          subject_id,
+          teacher_id,
+          school_id,
+          group_name,
+          subject:subjects (*),
+          teacher:user_profiles (*)
+        `)
+        .eq('class_id', classId);
+      if (assignError) throw assignError;
 
-      // Fetch class subjects from the single source of truth. Teacher assignments are joined only as metadata.
-      const classSubjectOptions = await fetchClassSubjectOptions(classId);
-      setAssignments(classSubjectOptions);
+      // Fetch Class Subjects metadata
+      const { data: csData, error: csError } = await supabase
+        .from('class_subjects')
+        .select('*')
+        .eq('class_id', classId);
+      if (csError) throw csError;
+
+      const mergedAssignments = (assignData || []).map(item => {
+        const cs = (csData || []).find((c: any) => c.subject_id === item.subject_id);
+        return {
+          ...item,
+          class_subject: cs || {
+            subject_type: 'REDOVNI',
+            subject_period: 'FULL_YEAR'
+          }
+        };
+      });
+      setAssignments(mergedAssignments);
 
       // Fetch All Global Subjects
       const { data: subData, error: subError } = await supabase.from('subjects').select('*').order('name');
@@ -236,20 +265,20 @@ export default function ClassSubjectsPage() {
     console.log("EDIT CLASS SUBJECT", { classId, subjectId: sId });
     setEditModal({
       isOpen: true,
-      assignmentId: item.assignmentId || '',
-      subjectId: item.subjectId || sId,
+      assignmentId: item.id,
+      subjectId: sId,
       subjectName: item.subject?.name || '',
       subjectType: item.class_subject?.subject_type || 'redovni',
       subjectPeriod: item.class_subject?.subject_period || 'FULL_YEAR',
-      teacherId: item.primaryTeacherId || item.teacher?.id || '',
-      groupName: item.groupName || item.group_name || '',
+      teacherId: item.teacher?.id || '',
+      groupName: item.group_name || '',
     });
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     const { assignmentId, subjectId, subjectType, subjectPeriod, teacherId, groupName } = editModal;
-    if (!classId || !subjectId) return;
+    if (!classId || !subjectId || !assignmentId) return;
 
     console.log("EDIT CLASS SUBJECT", { classId, subjectId });
 
@@ -275,33 +304,18 @@ export default function ClassSubjectsPage() {
         throw csError;
       }
 
-
-      // B. Update or create teacher assignment. class_subject_teachers is not the source for the subject list.
-      if (teacherId) {
-        const teacherPayload = {
-          class_id: classId,
-          subject_id: subjectId,
-          school_id: selectedSchoolId,
+      // B. Update class_subject_teachers assignment
+      const { error: astError } = await supabase
+        .from('class_subject_teachers')
+        .update({
           teacher_id: teacherId,
           group_name: groupName || null
-        };
+        })
+        .eq('id', assignmentId);
 
-        const { error: astError } = assignmentId
-          ? await supabase
-              .from('class_subject_teachers')
-              .update({
-                teacher_id: teacherId,
-                group_name: groupName || null
-              })
-              .eq('id', assignmentId)
-          : await supabase
-              .from('class_subject_teachers')
-              .insert([teacherPayload]);
-
-        if (astError) {
-          console.log("EDIT CLASS SUBJECT ERROR", astError);
-          throw astError;
-        }
+      if (astError) {
+        console.log("EDIT CLASS SUBJECT ERROR", astError);
+        throw astError;
       }
 
       toast.success('Predmet zaduženja uspješno uređen');
@@ -504,7 +518,7 @@ export default function ClassSubjectsPage() {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {assignments.map((item) => (
-                  <tr key={item.classSubjectId || item.id} className="hover:bg-slate-50/50 transition-colors group">
+                  <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
                     <td className="p-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center">
@@ -540,7 +554,7 @@ export default function ClassSubjectsPage() {
                         <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-slate-300">
                           <UserIcon size={14} />
                         </div>
-                        <span className="font-bold text-slate-700 text-sm">{item.teacher?.name || 'Nastavnik nije dodijeljen'}</span>
+                        <span className="font-bold text-slate-700 text-sm">{item.teacher?.name}</span>
                       </div>
                     </td>
                     <td className="p-4 text-right">

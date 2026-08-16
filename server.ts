@@ -3154,54 +3154,231 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
   app.patch("/api/admin/update-user", async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
-      const { profileId, authUserId, email, name, surname, address, oib, roles, schoolId, status } = req.body;
+      const { 
+        profileId, 
+        authUserId, 
+        email, 
+        name, 
+        surname, 
+        address, 
+        oib, 
+        roles, 
+        schoolId, 
+        activeSchoolId, 
+        status = 'ACTIVE',
+        password 
+      } = req.body;
 
-      console.log(`[ADMIN_UPDATE] Updating user ${email} (Profile ID: ${profileId})`);
+      console.log(`[ADMIN_UPDATE] SAVE USER START:`, {
+        profileId,
+        authUserId,
+        email,
+        name,
+        surname,
+        roles,
+        schoolId,
+        status
+      });
 
-      // Update Auth Email if changed
-      if (authUserId && email) {
-        await supabaseAdmin.auth.admin.updateUserById(authUserId, { email });
+      if (!profileId) {
+        return res.status(400).json({ success: false, error: "Nedostaje ID profila korisnika." });
       }
 
-      // Update Profile
-      const { error: profileError } = await supabaseAdmin
-        .from('user_profiles')
-        .update({
-          email,
-          name: `${name} ${surname}`,
-          address,
-          oib
-        })
-        .eq('id', profileId);
-      
-      if (profileError) throw profileError;
-
-      // Update Roles (Replace existing for this school)
-      if (schoolId && roles && Array.isArray(roles)) {
-        // Delete old roles for this school
-        await supabaseAdmin
-          .from('user_school_roles')
-          .delete()
-          .eq('user_id', profileId)
-          .eq('school_id', schoolId);
-        
-        // Insert new ones
-        for (const role of roles) {
-          await supabaseAdmin
-            .from('user_school_roles')
-            .insert({
-              user_id: profileId,
-              school_id: schoolId,
-              role: role,
-              status: status || 'ACTIVE'
-            });
+      // Compute display name
+      let fullName = name ? String(name).trim() : '';
+      if (surname && String(surname).trim()) {
+        const trimmedSurname = String(surname).trim();
+        if (!fullName.includes(trimmedSurname)) {
+          fullName = `${fullName} ${trimmedSurname}`.trim();
         }
       }
 
-      return res.status(200).json({ success: true });
+      const emailLower = email ? String(email).trim().toLowerCase() : undefined;
+      const isGlobalAdmin = emailLower === 'skole@skolehr.xyz' || emailLower === 'skola@skolehr.xyz';
+      
+      const rolesArray = Array.isArray(roles) ? roles : (roles ? [roles] : []);
+      
+      // Determine primary role & access_role
+      let primaryRole = 'STUDENT';
+      let accessRole = 'user';
+
+      if (isGlobalAdmin) {
+        primaryRole = 'SUPER_ADMIN';
+        accessRole = 'SUPER_ADMIN';
+      } else if (rolesArray.includes('SCHOOL_ADMIN')) {
+        primaryRole = 'SCHOOL_ADMIN';
+        accessRole = 'SCHOOL_ADMIN';
+      } else if (rolesArray.includes('ADMIN') || rolesArray.includes('MAIN_ADMIN')) {
+        primaryRole = 'ADMIN';
+        accessRole = 'ADMIN';
+      } else if (rolesArray.includes('HOMEROOM')) {
+        primaryRole = 'HOMEROOM';
+        accessRole = 'TEACHER';
+      } else if (rolesArray.includes('DEPUTY')) {
+        primaryRole = 'DEPUTY';
+        accessRole = 'TEACHER';
+      } else if (rolesArray.includes('TEACHER')) {
+        primaryRole = 'TEACHER';
+        accessRole = 'TEACHER';
+      } else if (rolesArray.includes('PARENT')) {
+        primaryRole = 'PARENT';
+        accessRole = 'PARENT';
+      } else if (rolesArray.length > 0) {
+        primaryRole = rolesArray[0];
+        accessRole = rolesArray[0];
+      }
+
+      const targetSchoolId = isGlobalAdmin ? null : (schoolId || activeSchoolId || 'srednja-kola-glina-zagreb');
+
+      // 1. Update Auth user if needed
+      let targetAuthId = authUserId;
+      if (!targetAuthId && emailLower) {
+        const { data: existingAuth } = await supabaseAdmin.auth.admin.listUsers();
+        const found = existingAuth?.users?.find((u: any) => u.email?.toLowerCase() === emailLower);
+        if (found) targetAuthId = found.id;
+      }
+
+      if (targetAuthId) {
+        const authUpdatePayload: any = {};
+        if (emailLower) authUpdatePayload.email = emailLower;
+        if (password) authUpdatePayload.password = password;
+        if (fullName) authUpdatePayload.user_metadata = { full_name: fullName };
+
+        if (Object.keys(authUpdatePayload).length > 0) {
+          const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(targetAuthId, authUpdatePayload);
+          if (authErr) {
+            console.warn("[ADMIN_UPDATE] Warning updating auth user:", authErr.message);
+          }
+        }
+      }
+
+      // 2. Update Profile in user_profiles
+      const profilePayload: any = {
+        updated_at: new Date().toISOString()
+      };
+      if (fullName) profilePayload.name = fullName;
+      if (emailLower) profilePayload.email = emailLower;
+      if (primaryRole) profilePayload.role = primaryRole;
+      if (accessRole) profilePayload.access_role = accessRole;
+      profilePayload.school_id = targetSchoolId;
+      profilePayload.active_school_id = targetSchoolId;
+      if (address !== undefined) profilePayload.address = address;
+      if (oib !== undefined) profilePayload.oib = oib;
+      if (targetAuthId) profilePayload.auth_user_id = targetAuthId;
+
+      const isStaffRole = ['TEACHER', 'HOMEROOM', 'DEPUTY', 'SCHOOL_ADMIN', 'ADMIN', 'MAIN_ADMIN', 'SUPER_ADMIN'].includes(primaryRole);
+      if (isStaffRole) {
+        const DEFAULT_PIN_HASH = '$2b$10$EEbRoX3UU0AtHm3CMZSABOXxL9ghae0./0eeeBuKVpYEsAaDdXQ72';
+        const { data: curProf } = await supabaseAdmin.from('user_profiles').select('pin_hash').eq('id', profileId).maybeSingle();
+        if (!curProf?.pin_hash) {
+          profilePayload.pin_hash = DEFAULT_PIN_HASH;
+        }
+      }
+
+      const { data: profileResult, error: profileError } = await supabaseAdmin
+        .from('user_profiles')
+        .update(profilePayload)
+        .eq('id', profileId)
+        .select()
+        .single();
+      
+      console.log("SAVE USER PROFILE UPDATE RESULT", profileResult || profileError);
+      if (profileError) {
+        throw new Error(`Greška pri ažuriranju profila: ${profileError.message}`);
+      }
+
+      // 3. Update Roles in user_school_roles
+      let rolesResult: any[] = [];
+      if (targetSchoolId) {
+        if (rolesArray.length > 0) {
+          // Fetch existing roles for this user and school
+          const { data: existingRoles, error: getRolesErr } = await supabaseAdmin
+            .from('user_school_roles')
+            .select('*')
+            .eq('user_id', profileId)
+            .eq('school_id', targetSchoolId);
+
+          if (getRolesErr) {
+            console.warn("[ADMIN_UPDATE] Error fetching existing roles:", getRolesErr.message);
+          }
+
+          // Remove roles that are no longer selected
+          const unselected = (existingRoles || []).filter((r: any) => !rolesArray.includes(r.role));
+          if (unselected.length > 0) {
+            const deleteIds = unselected.map((r: any) => r.id);
+            await supabaseAdmin
+              .from('user_school_roles')
+              .delete()
+              .in('id', deleteIds);
+          }
+
+          // Upsert newly selected roles
+          for (const role of rolesArray) {
+            const { data: roleUpsertData, error: roleUpsertErr } = await supabaseAdmin
+              .from('user_school_roles')
+              .upsert({
+                user_id: profileId,
+                school_id: targetSchoolId,
+                role: role,
+                status: status || 'ACTIVE',
+                updated_at: new Date().toISOString()
+              }, {
+                onConflict: 'user_id,school_id,role'
+              })
+              .select();
+
+            if (roleUpsertErr) {
+              console.error(`[ADMIN_UPDATE] Error saving role ${role}:`, roleUpsertErr.message);
+            } else if (roleUpsertData) {
+              rolesResult.push(...roleUpsertData);
+            }
+          }
+        } else if (status) {
+          // Update status of existing roles if no role changes
+          await supabaseAdmin
+            .from('user_school_roles')
+            .update({ status: status, updated_at: new Date().toISOString() })
+            .eq('user_id', profileId)
+            .eq('school_id', targetSchoolId);
+        }
+      }
+      console.log("SAVE USER ROLES UPDATE RESULT", rolesResult);
+
+      // 4. Refetch complete user with roles
+      const { data: refreshedUser, error: refetchErr } = await supabaseAdmin
+        .from('user_profiles')
+        .select(`
+          id,
+          auth_user_id,
+          email,
+          name,
+          role,
+          access_role,
+          school_id,
+          active_school_id,
+          address,
+          oib,
+          user_school_roles (
+            id,
+            school_id,
+            role,
+            status
+          )
+        `)
+        .eq('id', profileId)
+        .single();
+
+      console.log("SAVE USER REFRESHED DATA", refreshedUser || refetchErr);
+
+      return res.status(200).json({ 
+        success: true, 
+        profileResult, 
+        rolesResult, 
+        refreshedUser: refreshedUser || profileResult 
+      });
     } catch (err: any) {
       console.error("[ADMIN_UPDATE] Error:", err);
-      return res.status(500).json({ success: false, error: err.message });
+      return res.status(500).json({ success: false, error: err.message || "Greška pri ažuriranju korisnika." });
     }
   });
 
@@ -4006,15 +4183,17 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         writeJsonFile("student_transfers.json", transfers);
       }
 
-      // If database is up, update user_profiles table class_id or status
+      // If database is up, update user_profiles and user_school_roles status
       if (supabaseAdmin) {
         try {
           if (payload.action_type === 'UPIS' || payload.action_type === 'PREMJESTAJ' || payload.action_type === 'PRIJELAZ_IZ') {
             if (payload.new_class_id) {
-              await supabaseAdmin.from("user_profiles").update({ class_id: payload.new_class_id, status: 'ACTIVE' }).eq('id', payload.student_id);
+              await supabaseAdmin.from("user_profiles").update({ class_id: payload.new_class_id }).eq('id', payload.student_id);
+              await supabaseAdmin.from("user_school_roles").update({ status: 'ACTIVE' }).eq('user_id', payload.student_id);
             }
           } else if (payload.action_type === 'ISPIS' || payload.action_type === 'PRIJELAZ_U') {
-            await supabaseAdmin.from("user_profiles").update({ class_id: null, status: 'INACTIVE' }).eq('id', payload.student_id);
+            await supabaseAdmin.from("user_profiles").update({ class_id: null }).eq('id', payload.student_id);
+            await supabaseAdmin.from("user_school_roles").update({ status: 'INACTIVE' }).eq('user_id', payload.student_id);
           }
         } catch (dbErr) {
           console.warn("DB user profile registration update bypassed:", dbErr);
@@ -4417,6 +4596,111 @@ Generiraj JSON objekt sa sljedećom strukturom:
       return app;
   }
 
+  const fixSpecificUsers = async () => {
+    if (!supabaseAdmin) return;
+    try {
+      const targetSchoolId = 'srednja-kola-glina-zagreb';
+      const DEFAULT_PIN_HASH = '$2b$10$EEbRoX3UU0AtHm3CMZSABOXxL9ghae0./0eeeBuKVpYEsAaDdXQ72'; // '1234'
+
+      console.log("[USER_FIX] Running specific users fix routine...");
+
+      // 1. Nikola Đurić
+      const { data: nikolaProf } = await supabaseAdmin
+        .from('user_profiles')
+        .select('*')
+        .eq('email', 'nikola.duric@skolehr.xyz')
+        .maybeSingle();
+
+      if (nikolaProf) {
+        await supabaseAdmin
+          .from('user_profiles')
+          .update({
+            name: 'Nikola Đurić',
+            role: 'SCHOOL_ADMIN',
+            access_role: 'SCHOOL_ADMIN',
+            school_id: targetSchoolId,
+            active_school_id: targetSchoolId,
+            pin_hash: nikolaProf.pin_hash || DEFAULT_PIN_HASH,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', nikolaProf.id);
+
+        await supabaseAdmin
+          .from('user_school_roles')
+          .upsert({
+            user_id: nikolaProf.id,
+            school_id: targetSchoolId,
+            role: 'SCHOOL_ADMIN',
+            status: 'ACTIVE',
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id,school_id,role' });
+        
+        console.log("[USER_FIX] Nikola Đurić verified as SCHOOL_ADMIN for", targetSchoolId);
+      }
+
+      // 2. Boris Srećković
+      const { data: borisProf } = await supabaseAdmin
+        .from('user_profiles')
+        .select('*')
+        .eq('email', 'boris.sreckovic@skolehr.xyz')
+        .maybeSingle();
+
+      if (borisProf) {
+        await supabaseAdmin
+          .from('user_profiles')
+          .update({
+            name: 'Boris Srećković',
+            role: 'SCHOOL_ADMIN',
+            access_role: 'SCHOOL_ADMIN',
+            school_id: targetSchoolId,
+            active_school_id: targetSchoolId,
+            pin_hash: borisProf.pin_hash || DEFAULT_PIN_HASH,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', borisProf.id);
+
+        await supabaseAdmin
+          .from('user_school_roles')
+          .upsert({
+            user_id: borisProf.id,
+            school_id: targetSchoolId,
+            role: 'SCHOOL_ADMIN',
+            status: 'ACTIVE',
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id,school_id,role' });
+
+        console.log("[USER_FIX] Boris Srećković verified as SCHOOL_ADMIN for", targetSchoolId);
+      }
+
+      // 3. Global Super Admin: skole@skolehr.xyz & skola@skolehr.xyz
+      for (const superEmail of ['skole@skolehr.xyz', 'skola@skolehr.xyz']) {
+        const { data: superProf } = await supabaseAdmin
+          .from('user_profiles')
+          .select('*')
+          .eq('email', superEmail)
+          .maybeSingle();
+
+        if (superProf) {
+          await supabaseAdmin
+            .from('user_profiles')
+            .update({
+              role: 'SUPER_ADMIN',
+              access_role: 'SUPER_ADMIN',
+              school_id: null,
+              active_school_id: null,
+              pin_hash: superProf.pin_hash || DEFAULT_PIN_HASH,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', superProf.id);
+          
+          console.log("[USER_FIX] Global admin verified:", superEmail);
+        }
+      }
+    } catch (err: any) {
+      console.error("[USER_FIX] Error running specific users fix:", err?.message || err);
+    }
+  };
+
   const fixNullSchoolYears = async () => {
     if (!supabaseAdmin) return;
     try {
@@ -4464,10 +4748,12 @@ Generiraj JSON objekt sa sljedećom strukturom:
   if (isVercel) {
     console.log("[SERVER] Running in Vercel environment. Skipping app.listen.");
     fixNullSchoolYears();
+    fixSpecificUsers();
   } else {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on http://localhost:${PORT}`);
       fixNullSchoolYears();
+      fixSpecificUsers();
     });
   }
   return app;

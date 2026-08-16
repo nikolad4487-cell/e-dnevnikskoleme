@@ -30,6 +30,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const APP_VERSION = '1.0.5'; // Increment this for force logouts
 
 const ROLE_PRIORITY: Record<Role, number> = {
+  [Role.SUPER_ADMIN]: 0,
   [Role.MAIN_ADMIN]: 0,
   [Role.ADMIN]: 0,
   [Role.SCHOOL_ADMIN]: 1,
@@ -41,6 +42,7 @@ const ROLE_PRIORITY: Record<Role, number> = {
 };
 
 const ROLE_DISPLAY_NAMES: Record<Role, string> = {
+  [Role.SUPER_ADMIN]: 'Glavni administrator',
   [Role.MAIN_ADMIN]: 'Glavni administrator',
   [Role.ADMIN]: 'Administrator',
   [Role.SCHOOL_ADMIN]: 'Administrator škole',
@@ -541,8 +543,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [userSchoolRoles, isStudentPortal]);
 
   const isMainAdmin = React.useMemo(() => {
-    const hasProfileAdminRole = user?.role === Role.MAIN_ADMIN || user?.role === Role.ADMIN || user?.globalRole === Role.MAIN_ADMIN || user?.globalRole === Role.ADMIN;
-    const hasSchoolAdminRole = effectiveSchoolRoles.some(r => r.role === Role.MAIN_ADMIN || r.role === Role.ADMIN);
+    const hasProfileAdminRole = user?.role === Role.SUPER_ADMIN || user?.role === Role.MAIN_ADMIN || user?.role === Role.ADMIN || user?.globalRole === Role.SUPER_ADMIN || user?.globalRole === Role.MAIN_ADMIN || user?.globalRole === Role.ADMIN;
+    const hasSchoolAdminRole = effectiveSchoolRoles.some(r => r.role === Role.SUPER_ADMIN || r.role === Role.MAIN_ADMIN || r.role === Role.ADMIN);
     return hasProfileAdminRole || hasSchoolAdminRole;
   }, [user, effectiveSchoolRoles]);
 

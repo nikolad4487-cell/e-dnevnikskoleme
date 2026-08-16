@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { User, Role, EdnevnikSyncReport } from '../../types';
+import { User, Role, EdnevnikSyncReport, isSchoolAdminUser } from '../../types';
 import { 
   UserPlus, 
   Search, 
@@ -35,7 +35,9 @@ export default function UserManagementPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('ALL');
 
-  const isAnyAdmin = isMainAdmin || userSchoolRoles.some(r => r.schoolId === selectedSchoolId && (r.role === Role.SCHOOL_ADMIN || r.role === Role.ADMIN));
+  const isAnyAdmin = isMainAdmin || userSchoolRoles.some(r => 
+    (r.schoolId === selectedSchoolId || r.school_id === selectedSchoolId) && isSchoolAdminUser(r, [r.role])
+  );
 
   // Form State
   const [editingUser, setEditingUser] = useState<any | null>(null);
@@ -45,6 +47,7 @@ export default function UserManagementPage() {
   const [surname, setSurname] = useState('');
   const [address, setAddress] = useState('');
   const [oib, setOib] = useState('');
+  const [status, setStatus] = useState<'ACTIVE' | 'INACTIVE'>('ACTIVE');
   const [selectedRoles, setSelectedRoles] = useState<Role[]>([Role.TEACHER]);
   const [submitting, setSubmitting] = useState(false);
   
@@ -104,12 +107,36 @@ export default function UserManagementPage() {
       return;
     }
     setEditingUser(user);
-    setEmail(user.email);
-    setName(user.name || '');
-    setSurname(user.surname || '');
+    setEmail(user.email || '');
+    
+    let firstName = user.name || '';
+    let lastName = user.surname || '';
+    if (!lastName && firstName.includes(' ')) {
+      const parts = firstName.trim().split(' ');
+      firstName = parts[0];
+      lastName = parts.slice(1).join(' ');
+    }
+    setName(firstName);
+    setSurname(lastName);
     setAddress(user.address || '');
     setOib(user.oib || '');
-    setSelectedRoles(user.roles || []);
+    const displayStatus = user.user_school_roles?.some((r: any) => r.status === 'ACTIVE')
+      ? 'ACTIVE'
+      : (user.status || 'ACTIVE');
+    setStatus(displayStatus);
+    
+    // Retrieve all active roles from user_school_roles as well as user.roles
+    const activeRolesFromSchoolRoles = user.user_school_roles
+      ?.filter((r: any) => r.status === 'ACTIVE' && (!r.school_id || r.school_id === selectedSchoolId))
+      ?.map((r: any) => r.role) || [];
+
+    const combinedRoles = Array.from(new Set([
+      ...(user.roles || []),
+      ...activeRolesFromSchoolRoles,
+      ...(user.role ? [user.role] : [])
+    ]));
+
+    setSelectedRoles(combinedRoles.length > 0 ? (combinedRoles as Role[]) : [Role.TEACHER]);
     setIsModalOpen(true);
   };
 
@@ -124,6 +151,7 @@ export default function UserManagementPage() {
     setSurname('');
     setAddress('');
     setOib('');
+    setStatus('ACTIVE');
     setSelectedRoles([Role.TEACHER]);
     setIsModalOpen(true);
   };
@@ -139,67 +167,70 @@ export default function UserManagementPage() {
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      console.log("USER FILTER", roleFilter);
+      console.log("USER FILTER", roleFilter, "FETCHING USERS FOR SCHOOL:", selectedSchoolId);
       
-      // Fetch users from user_school_roles
-      const { data: roleData, error: roleError } = await supabase
-        .from('user_school_roles')
+      // Task 3: Fetch user_profiles with user_school_roles
+      const { data, error } = await supabase
+        .from("user_profiles")
         .select(`
           id,
+          auth_user_id,
+          email,
+          name,
           role,
-          status,
-          user:user_profiles (*)
-        `)
-        .eq('school_id', selectedSchoolId);
+          access_role,
+          school_id,
+          active_school_id,
+          address,
+          oib,
+          user_school_roles (
+            id,
+            school_id,
+            role,
+            status
+          )
+        `);
       
-      console.log("FETCHED ROLES DATA", roleData);
-      if (roleError) {
-        console.error("FETCH USERS ERROR", roleError);
-        throw roleError;
+      if (error) {
+        console.error("FETCH USERS ERROR", error);
+        throw error;
       }
 
-      // Fetch students via class enrollments just in case they are missing from roles
-      const { data: enrollData, error: enrollError } = await supabase
-        .from('student_class_enrollments')
-        .select('student:user_profiles(*), classes!inner(school_id)')
-        .eq('classes.school_id', selectedSchoolId);
-      
-      console.log("FETCHED ENROLLMENTS DATA", enrollData);
-      
-      const usersMap = new Map();
-      
-      // Process roles
-      roleData?.forEach(row => {
-        const profile = row.user as any;
-        const userId = profile?.id;
-        if (!userId) return;
-        
-        if (!usersMap.has(userId)) {
-          usersMap.set(userId, { ...profile, roles: [] });
-        }
-        if (!usersMap.get(userId).roles.includes(row.role)) {
-          usersMap.get(userId).roles.push(row.role);
-        }
+      console.log("RAW FETCHED USER PROFILES DATA", data);
+
+      // Filter and map users for the selected school
+      const schoolUsers = (data || []).filter((user: any) => {
+        const isAssignedToSchool = user.school_id === selectedSchoolId || user.active_school_id === selectedSchoolId;
+        const hasSchoolRole = user.user_school_roles?.some((r: any) => r.school_id === selectedSchoolId);
+        return isAssignedToSchool || hasSchoolRole;
       });
 
-      // Process students from enrollments
-      enrollData?.forEach(row => {
-        const profile = row.student as any;
-        const userId = profile?.id;
-        if (!userId) return;
+      const mappedUsers = schoolUsers.map((user: any) => {
+        const activeRoles = user.user_school_roles
+          ?.filter((r: any) => r.status === "ACTIVE" && (!r.school_id || r.school_id === selectedSchoolId))
+          ?.map((r: any) => r.role) || [];
 
-        if (!usersMap.has(userId)) {
-          usersMap.set(userId, { ...profile, roles: [Role.STUDENT] });
-        } else if (!usersMap.get(userId).roles.includes(Role.STUDENT)) {
-          usersMap.get(userId).roles.push(Role.STUDENT);
+        let allActiveRoles = [...activeRoles];
+        if (allActiveRoles.length === 0 && user.role) {
+          allActiveRoles.push(user.role);
         }
+        allActiveRoles = Array.from(new Set(allActiveRoles));
+
+        const displayStatus = user.user_school_roles?.some((r: any) => r.status === "ACTIVE")
+          ? "ACTIVE"
+          : "INACTIVE";
+
+        return {
+          ...user,
+          roles: allActiveRoles,
+          status: displayStatus
+        };
       });
       
-      const combinedUsers = Array.from(usersMap.values());
-      console.log("COMBINED USERS", combinedUsers);
-      setUsers(combinedUsers);
+      console.log("COMBINED MAPPED USERS", mappedUsers);
+      setUsers(mappedUsers);
     } catch (err: any) {
-      toast.error('Greška pri učitavanju korisnika');
+      toast.error('Greška pri učitavanju korisnika: ' + (err?.message || ''));
       console.error(err);
     } finally {
       setLoading(false);
@@ -212,7 +243,7 @@ export default function UserManagementPage() {
       console.warn("Attempted user create/update without admin permissions");
       return;
     }
-    if (!oib || oib.length !== 11) {
+    if (oib && oib.length !== 11) {
       toast.error('OIB mora sadržavati točno 11 znamenki.');
       return;
     }
@@ -223,8 +254,9 @@ export default function UserManagementPage() {
     setSubmitting(true);
     try {
       const endpoint = editingUser ? '/api/admin/update-user' : '/api/admin/create-user';
+      const userProfileId = editingUser?.id;
       const payload = {
-        profileId: editingUser?.id,
+        profileId: userProfileId,
         authUserId: editingUser?.auth_user_id,
         email,
         name,
@@ -233,11 +265,18 @@ export default function UserManagementPage() {
         oib,
         roles: selectedRoles,
         schoolId: selectedSchoolId,
-        status: editingUser?.status || 'ACTIVE',
+        activeSchoolId: selectedSchoolId,
+        status: status || 'ACTIVE',
         password: editingUser ? undefined : password
       };
 
-      console.log(`${editingUser ? 'UPDATE' : 'CREATE'} USER CLICKED`, payload);
+      // Task 6: Debug log at start of save
+      console.log("SAVE USER START", {
+        userProfileId,
+        payload,
+        selectedRoles,
+        selectedSchoolId
+      });
 
       const response = await fetch(endpoint, {
         method: editingUser ? 'PATCH' : 'POST',
@@ -250,19 +289,26 @@ export default function UserManagementPage() {
       try {
         data = text ? JSON.parse(text) : null;
       } catch (e) {
-        console.error("CREATE USER JSON PARSE ERROR", e);
-        console.log("CREATE USER RAW RESPONSE", text);
-        throw new Error("Server nije vratio ispravan JSON odgovor.");
+        console.error("USER JSON PARSE ERROR", e);
+        console.log("USER RAW RESPONSE", text);
+        throw new Error("Server nije vratio ispravan JSON odgovor: " + text);
       }
 
-      console.log("CREATE USER RESPONSE STATUS", response.status);
-      console.log("CREATE USER RAW RESPONSE", text);
+      console.log("USER RESPONSE STATUS", response.status);
       
-      if (!response.ok) throw new Error(data?.error || data?.message || 'Neuspjela obrada zahtjeva');
+      if (!response.ok || !data?.success) {
+        const errorMsg = data?.error || data?.message || 'Neuspjela obrada zahtjeva';
+        throw new Error(errorMsg);
+      }
 
-      toast.success(editingUser ? 'Korisnik ažuriran' : 'Korisnik uspješno kreiran');
+      // Task 6: Debug logs for update results
+      console.log("SAVE USER PROFILE UPDATE RESULT", data.profileResult || data);
+      console.log("SAVE USER ROLES UPDATE RESULT", data.rolesResult || selectedRoles);
+      console.log("SAVE USER REFRESHED DATA", data.refreshedUser || data);
+
+      toast.success(editingUser ? 'Korisnik uspješno ažuriran' : 'Korisnik uspješno kreiran');
       setIsModalOpen(false);
-      fetchUsers();
+      await fetchUsers();
     } catch (err: any) {
       console.error("USER ACTION FAILED:", err);
       toast.error('Greška pri spremanju korisnika: ' + (err.message || 'Nepoznata greška'));
@@ -414,9 +460,13 @@ export default function UserManagementPage() {
 
   const getRoleBadge = (role: string) => {
     switch (role) {
-      case Role.SCHOOL_ADMIN: return 'bg-purple-100 text-purple-700';
+      case Role.SUPER_ADMIN:
+      case Role.MAIN_ADMIN: return 'bg-red-100 text-red-700 font-bold';
+      case Role.SCHOOL_ADMIN:
+      case Role.ADMIN: return 'bg-purple-100 text-purple-700 font-bold';
       case Role.TEACHER: return 'bg-blue-100 text-blue-700';
       case Role.HOMEROOM: return 'bg-indigo-100 text-indigo-700';
+      case Role.DEPUTY: return 'bg-sky-100 text-sky-700';
       case Role.STUDENT: return 'bg-emerald-100 text-emerald-700';
       case Role.PARENT: return 'bg-amber-100 text-amber-700';
       default: return 'bg-slate-100 text-slate-700';
@@ -816,6 +866,20 @@ export default function UserManagementPage() {
                   />
                 </div>
               </div>
+
+              {editingUser && (
+                <div>
+                  <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Status korisnika</label>
+                  <select
+                    value={status}
+                    onChange={e => setStatus(e.target.value as 'ACTIVE' | 'INACTIVE')}
+                    className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none"
+                  >
+                    <option value="ACTIVE">Aktivan</option>
+                    <option value="INACTIVE">Neaktivan / Deaktiviran</option>
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">Uloge u školi (odaberi više)</label>

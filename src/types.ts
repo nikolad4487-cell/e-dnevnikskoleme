@@ -1,4 +1,5 @@
 export enum Role {
+  SUPER_ADMIN = 'SUPER_ADMIN',
   MAIN_ADMIN = 'MAIN_ADMIN',
   SCHOOL_ADMIN = 'SCHOOL_ADMIN',
   TEACHER = 'TEACHER',
@@ -7,6 +8,18 @@ export enum Role {
   STUDENT = 'STUDENT',
   PARENT = 'PARENT',
   ADMIN = 'ADMIN'
+}
+
+export function isSchoolAdminUser(profile: any, roles: any[] = []): boolean {
+  const values = [
+    profile?.role,
+    profile?.access_role,
+    ...roles
+  ]
+    .filter(Boolean)
+    .map((r) => String(r).toUpperCase());
+
+  return values.includes("ADMIN") || values.includes("SCHOOL_ADMIN");
 }
 
 export type SchoolType = 'PRIMARY' | 'SECONDARY';
