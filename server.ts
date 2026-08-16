@@ -4266,7 +4266,8 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
     const roleText = String(profile.role || "").toUpperCase();
     const accessRoleText = String(profile.access_role || "").toUpperCase();
-    if (["SUPER_ADMIN", "MAIN_ADMIN"].includes(roleText) || ["SUPER_ADMIN", "MAIN_ADMIN"].includes(accessRoleText)) {
+    const globalAdminRoles = ["SUPER_ADMIN", "MAIN_ADMIN", "ADMIN"];
+    if (globalAdminRoles.includes(roleText) || globalAdminRoles.includes(accessRoleText)) {
       return { authorized: true, profile };
     }
 
