@@ -684,7 +684,11 @@ export default function MaticnaKnjigaPage() {
                     <label className="block text-[10px] font-black uppercase text-slate-500 mb-1">Program</label>
                     <select value={editForm.program_id} onChange={e => setEditForm({...editForm, program_id: e.target.value})} className="w-full border border-slate-200 rounded p-2 text-xs">
                       <option value="">-- Bez programa --</option>
-                      {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      {programs.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.module_or_track ? `${p.name} — ${p.module_or_track}` : p.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>

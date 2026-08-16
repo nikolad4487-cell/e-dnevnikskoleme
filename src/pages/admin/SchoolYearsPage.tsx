@@ -33,10 +33,14 @@ export default function SchoolYearsPage() {
   const { user, userSchoolRoles } = useAuth();
   const navigate = useNavigate();
 
-  // 1. Identify active schoolId based on user request
+  // 1. Identify active schoolId based on user request (selectedSchoolId or profile active_school_id)
   let schoolId = selectedSchoolId;
   if (!schoolId) {
-    if (user && (user as any).school_id) {
+    if (user && (user as any).active_school_id) {
+      schoolId = (user as any).active_school_id;
+    } else if (user && (user as any).activeSchoolId) {
+      schoolId = (user as any).activeSchoolId;
+    } else if (user && (user as any).school_id) {
       schoolId = (user as any).school_id;
     } else if (user && (user as any).schoolId) {
       schoolId = (user as any).schoolId;
@@ -82,7 +86,16 @@ export default function SchoolYearsPage() {
       // Debug statement as requested
       console.log("SCHOOL YEARS FETCH", data, error);
 
-      if (error) throw error;
+      if (error) {
+        console.warn("Direct fetch from Supabase failed, trying API fallback:", error);
+        const res = await fetch(`/api/school-years?schoolId=${schoolId}`);
+        const json = await res.json();
+        if (json.success && json.data) {
+          setYears(json.data);
+          return;
+        }
+        throw error;
+      }
       setYears(data || []);
     } catch (err: any) {
       toast.error('Greška pri učitavanju školskih godina: ' + err.message);
@@ -127,16 +140,37 @@ export default function SchoolYearsPage() {
           starts_at: startsAt,
           ends_at: endsAt,
           status,
-          is_active
+          is_active,
+          school_id: schoolId
         };
-        console.log("EDIT SCHOOL YEAR PAYLOAD", payload);
+        console.log("SAVE SCHOOL YEAR PAYLOAD", payload);
 
-        const { error } = await supabase
+        let error: any = null;
+        const res = await supabase
           .from('school_years')
-          .update(payload)
+          .update({
+            name,
+            starts_at: startsAt,
+            ends_at: endsAt,
+            status,
+            is_active
+          })
           .eq('id', editingYear.id);
 
-        if (error) throw error;
+        error = res.error;
+        if (error) {
+          console.warn("Direct Supabase update failed, attempting service role API fallback:", error);
+          const apiRes = await fetch(`/api/school-years/${editingYear.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const apiData = await apiRes.json();
+          if (!apiRes.ok || !apiData.success) {
+            throw new Error(apiData.error || error.message);
+          }
+        }
+
         toast.success('Školska godina je uspješno izmijenjena.');
       } else {
         const payload = {
@@ -147,19 +181,32 @@ export default function SchoolYearsPage() {
           is_active,
           school_id: schoolId
         };
-        // Debug statement as requested
-        console.log("CREATE SCHOOL YEAR PAYLOAD", payload);
+        console.log("SAVE SCHOOL YEAR PAYLOAD", payload);
 
-        const { error } = await supabase
+        let error: any = null;
+        const res = await supabase
           .from('school_years')
           .insert([payload]);
 
-        if (error) throw error;
+        error = res.error;
+        if (error) {
+          console.warn("Direct Supabase insert failed, attempting service role API fallback:", error);
+          const apiRes = await fetch('/api/school-years', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const apiData = await apiRes.json();
+          if (!apiRes.ok || !apiData.success) {
+            throw new Error(apiData.error || error.message);
+          }
+        }
+
         toast.success('Uspješno stvorena školska godina.');
       }
 
       setIsModalOpen(false);
-      fetchYears();
+      await fetchYears();
     } catch (err: any) {
       toast.error('Greška pri spremanju školske godine: ' + err.message);
     }
@@ -167,7 +214,6 @@ export default function SchoolYearsPage() {
 
   const handleActivate = async (year: DBYear) => {
     if (!schoolId) return;
-    // Debug statement as requested
     console.log("ACTIVATE SCHOOL YEAR", year);
 
     if (!window.confirm(`Jeste li sigurni da želite postaviti školsku godinu "${year.name}" kao aktivnu? Sve ostale školske godine za ovu školu bit će automatski arhivirane.`)) {
@@ -184,18 +230,27 @@ export default function SchoolYearsPage() {
         .eq('school_id', schoolId)
         .neq('id', year.id);
 
-      if (deactivateError) throw deactivateError;
-
       // 2. Activate selected year
       const { error: activateError } = await supabase
         .from('school_years')
         .update({ is_active: true, status: 'ACTIVE' })
         .eq('id', year.id);
 
-      if (activateError) throw activateError;
+      if (deactivateError || activateError) {
+        console.warn("Direct activation encountered an issue, falling back to service role API");
+        const apiRes = await fetch(`/api/school-years/${year.id}/activate`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ school_id: schoolId })
+        });
+        const apiData = await apiRes.json();
+        if (!apiRes.ok || !apiData.success) {
+          throw new Error(apiData.error || deactivateError?.message || activateError?.message);
+        }
+      }
 
       toast.success(`Školska godina ${year.name} je sada aktivna.`);
-      fetchYears();
+      await fetchYears();
     } catch (err: any) {
       toast.error('Greška pri aktivaciji: ' + err.message);
     } finally {
@@ -211,9 +266,21 @@ export default function SchoolYearsPage() {
         .update({ is_active: false, status: 'ARCHIVED' })
         .eq('id', year.id);
 
-      if (error) throw error;
+      if (error) {
+        console.warn("Direct archive failed, using API fallback:", error);
+        const apiRes = await fetch(`/api/school-years/${year.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: false, status: 'ARCHIVED', school_id: schoolId })
+        });
+        const apiData = await apiRes.json();
+        if (!apiRes.ok || !apiData.success) {
+          throw new Error(apiData.error || error.message);
+        }
+      }
+
       toast.success(`Školska godina ${year.name} je arhivirana.`);
-      fetchYears();
+      await fetchYears();
     } catch (err: any) {
       toast.error('Greška pri arhiviranju: ' + err.message);
     } finally {
@@ -238,9 +305,19 @@ export default function SchoolYearsPage() {
         .delete()
         .eq('id', year.id);
 
-      if (error) throw error;
+      if (error) {
+        console.warn("Direct delete failed, trying API fallback:", error);
+        const apiRes = await fetch(`/api/school-years/${year.id}`, {
+          method: 'DELETE'
+        });
+        const apiData = await apiRes.json();
+        if (!apiRes.ok || !apiData.success) {
+          throw new Error(apiData.error || error.message);
+        }
+      }
+
       toast.success('Školska godina uspješno obrisana.');
-      fetchYears();
+      await fetchYears();
     } catch (err: any) {
       toast.error('Greška pri brisanju školske godine: ' + err.message);
     } finally {

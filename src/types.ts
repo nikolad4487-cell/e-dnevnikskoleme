@@ -103,10 +103,50 @@ export type UserSchoolRole = {
 export const PROGRAM_TYPES = {
   VOCATIONAL_3Y: 'VOCATIONAL_3Y',
   COMMERCIALIST_4Y: 'COMMERCIALIST_4Y',
+  GYMNASIUM_4Y: 'GYMNASIUM_4Y',
   CONTINUATION_FREE: 'CONTINUATION_FREE',
-  CONTINUATION_PAID: 'CONTINUATION_PAID'
+  CONTINUATION_PAID: 'CONTINUATION_PAID',
+  // Faculty study types
+  INTEGRATED_UNDERGRAD_GRAD: 'INTEGRATED_UNDERGRAD_GRAD',
+  UNDERGRADUATE_UNIVERSITY: 'UNDERGRADUATE_UNIVERSITY',
+  GRADUATE_UNIVERSITY: 'GRADUATE_UNIVERSITY',
+  PROFESSIONAL_UNDERGRADUATE: 'PROFESSIONAL_UNDERGRADUATE',
+  PROFESSIONAL_GRADUATE: 'PROFESSIONAL_GRADUATE',
+  SPECIALIST_GRADUATE_PROFESSIONAL: 'SPECIALIST_GRADUATE_PROFESSIONAL',
+  POSTGRADUATE_SPECIALIST: 'POSTGRADUATE_SPECIALIST',
+  DOCTORAL: 'DOCTORAL'
 } as const;
 export type ProgramType = typeof PROGRAM_TYPES[keyof typeof PROGRAM_TYPES];
+
+export const FACULTY_STUDY_TYPE_LABELS: Record<string, string> = {
+  INTEGRATED_UNDERGRAD_GRAD: 'Integrirani prijediplomski i diplomski sveučilišni studij',
+  UNDERGRADUATE_UNIVERSITY: 'Prijediplomski sveučilišni studij',
+  GRADUATE_UNIVERSITY: 'Diplomski sveučilišni studij',
+  PROFESSIONAL_UNDERGRADUATE: 'Stručni prijediplomski studij',
+  PROFESSIONAL_GRADUATE: 'Stručni diplomski studij',
+  SPECIALIST_GRADUATE_PROFESSIONAL: 'Specijalistički diplomski stručni studij',
+  POSTGRADUATE_SPECIALIST: 'Poslijediplomski specijalistički studij',
+  DOCTORAL: 'Doktorski studij',
+  // Compatibility aliases
+  INTEGRIRANI_SVEUCILISNI: 'Integrirani prijediplomski i diplomski sveučilišni studij',
+  PRIJEDIPLOMSKI_SVEUCILISNI: 'Prijediplomski sveučilišni studij',
+  DIPLOMSKI_SVEUCILISNI: 'Diplomski sveučilišni studij',
+  STRUCNI_PRIJEDIPLOMSKI: 'Stručni prijediplomski studij',
+  STRUCNI_DIPLOMSKI: 'Stručni diplomski studij',
+  SPECIJALISTICKI_DIPLOMSKI_STRUCNI: 'Specijalistički diplomski stručni studij',
+  POSLIJEDIPLOMSKI_SPECIJALISTICKI: 'Poslijediplomski specijalistički studij',
+  DOKTORSKI: 'Doktorski studij'
+};
+
+export const UCITELJSKI_FACULTY_MODULES = [
+  'Modul informatika',
+  'Modul hrvatski jezik',
+  'Modul likovna kultura',
+  'Modul odgojne znanosti',
+  'Smjer engleski jezik',
+  'Smjer njemački jezik',
+  'Smjer cjeloživotno obrazovanje i obrazovanje odraslih'
+];
 
 export const CONTINUATION_TYPES = {
   NONE: 'NONE',

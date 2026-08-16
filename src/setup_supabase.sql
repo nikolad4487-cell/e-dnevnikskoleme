@@ -98,6 +98,7 @@ CREATE TABLE public.programs (
     duration_years INTEGER NOT NULL DEFAULT 4,
     type TEXT NOT NULL DEFAULT 'VOCATIONAL_3Y',
     continuation_type TEXT NOT NULL DEFAULT 'NONE',
+    module_or_track TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -450,7 +451,122 @@ ALTER TABLE public.grading_elements ENABLE ROW LEVEL SECURITY;
 
 -- Policies
 CREATE POLICY "Authenticated read" ON public.schools FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Authenticated read" ON public.school_years FOR ALL TO authenticated USING (true);
+
+-- School years RLS Policies
+DROP POLICY IF EXISTS "Authenticated read" ON public.school_years;
+DROP POLICY IF EXISTS "Admins can read school years" ON public.school_years;
+DROP POLICY IF EXISTS "Admins can insert school years" ON public.school_years;
+DROP POLICY IF EXISTS "Admins can update school years" ON public.school_years;
+DROP POLICY IF EXISTS "Admins can delete school years" ON public.school_years;
+
+CREATE POLICY "Admins can read school years"
+ON public.school_years
+FOR SELECT
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM public.user_profiles up
+    LEFT JOIN public.user_school_roles usr
+      ON usr.user_id = up.id
+    WHERE up.auth_user_id = auth.uid()
+      AND (
+        up.role = 'SUPER_ADMIN'
+        OR up.access_role = 'SUPER_ADMIN'
+        OR (
+          usr.school_id = school_years.school_id
+          AND usr.status = 'ACTIVE'
+        )
+      )
+  )
+);
+
+CREATE POLICY "Admins can insert school years"
+ON public.school_years
+FOR INSERT
+TO authenticated
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM public.user_profiles up
+    LEFT JOIN public.user_school_roles usr
+      ON usr.user_id = up.id
+    WHERE up.auth_user_id = auth.uid()
+      AND (
+        up.role = 'SUPER_ADMIN'
+        OR up.access_role = 'SUPER_ADMIN'
+        OR (
+          usr.school_id = school_years.school_id
+          AND usr.status = 'ACTIVE'
+          AND usr.role IN ('ADMIN', 'SCHOOL_ADMIN', 'SUPER_ADMIN')
+        )
+      )
+  )
+);
+
+CREATE POLICY "Admins can update school years"
+ON public.school_years
+FOR UPDATE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM public.user_profiles up
+    LEFT JOIN public.user_school_roles usr
+      ON usr.user_id = up.id
+    WHERE up.auth_user_id = auth.uid()
+      AND (
+        up.role = 'SUPER_ADMIN'
+        OR up.access_role = 'SUPER_ADMIN'
+        OR (
+          usr.school_id = school_years.school_id
+          AND usr.status = 'ACTIVE'
+          AND usr.role IN ('ADMIN', 'SCHOOL_ADMIN', 'SUPER_ADMIN')
+        )
+      )
+  )
+)
+WITH CHECK (
+  EXISTS (
+    SELECT 1
+    FROM public.user_profiles up
+    LEFT JOIN public.user_school_roles usr
+      ON usr.user_id = up.id
+    WHERE up.auth_user_id = auth.uid()
+      AND (
+        up.role = 'SUPER_ADMIN'
+        OR up.access_role = 'SUPER_ADMIN'
+        OR (
+          usr.school_id = school_years.school_id
+          AND usr.status = 'ACTIVE'
+          AND usr.role IN ('ADMIN', 'SCHOOL_ADMIN', 'SUPER_ADMIN')
+        )
+      )
+  )
+);
+
+CREATE POLICY "Admins can delete school years"
+ON public.school_years
+FOR DELETE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1
+    FROM public.user_profiles up
+    LEFT JOIN public.user_school_roles usr
+      ON usr.user_id = up.id
+    WHERE up.auth_user_id = auth.uid()
+      AND (
+        up.role = 'SUPER_ADMIN'
+        OR up.access_role = 'SUPER_ADMIN'
+        OR (
+          usr.school_id = school_years.school_id
+          AND usr.status = 'ACTIVE'
+          AND usr.role IN ('ADMIN', 'SCHOOL_ADMIN', 'SUPER_ADMIN')
+        )
+      )
+  )
+);
 CREATE POLICY "Authenticated read" ON public.programs FOR ALL TO authenticated USING (true);
 CREATE POLICY "Authenticated read" ON public.user_profiles FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Authenticated read" ON public.user_school_roles FOR SELECT TO authenticated USING (true);

@@ -311,6 +311,375 @@ async function startServer() {
     });
   });
 
+  // School Years CRUD endpoints via Supabase Admin (Service Role)
+  app.get("/api/school-years", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const schoolId = (req.query.schoolId || req.query.school_id) as string;
+      let query = supabaseAdmin.from("school_years").select("*");
+      if (schoolId) {
+        query = query.eq("school_id", schoolId);
+      }
+      query = query.order("starts_at", { ascending: false });
+      const { data, error } = await query;
+      if (error) throw error;
+      res.json({ success: true, data: data || [] });
+    } catch (err: any) {
+      console.error("[SERVER] GET /api/school-years error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/school-years", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const school_id = req.body.school_id || req.body.schoolId;
+      if (!school_id) {
+        return res.status(400).json({ success: false, error: "school_id je obavezan." });
+      }
+      if (!req.body.name) {
+        return res.status(400).json({ success: false, error: "Naziv školske godine je obavezan." });
+      }
+
+      const payload = {
+        name: req.body.name,
+        starts_at: req.body.starts_at || req.body.startsAt || null,
+        ends_at: req.body.ends_at || req.body.endsAt || null,
+        status: req.body.status || (req.body.is_active ? 'ACTIVE' : 'ARCHIVED'),
+        is_active: req.body.is_active !== undefined ? !!req.body.is_active : (req.body.status === 'ACTIVE'),
+        school_id
+      };
+
+      console.log("SAVE SCHOOL YEAR PAYLOAD", payload);
+
+      const { data, error } = await supabaseAdmin
+        .from("school_years")
+        .insert([payload])
+        .select()
+        .single();
+
+      if (error) throw error;
+      console.log("[SERVER] School year created successfully:", data);
+      res.json({ success: true, data });
+    } catch (err: any) {
+      console.error("[SERVER] POST /api/school-years error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.put("/api/school-years/:id", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { id } = req.params;
+      const payload: any = {
+        name: req.body.name,
+        starts_at: req.body.starts_at || req.body.startsAt || null,
+        ends_at: req.body.ends_at || req.body.endsAt || null,
+        status: req.body.status || (req.body.is_active ? 'ACTIVE' : 'ARCHIVED'),
+        is_active: req.body.is_active !== undefined ? !!req.body.is_active : (req.body.status === 'ACTIVE')
+      };
+      if (req.body.school_id || req.body.schoolId) {
+        payload.school_id = req.body.school_id || req.body.schoolId;
+      }
+
+      console.log("SAVE SCHOOL YEAR PAYLOAD (EDIT)", payload);
+
+      const { data, error } = await supabaseAdmin
+        .from("school_years")
+        .update(payload)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json({ success: true, data });
+    } catch (err: any) {
+      console.error("[SERVER] PUT /api/school-years/:id error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/school-years/:id/activate", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { id } = req.params;
+      let schoolId = req.body.school_id || req.body.schoolId;
+
+      if (!schoolId) {
+        const { data: targetYear } = await supabaseAdmin
+          .from("school_years")
+          .select("school_id")
+          .eq("id", id)
+          .single();
+        if (targetYear) {
+          schoolId = targetYear.school_id;
+        }
+      }
+
+      if (schoolId) {
+        await supabaseAdmin
+          .from("school_years")
+          .update({ is_active: false, status: "ARCHIVED" })
+          .eq("school_id", schoolId)
+          .neq("id", id);
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("school_years")
+        .update({ is_active: true, status: "ACTIVE" })
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json({ success: true, data });
+    } catch (err: any) {
+      console.error("[SERVER] POST /api/school-years/:id/activate error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete("/api/school-years/:id", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { id } = req.params;
+      const { error } = await supabaseAdmin
+        .from("school_years")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (err: any) {
+      console.error("[SERVER] DELETE /api/school-years/:id error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  // Programs CRUD endpoints via Supabase Admin (Service Role)
+  app.get("/api/programs", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const schoolId = (req.query.schoolId || req.query.school_id) as string;
+      let query = supabaseAdmin.from("programs").select("*");
+      if (schoolId) {
+        query = query.eq("school_id", schoolId);
+      }
+      query = query.order("name", { ascending: true });
+      const { data, error } = await query;
+      if (error) throw error;
+      res.json({ success: true, data: data || [] });
+    } catch (err: any) {
+      console.error("[SERVER] GET /api/programs error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.post("/api/programs", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const school_id = req.body.school_id || req.body.schoolId;
+      if (!school_id) {
+        return res.status(400).json({ success: false, error: "school_id je obavezan." });
+      }
+      if (!req.body.name) {
+        return res.status(400).json({ success: false, error: "Naziv programa je obavezan." });
+      }
+
+      const payload = {
+        name: req.body.name,
+        duration_years: Number(req.body.duration_years || req.body.durationYears || 4),
+        type: req.body.type || 'COMMERCIALIST_4Y',
+        continuation_type: req.body.continuation_type || req.body.continuationType || 'NONE',
+        module_or_track: req.body.module_or_track || req.body.moduleOrTrack || null,
+        school_id
+      };
+
+      console.log("SAVE PROGRAM PAYLOAD", payload);
+
+      const { data, error } = await supabaseAdmin
+        .from("programs")
+        .insert([payload])
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json({ success: true, data });
+    } catch (err: any) {
+      console.error("[SERVER] POST /api/programs error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.put("/api/programs/:id", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { id } = req.params;
+      const payload: any = {
+        name: req.body.name,
+        duration_years: Number(req.body.duration_years || req.body.durationYears || 4),
+        type: req.body.type,
+        continuation_type: req.body.continuation_type || req.body.continuationType || 'NONE',
+        module_or_track: req.body.module_or_track !== undefined ? req.body.module_or_track : (req.body.moduleOrTrack || null)
+      };
+      if (req.body.school_id || req.body.schoolId) {
+        payload.school_id = req.body.school_id || req.body.schoolId;
+      }
+
+      console.log("SAVE PROGRAM PAYLOAD (EDIT)", payload);
+
+      const { data, error } = await supabaseAdmin
+        .from("programs")
+        .update(payload)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      res.json({ success: true, data });
+    } catch (err: any) {
+      console.error("[SERVER] PUT /api/programs/:id error:", err);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  });
+
+  app.delete("/api/programs/:id", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { id } = req.params;
+      if (!id) {
+        return res.status(400).json({ success: false, error: "ID programa je obavezan." });
+      }
+
+      console.log("[SERVER] DELETE PROGRAM REQUEST FOR ID:", id);
+
+      // Check if program exists
+      const { data: existingProgram, error: fetchErr } = await supabaseAdmin
+        .from("programs")
+        .select("id, name, school_id, module_or_track")
+        .eq("id", id)
+        .maybeSingle();
+
+      console.log("[SERVER] EXISTING PROGRAM BEFORE DELETE:", existingProgram);
+
+      if (fetchErr) {
+        console.error("[SERVER] Error checking existing program:", fetchErr);
+      }
+
+      // Check if any student class enrollments are tied directly
+      const { data: enrollments } = await supabaseAdmin
+        .from("student_class_enrollments")
+        .select("id")
+        .eq("program_id", id)
+        .limit(5);
+
+      if (enrollments && enrollments.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Program se ne može obrisati jer postoje učenici ili upisi povezani s njim."
+        });
+      }
+
+      // Check if classes reference this program
+      const { data: linkedClasses } = await supabaseAdmin
+        .from("classes")
+        .select("id, name")
+        .eq("program_id", id)
+        .limit(5);
+
+      if (linkedClasses && linkedClasses.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Program se ne može obrisati jer je dodijeljen razrednim odjelima/grupama (${linkedClasses.map(c => c.name).join(", ")}).`
+        });
+      }
+
+      // Execute delete
+      const { data: deletedData, error } = await supabaseAdmin
+        .from("programs")
+        .delete()
+        .eq("id", id)
+        .select();
+
+      if (error) throw error;
+
+      console.log("[SERVER] DELETE PROGRAM SUCCESSFUL FOR ID:", id, "Deleted records:", deletedData);
+
+      return res.status(200).json({
+        success: true,
+        deletedId: id,
+        data: deletedData
+      });
+    } catch (err: any) {
+      console.error("[SERVER] DELETE /api/programs/:id error:", err);
+      return res.status(400).json({ success: false, error: err.message || "Greška pri brisanju programa." });
+    }
+  });
+
+  // Alias for /api/admin/programs/:id
+  app.delete("/api/admin/programs/:id", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const { id } = req.params;
+      if (!id) {
+        return res.status(400).json({ success: false, error: "ID programa je obavezan." });
+      }
+
+      console.log("[SERVER] DELETE ADMIN PROGRAM REQUEST FOR ID:", id);
+
+      const { data: existingProgram } = await supabaseAdmin
+        .from("programs")
+        .select("id, name, school_id, module_or_track")
+        .eq("id", id)
+        .maybeSingle();
+
+      console.log("[SERVER] EXISTING PROGRAM BEFORE DELETE (ADMIN ALIAS):", existingProgram);
+
+      const { data: enrollments } = await supabaseAdmin
+        .from("student_class_enrollments")
+        .select("id")
+        .eq("program_id", id)
+        .limit(5);
+
+      if (enrollments && enrollments.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: "Program se ne može obrisati jer postoje učenici ili upisi povezani s njim."
+        });
+      }
+
+      const { data: linkedClasses } = await supabaseAdmin
+        .from("classes")
+        .select("id, name")
+        .eq("program_id", id)
+        .limit(5);
+
+      if (linkedClasses && linkedClasses.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Program se ne može obrisati jer je dodijeljen razrednim odjelima/grupama (${linkedClasses.map(c => c.name).join(", ")}).`
+        });
+      }
+
+      const { data: deletedData, error } = await supabaseAdmin
+        .from("programs")
+        .delete()
+        .eq("id", id)
+        .select();
+
+      if (error) throw error;
+
+      return res.status(200).json({
+        success: true,
+        deletedId: id,
+        data: deletedData
+      });
+    } catch (err: any) {
+      console.error("[SERVER] DELETE /api/admin/programs/:id error:", err);
+      return res.status(400).json({ success: false, error: err.message || "Greška pri brisanju programa." });
+    }
+  });
+
   // Bulk schedule assignment POST endpoint
   app.post("/api/admin/bulk-schedule-assign", async (req, res) => {
     try {

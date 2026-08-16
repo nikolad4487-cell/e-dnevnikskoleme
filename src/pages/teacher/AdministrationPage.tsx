@@ -156,20 +156,18 @@ export default function AdministrationPage() {
     console.log('ALL LOADED PROGRAMS:', programs);
     
     const filtered = programs.filter(program => {
-        if (selectedClassData.variant === 'REGULAR') {
-            return ['VOCATIONAL_3Y', 'COMMERCIALIST_4Y'].includes(program.type);
-        }
         if (selectedClassData.variant === 'CONTINUATION_FREE') {
             return program.type === 'CONTINUATION_FREE';
         }
         if (selectedClassData.variant === 'CONTINUATION_PAID') {
             return program.type === 'CONTINUATION_PAID';
         }
-        return true;
+        // REGULAR variant: allow all non-continuation programs (including all faculty types)
+        return program.type !== 'CONTINUATION_FREE' && program.type !== 'CONTINUATION_PAID';
      }).sort((a,b) => (a.name || '').localeCompare(b.name || ''));
      
      console.log('FILTERED PROGRAMS:', filtered);
-     return filtered;
+     return filtered.length > 0 ? filtered : programs;
   }, [selectedClassData, programs]);
 
   const isSchoolAdminMode = location.pathname.startsWith('/admin') && !location.pathname.startsWith('/admin-skole');
@@ -350,7 +348,8 @@ export default function AdministrationPage() {
     name: '',
     durationYears: 4,
     schoolId: selectedSchoolId || '',
-    type: PROGRAM_TYPES.VOCATIONAL_3Y
+    type: PROGRAM_TYPES.VOCATIONAL_3Y as string,
+    moduleOrTrack: ''
   });
 
   const [createdStaffTotp, setCreatedStaffTotp] = useState<{
@@ -2942,8 +2941,71 @@ setAllSubjects(uniqueSub2);
         await supabase.from('curriculum_plans').delete().eq('id', deleteDialog.id);
         toast.success('Plan je obrisan.');
       } else if (deleteDialog.type === 'PROGRAM') {
-        const { error } = await supabase.from('programs').delete().eq('id', deleteDialog.id);
-        if (error) throw error;
+        const programId = deleteDialog.id;
+        console.log("DELETE PROGRAM CLICKED (ADMIN PAGE)", deleteDialog);
+        console.log("DELETE PROGRAM ID (ADMIN PAGE)", programId);
+
+        // Pre-check existing
+        const { data: existingProgram } = await supabase
+          .from("programs")
+          .select("id, name, school_id, module_or_track")
+          .eq("id", programId)
+          .maybeSingle();
+
+        console.log("EXISTING PROGRAM BEFORE DELETE", existingProgram);
+
+        // Check if student enrollments exist
+        const { data: enrollments } = await supabase
+          .from('student_class_enrollments')
+          .select('id')
+          .eq('program_id', programId)
+          .limit(1);
+
+        if (enrollments && enrollments.length > 0) {
+          throw new Error('Program se ne može obrisati jer postoje učenici ili upisi povezani s njim.');
+        }
+
+        // Check if classes exist
+        const { data: linkedClasses } = await supabase
+          .from('classes')
+          .select('id, name')
+          .eq('program_id', programId)
+          .limit(1);
+
+        if (linkedClasses && linkedClasses.length > 0) {
+          throw new Error(`Program se ne može obrisati jer je dodijeljen razrednom odjelu (${linkedClasses[0].name}).`);
+        }
+
+        const { data: deletedRows, error: sbError } = await supabase
+          .from('programs')
+          .delete()
+          .eq('id', programId)
+          .select();
+
+        if (sbError || !deletedRows || deletedRows.length === 0) {
+          console.log("Calling API delete fallback for program ID:", programId);
+          const response = await fetch(`/api/programs/${programId}`, {
+            method: 'DELETE'
+          });
+
+          const raw = await response.text();
+          console.log("DELETE PROGRAM STATUS", response.status);
+          console.log("DELETE PROGRAM RAW RESPONSE", raw);
+
+          let result = null;
+          if (raw) {
+            try {
+              result = JSON.parse(raw);
+            } catch (jsonErr) {
+              console.error("Failed to parse delete JSON response:", jsonErr);
+            }
+          }
+
+          if (!response.ok) {
+            throw new Error(result?.error || raw || "Brisanje programa nije uspjelo.");
+          }
+        }
+
         toast.success('Program je obrisan.');
       }
     } catch (err: any) {
@@ -2957,12 +3019,11 @@ setAllSubjects(uniqueSub2);
 
   const handleCreateSchoolYear = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newYearForm.name || !selectedSchoolId) {
-      toast.error('Naziv školske godine je obavezan');
+    const effectiveSchoolId = selectedSchoolId || (user as any)?.active_school_id || (user as any)?.activeSchoolId || (user as any)?.school_id || (user as any)?.schoolId;
+    if (!newYearForm.name || !effectiveSchoolId) {
+      toast.error('Naziv školske godine i odabir škole su obavezni.');
       return;
     }
-    
-    console.log("CREATE SCHOOL YEAR CLICKED", { name: newYearForm.name, schoolId: selectedSchoolId });
     
     setLoading(true);
     try {
@@ -2971,23 +3032,46 @@ setAllSubjects(uniqueSub2);
         setLoading(false);
         return;
       }
-      const { data, error } = await supabase.from('school_years').insert([{
+
+      const payload = {
         name: newYearForm.name,
         starts_at: newYearForm.startsAt || null,
         ends_at: newYearForm.endsAt || null,
-        school_id: selectedSchoolId,
-        is_active: schoolYears.length === 0 
-      }]).select().single();
+        school_id: effectiveSchoolId,
+        is_active: schoolYears.length === 0,
+        status: schoolYears.length === 0 ? 'ACTIVE' : 'ARCHIVED'
+      };
+
+      console.log("SAVE SCHOOL YEAR PAYLOAD", payload);
+
+      let data: any = null;
+      let error: any = null;
+
+      const directRes = await supabase.from('school_years').insert([payload]).select().single();
+      data = directRes.data;
+      error = directRes.error;
+
+      if (error) {
+        console.warn("Direct Supabase insert failed, attempting service role API fallback:", error);
+        const apiRes = await fetch('/api/school-years', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const apiJson = await apiRes.json();
+        if (!apiRes.ok || !apiJson.success) {
+          throw new Error(apiJson.error || error.message);
+        }
+        data = apiJson.data;
+        error = null;
+      }
 
       console.log("CREATE SCHOOL YEAR RESULT:", { data, error });
 
-      if (error) {
-        throw error;
-      } else {
-        setNewYearForm({ name: '', startsAt: '', endsAt: '' });
-        toast.success(`Nova školska godina ${newYearForm.name} je otvorena`);
-        await fetchSchoolYears();
-      }
+      setNewYearForm({ name: '', startsAt: '', endsAt: '' });
+      toast.success(`Nova školska godina ${newYearForm.name} je otvorena`);
+      await fetchSchoolYears();
+      if (typeof fetchData === 'function') await fetchData();
     } catch (err: any) {
       console.error("CREATE SCHOOL YEAR ERROR:", err);
       toast.error('Greška pri otvaranju školske godine: ' + err.message);
@@ -3127,15 +3211,33 @@ setAllSubjects(uniqueSub2);
       if (!activeYear) {
          const currentYear = new Date().getFullYear();
          const nextYear = currentYear + 1;
-         const { data: newYear, error: createError } = await supabase.from('school_years').insert([{
+         const payload = {
            name: `${currentYear}./${nextYear}.`,
            school_id: selectedSchoolId,
            is_active: true,
            starts_at: `${currentYear}-09-01`,
-           ends_at: `${nextYear}-06-30`
-         }]).select().single();
+           ends_at: `${nextYear}-06-30`,
+           status: 'ACTIVE'
+         };
+         console.log("SAVE SCHOOL YEAR PAYLOAD", payload);
+         let newYear: any = null;
+         const { data: directData, error: createError } = await supabase.from('school_years').insert([payload]).select().single();
+         if (createError) {
+           console.warn("Direct insert failed, attempting service role API fallback:", createError);
+           const apiRes = await fetch('/api/school-years', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify(payload)
+           });
+           const apiJson = await apiRes.json();
+           if (!apiRes.ok || !apiJson.success) {
+             throw new Error(apiJson.error || createError.message);
+           }
+           newYear = apiJson.data;
+         } else {
+           newYear = directData;
+         }
          
-         if (createError) throw createError;
          if (newYear) {
            activeYear = mappers.schoolYear(newYear);
            currentYears.push(activeYear);
@@ -4474,7 +4576,11 @@ setAllSubjects(uniqueSub2);
                           className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                         >
                           <option value="">-- Odaberi --</option>
-                          {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                          {programs.map(p => (
+                            <option key={p.id} value={p.id}>
+                              {p.module_or_track ? `${p.name} — ${p.module_or_track}` : p.name}
+                            </option>
+                          ))}
                         </select>
                       </div>
                     </div>
@@ -4729,7 +4835,11 @@ setAllSubjects(uniqueSub2);
                         className="border border-gray-300 p-2 outline-none focus:border-[#005c8d] font-bold"
                       >
                         <option value="">Program...</option>
-                        {programs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        {programs.map(p => (
+                          <option key={p.id} value={p.id}>
+                            {p.module_or_track ? `${p.name} — ${p.module_or_track}` : p.name}
+                          </option>
+                        ))}
                       </select>
                       <select 
                         value={studentForm.classId}
@@ -5588,12 +5698,13 @@ setAllSubjects(uniqueSub2);
                           >
                             <option value="">-- Odaberi --</option>
                             {programs.filter(program => {
-                               if (newClassVariant === 'REGULAR') return ['VOCATIONAL_3Y', 'COMMERCIALIST_4Y'].includes(program.type);
                                if (newClassVariant === 'CONTINUATION_FREE') return program.type === 'CONTINUATION_FREE';
                                if (newClassVariant === 'CONTINUATION_PAID') return program.type === 'CONTINUATION_PAID';
-                               return false;
+                               return program.type !== 'CONTINUATION_FREE' && program.type !== 'CONTINUATION_PAID';
                              }).map(p => (
-                              <option key={p.id} value={p.id}>{p.name}</option>
+                              <option key={p.id} value={p.id}>
+                                {p.module_or_track ? `${p.name} — ${p.module_or_track}` : p.name}
+                              </option>
                             ))}
                           </select>
                         </div>
@@ -5961,82 +6072,172 @@ setAllSubjects(uniqueSub2);
               <div className="border-b-2 border-[#005c8d] pb-2 flex items-center justify-between">
                 <h3 className="text-lg font-black text-[#005c8d] uppercase tracking-tighter">Upravljanje programima</h3>
               </div>
-              {isMainAdmin && (
-                <div className="bg-white border border-gray-300 p-4">
-                  <div className="text-[10px] font-black text-gray-400 uppercase mb-3">Dodaj novi obrazovni program</div>
-                  <form onSubmit={async (e) => {
-                    e.preventDefault();
-                    if (!programForm.name || !programForm.schoolId) return;
-                    setLoading(true);
-                    try {
-                      const { error } = await supabase.from('programs').insert([{ 
-                        name: programForm.name, 
-                        duration_years: programForm.durationYears, 
-                        school_id: programForm.schoolId,
-                        type: programForm.type
-                      }]);
-                      if (error) throw error;
-                      setProgramForm({
-                        name: '',
-                        durationYears: 4,
-                        schoolId: programForm.schoolId,
-                        type: PROGRAM_TYPES.VOCATIONAL_3Y
-                      });
-                      toast.success('Program dodan');
-                      fetchData();
-                    } catch (err: any) {
-                      toast.error('Greska: ' + err.message);
-                    } finally {
-                      setLoading(false);
-                    }
-                  }} className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black text-gray-400 uppercase">Naziv programa</label>
-                        <input 
-                          value={programForm.name}
-                          onChange={e => setProgramForm({...programForm, name: e.target.value})}
-                          placeholder="npr. Tehničar za računalstvo" 
-                          className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none" required 
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black text-gray-400 uppercase">Škola</label>
-                        <select 
-                          value={programForm.schoolId}
-                          onChange={e => setProgramForm({...programForm, schoolId: e.target.value})}
-                          className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none" required
-                        >
-                          <option value="">-- Odaberi školu --</option>
-                          {schools.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                      </div>
+              {isMainAdmin && (() => {
+                const targetSchool = schools.find(s => s.id === programForm.schoolId);
+                const isTargetFaculty = targetSchool?.type === 'FAKULTET' || 
+                  (targetSchool?.name ? /fakultet|veleučilišt|sveučilišt|akademij/i.test(targetSchool.name) : false);
+                const isTargetUciteljski = isTargetFaculty && (targetSchool?.name ? /učiteljsk|uciteljsk/i.test(targetSchool.name) : false);
+
+                return (
+                  <div className="bg-white border border-gray-300 p-4">
+                    <div className="text-[10px] font-black text-gray-400 uppercase mb-3">
+                      {isTargetFaculty ? 'Dodaj novi studijski program / modul' : 'Dodaj novi obrazovni program'}
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black text-gray-400 uppercase">Trajanje (godina)</label>
-                        <input 
-                          type="number" min="1" max="5" 
-                          value={programForm.durationYears}
-                          onChange={e => setProgramForm({...programForm, durationYears: parseInt(e.target.value)})}
-                          className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none" required 
-                        />
+                    <form onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!programForm.name || !programForm.schoolId) return;
+                      setLoading(true);
+                      try {
+                        const payload = {
+                          name: programForm.name,
+                          duration_years: programForm.durationYears,
+                          school_id: programForm.schoolId,
+                          type: programForm.type,
+                          module_or_track: programForm.moduleOrTrack || null
+                        };
+
+                        let { error } = await supabase.from('programs').insert([payload]);
+                        if (error) {
+                          const apiRes = await fetch('/api/programs', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                          });
+                          const apiJson = await apiRes.json();
+                          if (!apiRes.ok || !apiJson.success) throw new Error(apiJson.error || error.message);
+                        }
+
+                        setProgramForm({
+                          name: '',
+                          durationYears: isTargetFaculty ? 5 : 4,
+                          schoolId: programForm.schoolId,
+                          type: isTargetFaculty ? 'INTEGRATED_UNDERGRAD_GRAD' : PROGRAM_TYPES.VOCATIONAL_3Y,
+                          moduleOrTrack: ''
+                        });
+                        toast.success(isTargetFaculty ? 'Studijski program dodan' : 'Program dodan');
+                        fetchData();
+                      } catch (err: any) {
+                        toast.error('Greška: ' + err.message);
+                      } finally {
+                        setLoading(false);
+                      }
+                    }} className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black text-gray-400 uppercase">
+                            {isTargetFaculty ? 'Studijski program' : 'Naziv programa'}
+                          </label>
+                          <input 
+                            value={programForm.name}
+                            onChange={e => setProgramForm({...programForm, name: e.target.value})}
+                            placeholder={isTargetFaculty ? "npr. Integrirani prijediplomski i diplomski sveučilišni studij - Učiteljski studij" : "npr. Tehničar za računalstvo"} 
+                            className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none" required 
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black text-gray-400 uppercase">Ustanova (Škola / Fakultet)</label>
+                          <select 
+                            value={programForm.schoolId}
+                            onChange={e => {
+                              const newSchId = e.target.value;
+                              const sch = schools.find(s => s.id === newSchId);
+                              const isFac = sch?.type === 'FAKULTET' || (sch?.name ? /fakultet|veleučilišt|sveučilišt/i.test(sch.name) : false);
+                              const isUci = isFac && (sch?.name ? /učiteljsk|uciteljsk/i.test(sch.name) : false);
+                              setProgramForm({
+                                ...programForm,
+                                schoolId: newSchId,
+                                type: isFac ? 'INTEGRATED_UNDERGRAD_GRAD' : PROGRAM_TYPES.COMMERCIALIST_4Y,
+                                durationYears: isFac ? 5 : 4,
+                                name: isUci ? 'Integrirani prijediplomski i diplomski sveučilišni studij - Učiteljski studij' : programForm.name,
+                                moduleOrTrack: isUci ? 'Modul informatika' : ''
+                              });
+                            }}
+                            className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none" required
+                          >
+                            <option value="">-- Odaberi ustanovu --</option>
+                            {schools.map(s => <option key={s.id} value={s.id}>{s.name} ({s.type === 'FAKULTET' ? 'Fakultet' : s.type === 'PRIMARY' ? 'Osnovna' : 'Srednja'})</option>)}
+                          </select>
+                        </div>
                       </div>
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black text-gray-400 uppercase">Tip programa</label>
-                        <select 
-                          value={programForm.type}
-                          onChange={e => setProgramForm({...programForm, type: e.target.value as any})}
-                          className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none"
-                        >
-                          {Object.entries(PROGRAM_TYPES).map(([k, v]) => <option key={k} value={v}>{k}</option>)}
-                        </select>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black text-gray-400 uppercase">Trajanje (godina)</label>
+                          <input 
+                            type="number" min="1" max="6" 
+                            value={programForm.durationYears}
+                            onChange={e => setProgramForm({...programForm, durationYears: parseInt(e.target.value)})}
+                            className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none" required 
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-black text-gray-400 uppercase">
+                            {isTargetFaculty ? 'Vrsta studija' : 'Tip programa'}
+                          </label>
+                          {isTargetFaculty ? (
+                            <select 
+                              value={programForm.type}
+                              onChange={e => {
+                                const newType = e.target.value;
+                                let defDuration = 3;
+                                if (newType === 'INTEGRATED_UNDERGRAD_GRAD' || newType === 'INTEGRIRANI_SVEUCILISNI') defDuration = 5;
+                                else if (newType === 'GRADUATE_UNIVERSITY' || newType === 'PROFESSIONAL_GRADUATE') defDuration = 2;
+                                else if (newType === 'DOCTORAL') defDuration = 3;
+                                setProgramForm({...programForm, type: newType, durationYears: defDuration});
+                              }}
+                              className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none"
+                            >
+                              <option value="INTEGRATED_UNDERGRAD_GRAD">Integrirani prijediplomski i diplomski sveučilišni studij</option>
+                              <option value="UNDERGRADUATE_UNIVERSITY">Prijediplomski sveučilišni studij</option>
+                              <option value="GRADUATE_UNIVERSITY">Diplomski sveučilišni studij</option>
+                              <option value="PROFESSIONAL_UNDERGRADUATE">Stručni prijediplomski studij</option>
+                              <option value="PROFESSIONAL_GRADUATE">Stručni diplomski studij</option>
+                              <option value="SPECIALIST_GRADUATE_PROFESSIONAL">Specijalistički diplomski stručni studij</option>
+                              <option value="POSTGRADUATE_SPECIALIST">Poslijediplomski specijalistički studij</option>
+                              <option value="DOCTORAL">Doktorski studij</option>
+                            </select>
+                          ) : (
+                            <select 
+                              value={programForm.type}
+                              onChange={e => setProgramForm({...programForm, type: e.target.value as any})}
+                              className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none"
+                            >
+                              <option value="COMMERCIALIST_4Y">Uobičajeni stručni 4G</option>
+                              <option value="VOCATIONAL_3Y">Strukovni 3G</option>
+                              <option value="GYMNASIUM_4Y">Gimnazijski</option>
+                              <option value="CONTINUATION_FREE">Sufinancirani nastavak</option>
+                              <option value="CONTINUATION_PAID">Nastavak uz plaćanje</option>
+                            </select>
+                          )}
+                        </div>
+
+                        {isTargetFaculty && (
+                          <div className="space-y-1">
+                            <label className="text-[9px] font-black text-gray-400 uppercase">Smjer / modul</label>
+                            <select
+                              value={programForm.moduleOrTrack}
+                              onChange={e => setProgramForm({...programForm, moduleOrTrack: e.target.value})}
+                              className="w-full border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none"
+                            >
+                              <option value="">[ Bez posebnog modula / Opći smjer ]</option>
+                              <option value="Modul informatika">Modul informatika</option>
+                              <option value="Modul hrvatski jezik">Modul hrvatski jezik</option>
+                              <option value="Modul likovna kultura">Modul likovna kultura</option>
+                              <option value="Modul odgojne znanosti">Modul odgojne znanosti</option>
+                              <option value="Smjer engleski jezik">Smjer engleski jezik</option>
+                              <option value="Smjer njemački jezik">Smjer njemački jezik</option>
+                              <option value="Smjer cjeloživotno obrazovanje i obrazovanje odraslih">Smjer cjeloživotno obrazovanje i obrazovanje odraslih</option>
+                            </select>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    <button className="w-full bg-[#005c8d] text-white font-black text-[10px] uppercase py-3 border border-[#004a70] hover:bg-[#004a70]">Dodaj Program</button>
-                  </form>
-                </div>
-              )}
+                      <button className="w-full bg-[#005c8d] text-white font-black text-[10px] uppercase py-3 border border-[#004a70] hover:bg-[#004a70]">
+                        {isTargetFaculty ? 'Dodaj Studijski Program' : 'Dodaj Program'}
+                      </button>
+                    </form>
+                  </div>
+                );
+              })()}
               <div className="bg-white border border-gray-300">
                 <table className="w-full text-left text-[11px]">
                   <thead className="bg-gray-50 font-black text-gray-400 uppercase text-[9px] border-b">

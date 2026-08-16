@@ -43,6 +43,7 @@ export default function ClassManagementPage() {
   const [schoolYears, setSchoolYears] = useState<any[]>([]);
   const [selectedYearId, setSelectedYearId] = useState<string>('');
   const [programs, setPrograms] = useState<any[]>([]);
+  const [selectedSchool, setSelectedSchool] = useState<any>(null);
 
   useEffect(() => {
     if (!selectedSchoolId) {
@@ -61,6 +62,32 @@ export default function ClassManagementPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
+
+      // Fetch School details
+      let currentSchool: any = null;
+      try {
+        const { data: sData } = await supabase
+          .from('schools')
+          .select('*')
+          .eq('id', selectedSchoolId)
+          .maybeSingle();
+        currentSchool = sData;
+      } catch (err) {
+        console.warn('Direct school fetch error:', err);
+      }
+
+      if (!currentSchool) {
+        try {
+          const apiSchoolRes = await fetch(`/api/schools/${selectedSchoolId}`);
+          if (apiSchoolRes.ok) {
+            const json = await apiSchoolRes.json();
+            currentSchool = json.data || json;
+          }
+        } catch (apiErr) {
+          console.warn('API school fetch error:', apiErr);
+        }
+      }
+      setSelectedSchool(currentSchool);
       
       // Fetch Classes directly from table to ensure we see all for this school
       const { data: classData, error: classError } = await supabase
@@ -107,8 +134,44 @@ export default function ClassManagementPage() {
       setTeachers(uniqueTeachers as any[]);
 
       // Fetch Programs
-      const { data: progData } = await supabase.from('programs').select('*').eq('school_id', selectedSchoolId);
-      setPrograms(progData || []);
+      console.log("CURRENT SCHOOL", currentSchool);
+      console.log("CURRENT SCHOOL ID", currentSchool?.id || selectedSchoolId);
+      console.log("CURRENT SCHOOL TYPE", currentSchool?.type || currentSchool?.school_type);
+      console.log("LOADING PROGRAMS FOR SCHOOL ID", selectedSchoolId);
+
+      let loadedPrograms: any[] = [];
+      let progError: any = null;
+
+      const { data: progData, error } = await supabase
+        .from('programs')
+        .select('id, name, module_or_track, type, school_id, duration_years, continuation_type')
+        .eq('school_id', selectedSchoolId)
+        .order('name');
+
+      if (error) {
+        progError = error;
+        console.warn("Supabase query error loading programs:", error);
+      } else {
+        loadedPrograms = progData || [];
+      }
+
+      if (loadedPrograms.length === 0) {
+        try {
+          const apiRes = await fetch(`/api/programs?schoolId=${selectedSchoolId}`);
+          if (apiRes.ok) {
+            const apiJson = await apiRes.json();
+            if (apiJson.data && Array.isArray(apiJson.data)) {
+              loadedPrograms = apiJson.data;
+            }
+          }
+        } catch (apiErr) {
+          console.warn("API programs fallback error:", apiErr);
+        }
+      }
+
+      console.log("LOADED PROGRAMS", loadedPrograms);
+      console.log("PROGRAMS ERROR", progError);
+      setPrograms(loadedPrograms);
 
     } catch (err: any) {
       toast.error('Greška pri učitavanju podataka');
@@ -302,22 +365,22 @@ export default function ClassManagementPage() {
     matchesSearch(c.name, searchTerm)
   );
 
-  const getAllowedProgramTypes = (variantVal: string) => {
-    if (variantVal === 'REGULAR') {
-      return ['VOCATIONAL_3Y', 'COMMERCIALIST_4Y'];
-    }
-    if (variantVal === 'CONTINUATION_FREE') {
-      return ['CONTINUATION_FREE'];
-    }
-    if (variantVal === 'CONTINUATION_PAID') {
-      return ['CONTINUATION_PAID'];
-    }
-    return [];
-  };
+  const filteredPrograms = React.useMemo(() => {
+    if (!programs || programs.length === 0) return [];
+    const filtered = programs.filter(program => {
+      if (variant === 'CONTINUATION_FREE') {
+        return program.type === 'CONTINUATION_FREE' || program.continuation_type === 'FREE';
+      }
+      if (variant === 'CONTINUATION_PAID') {
+        return program.type === 'CONTINUATION_PAID' || program.continuation_type === 'PAID';
+      }
+      // For REGULAR variant: allow all regular types and faculty types (exclude only continuation programs)
+      return program.type !== 'CONTINUATION_FREE' && program.type !== 'CONTINUATION_PAID' && program.continuation_type !== 'FREE' && program.continuation_type !== 'PAID';
+    });
 
-  const filteredPrograms = programs.filter(program =>
-    getAllowedProgramTypes(variant).includes(program.type)
-  );
+    // If filter resulted in empty list but programs exists, fallback to all programs so none are blocked
+    return filtered.length > 0 ? filtered : programs;
+  }, [programs, variant]);
 
   return (
     <div className="p-4 md:p-6 font-sans w-full bg-[#f8fafc] min-h-screen">
@@ -647,14 +710,23 @@ export default function ClassManagementPage() {
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Program / Smjer</label>
                 <select 
+                  id="class-program-select"
                   value={programId}
                   onChange={e => setProgramId(e.target.value)}
                   className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none"
                 >
-                  <option value="">Nema programa...</option>
-                  {filteredPrograms.map(p => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
+                  {filteredPrograms.length === 0 ? (
+                    <option value="">Nema programa...</option>
+                  ) : (
+                    <>
+                      <option value="">-- Odaberi program / smjer --</option>
+                      {filteredPrograms.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.module_or_track ? `${p.name} — ${p.module_or_track}` : p.name}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
               </div>
 
