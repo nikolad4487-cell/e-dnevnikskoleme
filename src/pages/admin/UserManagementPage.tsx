@@ -60,6 +60,102 @@ export default function UserManagementPage() {
   const [syncing, setSyncing] = useState(false);
   const [syncReport, setSyncReport] = useState<EdnevnikSyncReport | null>(null);
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isEmaticaModalOpen, setIsEmaticaModalOpen] = useState(false);
+  const [ematicaUsers, setEmaticaUsers] = useState<any[]>([]);
+  const [ematicaSearch, setEmaticaSearch] = useState('');
+  const [selectedEmaticaUserIds, setSelectedEmaticaUserIds] = useState<string[]>([]);
+  const [loadingEmaticaUsers, setLoadingEmaticaUsers] = useState(false);
+  const [importingEmaticaUsers, setImportingEmaticaUsers] = useState(false);
+
+  const loadEmaticaUsers = async (searchValue = ematicaSearch) => {
+    try {
+      setLoadingEmaticaUsers(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const params = new URLSearchParams({
+        schoolId: selectedSchoolId || '',
+        search: searchValue || ''
+      });
+      const response = await fetch(`/api/admin/ematica-users?${params.toString()}`, {
+        headers: {
+          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
+        }
+      });
+      const raw = await response.text();
+      console.log("LOAD EMATICA USERS STATUS", response.status);
+      console.log("LOAD EMATICA USERS RAW RESPONSE", raw);
+      const result = raw ? JSON.parse(raw) : null;
+      if (!response.ok || result?.success === false) {
+        throw new Error(result?.error || raw || 'Dohvat korisnika nije uspio.');
+      }
+      setEmaticaUsers(result.users || []);
+    } catch (err: any) {
+      console.error("LOAD EMATICA USERS FAILED:", err);
+      toast.error('Greška pri dohvaćanju korisnika iz e-Matice: ' + (err.message || 'Nepoznata greška'));
+    } finally {
+      setLoadingEmaticaUsers(false);
+    }
+  };
+
+  const handleOpenEmaticaImport = async () => {
+    setSelectedEmaticaUserIds([]);
+    setEmaticaSearch('');
+    setIsEmaticaModalOpen(true);
+    await loadEmaticaUsers('');
+  };
+
+  const toggleEmaticaUser = (userId: string) => {
+    setSelectedEmaticaUserIds(prev =>
+      prev.includes(userId)
+        ? prev.filter(id => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  const handleImportSelectedEmaticaUsers = async () => {
+    if (selectedEmaticaUserIds.length === 0) {
+      toast.error('Odaberite barem jednog korisnika.');
+      return;
+    }
+
+    try {
+      setImportingEmaticaUsers(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const rolesByUserId = selectedEmaticaUserIds.reduce((acc: Record<string, string>, userId) => {
+        const user = ematicaUsers.find(item => item.id === userId);
+        acc[userId] = user?.role || Role.TEACHER;
+        return acc;
+      }, {});
+
+      const response = await fetch('/api/admin/import-ematica-users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {})
+        },
+        body: JSON.stringify({
+          schoolId: selectedSchoolId,
+          userIds: selectedEmaticaUserIds,
+          rolesByUserId
+        })
+      });
+      const raw = await response.text();
+      console.log("IMPORT EMATICA USERS STATUS", response.status);
+      console.log("IMPORT EMATICA USERS RAW RESPONSE", raw);
+      const result = raw ? JSON.parse(raw) : null;
+      if (!response.ok || result?.success === false) {
+        throw new Error(result?.error || raw || 'Povlačenje korisnika nije uspjelo.');
+      }
+
+      toast.success(`Povučeno korisnika: ${result.imported}`);
+      setIsEmaticaModalOpen(false);
+      fetchUsers();
+    } catch (err: any) {
+      console.error("IMPORT EMATICA USERS FAILED:", err);
+      toast.error('Greška pri povlačenju korisnika: ' + (err.message || 'Nepoznata greška'));
+    } finally {
+      setImportingEmaticaUsers(false);
+    }
+  };
 
   const handleSyncUsers = async () => {
     try {
@@ -491,12 +587,12 @@ export default function UserManagementPage() {
         {isAnyAdmin && (
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <button 
-              onClick={handleSyncUsers}
-              disabled={syncing}
+              onClick={handleOpenEmaticaImport}
+              disabled={loadingEmaticaUsers || importingEmaticaUsers}
               className="w-full sm:w-auto bg-emerald-600 text-white px-5 py-2.5 rounded-lg font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer"
             >
-              <RefreshCw className={syncing ? "animate-spin" : ""} size={16} strokeWidth={3} />
-              {syncing ? "Sinkronizacija..." : "Pokreni sinkronizaciju"}
+              <RefreshCw className={loadingEmaticaUsers || importingEmaticaUsers ? "animate-spin" : ""} size={16} strokeWidth={3} />
+              Povuci iz e-Matice
             </button>
             <button 
               onClick={() => setIsBulkModalOpen(true)}
@@ -710,6 +806,136 @@ export default function UserManagementPage() {
           )}
         </div>
       </div>
+
+      {/* e-Matica Import Modal */}
+      {isEmaticaModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-4xl rounded-xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-150 flex flex-col max-h-[90vh]">
+            <div className="bg-emerald-700 p-5 text-white shrink-0 flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-sm md:text-base font-black uppercase tracking-tight">
+                  Povuci korisnike iz e-Matice
+                </h2>
+                <p className="text-emerald-100 text-[10px] font-black uppercase tracking-widest">
+                  Odaberite samo korisnike koje želite povezati s ovom školom
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEmaticaModalOpen(false)}
+                className="text-white/80 hover:text-white font-black text-lg"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-col sm:flex-row gap-3">
+              <div className="flex-1 bg-white px-3 py-2.5 rounded-xl border border-slate-200 flex items-center gap-2.5">
+                <Search className="text-slate-300 shrink-0" size={18} />
+                <input
+                  type="text"
+                  value={ematicaSearch}
+                  onChange={e => setEmaticaSearch(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      loadEmaticaUsers(ematicaSearch);
+                    }
+                  }}
+                  placeholder="Pretraži ime ili email..."
+                  className="bg-transparent border-none outline-none font-bold text-slate-900 text-xs w-full p-1"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => loadEmaticaUsers(ematicaSearch)}
+                disabled={loadingEmaticaUsers}
+                className="bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-100 disabled:opacity-50"
+              >
+                Pretraži
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1">
+              {loadingEmaticaUsers ? (
+                <div className="p-12 text-center text-slate-400 font-black uppercase tracking-widest text-xs">
+                  Učitavanje korisnika...
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {ematicaUsers.map((item) => {
+                    const checked = selectedEmaticaUserIds.includes(item.id);
+                    return (
+                      <label
+                        key={item.id}
+                        className={`flex items-center gap-4 p-4 cursor-pointer transition-colors ${checked ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleEmaticaUser(item.id)}
+                          className="w-4 h-4 accent-emerald-700"
+                        />
+                        <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 shrink-0">
+                          <UserIcon size={20} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-black text-slate-900 uppercase text-xs tracking-tight">
+                            {formatPersonName(item)}
+                          </div>
+                          <div className="text-xs text-slate-500 font-semibold truncate">
+                            {item.email || 'Nema email adrese'}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={`px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest ${getRoleBadge(item.role || Role.TEACHER)}`}>
+                            {item.role || 'TEACHER'}
+                          </span>
+                          {item.assignedToSelectedSchool && (
+                            <span className="px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-widest bg-amber-100 text-amber-700">
+                              Već povezan
+                            </span>
+                          )}
+                        </div>
+                      </label>
+                    );
+                  })}
+
+                  {ematicaUsers.length === 0 && (
+                    <div className="p-12 text-center text-slate-400 font-black uppercase tracking-widest text-xs">
+                      Nema korisnika za prikaz
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-slate-200 bg-white flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="text-xs text-slate-500 font-bold">
+                Odabrano: {selectedEmaticaUserIds.length}
+              </div>
+              <div className="flex gap-3 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsEmaticaModalOpen(false)}
+                  disabled={importingEmaticaUsers}
+                  className="flex-1 sm:flex-none bg-slate-100 text-slate-700 px-5 py-3 rounded-lg font-black uppercase tracking-wider text-[10px]"
+                >
+                  Odustani
+                </button>
+                <button
+                  type="button"
+                  onClick={handleImportSelectedEmaticaUsers}
+                  disabled={importingEmaticaUsers || selectedEmaticaUserIds.length === 0}
+                  className="flex-1 sm:flex-none bg-emerald-700 text-white px-5 py-3 rounded-lg font-black uppercase tracking-wider text-[10px] disabled:opacity-50"
+                >
+                  {importingEmaticaUsers ? 'Povlačenje...' : 'Povuci odabrane'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Bulk Modal */}
       {isBulkModalOpen && (

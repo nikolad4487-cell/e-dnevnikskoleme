@@ -4350,6 +4350,163 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     }
   });
 
+  app.get("/api/admin/ematica-users", async (req, res) => {
+    try {
+      if (!supabaseAdmin) {
+        return res.status(500).json({ success: false, error: "Supabase Admin client not initialized." });
+      }
+
+      const authHeader = req.headers.authorization || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+      const schoolId = String(req.query.schoolId || "");
+      const search = String(req.query.search || "").trim().toLowerCase();
+
+      const auth = await authorizeClassAdmin(token, schoolId);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: auth.error || "Nemate ovlasti za dohvat korisnika." });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from("user_profiles")
+        .select(`
+          id,
+          auth_user_id,
+          email,
+          name,
+          role,
+          access_role,
+          school_id,
+          active_school_id,
+          user_school_roles (
+            id,
+            school_id,
+            role,
+            status
+          )
+        `)
+        .order("name", { ascending: true });
+
+      if (error) throw error;
+
+      const users = (data || [])
+        .filter((user: any) => {
+          if (!search) return true;
+          return String(user.name || "").toLowerCase().includes(search) ||
+            String(user.email || "").toLowerCase().includes(search);
+        })
+        .map((user: any) => {
+          const roles = user.user_school_roles || [];
+          const assignedToSelectedSchool = roles.some((role: any) =>
+            String(role.school_id) === String(schoolId) &&
+            String(role.status || "ACTIVE").toUpperCase() === "ACTIVE"
+          );
+          const selectedSchoolRoles = roles
+            .filter((role: any) => String(role.school_id) === String(schoolId))
+            .map((role: any) => role.role);
+
+          return {
+            id: user.id,
+            auth_user_id: user.auth_user_id,
+            email: user.email,
+            name: user.name,
+            role: user.role,
+            access_role: user.access_role,
+            assignedToSelectedSchool,
+            selectedSchoolRoles,
+            allSchoolRoles: roles
+          };
+        });
+
+      return res.json({ success: true, users });
+    } catch (e: any) {
+      console.error("[EMATICA_USERS_LIST] error:", e);
+      return res.status(500).json({ success: false, error: e.message || "Dohvat korisnika iz e-Matice nije uspio." });
+    }
+  });
+
+  app.post("/api/admin/import-ematica-users", async (req, res) => {
+    try {
+      if (!supabaseAdmin) {
+        return res.status(500).json({ success: false, error: "Supabase Admin client not initialized." });
+      }
+
+      const authHeader = req.headers.authorization || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+      const { schoolId, userIds, rolesByUserId } = req.body || {};
+
+      if (!schoolId) return res.status(400).json({ success: false, error: "Nedostaje schoolId." });
+      if (!Array.isArray(userIds) || userIds.length === 0) {
+        return res.status(400).json({ success: false, error: "Odaberite barem jednog korisnika." });
+      }
+
+      const auth = await authorizeClassAdmin(token, schoolId);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: auth.error || "Nemate ovlasti za povlačenje korisnika." });
+      }
+
+      const { data: profiles, error: profilesError } = await supabaseAdmin
+        .from("user_profiles")
+        .select("id, auth_user_id, email, name, role, access_role")
+        .in("id", userIds);
+
+      if (profilesError) throw profilesError;
+
+      const results: any[] = [];
+      for (const profile of profiles || []) {
+        const requestedRole = rolesByUserId?.[profile.id];
+        const role = String(requestedRole || profile.role || "TEACHER").toUpperCase();
+        const isStudent = role === "STUDENT";
+        const password = isStudent ? "yupu8Ev4" : "1234";
+
+        let authUserId = profile.auth_user_id;
+        if (!authUserId && profile.email) {
+          const { data: createdAuth, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
+            email: String(profile.email).toLowerCase(),
+            password,
+            email_confirm: true,
+            user_metadata: { full_name: profile.name || profile.email }
+          });
+
+          if (authCreateError && !String(authCreateError.message || "").toLowerCase().includes("already")) {
+            results.push({ id: profile.id, email: profile.email, success: false, error: authCreateError.message });
+            continue;
+          }
+
+          authUserId = createdAuth?.user?.id || authUserId;
+          if (authUserId) {
+            await supabaseAdmin
+              .from("user_profiles")
+              .update({ auth_user_id: authUserId })
+              .eq("id", profile.id);
+          }
+        }
+
+        const { error: roleError } = await supabaseAdmin
+          .from("user_school_roles")
+          .upsert({
+            user_id: profile.id,
+            school_id: schoolId,
+            role,
+            status: "ACTIVE"
+          }, { onConflict: "user_id,school_id,role" });
+
+        if (roleError) {
+          results.push({ id: profile.id, email: profile.email, role, success: false, error: roleError.message });
+          continue;
+        }
+
+        results.push({ id: profile.id, email: profile.email, name: profile.name, role, success: true });
+      }
+
+      const imported = results.filter((item) => item.success).length;
+      const failed = results.length - imported;
+      return res.json({ success: failed === 0, imported, failed, results });
+    } catch (e: any) {
+      console.error("[EMATICA_USERS_IMPORT] error:", e);
+      return res.status(500).json({ success: false, error: e.message || "Povlačenje korisnika iz e-Matice nije uspjelo." });
+    }
+  });
+
   app.delete("/api/classes/:id", async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Database admin client not configured");
