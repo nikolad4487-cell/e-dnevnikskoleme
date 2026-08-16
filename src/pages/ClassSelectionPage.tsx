@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
-import { Class, Role, SchoolYear } from '../types';
+import { Class, Role, SchoolYear, isSchoolAdminUser, isSuperAdminUser, hasAnyRole } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, ArrowRight, Calendar, ChevronLeft, Plus, Award, FileText, UserX, Clock } from 'lucide-react';
+import { Loader2, ArrowRight, Calendar, ChevronLeft, Plus, Award, FileText, UserX, Clock, Building2, Shield } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn, formatPersonName } from '../lib/utils';
 import { Header } from '../components/Header';
@@ -50,9 +50,8 @@ export default function ClassSelectionPage() {
     }
   }, []);
 
-  // Current roles in selected school
-  const currentSchoolRoles = userSchoolRoles.filter(r => r.schoolId === selectedSchoolId).map(r => r.role);
-  const isSchoolAdmin = isMainAdmin || currentSchoolRoles.includes(Role.SCHOOL_ADMIN) || currentSchoolRoles.includes(Role.ADMIN);
+  const isSuperAdmin = isSuperAdminUser(user, userSchoolRoles);
+  const isSchoolAdmin = isSchoolAdminUser(user, userSchoolRoles);
 
   const schoolsCount = React.useMemo(() => {
     const uniqueSchoolIds = new Set(userSchoolRoles.map(r => r.schoolId || r.school_id).filter(Boolean));
@@ -318,8 +317,15 @@ export default function ClassSelectionPage() {
   const selectedYear = schoolYears.find(y => y.id === selectedYearId);
 
   const handleCreateClass = () => {
-    if (!isSchoolAdmin || !selectedSchoolId || !selectedYear) {
-      if (!selectedYear) toast.error('Odaberite školsku godinu.');
+    if (!isSchoolAdmin || !selectedSchoolId) {
+      return;
+    }
+    if (schoolYears.length === 0) {
+      navigate('/admin-skole/skolske-godine');
+      return;
+    }
+    if (!selectedYear) {
+      navigate(`/admin-skole?openAddClass=true&schoolYearId=${schoolYears[0].id}`);
       return;
     }
     console.log('ADD CLASS CLICKED');
@@ -377,11 +383,11 @@ export default function ClassSelectionPage() {
     <div className="min-h-screen bg-[#f8f9fa] font-sans flex flex-col">
       <Header showNav={false} />
       <div className="flex-1 max-w-5xl mx-auto py-12 px-6 w-full">
-        <div className="flex justify-between items-center mb-8">
-          {(isMainAdmin || schoolsCount > 1) ? (
+        <div className="flex justify-between items-center mb-8 gap-3">
+          {(isSuperAdmin || schoolsCount > 1) ? (
             <button 
               onClick={() => navigate('/select-school')}
-              className="text-[10px] font-black uppercase text-slate-400 hover:text-[#005c8d] transition-colors flex items-center gap-1 bg-white border border-slate-200 px-4 py-2"
+              className="text-[10px] font-black uppercase text-slate-500 hover:text-[#005c8d] transition-colors flex items-center gap-1 bg-white border border-slate-200 px-4 py-2 rounded-sm shadow-xs"
             >
               <ChevronLeft size={14} />
               Promijeni školu
@@ -390,15 +396,28 @@ export default function ClassSelectionPage() {
             <div />
           )}
 
-          {isSchoolAdmin && (
-            <button 
-              onClick={() => navigate('/admin-skole')}
-              className="text-[10px] font-black uppercase text-white bg-[#005c8d] hover:bg-[#004a70] transition-colors flex items-center gap-2 px-6 py-2 shadow-sm"
-            >
-              Administracija škole
-              <ArrowRight size={14} />
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {isSuperAdmin && (
+              <button 
+                onClick={() => navigate('/admin/schools')}
+                className="text-[10px] font-black uppercase text-white bg-slate-800 hover:bg-slate-900 transition-colors flex items-center gap-2 px-5 py-2 rounded-sm shadow-sm"
+              >
+                <Shield size={14} />
+                Administracija sustava
+                <ArrowRight size={14} />
+              </button>
+            )}
+            {isSchoolAdmin && (
+              <button 
+                onClick={() => navigate('/admin-skole')}
+                className="text-[10px] font-black uppercase text-white bg-[#005c8d] hover:bg-[#004a70] transition-colors flex items-center gap-2 px-6 py-2 rounded-sm shadow-sm"
+              >
+                <Building2 size={14} />
+                Administracija škole
+                <ArrowRight size={14} />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="mb-10 text-center">
@@ -411,27 +430,79 @@ export default function ClassSelectionPage() {
           )}
         </div>
 
-        {/* School Year Selector */}
-        <div className="mb-6 flex flex-col items-center">
-          <label className="text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider">Školska godina:</label>
-          <div className="relative inline-block">
-            <select
-              value={selectedYearId}
-              onChange={(e) => setSelectedYearId(e.target.value)}
-              className="appearance-none bg-white border-2 border-[#005c8d] text-[#005c8d] font-black px-10 py-2 rounded-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#005c8d]/20 transition-all hover:bg-slate-50 min-w-[180px]"
-            >
-              {schoolYears.map(y => (
-                <option key={y.id} value={y.id}>{y.name}</option>
-              ))}
-            </select>
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-[#005c8d]" size={16} />
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#005c8d]">
-              <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
-                <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-              </svg>
+        {schoolYears.length === 0 ? (
+          <div className="bg-white border border-[#dee2e6] rounded-sm shadow-sm p-8 md:p-12 text-center max-w-2xl mx-auto">
+            <div className="w-16 h-16 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Calendar size={32} />
             </div>
+            <h2 className="text-base font-black text-slate-800 uppercase tracking-tight mb-2">
+              Nema pronađenih školskih godina
+            </h2>
+            <p className="text-slate-500 text-xs mb-6">
+              Za ovu ustanovu još nije definirana školska godina ili nema unesenih podataka.
+            </p>
+            {isSchoolAdmin ? (
+              <div className="flex flex-col items-center gap-4">
+                <div className="bg-sky-50 border border-sky-100 p-4 rounded text-xs font-bold text-[#005c8d] max-w-lg">
+                  Kao administrator ustanove možete otvoriti administraciju kako biste kreirali školske godine, razrede, smjerove i dodijelili korisnike.
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
+                  <button
+                    onClick={() => navigate('/admin-skole')}
+                    className="inline-flex items-center gap-2 bg-[#005c8d] text-white px-6 py-2.5 rounded-sm font-black uppercase text-[10px] tracking-widest hover:bg-[#004a70] transition-all shadow-md active:scale-95"
+                  >
+                    <Building2 size={14} />
+                    Administracija škole
+                    <ArrowRight size={14} />
+                  </button>
+                  <button
+                    onClick={() => navigate('/admin-skole/skolske-godine')}
+                    className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-sm font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 transition-all shadow-md active:scale-95"
+                  >
+                    <Plus size={14} />
+                    Dodaj školsku godinu
+                  </button>
+                  {isSuperAdmin && (
+                    <button
+                      onClick={() => navigate('/admin/schools')}
+                      className="inline-flex items-center gap-2 bg-slate-800 text-white px-6 py-2.5 rounded-sm font-black uppercase text-[10px] tracking-widest hover:bg-slate-900 transition-all shadow-md active:scale-95"
+                    >
+                      <Shield size={14} />
+                      Administracija sustava
+                      <ArrowRight size={14} />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-slate-400 italic text-xs">
+                Nemate dodijeljenih razreda. Obratite se administratoru škole.
+              </p>
+            )}
           </div>
-        </div>
+        ) : (
+          <>
+            {/* School Year Selector */}
+            <div className="mb-6 flex flex-col items-center">
+              <label className="text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider">Školska godina:</label>
+              <div className="relative inline-block">
+                <select
+                  value={selectedYearId}
+                  onChange={(e) => setSelectedYearId(e.target.value)}
+                  className="appearance-none bg-white border-2 border-[#005c8d] text-[#005c8d] font-black px-10 py-2 rounded-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#005c8d]/20 transition-all hover:bg-slate-50 min-w-[180px]"
+                >
+                  {schoolYears.map(y => (
+                    <option key={y.id} value={y.id}>{y.name}</option>
+                  ))}
+                </select>
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-[#005c8d]" size={16} />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#005c8d]">
+                  <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
 
         {!isStaff ? (
           /* Student Card Grid Layout */
@@ -555,18 +626,45 @@ export default function ClassSelectionPage() {
 
             {filteredClasses.length === 0 ? (
               <div className="px-6 py-16 text-center">
-                <div className="w-16 h-16 bg-slate-50 text-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
+                <div className="w-16 h-16 bg-slate-50 text-slate-300 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Calendar size={32} />
                 </div>
-                <p className="text-slate-400 italic mb-6">Nema pronađenih razreda za odabranu školsku godinu.</p>
-                {isSchoolAdmin && (
-                  <button 
-                    onClick={handleCreateClass}
-                    className="inline-flex items-center gap-2 bg-[#005c8d] text-white px-8 py-3 rounded-sm font-black uppercase text-[10px] tracking-widest hover:bg-[#004a70] transition-all shadow-md active:scale-95"
-                  >
-                    <Plus size={16} />
-                    Dodaj razred u ovu školsku godinu
-                  </button>
+                <p className="text-slate-600 font-bold text-sm mb-2">Nema pronađenih razreda za odabranu školsku godinu.</p>
+                {isSchoolAdmin ? (
+                  <div className="flex flex-col items-center gap-4 mt-4">
+                    <p className="text-slate-500 text-xs max-w-md mx-auto">
+                      Možete otvoriti administraciju škole za upravljanje podacima ili dodati novi razred u ovu školsku godinu.
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-3">
+                      <button 
+                        onClick={() => navigate('/admin-skole')}
+                        className="inline-flex items-center gap-2 bg-[#005c8d] text-white px-6 py-2.5 rounded-sm font-black uppercase text-[10px] tracking-widest hover:bg-[#004a70] transition-all shadow-md active:scale-95"
+                      >
+                        <Building2 size={14} />
+                        Administracija škole
+                        <ArrowRight size={14} />
+                      </button>
+                      {isSuperAdmin && (
+                        <button 
+                          onClick={() => navigate('/admin/schools')}
+                          className="inline-flex items-center gap-2 bg-slate-800 text-white px-6 py-2.5 rounded-sm font-black uppercase text-[10px] tracking-widest hover:bg-slate-900 transition-all shadow-md active:scale-95"
+                        >
+                          <Shield size={14} />
+                          Administracija sustava
+                          <ArrowRight size={14} />
+                        </button>
+                      )}
+                      <button 
+                        onClick={handleCreateClass}
+                        className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-sm font-black uppercase text-[10px] tracking-widest hover:bg-emerald-700 transition-all shadow-md active:scale-95"
+                      >
+                        <Plus size={16} />
+                        Dodaj razred u ovu školsku godinu
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-slate-400 text-xs italic mt-2">Nemate dodijeljenih razreda za odabranu školsku godinu. Obratite se administratoru škole.</p>
                 )}
               </div>
             ) : (
@@ -637,6 +735,8 @@ export default function ClassSelectionPage() {
               </div>
             )}
           </div>
+        )}
+          </>
         )}
       </div>
     </div>

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { User as SupabaseUser, Session } from '@supabase/supabase-js';
-import { User, Role, UserSchoolRole } from '../types';
+import { User, Role, UserSchoolRole, isSchoolAdminUser, isSuperAdminUser, hasAnyRole } from '../types';
 import { mapObject, mapList, mappers } from '../lib/mappers';
 
 interface AuthContextType {
@@ -13,6 +13,8 @@ interface AuthContextType {
   error: string | null;
   signOut: () => Promise<void>;
   reloadUserData: () => Promise<void>;
+  isSuperAdmin: boolean;
+  isSchoolAdmin: boolean;
   isMainAdmin: boolean;
   isStaff: boolean;
   isTeacher: boolean;
@@ -542,16 +544,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return userSchoolRoles;
   }, [userSchoolRoles, isStudentPortal]);
 
-  const isMainAdmin = React.useMemo(() => {
-    const hasProfileAdminRole = user?.role === Role.SUPER_ADMIN || user?.role === Role.MAIN_ADMIN || user?.role === Role.ADMIN || user?.globalRole === Role.SUPER_ADMIN || user?.globalRole === Role.MAIN_ADMIN || user?.globalRole === Role.ADMIN;
-    const hasSchoolAdminRole = effectiveSchoolRoles.some(r => r.role === Role.SUPER_ADMIN || r.role === Role.MAIN_ADMIN || r.role === Role.ADMIN);
-    return hasProfileAdminRole || hasSchoolAdminRole;
+  const isSuperAdmin = React.useMemo(() => {
+    return isSuperAdminUser(user, effectiveSchoolRoles);
   }, [user, effectiveSchoolRoles]);
 
+  const isSchoolAdmin = React.useMemo(() => {
+    return isSchoolAdminUser(user, effectiveSchoolRoles);
+  }, [user, effectiveSchoolRoles]);
+
+  const isMainAdmin = React.useMemo(() => {
+    return isSuperAdmin || isSchoolAdmin;
+  }, [isSuperAdmin, isSchoolAdmin]);
+
   const isStaff = React.useMemo(() => 
-    isMainAdmin || 
-    effectiveSchoolRoles.some(r => [Role.TEACHER, Role.SCHOOL_ADMIN, Role.HOMEROOM, Role.DEPUTY].includes(r.role))
-  , [isMainAdmin, effectiveSchoolRoles]);
+    isSchoolAdmin || 
+    isSuperAdmin ||
+    effectiveSchoolRoles.some(r => [Role.TEACHER, Role.SCHOOL_ADMIN, Role.ADMIN, Role.SUPER_ADMIN, Role.MAIN_ADMIN, Role.HOMEROOM, Role.DEPUTY].includes(r.role))
+  , [isSchoolAdmin, isSuperAdmin, effectiveSchoolRoles]);
 
   const isTeacher = React.useMemo(() => 
     effectiveSchoolRoles.some(r => [Role.TEACHER, Role.HOMEROOM, Role.DEPUTY].includes(r.role))
@@ -603,6 +612,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     error,
     signOut,
     reloadUserData: reloadUserDataWrapper,
+    isSuperAdmin,
+    isSchoolAdmin,
     isMainAdmin,
     isStaff,
     isTeacher,
@@ -613,7 +624,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isStudentPortal,
     isTeacherDomain,
     isStudentDomain
-  }), [user, supabaseUser, session, effectiveSchoolRoles, loading, error, isMainAdmin, isStaff, isTeacher, isStudent, isParent, highestRole, formattedRoles, isStudentPortal, isTeacherDomain, isStudentDomain]);
+  }), [user, supabaseUser, session, effectiveSchoolRoles, loading, error, isSuperAdmin, isSchoolAdmin, isMainAdmin, isStaff, isTeacher, isStudent, isParent, highestRole, formattedRoles, isStudentPortal, isTeacherDomain, isStudentDomain]);
 
   return (
     <AuthContext.Provider value={value}>

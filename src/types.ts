@@ -10,16 +10,46 @@ export enum Role {
   ADMIN = 'ADMIN'
 }
 
-export function isSchoolAdminUser(profile: any, roles: any[] = []): boolean {
-  const values = [
-    profile?.role,
-    profile?.access_role,
-    ...roles
-  ]
-    .filter(Boolean)
-    .map((r) => String(r).toUpperCase());
+export function hasAnyRole(userRoles: any[], rolesToCheck: string[]): boolean {
+  const normalized = (userRoles || []).map(r => {
+    if (!r) return '';
+    if (typeof r === 'string') return r.toUpperCase();
+    if (typeof r === 'object' && r.role) return String(r.role).toUpperCase();
+    return String(r).toUpperCase();
+  }).filter(Boolean);
 
-  return values.includes("ADMIN") || values.includes("SCHOOL_ADMIN");
+  const normalizedToCheck = rolesToCheck.map(r => String(r).toUpperCase());
+  return normalizedToCheck.some(role => normalized.includes(role));
+}
+
+export function isSchoolAdminUser(profile: any, roles: any[] = []): boolean {
+  return (
+    hasAnyRole(roles, ["ADMIN", "SCHOOL_ADMIN", "SUPER_ADMIN", "MAIN_ADMIN"]) ||
+    profile?.role === "ADMIN" ||
+    profile?.role === "SCHOOL_ADMIN" ||
+    profile?.role === "SUPER_ADMIN" ||
+    profile?.role === "MAIN_ADMIN" ||
+    profile?.access_role === "ADMIN" ||
+    profile?.access_role === "SCHOOL_ADMIN" ||
+    profile?.access_role === "SUPER_ADMIN" ||
+    profile?.access_role === "MAIN_ADMIN" ||
+    profile?.globalRole === "ADMIN" ||
+    profile?.globalRole === "SCHOOL_ADMIN" ||
+    profile?.globalRole === "SUPER_ADMIN" ||
+    profile?.globalRole === "MAIN_ADMIN"
+  );
+}
+
+export function isSuperAdminUser(profile: any, roles: any[] = []): boolean {
+  return (
+    hasAnyRole(roles, ["SUPER_ADMIN", "MAIN_ADMIN"]) ||
+    profile?.role === "SUPER_ADMIN" ||
+    profile?.role === "MAIN_ADMIN" ||
+    profile?.access_role === "SUPER_ADMIN" ||
+    profile?.access_role === "MAIN_ADMIN" ||
+    profile?.globalRole === "SUPER_ADMIN" ||
+    profile?.globalRole === "MAIN_ADMIN"
+  );
 }
 
 export type SchoolType = 'PRIMARY' | 'SECONDARY' | 'FAKULTET';

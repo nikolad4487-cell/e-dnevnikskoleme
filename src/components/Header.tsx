@@ -1,11 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { User, LogOut, Settings, Repeat, Bell } from 'lucide-react';
+import { User, LogOut, Settings, Repeat, Bell, Building2, Shield } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { cn, formatPersonName } from '../lib/utils';
-import { Role, Notification } from '../types';
+import { Role, Notification, isSchoolAdminUser, isSuperAdminUser } from '../types';
 
 interface HeaderProps {
   showNav?: boolean;
@@ -13,7 +13,7 @@ interface HeaderProps {
 }
 
 export function Header({ showNav = true, hideClass = false }: HeaderProps) {
-  const { user, signOut, formattedRoles, userSchoolRoles, isStudent, isParent } = useAuth();
+  const { user, signOut, formattedRoles, userSchoolRoles, isStudent, isParent, isSuperAdmin: authIsSuperAdmin, isSchoolAdmin: authIsSchoolAdmin } = useAuth();
   const { 
     selectedSchoolId, 
     selectedYearId, 
@@ -209,7 +209,31 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
           </button>
 
           {isMenuOpen && (
-          <div className="absolute right-0 top-full mt-2 w-48 bg-white text-gray-800 border border-gray-200 shadow-xl rounded py-1 z-[100] animate-in fade-in zoom-in-95 duration-100">
+          <div className="absolute right-0 top-full mt-2 w-52 bg-white text-gray-800 border border-gray-200 shadow-xl rounded py-1 z-[100] animate-in fade-in zoom-in-95 duration-100">
+            {isSuperAdminUser(user, userSchoolRoles) && (
+              <button 
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  navigate('/admin/schools');
+                }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-800 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
+              >
+                <Shield size={14} className="text-[#005c8d]" />
+                Administracija sustava
+              </button>
+            )}
+            {isSchoolAdminUser(user, userSchoolRoles) && (
+              <button 
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  navigate('/admin-skole');
+                }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-[#005c8d] hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
+              >
+                <Building2 size={14} className="text-[#005c8d]" />
+                Administracija škole
+              </button>
+            )}
             {(isStudent || isParent) && (
               <button 
                 onClick={() => {
