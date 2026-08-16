@@ -4258,7 +4258,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("user_profiles")
-      .select("id, auth_user_id, email, role, access_role")
+      .select("id, auth_user_id, email, role, access_role, school_id, active_school_id")
       .eq("auth_user_id", user.id)
       .maybeSingle();
 
@@ -4267,6 +4267,17 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     const roleText = String(profile.role || "").toUpperCase();
     const accessRoleText = String(profile.access_role || "").toUpperCase();
     if (["SUPER_ADMIN", "MAIN_ADMIN"].includes(roleText) || ["SUPER_ADMIN", "MAIN_ADMIN"].includes(accessRoleText)) {
+      return { authorized: true, profile };
+    }
+
+    const profileSchoolIds = [
+      profile.school_id,
+      profile.active_school_id
+    ].filter(Boolean).map((id: any) => String(id));
+    const profileHasSchoolAdminRole = ["ADMIN", "SCHOOL_ADMIN"].includes(roleText) ||
+      ["ADMIN", "SCHOOL_ADMIN"].includes(accessRoleText);
+
+    if (profileHasSchoolAdminRole && profileSchoolIds.includes(String(schoolId))) {
       return { authorized: true, profile };
     }
 
@@ -4284,9 +4295,21 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       return sameSchool && status === "ACTIVE" && ["ADMIN", "SCHOOL_ADMIN", "SUPER_ADMIN", "MAIN_ADMIN"].includes(schoolRole);
     });
 
-    return hasSchoolAdminRole
-      ? { authorized: true, profile }
-      : { authorized: false, error: "User is not an active admin for this school" };
+    if (!hasSchoolAdminRole) {
+      console.warn("[AUTH_CLASS_ADMIN] denied", {
+        authUserId: user.id,
+        profileId: profile.id,
+        email: profile.email,
+        role: profile.role,
+        accessRole: profile.access_role,
+        profileSchoolIds,
+        requestedSchoolId: schoolId,
+        roles
+      });
+      return { authorized: false, error: "User is not an active admin for this school" };
+    }
+
+    return { authorized: true, profile };
   }
 
   app.post("/api/admin/classes", async (req, res) => {
