@@ -176,7 +176,7 @@ export default function ClassSelectionPage() {
           grouped.set(schoolId, existing);
         });
 
-        if (isProfileGlobalAdmin) {
+        if (isProfileGlobalAdmin || isSchoolAdmin) {
           const { data: allSchools, error: schoolsError } = await supabase
             .from("schools")
             .select("id, name, type, school_type")
@@ -190,7 +190,7 @@ export default function ClassSelectionPage() {
               id: school.id,
               name: school.name || 'Nepoznata ustanova',
               type: school.type || school.school_type,
-              roles: [Role.ADMIN]
+              roles: isProfileGlobalAdmin ? [Role.ADMIN] : ['DOSTUPNO']
             });
           });
         }
@@ -232,7 +232,7 @@ export default function ClassSelectionPage() {
     };
 
     loadAvailableSchools();
-  }, [user?.id, selectedSchoolId, setSelectedSchoolId, isProfileGlobalAdmin, userSchoolRoles, activeSchoolRoles]);
+  }, [user?.id, selectedSchoolId, setSelectedSchoolId, isProfileGlobalAdmin, isSchoolAdmin, userSchoolRoles, activeSchoolRoles]);
 
   useEffect(() => {
     const init = async () => {
@@ -619,16 +619,16 @@ export default function ClassSelectionPage() {
       <Header showNav={false} />
       <div className="flex-1 max-w-5xl mx-auto py-12 px-6 w-full">
         <div className="flex justify-between items-center mb-8 gap-3">
-          {schoolsCount > 1 ? (
+          {schoolsCount > 0 ? (
             <div className="relative">
               <button
                 type="button"
                 onClick={() => setSchoolMenuOpen(open => !open)}
                 disabled={switchingSchool}
-                className="text-[10px] font-black uppercase text-slate-700 hover:text-[#005c8d] transition-colors flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-sm shadow-xs disabled:opacity-60"
+                className="text-[10px] font-black uppercase text-slate-700 hover:text-[#005c8d] transition-colors flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-sm shadow-xs disabled:opacity-60 min-w-[220px]"
               >
                 <Building2 size={14} />
-                <span className="max-w-[260px] truncate">
+                <span className="max-w-[280px] truncate text-left">
                   {selectedSchool?.name || 'Promijeni školu'}
                 </span>
                 <ChevronDown size={14} />
@@ -668,9 +668,9 @@ export default function ClassSelectionPage() {
               )}
             </div>
           ) : (
-            <div className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-sm shadow-xs">
+            <div className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-sm shadow-xs min-w-[220px]">
               <Building2 size={14} />
-              <span className="max-w-[260px] truncate">{selectedSchool?.name || ''}</span>
+              <span className="max-w-[280px] truncate">{selectedSchool?.name || 'Ucitavanje skola...'}</span>
             </div>
           )}
 
