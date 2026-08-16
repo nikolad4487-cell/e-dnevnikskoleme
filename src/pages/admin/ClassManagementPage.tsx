@@ -11,7 +11,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 
 export default function ClassManagementPage() {
   const { selectedSchoolId } = useSelection();
-  const { isMainAdmin, userSchoolRoles } = useAuth();
+  const { isMainAdmin, userSchoolRoles, user: profile } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [classes, setClasses] = useState<Class[]>([]);
@@ -44,6 +44,7 @@ export default function ClassManagementPage() {
   const [selectedYearId, setSelectedYearId] = useState<string>('');
   const [programs, setPrograms] = useState<any[]>([]);
   const [selectedSchool, setSelectedSchool] = useState<any>(null);
+  const [programsLoading, setProgramsLoading] = useState(false);
 
   useEffect(() => {
     if (!selectedSchoolId) {
@@ -58,6 +59,56 @@ export default function ClassManagementPage() {
       setIsModalOpen(true);
     }
   }, [searchParams, isAnyAdmin]);
+
+  const fetchPrograms = async (schoolOverride?: any) => {
+    const currentSchool: any = schoolOverride || null;
+    const schoolId =
+      currentSchool?.id ||
+      selectedSchool?.id ||
+      selectedSchoolId ||
+      (profile as any)?.active_school_id ||
+      (profile as any)?.school_id;
+
+    console.log("NEW CLASS MODAL - selectedSchool", selectedSchool);
+    console.log("NEW CLASS MODAL - currentSchool", currentSchool);
+    console.log("NEW CLASS MODAL - selectedSchoolId", selectedSchoolId);
+    console.log("NEW CLASS MODAL - profile", profile);
+    console.log("NEW CLASS MODAL - final schoolId for programs", schoolId);
+    console.log("NEW CLASS MODAL - SQL DEBUG", `
+select id, name, module_or_track, type, school_id
+from public.programs
+where school_id = '1c8a46d7-e89f-4d42-a779-1a136ebbfe5c'
+order by name, module_or_track;
+`);
+
+    if (!schoolId) {
+      setPrograms([]);
+      return;
+    }
+
+    try {
+      setProgramsLoading(true);
+      console.log("NEW CLASS MODAL - loading programs for school_id", schoolId);
+
+      const { data, error } = await supabase
+        .from("programs")
+        .select("id, name, module_or_track, type, duration_years, school_id")
+        .eq("school_id", schoolId)
+        .order("name", { ascending: true })
+        .order("module_or_track", { ascending: true });
+
+      console.log("NEW CLASS MODAL - loaded programs", data);
+      console.log("NEW CLASS MODAL - programs error", error);
+
+      if (error) throw error;
+      setPrograms(data || []);
+    } catch (err) {
+      console.error("NEW CLASS MODAL - programs load failed", err);
+      setPrograms([]);
+    } finally {
+      setProgramsLoading(false);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -133,45 +184,7 @@ export default function ClassManagementPage() {
       );
       setTeachers(uniqueTeachers as any[]);
 
-      // Fetch Programs
-      console.log("CURRENT SCHOOL", currentSchool);
-      console.log("CURRENT SCHOOL ID", currentSchool?.id || selectedSchoolId);
-      console.log("CURRENT SCHOOL TYPE", currentSchool?.type || currentSchool?.school_type);
-      console.log("LOADING PROGRAMS FOR SCHOOL ID", selectedSchoolId);
-
-      let loadedPrograms: any[] = [];
-      let progError: any = null;
-
-      const { data: progData, error } = await supabase
-        .from('programs')
-        .select('id, name, module_or_track, type, school_id, duration_years, continuation_type')
-        .eq('school_id', selectedSchoolId)
-        .order('name');
-
-      if (error) {
-        progError = error;
-        console.warn("Supabase query error loading programs:", error);
-      } else {
-        loadedPrograms = progData || [];
-      }
-
-      if (loadedPrograms.length === 0) {
-        try {
-          const apiRes = await fetch(`/api/programs?schoolId=${selectedSchoolId}`);
-          if (apiRes.ok) {
-            const apiJson = await apiRes.json();
-            if (apiJson.data && Array.isArray(apiJson.data)) {
-              loadedPrograms = apiJson.data;
-            }
-          }
-        } catch (apiErr) {
-          console.warn("API programs fallback error:", apiErr);
-        }
-      }
-
-      console.log("LOADED PROGRAMS", loadedPrograms);
-      console.log("PROGRAMS ERROR", progError);
-      setPrograms(loadedPrograms);
+      await fetchPrograms(currentSchool);
 
     } catch (err: any) {
       toast.error('Greška pri učitavanju podataka');
@@ -215,6 +228,7 @@ export default function ClassManagementPage() {
       setProgramId('');
       setVariant('REGULAR');
     }
+    void fetchPrograms(selectedSchool);
     setIsModalOpen(true);
   };
 
@@ -364,23 +378,6 @@ export default function ClassManagementPage() {
   const filteredClasses = classes.filter(c => 
     matchesSearch(c.name, searchTerm)
   );
-
-  const filteredPrograms = React.useMemo(() => {
-    if (!programs || programs.length === 0) return [];
-    const filtered = programs.filter(program => {
-      if (variant === 'CONTINUATION_FREE') {
-        return program.type === 'CONTINUATION_FREE' || program.continuation_type === 'FREE';
-      }
-      if (variant === 'CONTINUATION_PAID') {
-        return program.type === 'CONTINUATION_PAID' || program.continuation_type === 'PAID';
-      }
-      // For REGULAR variant: allow all regular types and faculty types (exclude only continuation programs)
-      return program.type !== 'CONTINUATION_FREE' && program.type !== 'CONTINUATION_PAID' && program.continuation_type !== 'FREE' && program.continuation_type !== 'PAID';
-    });
-
-    // If filter resulted in empty list but programs exists, fallback to all programs so none are blocked
-    return filtered.length > 0 ? filtered : programs;
-  }, [programs, variant]);
 
   return (
     <div className="p-4 md:p-6 font-sans w-full bg-[#f8fafc] min-h-screen">
@@ -715,18 +712,18 @@ export default function ClassManagementPage() {
                   onChange={e => setProgramId(e.target.value)}
                   className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none"
                 >
-                  {filteredPrograms.length === 0 ? (
-                    <option value="">Nema programa...</option>
-                  ) : (
-                    <>
-                      <option value="">-- Odaberi program / smjer --</option>
-                      {filteredPrograms.map(p => (
-                        <option key={p.id} value={p.id}>
-                          {p.module_or_track ? `${p.name} — ${p.module_or_track}` : p.name}
-                        </option>
-                      ))}
-                    </>
-                  )}
+                  <option value="">
+                    {programsLoading
+                      ? 'Učitavanje programa...'
+                      : programs.length === 0
+                        ? 'Nema programa...'
+                        : 'Odaberi program...'}
+                  </option>
+                  {programs.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.module_or_track ? `${p.name} — ${p.module_or_track}` : p.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 
