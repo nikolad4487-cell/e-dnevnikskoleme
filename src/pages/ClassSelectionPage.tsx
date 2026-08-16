@@ -76,8 +76,15 @@ export default function ClassSelectionPage() {
 
   const userRoleText = String((user as any)?.role || (user as any)?.globalRole || '').toUpperCase();
   const isProfileGlobalAdmin = ['SUPER_ADMIN', 'MAIN_ADMIN', 'ADMIN'].includes(userRoleText);
+  const hasAdminRoleInAnySchool = React.useMemo(() => {
+    return userSchoolRoles.some((role: any) => {
+      const status = String(role.status || 'ACTIVE').toUpperCase();
+      const roleName = String(role.role || '').toUpperCase();
+      return status === 'ACTIVE' && ['ADMIN', 'SCHOOL_ADMIN', 'SUPER_ADMIN', 'MAIN_ADMIN'].includes(roleName);
+    });
+  }, [userSchoolRoles]);
   const isSuperAdmin = isSuperAdminUser(user, activeSchoolRoles);
-  const isSchoolAdmin = isSuperAdmin || isProfileGlobalAdmin || hasAnyRole(activeSchoolRoles, [Role.ADMIN, Role.SCHOOL_ADMIN, Role.SUPER_ADMIN, Role.MAIN_ADMIN]);
+  const isSchoolAdmin = isSuperAdmin || isProfileGlobalAdmin || hasAdminRoleInAnySchool || hasAnyRole(activeSchoolRoles, [Role.ADMIN, Role.SCHOOL_ADMIN, Role.SUPER_ADMIN, Role.MAIN_ADMIN]);
 
   const schoolsCount = React.useMemo(() => {
     return availableSchools.length;
@@ -111,7 +118,9 @@ export default function ClassSelectionPage() {
           .eq("user_id", user.id)
           .eq("status", "ACTIVE");
 
-        if (error) throw error;
+        if (error) {
+          console.warn("MULTI SCHOOL - schoolRoles query failed, continuing with schools fallback", error);
+        }
         console.log("MULTI SCHOOL - schoolRoles", schoolRoles);
 
         const grouped = new Map<string, SchoolOption>();
@@ -182,7 +191,9 @@ export default function ClassSelectionPage() {
             .select("id, name, type, school_type")
             .order("name", { ascending: true });
 
-          if (schoolsError) throw schoolsError;
+          if (schoolsError) {
+            console.warn("MULTI SCHOOL - all schools load failed", schoolsError);
+          }
 
           (allSchools || []).forEach((school: any) => {
             if (!school?.id || grouped.has(school.id)) return;
