@@ -94,6 +94,15 @@ export default function ClassSelectionPage() {
     () => availableSchools.find(school => school.id === selectedSchoolId) || null,
     [availableSchools, selectedSchoolId]
   );
+  const isLoadingSchoolName = (name: string) =>
+    String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().includes('ucitavanje');
+  const selectedSchoolLabel = React.useMemo(() => {
+    const name = selectedSchool?.name || '';
+    if (!name || isLoadingSchoolName(name)) {
+      return 'Promijeni školu';
+    }
+    return name;
+  }, [selectedSchool]);
 
   useEffect(() => {
     const loadAvailableSchools = async () => {
@@ -144,16 +153,22 @@ export default function ClassSelectionPage() {
           });
 
         if (seedSchoolIds.size > 0) {
-          const { data: roleSchools, error: roleSchoolsError } = await supabase
-            .from("schools")
-            .select("id, name, type, school_type")
-            .in("id", Array.from(seedSchoolIds));
+          const roleSchools = await Promise.all(
+            Array.from(seedSchoolIds).map(async schoolId => {
+              const { data, error: roleSchoolError } = await supabase
+                .from("schools")
+                .select("id, name, type, school_type")
+                .eq("id", schoolId)
+                .maybeSingle();
 
-          if (roleSchoolsError) {
-            console.warn("MULTI SCHOOL - role schools load failed", roleSchoolsError);
-          }
+              if (roleSchoolError) {
+                console.warn("MULTI SCHOOL - role school load failed", schoolId, roleSchoolError);
+              }
+              return data;
+            })
+          );
 
-          (roleSchools || []).forEach((school: any) => {
+          roleSchools.filter(Boolean).forEach((school: any) => {
             const existing = grouped.get(school.id);
             if (!existing) return;
             grouped.set(school.id, {
@@ -641,7 +656,7 @@ export default function ClassSelectionPage() {
               >
                 <Building2 size={14} />
                 <span className="max-w-[280px] truncate text-left">
-                  {selectedSchool?.name || 'Promijeni školu'}
+                  {selectedSchoolLabel}
                 </span>
                 <ChevronDown size={14} />
               </button>
@@ -667,7 +682,7 @@ export default function ClassSelectionPage() {
                           )}
                         >
                           <div className="text-xs font-black text-slate-900 uppercase tracking-tight">
-                            {school.name}
+                            {isLoadingSchoolName(school.name) ? 'Ustanova' : school.name}
                           </div>
                           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">
                             {school.roles.join(', ')}
