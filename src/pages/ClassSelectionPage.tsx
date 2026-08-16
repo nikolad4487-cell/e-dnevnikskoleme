@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
-import { Class, Role, SchoolYear, isSchoolAdminUser, isSuperAdminUser, hasAnyRole } from '../types';
+import { Role, SchoolYear, isSuperAdminUser, hasAnyRole } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, ArrowRight, Calendar, ChevronLeft, Plus, Award, FileText, UserX, Clock, Building2, Shield } from 'lucide-react';
+import { Loader2, ArrowRight, Calendar, Plus, Award, FileText, UserX, Clock, Building2, Shield, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn, formatPersonName } from '../lib/utils';
 import { Header } from '../components/Header';
@@ -26,22 +26,35 @@ interface ClassWithDetails {
   programName?: string;
 }
 
+interface SchoolOption {
+  id: string;
+  name: string;
+  type?: string;
+  roles: Role[];
+}
+
 export default function ClassSelectionPage() {
-  const { user, isParent, isStaff, isMainAdmin, userSchoolRoles } = useAuth();
-  const { setSelectedClassId, setIsArchived, setSelectedSchoolId, selectedSchoolId, selectedChildId } = useSelection();
+  const { user, isParent, isStaff, userSchoolRoles } = useAuth();
+  const { setSelectedClassId, setIsArchived, setSelectedSchoolId, selectedSchoolId, selectedChildId, setSelectedYearId: setContextSelectedYearId } = useSelection();
   const [classes, setClasses] = useState<ClassWithDetails[]>([]);
   const [schoolYears, setSchoolYears] = useState<SchoolYear[]>([]);
   const [selectedYearId, setSelectedYearId] = useState<string>(() => sessionStorage.getItem('selectedYearId') || '');
   const [summaries, setSummaries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [availableSchools, setAvailableSchools] = useState<SchoolOption[]>([]);
+  const [schoolMenuOpen, setSchoolMenuOpen] = useState(false);
+  const [switchingSchool, setSwitchingSchool] = useState(false);
   const navigate = useNavigate();
   const lastClassesFetchKey = React.useRef("");
 
   // Sync state with sessionStorage
   useEffect(() => {
     if (selectedSchoolId) sessionStorage.setItem('selectedSchoolId', selectedSchoolId);
-    if (selectedYearId) sessionStorage.setItem('selectedYearId', selectedYearId);
-  }, [selectedSchoolId, selectedYearId]);
+    if (selectedYearId) {
+      sessionStorage.setItem('selectedYearId', selectedYearId);
+      setContextSelectedYearId(selectedYearId);
+    }
+  }, [selectedSchoolId, selectedYearId, setContextSelectedYearId]);
 
   useEffect(() => {
     const cachedSchoolId = sessionStorage.getItem('selectedSchoolId');
@@ -50,13 +63,110 @@ export default function ClassSelectionPage() {
     }
   }, []);
 
-  const isSuperAdmin = isSuperAdminUser(user, userSchoolRoles);
-  const isSchoolAdmin = isSchoolAdminUser(user, userSchoolRoles);
+  const activeSchoolRoles = React.useMemo(() => {
+    const roles = userSchoolRoles.filter((role: any) => {
+      const roleSchoolId = role.schoolId || role.school_id;
+      const status = String(role.status || 'ACTIVE').toUpperCase();
+      return roleSchoolId === selectedSchoolId && status === 'ACTIVE';
+    });
+    console.log("MULTI SCHOOL - roles for active school", roles);
+    return roles;
+  }, [userSchoolRoles, selectedSchoolId]);
+
+  const userRoleText = String((user as any)?.role || (user as any)?.globalRole || '').toUpperCase();
+  const isProfileGlobalAdmin = ['SUPER_ADMIN', 'MAIN_ADMIN', 'ADMIN'].includes(userRoleText);
+  const isSuperAdmin = isSuperAdminUser(user, activeSchoolRoles);
+  const isSchoolAdmin = isSuperAdmin || isProfileGlobalAdmin || hasAnyRole(activeSchoolRoles, [Role.ADMIN, Role.SCHOOL_ADMIN, Role.SUPER_ADMIN, Role.MAIN_ADMIN]);
 
   const schoolsCount = React.useMemo(() => {
-    const uniqueSchoolIds = new Set(userSchoolRoles.map(r => r.schoolId || r.school_id).filter(Boolean));
-    return uniqueSchoolIds.size;
-  }, [userSchoolRoles]);
+    return availableSchools.length;
+  }, [availableSchools]);
+
+  const selectedSchool = React.useMemo(
+    () => availableSchools.find(school => school.id === selectedSchoolId) || null,
+    [availableSchools, selectedSchoolId]
+  );
+
+  useEffect(() => {
+    const loadAvailableSchools = async () => {
+      if (!user?.id) return;
+      try {
+        console.log("MULTI SCHOOL - profile", user);
+
+        const { data: schoolRoles, error } = await supabase
+          .from("user_school_roles")
+          .select(`
+            id,
+            school_id,
+            role,
+            status,
+            schools:school_id (
+              id,
+              name,
+              type,
+              school_type
+            )
+          `)
+          .eq("user_id", user.id)
+          .eq("status", "ACTIVE");
+
+        if (error) throw error;
+        console.log("MULTI SCHOOL - schoolRoles", schoolRoles);
+
+        const grouped = new Map<string, SchoolOption>();
+        (schoolRoles || []).forEach((item: any) => {
+          const school = Array.isArray(item.schools) ? item.schools[0] : item.schools;
+          const schoolId = item.school_id || school?.id;
+          if (!schoolId || !school) return;
+
+          const existing = grouped.get(schoolId) || {
+            id: schoolId,
+            name: school.name || 'Nepoznata ustanova',
+            type: school.type || school.school_type,
+            roles: []
+          };
+          if (item.role && !existing.roles.includes(item.role)) {
+            existing.roles.push(item.role);
+          }
+          grouped.set(schoolId, existing);
+        });
+
+        if (isProfileGlobalAdmin) {
+          const { data: allSchools, error: schoolsError } = await supabase
+            .from("schools")
+            .select("id, name, type, school_type")
+            .order("name", { ascending: true });
+
+          if (schoolsError) throw schoolsError;
+
+          (allSchools || []).forEach((school: any) => {
+            if (!school?.id || grouped.has(school.id)) return;
+            grouped.set(school.id, {
+              id: school.id,
+              name: school.name || 'Nepoznata ustanova',
+              type: school.type || school.school_type,
+              roles: [Role.ADMIN]
+            });
+          });
+        }
+
+        const schools = Array.from(grouped.values()).sort((a, b) =>
+          a.name.localeCompare(b.name, 'hr')
+        );
+        setAvailableSchools(schools);
+
+        const activeSchoolId = selectedSchoolId || (user as any)?.active_school_id || schools[0]?.id || null;
+        console.log("MULTI SCHOOL - activeSchoolId", activeSchoolId);
+        if (!selectedSchoolId && activeSchoolId) {
+          setSelectedSchoolId(activeSchoolId);
+        }
+      } catch (error) {
+        console.error("MULTI SCHOOL - load schools error", error);
+      }
+    };
+
+    loadAvailableSchools();
+  }, [user?.id, selectedSchoolId, setSelectedSchoolId, isProfileGlobalAdmin]);
 
   useEffect(() => {
     const init = async () => {
@@ -64,7 +174,8 @@ export default function ClassSelectionPage() {
 
       // 1. Resolve school ID if needed
       if (!schoolId && user) {
-        schoolId = (user as any).school_id || 
+        schoolId = (user as any).active_school_id ||
+                   (user as any).school_id ||
                    (userSchoolRoles && userSchoolRoles.length > 0 ? userSchoolRoles[0].schoolId : null) ||
                    (user as any).profile?.school_id;
         
@@ -316,6 +427,56 @@ export default function ClassSelectionPage() {
 
   const selectedYear = schoolYears.find(y => y.id === selectedYearId);
 
+  const handleSwitchSchool = async (school: SchoolOption) => {
+    if (!school?.id || school.id === selectedSchoolId) {
+      setSchoolMenuOpen(false);
+      return;
+    }
+
+    try {
+      setSwitchingSchool(true);
+      console.log("MULTI SCHOOL - selected school", school);
+
+      localStorage.removeItem("selectedClassId");
+      sessionStorage.removeItem("selectedClassId");
+      localStorage.removeItem("selectedClass");
+      sessionStorage.removeItem("selectedClass");
+      localStorage.removeItem("selectedSchoolYearId");
+      sessionStorage.removeItem("selectedSchoolYearId");
+      localStorage.removeItem("selectedYearId");
+      sessionStorage.removeItem("selectedYearId");
+
+      setSelectedClassId(null);
+      setIsArchived(false);
+      setSelectedYearId('');
+      setContextSelectedYearId(null);
+      setClasses([]);
+      setSchoolYears([]);
+      lastClassesFetchKey.current = "";
+
+      if (user?.id) {
+        const { error } = await supabase
+          .from("user_profiles")
+          .update({ active_school_id: school.id })
+          .eq("id", user.id);
+
+        if (error) {
+          console.warn("MULTI SCHOOL - active_school_id update failed", error);
+        }
+      }
+
+      setSelectedSchoolId(school.id);
+      sessionStorage.setItem("selectedSchoolId", school.id);
+      setSchoolMenuOpen(false);
+      navigate('/select-class');
+    } catch (error) {
+      console.error("MULTI SCHOOL - switch failed", error);
+      toast.error("Promjena škole nije uspjela.");
+    } finally {
+      setSwitchingSchool(false);
+    }
+  };
+
   const handleCreateClass = () => {
     if (!isSchoolAdmin || !selectedSchoolId) {
       return;
@@ -384,16 +545,59 @@ export default function ClassSelectionPage() {
       <Header showNav={false} />
       <div className="flex-1 max-w-5xl mx-auto py-12 px-6 w-full">
         <div className="flex justify-between items-center mb-8 gap-3">
-          {(isSuperAdmin || schoolsCount > 1) ? (
-            <button 
-              onClick={() => navigate('/select-school')}
-              className="text-[10px] font-black uppercase text-slate-500 hover:text-[#005c8d] transition-colors flex items-center gap-1 bg-white border border-slate-200 px-4 py-2 rounded-sm shadow-xs"
-            >
-              <ChevronLeft size={14} />
-              Promijeni školu
-            </button>
+          {schoolsCount > 1 ? (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setSchoolMenuOpen(open => !open)}
+                disabled={switchingSchool}
+                className="text-[10px] font-black uppercase text-slate-700 hover:text-[#005c8d] transition-colors flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-sm shadow-xs disabled:opacity-60"
+              >
+                <Building2 size={14} />
+                <span className="max-w-[260px] truncate">
+                  {selectedSchool?.name || 'Promijeni školu'}
+                </span>
+                <ChevronDown size={14} />
+              </button>
+
+              {schoolMenuOpen && (
+                <div className="absolute left-0 top-full mt-2 w-[360px] max-w-[calc(100vw-3rem)] bg-white border border-slate-200 rounded-sm shadow-xl z-30 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-100">
+                    <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      Promijeni školu
+                    </div>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto">
+                    {availableSchools.map(school => {
+                      const active = school.id === selectedSchoolId;
+                      return (
+                        <button
+                          key={school.id}
+                          type="button"
+                          onClick={() => handleSwitchSchool(school)}
+                          className={cn(
+                            "w-full text-left px-4 py-3 border-b border-slate-50 hover:bg-slate-50 transition-colors",
+                            active && "bg-sky-50"
+                          )}
+                        >
+                          <div className="text-xs font-black text-slate-900 uppercase tracking-tight">
+                            {school.name}
+                          </div>
+                          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">
+                            {school.roles.join(', ')}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
-            <div />
+            <div className="text-[10px] font-black uppercase text-slate-500 flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-sm shadow-xs">
+              <Building2 size={14} />
+              <span className="max-w-[260px] truncate">{selectedSchool?.name || ''}</span>
+            </div>
           )}
 
           <div className="flex items-center gap-2">
