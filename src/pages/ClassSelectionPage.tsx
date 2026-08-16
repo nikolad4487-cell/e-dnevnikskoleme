@@ -115,17 +115,61 @@ export default function ClassSelectionPage() {
         console.log("MULTI SCHOOL - schoolRoles", schoolRoles);
 
         const grouped = new Map<string, SchoolOption>();
+        const seedSchoolIds = new Set<string>();
+        userSchoolRoles
+          .filter((role: any) => String(role.status || 'ACTIVE').toUpperCase() === 'ACTIVE')
+          .forEach((role: any) => {
+            const schoolId = role.schoolId || role.school_id;
+            if (!schoolId) return;
+            seedSchoolIds.add(schoolId);
+            const existing = grouped.get(schoolId) || {
+              id: schoolId,
+              name: 'Učitavanje ustanove...',
+              type: '',
+              roles: []
+            };
+            if (role.role && !existing.roles.includes(role.role)) {
+              existing.roles.push(role.role);
+            }
+            grouped.set(schoolId, existing);
+          });
+
+        if (seedSchoolIds.size > 0) {
+          const { data: roleSchools, error: roleSchoolsError } = await supabase
+            .from("schools")
+            .select("id, name, type, school_type")
+            .in("id", Array.from(seedSchoolIds));
+
+          if (roleSchoolsError) {
+            console.warn("MULTI SCHOOL - role schools load failed", roleSchoolsError);
+          }
+
+          (roleSchools || []).forEach((school: any) => {
+            const existing = grouped.get(school.id);
+            if (!existing) return;
+            grouped.set(school.id, {
+              ...existing,
+              name: school.name || existing.name,
+              type: school.type || school.school_type || existing.type
+            });
+          });
+        }
+
         (schoolRoles || []).forEach((item: any) => {
           const school = Array.isArray(item.schools) ? item.schools[0] : item.schools;
           const schoolId = item.school_id || school?.id;
-          if (!schoolId || !school) return;
+          if (!schoolId) return;
 
           const existing = grouped.get(schoolId) || {
             id: schoolId,
-            name: school.name || 'Nepoznata ustanova',
-            type: school.type || school.school_type,
+            name: school?.name || 'Nepoznata ustanova',
+            type: school?.type || school?.school_type,
             roles: []
           };
+          if (school) {
+            existing.name = school.name || existing.name;
+            existing.type = school.type || school.school_type || existing.type;
+          }
           if (item.role && !existing.roles.includes(item.role)) {
             existing.roles.push(item.role);
           }
@@ -151,6 +195,27 @@ export default function ClassSelectionPage() {
           });
         }
 
+        if (selectedSchoolId && !grouped.has(selectedSchoolId)) {
+          const { data: currentSchool, error: currentSchoolError } = await supabase
+            .from("schools")
+            .select("id, name, type, school_type")
+            .eq("id", selectedSchoolId)
+            .maybeSingle();
+
+          if (currentSchoolError) {
+            console.warn("MULTI SCHOOL - selected school load failed", currentSchoolError);
+          }
+
+          if (currentSchool?.id) {
+            grouped.set(currentSchool.id, {
+              id: currentSchool.id,
+              name: currentSchool.name || 'Nepoznata ustanova',
+              type: currentSchool.type || currentSchool.school_type,
+              roles: activeSchoolRoles.map((role: any) => role.role).filter(Boolean)
+            });
+          }
+        }
+
         const schools = Array.from(grouped.values()).sort((a, b) =>
           a.name.localeCompare(b.name, 'hr')
         );
@@ -167,7 +232,7 @@ export default function ClassSelectionPage() {
     };
 
     loadAvailableSchools();
-  }, [user?.id, selectedSchoolId, setSelectedSchoolId, isProfileGlobalAdmin]);
+  }, [user?.id, selectedSchoolId, setSelectedSchoolId, isProfileGlobalAdmin, userSchoolRoles, activeSchoolRoles]);
 
   useEffect(() => {
     const init = async () => {
