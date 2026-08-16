@@ -121,7 +121,7 @@ export default function ClassSelectionPage() {
               id,
               name,
               type,
-              school_type
+              subtype
             )
           `)
           .eq("user_id", user.id)
@@ -157,7 +157,7 @@ export default function ClassSelectionPage() {
             Array.from(seedSchoolIds).map(async schoolId => {
               const { data, error: roleSchoolError } = await supabase
                 .from("schools")
-                .select("id, name, type, school_type")
+                .select("id, name, type, subtype")
                 .eq("id", schoolId)
                 .maybeSingle();
 
@@ -174,7 +174,7 @@ export default function ClassSelectionPage() {
             grouped.set(school.id, {
               ...existing,
               name: school.name || existing.name,
-              type: school.type || school.school_type || existing.type
+              type: school.type || school.subtype || existing.type
             });
           });
         }
@@ -187,12 +187,12 @@ export default function ClassSelectionPage() {
           const existing = grouped.get(schoolId) || {
             id: schoolId,
             name: school?.name || 'Nepoznata ustanova',
-            type: school?.type || school?.school_type,
+            type: school?.type || school?.subtype,
             roles: []
           };
           if (school) {
             existing.name = school.name || existing.name;
-            existing.type = school.type || school.school_type || existing.type;
+            existing.type = school.type || school.subtype || existing.type;
           }
           if (item.role && !existing.roles.includes(item.role)) {
             existing.roles.push(item.role);
@@ -203,7 +203,7 @@ export default function ClassSelectionPage() {
         if (isProfileGlobalAdmin || isSchoolAdmin) {
           const { data: allSchools, error: schoolsError } = await supabase
             .from("schools")
-            .select("id, name, type, school_type")
+            .select("id, name, type, subtype")
             .order("name", { ascending: true });
 
           if (schoolsError) {
@@ -216,7 +216,7 @@ export default function ClassSelectionPage() {
             grouped.set(school.id, {
               id: school.id,
               name: school.name || 'Nepoznata ustanova',
-              type: school.type || school.school_type,
+              type: school.type || school.subtype,
               roles: existing?.roles?.length ? existing.roles : (isProfileGlobalAdmin ? [Role.ADMIN] : ['DOSTUPNO'])
             });
           });
@@ -225,7 +225,7 @@ export default function ClassSelectionPage() {
         if (selectedSchoolId && !grouped.has(selectedSchoolId)) {
           const { data: currentSchool, error: currentSchoolError } = await supabase
             .from("schools")
-            .select("id, name, type, school_type")
+            .select("id, name, type, subtype")
             .eq("id", selectedSchoolId)
             .maybeSingle();
 
@@ -237,7 +237,7 @@ export default function ClassSelectionPage() {
             grouped.set(currentSchool.id, {
               id: currentSchool.id,
               name: currentSchool.name || 'Nepoznata ustanova',
-              type: currentSchool.type || currentSchool.school_type,
+              type: currentSchool.type || currentSchool.subtype,
               roles: activeSchoolRoles.map((role: any) => role.role).filter(Boolean)
             });
           }
