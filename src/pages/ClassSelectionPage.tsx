@@ -196,12 +196,13 @@ export default function ClassSelectionPage() {
           }
 
           (allSchools || []).forEach((school: any) => {
-            if (!school?.id || grouped.has(school.id)) return;
+            if (!school?.id) return;
+            const existing = grouped.get(school.id);
             grouped.set(school.id, {
               id: school.id,
               name: school.name || 'Nepoznata ustanova',
               type: school.type || school.school_type,
-              roles: isProfileGlobalAdmin ? [Role.ADMIN] : ['DOSTUPNO']
+              roles: existing?.roles?.length ? existing.roles : (isProfileGlobalAdmin ? [Role.ADMIN] : ['DOSTUPNO'])
             });
           });
         }
