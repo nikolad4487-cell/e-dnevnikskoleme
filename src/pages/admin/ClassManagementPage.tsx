@@ -287,31 +287,47 @@ order by name, module_or_track;
     try {
       console.log("SAVE CLASS PAYLOAD", payload);
 
-      // PRE-INSERT CHECK: Check if class with same name already exists in this school year
-      const { data: existingClass, error: checkError } = await supabase
-        .from('classes')
-        .select('id, name')
-        .eq('school_year_id', selectedYearId)
-        .eq('name', finalName)
-        .maybeSingle();
-      
-      if (existingClass && (!editingClass || existingClass.id !== editingClass.id)) {
-        toast.error(`Razred ${finalName} već postoji u ovoj školskoj godini.`);
-        return;
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) {
+        throw new Error("Nedostaje autorizacijski token. Prijavite se ponovno.");
+      }
+
+      const response = await fetch("/api/admin/classes", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({
+          classId: editingClass?.id || null,
+          payload
+        })
+      });
+
+      console.log("SAVE CLASS RESPONSE STATUS", response.status);
+      const raw = await response.text();
+      console.log("SAVE CLASS RAW RESPONSE", raw);
+
+      let result: any = null;
+      if (raw) {
+        try {
+          result = JSON.parse(raw);
+        } catch (parseErr) {
+          console.error("SAVE CLASS JSON PARSE ERROR", parseErr, raw);
+        }
+      }
+
+      if (!response.ok || result?.success === false) {
+        throw new Error(result?.error || raw || "Spremanje razreda nije uspjelo.");
       }
 
       if (editingClass) {
-        const { data, error } = await supabase.from('classes').update(payload).eq('id', editingClass.id).select();
-        console.log("UPDATE CLASS RESULT:", { data, error });
-        if (error) throw error;
+        console.log("UPDATE CLASS RESULT:", result);
         toast.success('Razredni odjel ažuriran');
       } else {
-        const { data, error } = await supabase.from('classes').insert([payload]).select();
-        console.log("CREATE CLASS RESULT:", { data, error });
-        if (error) throw error;
+        console.log("CREATE CLASS RESULT:", result);
         toast.success('Razredni odjel dodan');
       }
-      
       setIsModalOpen(false);
       fetchData();
     } catch (err: any) {

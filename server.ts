@@ -4248,6 +4248,108 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     }
   });
 
+  async function authorizeClassAdmin(token: string, schoolId: string) {
+    if (!supabaseAdmin) return { authorized: false, error: "Database admin client not configured" };
+    if (!token) return { authorized: false, error: "Missing authorization token" };
+    if (!schoolId) return { authorized: false, error: "Missing school_id" };
+
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+    if (authError || !user) return { authorized: false, error: "Invalid token" };
+
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("user_profiles")
+      .select("id, auth_user_id, email, role, access_role")
+      .eq("auth_user_id", user.id)
+      .maybeSingle();
+
+    if (profileError || !profile) return { authorized: false, error: "User profile not found" };
+
+    const roleText = String(profile.role || "").toUpperCase();
+    const accessRoleText = String(profile.access_role || "").toUpperCase();
+    if (["SUPER_ADMIN", "MAIN_ADMIN"].includes(roleText) || ["SUPER_ADMIN", "MAIN_ADMIN"].includes(accessRoleText)) {
+      return { authorized: true, profile };
+    }
+
+    const { data: roles, error: rolesError } = await supabaseAdmin
+      .from("user_school_roles")
+      .select("id, school_id, role, status")
+      .eq("user_id", profile.id);
+
+    if (rolesError) return { authorized: false, error: rolesError.message };
+
+    const hasSchoolAdminRole = (roles || []).some((role: any) => {
+      const sameSchool = String(role.school_id) === String(schoolId);
+      const status = String(role.status || "ACTIVE").toUpperCase();
+      const schoolRole = String(role.role || "").toUpperCase();
+      return sameSchool && status === "ACTIVE" && ["ADMIN", "SCHOOL_ADMIN", "SUPER_ADMIN", "MAIN_ADMIN"].includes(schoolRole);
+    });
+
+    return hasSchoolAdminRole
+      ? { authorized: true, profile }
+      : { authorized: false, error: "User is not an active admin for this school" };
+  }
+
+  app.post("/api/admin/classes", async (req, res) => {
+    try {
+      if (!supabaseAdmin) {
+        return res.status(500).json({ success: false, error: "Supabase Admin client not initialized." });
+      }
+
+      const authHeader = req.headers.authorization || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+      const { classId, payload } = req.body || {};
+
+      console.log("[ADMIN_CLASSES_SAVE] payload", payload);
+
+      if (!payload || typeof payload !== "object") {
+        return res.status(400).json({ success: false, error: "Nedostaje payload za razred." });
+      }
+
+      if (!payload.school_id) {
+        return res.status(400).json({ success: false, error: "Nedostaje school_id u payloadu." });
+      }
+
+      const auth = await authorizeClassAdmin(token, payload.school_id);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: auth.error || "Nemate ovlasti za spremanje razreda." });
+      }
+
+      if (payload.school_year_id && payload.name) {
+        let duplicateQuery = supabaseAdmin
+          .from("classes")
+          .select("id, name")
+          .eq("school_year_id", payload.school_year_id)
+          .eq("name", payload.name)
+          .eq("school_id", payload.school_id)
+          .limit(1);
+
+        if (classId) duplicateQuery = duplicateQuery.neq("id", classId);
+
+        const { data: duplicates, error: duplicateError } = await duplicateQuery;
+        if (duplicateError) throw duplicateError;
+        if (duplicates && duplicates.length > 0) {
+          return res.status(409).json({
+            success: false,
+            error: `Razred ${payload.name} već postoji u ovoj školskoj godini.`
+          });
+        }
+      }
+
+      const query = classId
+        ? supabaseAdmin.from("classes").update(payload).eq("id", classId).select()
+        : supabaseAdmin.from("classes").insert([payload]).select();
+
+      const { data, error } = await query;
+      console.log("[ADMIN_CLASSES_SAVE] result", { data, error });
+      if (error) throw error;
+
+      return res.json({ success: true, data });
+    } catch (e: any) {
+      console.error("[ADMIN_CLASSES_SAVE] error:", e);
+      return res.status(500).json({ success: false, error: e.message || "Spremanje razreda nije uspjelo." });
+    }
+  });
+
   app.delete("/api/classes/:id", async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Database admin client not configured");
