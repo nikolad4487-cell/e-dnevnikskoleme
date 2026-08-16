@@ -257,13 +257,19 @@ order by name, module_or_track;
       finalName = `4.${finalSection}`;
     }
 
+    const resolvedSchoolId =
+      selectedSchool?.id ||
+      selectedSchoolId ||
+      (profile as any)?.active_school_id ||
+      (profile as any)?.school_id;
+
     const payload = {
       name: finalName,
       grade_level: finalGradeLevel,
       section: finalSection,
       school_year: schoolYear,
       school_year_id: selectedYearId,
-      school_id: selectedSchoolId,
+      school_id: resolvedSchoolId,
       status: 'ACTIVE',
       homeroom_teacher_id: homeroomTeacherId || null,
       deputy_teacher_id: deputyHomeroomTeacherId || null,
