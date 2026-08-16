@@ -5923,6 +5923,7 @@ setAllSubjects(uniqueSub2);
                     <select name="schoolType" className="border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none">
                       <option value="PRIMARY">Osnovna škola</option>
                       <option value="SECONDARY">Srednja škola</option>
+                      <option value="FAKULTET">Fakultet</option>
                     </select>
                     <select name="schoolSubtype" className="border border-gray-300 p-2 text-xs focus:border-[#005c8d] outline-none">
                       <option value="GENERAL">Gimnazija</option>

@@ -184,7 +184,7 @@ export default function SchoolSelectionPage() {
                     </td>
                     <td className="px-6 py-5">
                       <span className="text-[10px] font-black uppercase tracking-tight py-1 px-2 bg-slate-100 rounded text-slate-600 border border-slate-200">
-                        {school.type === 'PRIMARY' ? 'Osnovna' : 'Srednja'}
+                        {school.type === 'PRIMARY' ? 'Osnovna' : school.type === 'FAKULTET' ? 'Fakultet' : 'Srednja'}
                       </span>
                     </td>
                     <td className="px-6 py-5">
@@ -247,7 +247,7 @@ export default function SchoolSelectionPage() {
                   <div>
                     <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Vrsta škole</span>
                     <span className="font-semibold text-slate-700">
-                      {school.type === 'PRIMARY' ? 'Osnovna škola' : 'Srednja škola'}
+                      {school.type === 'PRIMARY' ? 'Osnovna škola' : school.type === 'FAKULTET' ? 'Fakultet' : 'Srednja škola'}
                     </span>
                   </div>
                   {school.subtype && (

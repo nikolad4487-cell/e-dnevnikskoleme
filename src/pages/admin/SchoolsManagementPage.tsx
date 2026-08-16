@@ -292,7 +292,7 @@ export default function SchoolsManagementPage() {
                                 <div className="font-extrabold text-slate-800 text-sm uppercase leading-snug">{school.name}</div>
                                 <div className="flex items-center gap-2 mt-0.5">
                                   <span className="text-[9px] font-black uppercase tracking-tight text-slate-500">
-                                    {school.type === 'PRIMARY' ? 'Osnovna' : 'Srednja'}
+                                    {school.type === 'PRIMARY' ? 'Osnovna' : school.type === 'FAKULTET' ? 'Fakultet' : 'Srednja'}
                                   </span>
                                   {school.subtype && (
                                     <span className="text-[9px] font-bold text-[#005c8d] uppercase tracking-tight">
@@ -385,7 +385,7 @@ export default function SchoolsManagementPage() {
                           <div>
                             <h3 className="font-extrabold text-slate-950 text-sm leading-tight uppercase">{school.name}</h3>
                             <span className="inline-block mt-1 text-[9px] font-black uppercase tracking-widest px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded">
-                              {school.type === 'PRIMARY' ? 'Osnovna' : 'Srednja'} {school.subtype === 'GENERAL' ? '(Gimnazija)' : school.subtype === 'VOCATIONAL' ? '(Strukovna)' : ''}
+                              {school.type === 'PRIMARY' ? 'Osnovna' : school.type === 'FAKULTET' ? 'Fakultet' : 'Srednja'} {school.type === 'SECONDARY' && school.subtype === 'GENERAL' ? '(Gimnazija)' : school.type === 'SECONDARY' && school.subtype === 'VOCATIONAL' ? '(Strukovna)' : ''}
                             </span>
                           </div>
                         </div>
@@ -490,11 +490,18 @@ export default function SchoolsManagementPage() {
                   <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Tip škole</label>
                   <select
                     value={type}
-                    onChange={e => setType(e.target.value as SchoolType)}
+                    onChange={e => {
+                      const newType = e.target.value as SchoolType;
+                      setType(newType);
+                      if (newType !== 'SECONDARY') {
+                        setSubtype(null);
+                      }
+                    }}
                     className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none transition-all"
                   >
                     <option value="PRIMARY">Osnovna škola</option>
                     <option value="SECONDARY">Srednja škola</option>
+                    <option value="FAKULTET">Fakultet</option>
                   </select>
                 </div>
 

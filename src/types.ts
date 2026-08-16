@@ -22,7 +22,7 @@ export function isSchoolAdminUser(profile: any, roles: any[] = []): boolean {
   return values.includes("ADMIN") || values.includes("SCHOOL_ADMIN");
 }
 
-export type SchoolType = 'PRIMARY' | 'SECONDARY';
+export type SchoolType = 'PRIMARY' | 'SECONDARY' | 'FAKULTET';
 export type SecondarySubtype = 'GENERAL' | 'VOCATIONAL';
 
 export type School = {
