@@ -279,6 +279,8 @@ order by name, module_or_track;
     console.log(`${editingClass ? 'UPDATE' : 'CREATE'} CLASS CLICKED`, payload);
 
     try {
+      console.log("SAVE CLASS PAYLOAD", payload);
+
       // PRE-INSERT CHECK: Check if class with same name already exists in this school year
       const { data: existingClass, error: checkError } = await supabase
         .from('classes')
