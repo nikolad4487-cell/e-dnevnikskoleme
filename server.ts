@@ -4266,8 +4266,16 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
     const roleText = String(profile.role || "").toUpperCase();
     const accessRoleText = String(profile.access_role || "").toUpperCase();
+    const emailText = String(profile.email || "").toLowerCase();
     const globalAdminRoles = ["SUPER_ADMIN", "MAIN_ADMIN", "ADMIN"];
-    if (globalAdminRoles.includes(roleText) || globalAdminRoles.includes(accessRoleText)) {
+    const globalAdminEmails = [
+      "skola@skolehr.xyz",
+      "skole@skolehr.xyz",
+      "nikola.duric@skolehr.xyz",
+      "nikola.duric@eskole.me",
+      "nikolad4487@gmail.com"
+    ];
+    if (globalAdminRoles.includes(roleText) || globalAdminRoles.includes(accessRoleText) || globalAdminEmails.includes(emailText)) {
       return { authorized: true, profile };
     }
 
@@ -5268,10 +5276,10 @@ Generiraj JSON objekt sa sljedećom strukturom:
           .from('user_profiles')
           .update({
             name: 'Nikola Đurić',
-            role: 'SCHOOL_ADMIN',
-            access_role: 'SCHOOL_ADMIN',
-            school_id: targetSchoolId,
-            active_school_id: targetSchoolId,
+            role: 'MAIN_ADMIN',
+            access_role: 'MAIN_ADMIN',
+            school_id: null,
+            active_school_id: null,
             pin_hash: nikolaProf.pin_hash || DEFAULT_PIN_HASH,
             updated_at: new Date().toISOString()
           })
