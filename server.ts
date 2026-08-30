@@ -90,14 +90,23 @@ const configuredSupabaseUrl = normalizeSupabaseUrl(process.env.SUPABASE_URL || p
 const configuredSupabaseUrlLooksValid = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(configuredSupabaseUrl);
 const supabaseUrl = configuredSupabaseUrlLooksValid ? configuredSupabaseUrl : FALLBACK_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || "";
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 
 // Supabase Admin Client (Service Role)
 let supabaseAdmin: any;
+let supabaseAuthClient: any;
 if (supabaseUrl && supabaseServiceKey) {
   console.log("[SERVER] Supabase admin URL configured:", supabaseUrl);
   console.log("[SERVER] Supabase URL source:", configuredSupabaseUrlLooksValid ? "environment" : "fallback");
   console.log("[SERVER] Supabase service key configured:", Boolean(supabaseServiceKey));
+  console.log("[SERVER] Supabase anon key configured:", Boolean(supabaseAnonKey));
   supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  });
+  supabaseAuthClient = createClient(supabaseUrl, supabaseAnonKey || supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false
@@ -108,7 +117,8 @@ if (supabaseUrl && supabaseServiceKey) {
     hasSupabaseUrl: Boolean(supabaseUrl),
     configuredSupabaseUrl,
     usingFallbackSupabaseUrl: !configuredSupabaseUrlLooksValid,
-    hasServiceRoleKey: Boolean(supabaseServiceKey)
+    hasServiceRoleKey: Boolean(supabaseServiceKey),
+    hasAnonKey: Boolean(supabaseAnonKey)
   });
 }
 
@@ -190,6 +200,8 @@ async function startServer() {
               return "INVALID_URL";
             }
           })() : null,
+          hasAnonKey: Boolean(supabaseAnonKey),
+          anonKeyLooksLikeJwt: /^eyJ/i.test(supabaseAnonKey || ""),
           hasServiceRoleKey: Boolean(supabaseServiceKey),
           serviceRoleKeyLooksLikeJwt: /^eyJ/i.test(supabaseServiceKey || "")
         }
@@ -4061,12 +4073,12 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       // Try '1234' first as the standard password, falling back to '123456' for compatibility
       let authResult;
       if (loginType === 'STAFF') {
-        let res = await supabaseAdmin.auth.signInWithPassword({
+        let res = await supabaseAuthClient.auth.signInWithPassword({
           email: DemoresolvedEmail,
           password: '1234'
         });
         if (res.error && res.error.message === 'Invalid login credentials') {
-          const retryRes = await supabaseAdmin.auth.signInWithPassword({
+          const retryRes = await supabaseAuthClient.auth.signInWithPassword({
             email: DemoresolvedEmail,
             password: '123456'
           });
@@ -4076,7 +4088,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         }
         authResult = res;
       } else {
-        authResult = await supabaseAdmin.auth.signInWithPassword({
+        authResult = await supabaseAuthClient.auth.signInWithPassword({
           email: DemoresolvedEmail,
           password: password
         });
