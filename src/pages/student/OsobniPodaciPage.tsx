@@ -295,6 +295,84 @@ export default function OsobniPodaciPage() {
 
   const hasParentContact = parentContact && (parentContact.parent_name || parentContact.parent_phone || parentContact.parent_email);
 
+  const studentNameParts = (studentProfile?.name || '').trim().split(/\s+/);
+  const studentFirstName = studentNameParts.slice(0, -1).join(' ') || studentProfile?.name || '—';
+  const studentLastName = studentNameParts.length > 1 ? studentNameParts.at(-1) : '';
+  const studentRows = [
+    ['Redni broj', redniBroj],
+    ['Ime', studentFirstName],
+    ['Prezime', studentLastName || '—'],
+    ['OIB', studentProfile?.oib || '—'],
+    ['Datum rođenja', studentProfile?.dob ? new Date(studentProfile.dob).toLocaleDateString('hr') : '—'],
+    ['Mjesto rođenja', studentProfile?.birthplace || studentProfile?.pob || '—'],
+    ['Adresa', studentProfile?.address || '—'],
+    ['Program', programInfo?.name || classInfo?.program?.name || '—'],
+  ];
+
+  if (!isEditing) {
+    return (
+      <div className="flex-1 bg-white overflow-auto">
+        <div className="w-full px-4 md:px-5 py-3">
+          {canEdit && (
+            <div className="flex justify-end mb-3">
+              <button
+                onClick={() => setIsEditing(true)}
+                type="button"
+                className="px-4 py-2 bg-[#1780c2] text-white rounded-md text-sm font-medium flex items-center gap-2"
+              >
+                <Edit size={14} /> Uredi podatke
+              </button>
+            </div>
+          )}
+
+          <section className="border-y border-slate-200 py-3 text-center">
+            <h1 className="font-bold text-sm text-slate-950 mb-3">Podaci o učeniku</h1>
+            <div className="space-y-1 text-sm">
+              {studentRows.map(([label, value]) => (
+                <div key={label} className="flex justify-center gap-2 leading-6">
+                  <span className="font-bold">{label}</span>
+                  <span>{value}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="border-b border-slate-200 py-3 text-center">
+            <h2 className="font-bold text-sm text-slate-950 mb-3">Kontakt podaci</h2>
+            {!hasParentContact ? (
+              <p className="text-sm text-slate-500">Nema unesenih kontakata.</p>
+            ) : (
+              <div className="space-y-3 text-sm">
+                <div className="space-y-1">
+                  <div className="flex justify-center gap-2 leading-6">
+                    <span className="font-bold">Ime i prezime</span>
+                    <span>{parentContact.parent_name || '—'}</span>
+                  </div>
+                  <div className="flex justify-center gap-2 leading-6">
+                    <span className="font-bold">Adresa</span>
+                    <span>{parentContact.address || parentContact.parent_address || '—'}</span>
+                  </div>
+                  <div className="flex justify-center gap-2 leading-6">
+                    <span className="font-bold">Telefon</span>
+                    <span>{parentContact.parent_phone || '—'}</span>
+                  </div>
+                  <div className="flex justify-center gap-2 leading-6">
+                    <span className="font-bold">Napomena</span>
+                    <span>{parentContact.notes || '—'}</span>
+                  </div>
+                  <div className="flex justify-center gap-2 leading-6">
+                    <span className="font-bold">E-mail</span>
+                    <span>{parentContact.parent_email || '—'}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 p-6 space-y-6 max-w-5xl mx-auto w-full">
       {/* Title block */}

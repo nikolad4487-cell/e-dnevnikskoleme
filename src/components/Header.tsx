@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { User, LogOut, Settings, Repeat, Bell, Building2, Shield, Menu } from 'lucide-react';
+import { User, LogOut, Settings, Repeat, Bell, Building2, Shield, Menu, X, Home, Moon, FileText, BookOpen, Monitor, BarChart3, FlaskConical, IdCard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
@@ -177,39 +177,77 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
             className="w-9 h-9 rounded-md bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:bg-slate-50"
             aria-label="Izbornik"
           >
-            <Menu size={22} />
+            {isMenuOpen ? <X size={18} /> : <Menu size={22} />}
           </button>
 
           {isMenuOpen && (
-            <div className="absolute right-0 top-full mt-2 w-52 bg-white text-gray-800 border border-gray-200 shadow-xl rounded py-1 z-[100] animate-in fade-in zoom-in-95 duration-100">
+            <div className="absolute right-0 top-full mt-2 w-[305px] bg-white text-gray-800 border border-gray-200 shadow-xl rounded-md py-0 z-[100] animate-in fade-in zoom-in-95 duration-100 overflow-hidden">
+              <button
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  navigate('/student/ocjene');
+                }}
+                className="w-full flex items-center justify-between px-3 py-3 text-xs text-slate-800 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[38px]"
+              >
+                <span>POČETNA STRANICA</span>
+                <Home size={16} />
+              </button>
+
+              <div className="px-3 py-3 border-b border-gray-100">
+                <div className="text-xs text-slate-700 mb-3">OSTALE CARNET USLUGE</div>
+                <div className="grid grid-cols-3 gap-3 text-center text-[11px] text-slate-700">
+                  {[
+                    { label: 'e-Lektire', icon: <BookOpen size={24} /> },
+                    { label: 'portal skole.hr', icon: <Monitor size={24} /> },
+                    { label: 'CARNET data', icon: <BarChart3 size={24} /> },
+                    { label: 'Edutorij', icon: <FileText size={24} /> },
+                    { label: 'e-Laboratorij', icon: <FlaskConical size={24} /> },
+                    { label: 'CARNET info', icon: <IdCard size={24} /> },
+                  ].map(service => (
+                    <div key={service.label} className="flex flex-col items-center gap-1">
+                      <div className="text-slate-600">{service.icon}</div>
+                      <span>{service.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <button className="block ml-auto mt-2 text-xs font-bold text-[#0067a0] hover:underline">
+                  Pročitaj više...
+                </button>
+              </div>
+
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-3 py-3 text-xs text-slate-800 hover:bg-slate-50 transition-colors border-b border-gray-100"
+              >
+                <span>POTVRDE</span>
+                <FileText size={16} />
+              </button>
+
               {(isStudent || isParent) && (
                 <button
                   onClick={() => {
                     setIsMenuOpen(false);
                     navigate('/student/osobni-podaci');
                   }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
+                  className="w-full flex items-center justify-between px-3 py-3 text-xs text-slate-800 hover:bg-slate-50 transition-colors border-b border-gray-100"
                 >
-                  <User size={14} />
-                  Osobni podaci
+                  <span>OSOBNI PODACI</span>
+                  <User size={16} />
                 </button>
               )}
               <button
-                onClick={() => {
-                  setIsMenuOpen(false);
-                  navigate('/student/postavke');
-                }}
-                className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
+                type="button"
+                className="w-full flex items-center justify-between px-3 py-3 text-xs text-slate-800 hover:bg-slate-50 transition-colors border-b border-gray-100"
               >
-                <Settings size={14} />
-                Postavke
+                <span>TAMNI PRIKAZ</span>
+                <Moon size={16} />
               </button>
               <button
                 onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors min-h-[44px]"
+                className="w-full flex items-center justify-between px-3 py-3 text-xs text-slate-800 hover:bg-red-50 transition-colors"
               >
-                <LogOut size={14} />
-                Odjava
+                <span>ODJAVA</span>
+                <LogOut size={16} className="text-red-600" />
               </button>
             </div>
           )}
