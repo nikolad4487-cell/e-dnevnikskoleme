@@ -753,10 +753,12 @@ export default function ClassSelectionPage() {
           </div>
         </div>
 
-        <div className="mb-10 text-center">
-          <h1 className="text-2xl font-black text-[#005c8d] uppercase tracking-tight mb-2">Odabir razreda</h1>
-          <div className="w-12 h-1 bg-[#005c8d] mx-auto opacity-20"></div>
-        </div>
+        {isStaff && (
+          <div className="mb-10 text-center">
+            <h1 className="text-2xl font-black text-[#005c8d] uppercase tracking-tight mb-2">Odabir razreda</h1>
+            <div className="w-12 h-1 bg-[#005c8d] mx-auto opacity-20"></div>
+          </div>
+        )}
 
         {schoolYears.length === 0 ? (
           <div className="bg-white border border-[#dee2e6] rounded-sm shadow-sm p-8 md:p-12 text-center max-w-2xl mx-auto">
@@ -833,7 +835,7 @@ export default function ClassSelectionPage() {
             </div>
 
         {!isStaff ? (
-          /* Student Card Grid Layout */
+          /* Student horizontal class cards */
           filteredClasses.length === 0 ? (
             <div className="bg-white border border-[#dee2e6] rounded-sm shadow-sm overflow-hidden px-6 py-16 text-center">
               <div className="w-16 h-16 bg-slate-50 text-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -842,9 +844,10 @@ export default function ClassSelectionPage() {
               <p className="text-slate-400 italic">Nema pronađenih razreda za odabranu školsku godinu.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 mt-2">
+            <div className="-mx-6 px-6 overflow-x-auto pb-4">
+              <div className="flex gap-1 min-w-max">
               {filteredClasses
-                .sort((a, b) => (String(a.name || "")).localeCompare(b.name))
+                .sort((a, b) => (String(a.name || "")).localeCompare(String(b.name || ""), 'hr', { numeric: true }))
                 .map((cls) => {
                   const summary = summaries.find(s => 
                     s.class_id === cls.id && 
@@ -858,82 +861,73 @@ export default function ClassSelectionPage() {
                     : null;
 
                   return (
-                    <div key={cls.id} className="bg-white rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all p-6 flex flex-col justify-between">
-                      {/* Upper Header Section */}
-                      <div 
-                        className="cursor-pointer group select-none"
+                    <div
+                      key={cls.id}
+                      className="w-[330px] bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden shrink-0"
+                    >
+                      <button
+                        type="button"
                         onClick={() => handleSelect(cls)}
+                        className="w-full text-left px-4 py-4 border-b border-slate-100 hover:bg-slate-50 transition-colors"
                       >
-                        <div className="flex flex-col mb-4">
-                          <div className="text-2xl font-black text-[#005c8d] uppercase tracking-tight group-hover:text-[#004a70] transition-colors mb-2">
-                            {cls.name}
+                        <div className="grid grid-cols-[58px_1fr] gap-3 items-start">
+                          <div>
+                            <div className="text-xl font-black text-slate-900 leading-none">{cls.name}</div>
+                            <div className="text-sm text-slate-700 font-medium mt-1">
+                              {getShortenedYear(cls.yearName || selectedYear?.name || '')}
+                            </div>
                           </div>
-                          
-                          <div className="text-[10px] text-slate-600 font-bold uppercase">
-                             Razrednik: {cls.homeroomTeacherName || 'NIJE DODIJELJEN'}
-                          </div>
-                          {cls.deputyTeacherName && (
-                              <div className="text-[10px] text-slate-600 font-bold uppercase">
-                                Zamjenik: {cls.deputyTeacherName}
+                          <div className="text-sm text-slate-900 font-black leading-tight">
+                            <div className="line-clamp-2">{selectedSchoolLabel}</div>
+                            {cls.programName && (
+                              <div className="text-xs text-slate-500 font-bold mt-1 line-clamp-2">
+                                {cls.programName}
                               </div>
-                          )}
-
-                          <div className="text-[10px] text-slate-400 font-extrabold uppercase tracking-widest mt-3">
-                              Program:
-                          </div>
-                          <div className="text-slate-600 font-bold uppercase text-[11px]">
-                              {cls.programName || `${cls.gradeLevel}. razred`}
+                            )}
                           </div>
                         </div>
-                      </div>
+                      </button>
 
-                      {/* Navigation Menu/Tiles */}
-                      <div className="grid grid-cols-5 gap-1.5 my-5">
+                      <div className="divide-y divide-slate-100">
                         {menuItems.map(item => {
                           const ItemIcon = item.icon;
                           return (
                             <button
                               key={item.label}
+                              type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 handleSelectMenu(cls, item.path);
                               }}
-                              className={cn(
-                                "flex flex-col items-center justify-center p-2 rounded border border-slate-100 transition-all text-center cursor-pointer",
-                                item.color
-                              )}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-slate-900 font-medium hover:bg-slate-50 transition-colors text-left"
                               title={item.label}
                             >
-                              <ItemIcon size={18} className="mb-1 shrink-0" />
-                              <span className="text-[9px] font-black uppercase tracking-tight leading-none block whitespace-nowrap">
-                                {item.label}
-                              </span>
+                              <ItemIcon size={18} className="shrink-0 text-slate-700" />
+                              <span>{item.label}</span>
                             </button>
                           );
                         })}
                       </div>
 
-                      {/* Footer Section - General Success */}
-                      <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] font-black uppercase tracking-wide">
+                      <div className="border-t border-slate-100 px-4 py-3 flex items-center justify-between text-sm font-bold">
                         {isFinalized && typeof overall_average === 'number' ? (
                           <>
-                            <span className="text-slate-500">Opći uspjeh</span>
-                            <span className="text-[#10b981] font-black text-sm bg-emerald-50 border border-emerald-200 px-3 py-1 rounded">
+                            <span className="text-slate-300 uppercase font-black">Opći uspjeh</span>
+                            <span className="text-[#15c115] font-black text-lg">
                               {formattedAverage}
                             </span>
                           </>
                         ) : (
                           <>
-                            <span className="text-slate-400">Opći uspjeh</span>
-                            <span className="text-slate-400 font-black text-sm bg-slate-50 border border-slate-200 px-3 py-1 rounded">
-                              *
-                            </span>
+                            <span className="text-slate-300 uppercase font-black">Opći uspjeh</span>
+                            <span className="text-slate-300 font-black">-</span>
                           </>
                         )}
                       </div>
                     </div>
                   );
                 })}
+              </div>
             </div>
           )
         ) : (
