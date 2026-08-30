@@ -224,6 +224,29 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     return subjectAssignments.some(a => a.classId === effectiveClassId && a.teacherId === user.id);
   }, [user, isAdminUser, effectiveClassId, subjectAssignments]);
 
+  const canTeachSubjectInClass = useMemo(() => {
+    return (subjectId?: string) => {
+      if (!subjectId || !effectiveClassId || !user) return false;
+      if (isAdminUser) return true;
+      return subjectAssignments.some(a =>
+        a.classId === effectiveClassId &&
+        a.subjectId === subjectId &&
+        a.teacherId === user.id
+      );
+    };
+  }, [effectiveClassId, isAdminUser, subjectAssignments, user]);
+
+  const lessonSubjectOptions = useMemo(() => {
+    if (!effectiveClassId) return [];
+    return allSubjects.filter(s =>
+      subjectAssignments.some(a =>
+        a.subjectId === s.id &&
+        a.classId === effectiveClassId &&
+        (isAdminUser || a.teacherId === user?.id)
+      )
+    );
+  }, [allSubjects, effectiveClassId, isAdminUser, subjectAssignments, user?.id]);
+
   const canEditExam = useMemo(() => {
     return (exam: any) => {
       if (!user) return false;
@@ -1531,10 +1554,14 @@ setStudents(uniqueStudents);
       return;
     }
 
-    const assignment = subjectAssignments.find(a => a.subjectId === lessonForm.subjectId && a.classId === effectiveClassId);
-    // Allow if admin or if subject is assigned to this class (substitute case)
-    if (!isMainAdmin && !assignment) {
-       toast.error('Ovaj predmet nije dodijeljen ovom razredu.');
+    const assignment = subjectAssignments.find(a =>
+      a.subjectId === lessonForm.subjectId &&
+      a.classId === effectiveClassId &&
+      (isAdminUser || a.teacherId === user.id)
+    );
+
+    if (!assignment && !isAdminUser) {
+       toast.error('Možete unositi sate samo za predmete koje predajete ovom razredu.');
        return;
     }
 
@@ -2915,8 +2942,11 @@ setStudents(uniqueStudents);
                                 <div className="relative group/hint flex items-center">
                                   <button 
                                     onClick={() => {
-                                      const first = scheduledSubjs[0];
-                                      openLessonModal(hour, undefined, { subjectId: first.subjectId, teacherId: first.teacherId || (user?.id || '') });
+                                      const first = scheduledSubjs.find(ss => canTeachSubjectInClass(ss.subjectId));
+                                      openLessonModal(hour, undefined, {
+                                        subjectId: first?.subjectId || '',
+                                        teacherId: first?.teacherId || (user?.id || '')
+                                      });
                                     }}
                                     className="text-[#005c8d]/30 hover:text-[#005c8d] transition-colors cursor-pointer"
                                   >
@@ -2935,7 +2965,7 @@ setStudents(uniqueStudents);
                                 lessons.map((lesson, idx) => {
                                   const sub = allSubjects.find(s => s.id === lesson.subjectId);
                                   const teacher = teachers.find(t => t.id === lesson.teacherId);
-                                  const canEdit = isMainAdmin || lesson.teacherId === user?.id;
+                                  const canEdit = isAdminUser || lesson.teacherId === user?.id;
                                   const lessonAbsences = dailyAbsences.filter(a => a.lessonId === lesson.id);
                                   
                                   return (
@@ -3261,19 +3291,11 @@ setStudents(uniqueStudents);
                           onChange={e => setLessonForm({...lessonForm, subjectId: e.target.value})}
                         >
                           <option value="">-- Odaberite predmet --</option>
-                          {allSubjects
-                            .filter(s => {
-                              // Show all subjects assigned to this class
-                              return subjectAssignments.some(a => a.subjectId === s.id && a.classId === effectiveClassId);
-                            })
-                            .map(s => {
-                              const isMySubject = subjectAssignments.some(a => a.subjectId === s.id && a.classId === effectiveClassId && a.teacherId === user?.id);
-                              return (
-                                <option key={s.id} value={s.id}>
-                                  {formatSubjectName(s)} {isMySubject ? '(Moji sat)' : ''}
-                                </option>
-                              );
-                            })}
+                          {lessonSubjectOptions.map(s => (
+                            <option key={s.id} value={s.id}>
+                              {formatSubjectName(s)}
+                            </option>
+                          ))}
                         </select>
                       </div>
 
