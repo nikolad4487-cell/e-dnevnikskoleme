@@ -528,7 +528,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   console.log("HOSTNAME", hostname);
 
   const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz" || hostname === "ednevnik.skolehr.xyz";
-  const isStudentDomain = hostname === "ocjene.skolehr.xyz";
+  const isStudentDomain = hostname === "e-ocjene.skolehr.xyz" || hostname === "ocjene.skolehr.xyz";
 
   if (typeof window !== 'undefined' && hostname && !isTeacherDomain && !isStudentDomain && !hostname.includes('localhost') && !hostname.includes('run.app') && !hostname.includes('vercel.app') && !hostname.includes('127.0.0.1')) {
     console.warn("[AUTH] Unrecognized hostname:", hostname);

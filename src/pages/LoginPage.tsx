@@ -15,7 +15,7 @@ export default function LoginPage() {
   console.log("HOSTNAME", hostname);
 
   const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz" || hostname === "ednevnik.skolehr.xyz";
-  const isStudentDomain = hostname === "ocjene.skolehr.xyz";
+  const isStudentDomain = hostname === "e-ocjene.skolehr.xyz" || hostname === "ocjene.skolehr.xyz";
 
   useEffect(() => {
     if (hostname && !isTeacherDomain && !isStudentDomain && !hostname.includes('localhost') && !hostname.includes('run.app') && !hostname.includes('vercel.app') && !hostname.includes('127.0.0.1')) {
