@@ -6,7 +6,7 @@ import { Role, SchoolYear, isSuperAdminUser, hasAnyRole } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, ArrowRight, Calendar, Plus, Award, FileText, UserX, Clock, Building2, Shield, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { cn, formatPersonName, getProgramDisplayName } from '../lib/utils';
+import { cn, formatPersonName, getProgramDisplayName, getRoleLabel } from '../lib/utils';
 import { Header } from '../components/Header';
 
 interface ClassWithDetails {
@@ -685,7 +685,7 @@ export default function ClassSelectionPage() {
                             {isLoadingSchoolName(school.name) ? 'Ustanova' : school.name}
                           </div>
                           <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">
-                            {school.roles.join(', ')}
+                            {school.roles.map(role => getRoleLabel(role)).join(', ')}
                           </div>
                         </button>
                       );

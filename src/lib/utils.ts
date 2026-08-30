@@ -188,7 +188,9 @@ export const getRoleLabel = (role: string) => {
     'ADMIN': 'Administrator',
     'SCHOOL_ADMIN': 'Administrator škole',
     'HOMEROOM': 'Razrednik',
-    'MAIN_ADMIN': 'Glavni administrator'
+    'DEPUTY': 'Zamjenik razrednika',
+    'MAIN_ADMIN': 'Glavni administrator',
+    'SUPER_ADMIN': 'Super administrator'
   };
   return labels[role] || role;
 };
