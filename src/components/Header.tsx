@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { User, LogOut, Settings, Repeat, Bell, Building2, Shield, Menu, X, Home, Moon, FileText, BookOpen, Monitor, BarChart3, FlaskConical, IdCard } from 'lucide-react';
+import { User, LogOut, Settings, Repeat, Bell, Building2, Shield, Menu, X, Home, Moon, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
@@ -198,28 +198,6 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
                 <span>POČETNA STRANICA</span>
                 <Home size={16} />
               </button>
-
-              <div className="px-3 py-3 border-b border-gray-100">
-                <div className="text-xs text-slate-700 mb-3">OSTALE CARNET USLUGE</div>
-                <div className="grid grid-cols-3 gap-3 text-center text-[11px] text-slate-700">
-                  {[
-                    { label: 'e-Lektire', icon: <BookOpen size={24} /> },
-                    { label: 'portal skole.hr', icon: <Monitor size={24} /> },
-                    { label: 'CARNET data', icon: <BarChart3 size={24} /> },
-                    { label: 'Edutorij', icon: <FileText size={24} /> },
-                    { label: 'e-Laboratorij', icon: <FlaskConical size={24} /> },
-                    { label: 'CARNET info', icon: <IdCard size={24} /> },
-                  ].map(service => (
-                    <div key={service.label} className="flex flex-col items-center gap-1">
-                      <div className="text-slate-600">{service.icon}</div>
-                      <span>{service.label}</span>
-                    </div>
-                  ))}
-                </div>
-                <button className="block ml-auto mt-2 text-xs font-bold text-[#0067a0] hover:underline">
-                  Pročitaj više...
-                </button>
-              </div>
 
               <button
                 type="button"
