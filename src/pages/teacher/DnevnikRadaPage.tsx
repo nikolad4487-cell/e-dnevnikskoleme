@@ -1123,6 +1123,24 @@ setStudents(uniqueStudents);
     return scheduleSubjects.filter(ss => ss.scheduleCellId === cell.id);
   };
 
+  const getActivePeriodsForWeek = () => {
+    if (!selectedWeek) return morningPeriods;
+    const isAfternoonWeek = selectedWeek.shift === 'Popodne' || (selectedWeek.shift as string) === 'AFTERNOON';
+    return isAfternoonWeek ? afternoonPeriods : morningPeriods;
+  };
+
+  const getLessonSubjectLabel = (lesson: Lesson) => {
+    const subject = allSubjects.find(s => s.id === lesson.subjectId);
+    return formatSubjectName(subject || { name: 'Predmet' });
+  };
+
+  const openAbsenceEntryForLesson = (lesson: Lesson) => {
+    const lessonAbsences = dailyAbsences.filter(absence => absence.lessonId === lesson.id);
+    setAbsenceEntryLesson(lesson);
+    setAbsenceEntrySelectedStudents(lessonAbsences.map(absence => absence.studentId));
+    setShowAbsenceEntryModal(true);
+  };
+
   const handleAddWeek = () => {
     const nextWeekNum = weeks.length + 1;
     const defaultName = `${nextWeekNum}. radni tjedan`;
@@ -2246,79 +2264,117 @@ setStudents(uniqueStudents);
         {/* ABSENCES WEEKLY VIEW */}
         {view === 'ABSENCES' && selectedClass && (
           <div className="w-full">
-             <div className="bg-white border border-gray-300 shadow-sm overflow-hidden overflow-x-auto">
-                <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-[#005c8d] text-[11px] uppercase tracking-tight flex items-center justify-between">
-                    <span>Tjedni pregled izostanaka: {selectedWeek?.name}</span>
-                    <div className="flex gap-4 text-[9px]">
-                       <div className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500"/> Opravdano</div>
-                       <div className="flex items-center gap-1"><span className="w-3 h-3 bg-red-500"/> Neopravdano</div>
-                       <div className="flex items-center gap-1"><span className="w-3 h-3 bg-yellow-400"/> Ostalo</div>
-                       <div className="flex items-center gap-1"><span className="w-3 h-3 bg-orange-500"/> Čeka odluku</div>
-                    </div>
+             {(() => {
+               const absenceDate = selectedDate || selectedWeek?.teachingDays?.[0] || '';
+               const dayAbsences = currentWeekAbsences.filter(abs => abs.date === absenceDate);
+               const absencePeriods = Array.from({ length: 13 }, (_, index) => index);
+               const firstLessonForDay = dailyLessons[0];
+               return (
+             <div className="space-y-2">
+               <div className="flex items-center justify-between bg-white border border-gray-300 px-3 py-2">
+                 <div className="flex items-center gap-4 text-[11px]">
+                   <div className="font-bold">
+                     <div>{selectedWeek?.name || 'Radni tjedan'}</div>
+                     <div className="text-gray-500 font-medium normal-case">{selectedWeek?.shift || ''}</div>
+                   </div>
+                   <div className="h-8 border-l border-gray-200" />
+                   <button
+                     type="button"
+                     onClick={() => {
+                       const days = selectedWeek?.teachingDays || [];
+                       const idx = days.indexOf(absenceDate);
+                       if (idx > 0) setSelectedDate(days[idx - 1]);
+                     }}
+                     disabled={!selectedWeek || (selectedWeek.teachingDays || []).indexOf(absenceDate) <= 0}
+                     className="p-1.5 bg-[#005c8d] text-white disabled:bg-gray-300"
+                   >
+                     <ArrowLeft size={14} />
+                   </button>
+                   <div className="font-bold text-center">
+                     <div>{absenceDate ? getDayName(absenceDate).toLowerCase() : 'dan'}</div>
+                     <div className="text-gray-500 font-medium">{absenceDate ? new Date(absenceDate).toLocaleDateString('hr-HR') : ''}</div>
+                   </div>
+                   <button
+                     type="button"
+                     onClick={() => {
+                       const days = selectedWeek?.teachingDays || [];
+                       const idx = days.indexOf(absenceDate);
+                       if (idx >= 0 && idx < days.length - 1) setSelectedDate(days[idx + 1]);
+                     }}
+                     disabled={!selectedWeek || (selectedWeek.teachingDays || []).indexOf(absenceDate) >= (selectedWeek.teachingDays || []).length - 1}
+                     className="p-1.5 bg-[#005c8d] text-white disabled:bg-gray-300"
+                   >
+                     <ArrowRight size={14} />
+                   </button>
                  </div>
-                <table className="w-full border-collapse min-w-[800px] ed-table-dense">
+                 <button
+                   type="button"
+                   onClick={() => {
+                     if (firstLessonForDay) {
+                       openAbsenceEntryForLesson(firstLessonForDay);
+                     } else {
+                       toast.error('Za ovaj dan prvo unesite nastavni sat.');
+                     }
+                   }}
+                   className="px-3 py-1.5 bg-[#005c8d] text-white text-[10px] font-bold"
+                 >
+                   Unesi izostanak
+                 </button>
+               </div>
+
+             <div className="bg-white border border-gray-300 shadow-sm overflow-hidden overflow-x-auto">
+                <table className="w-full border-collapse min-w-[900px] ed-table-dense">
                   <thead>
-                    <tr className="bg-gray-50 border-b border-gray-300">
-                       <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500 border-r border-gray-300">Učenik</th>
-                       {(selectedWeek?.teachingDays || []).map(date => (
-                         <th key={date} className="p-2 text-center text-[10px] font-bold uppercase text-gray-500 border-r border-gray-300">
-                           {getDayName(date).substring(0,3)}<br/>{new Date(date).getDate()}.{new Date(date).getMonth() + 1}.
-                         </th>
+                    <tr className="bg-[#eaf4fb] border-b border-gray-300">
+                       <th colSpan={15} className="p-1 text-center text-[10px] font-bold uppercase text-slate-800 border-r border-gray-300">Izostanci učenika</th>
+                       <th rowSpan={2} className="p-2 text-center text-[10px] font-bold uppercase text-slate-800 border-r border-gray-300">Razlog izostanka</th>
+                       <th colSpan={2} className="p-1 text-center text-[10px] font-bold uppercase text-slate-800">Izostali sati</th>
+                    </tr>
+                    <tr className="bg-white border-b border-gray-300">
+                       <th className="p-2 text-left text-[10px] font-bold text-slate-800 border-r border-gray-300">Prezime i ime</th>
+                       <th className="p-2 text-center text-[10px] font-bold text-slate-800 border-r border-gray-300">Sati</th>
+                       {absencePeriods.map(hour => (
+                         <th key={`absence-hour-${hour}`} className="w-8 p-1 text-center text-[10px] font-bold text-slate-800 border-r border-gray-300">{hour}</th>
                        ))}
-                       <th className="p-2 text-center text-[10px] font-bold uppercase text-[#005c8d]">UKUPNO</th>
+                       <th className="w-14 p-2 text-center text-[10px] font-bold text-slate-800 border-r border-gray-300">oprav.</th>
+                       <th className="w-14 p-2 text-center text-[10px] font-bold text-slate-800">neoprav.</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {!selectedWeek && (
+                    {students.length === 0 && (
                       <tr>
-                        <td colSpan={100} className="p-12 text-center text-gray-400 italic">Nema radnih tjedana za ovaj razred.</td>
+                        <td colSpan={18} className="p-12 text-center text-gray-400 italic">Nema učenika u razredu.</td>
                       </tr>
                     )}
-                    {selectedWeek && students.length === 0 && (
-                      <tr>
-                        <td colSpan={(selectedWeek?.teachingDays?.length || 0) + 2} className="p-12 text-center text-gray-400 italic">Nema učenika u razredu.</td>
-                      </tr>
-                    )}
-                    {selectedWeek && sortStudentsBySurname(students).map(s => {
-                      let total = 0;
+                    {sortStudentsBySurname(students).map(s => {
+                      const studentAbsences = dayAbsences.filter(abs => abs.studentId === s.id);
+                      const justified = studentAbsences.filter(abs => abs.status === 'JUSTIFIED').length;
+                      const unjustified = studentAbsences.filter(abs => abs.status === 'UNJUSTIFIED').length;
+                      const reason = studentAbsences.map(abs => abs.note).filter(Boolean).join(', ');
                       return (
                         <tr key={`absence-row-${s.id}`} className="hover:bg-gray-50 transition-colors">
-                          <td className="p-2 font-bold text-gray-700 bg-gray-50/20 border-r border-gray-200">{s.name}</td>
-                          {selectedWeek?.teachingDays?.map(date => {
-                            const count = currentWeekAbsences.filter(abs => abs.studentId === s.id && abs.date === date).length;
-                            total += count;
+                          <td className="p-2 font-bold text-gray-700 bg-gray-50/20 border-r border-gray-200">{formatPersonName(s)}</td>
+                          <td className="p-1 text-center text-gray-400 border-r border-gray-200">/</td>
+                          {absencePeriods.map(hour => {
+                            const hasAbsence = studentAbsences.some(abs => Number(abs.hour) === hour);
                             return (
-                              <td key={`absence-cell-${s.id}-${date}`} className="p-2 border-r border-gray-200">
-                               <div className="flex flex-wrap gap-1 items-center justify-center">
-                                 {currentWeekAbsences
-                                   .filter(abs => abs.studentId === s.id && abs.date === date)
-                                   .map(abs => (
-                                     <div 
-                                       key={abs.id} 
-                                       className={cn(
-                                         "w-5 h-5 flex items-center justify-center text-[9px] font-bold text-white rounded-sm",
-                                         abs.status === 'JUSTIFIED' ? 'bg-green-500' :
-                                         abs.status === 'UNJUSTIFIED' ? 'bg-red-500' :
-                                         abs.status === 'OTHER' ? 'bg-yellow-400' :
-                                         'bg-orange-500' // PENDING
-                                       )}
-                                     >
-                                       {abs.hour}
-                                     </div>
-                                   ))}
-                               </div>
+                              <td key={`absence-cell-${s.id}-${hour}`} className="p-1 text-center border-r border-gray-200">
+                                {hasAbsence ? <span className="text-lg font-bold text-slate-900 leading-none">{hour}</span> : <span className="text-gray-400">/</span>}
                               </td>
                             );
                           })}
-                          <td className="p-2 text-center font-bold text-red-600 bg-red-50/30">
-                            {total}
-                          </td>
+                          <td className="p-2 text-center text-[10px] border-r border-gray-200">{reason || ''}</td>
+                          <td className="p-2 text-center border-r border-gray-200">{justified}</td>
+                          <td className="p-2 text-center">{unjustified}</td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
              </div>
+             </div>
+               );
+             })()}
           </div>
         )}
         {view === 'ABSENCES' && !selectedClass && (
@@ -2918,15 +2974,16 @@ setStudents(uniqueStudents);
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-300 text-gray-500 text-[10px] uppercase font-bold tracking-tight">
                     <th className="w-12 border-r border-gray-300 p-2 text-center">Sat</th>
-                    <th className="border-r border-gray-300 p-2 text-left">Sadržaj nastavnog sata</th>
+                    <th className="border-r border-gray-300 p-2 text-center">Sadržaj nastavnog sata</th>
+                    <th className="w-10 border-r border-gray-300 p-2 text-center">
+                      <UserX size={13} className="mx-auto text-slate-800" />
+                    </th>
                     <th className="border-r border-gray-300 p-2 text-left w-64">Napomena</th>
-                    <th className="w-16 p-2 text-center uppercase tracking-tight">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {(() => {
-                    const isAfternoonWeek = selectedWeek.shift === 'Popodne' || (selectedWeek.shift as string) === 'AFTERNOON';
-                    const activePeriods = isAfternoonWeek ? [0, 1, 2, 3, 4, 5, 6, 7] : [1, 2, 3, 4, 5, 6, 7, 8];
+                    const activePeriods = getActivePeriodsForWeek();
                     return activePeriods.map(hour => {
                       const lessons = dailyLessons.filter(l => l.hour === hour);
                       const isOccupied = lessons.length > 0;
@@ -2969,11 +3026,11 @@ setStudents(uniqueStudents);
                                   const lessonAbsences = dailyAbsences.filter(a => a.lessonId === lesson.id);
                                   
                                   return (
-                                    <div key={lesson.id} className={cn("text-[11px] leading-tight flex flex-col gap-1", idx > 0 && "pt-2 border-t border-gray-100")}>
+                                    <div key={lesson.id} className={cn("text-[11px] leading-tight flex flex-col gap-1 pl-1 border-l-4 border-[#005c8d]", idx > 0 && "pt-2 border-t border-gray-100")}>
                                       <div className="flex items-start justify-between gap-2">
                                         <div className="flex-1 animate-fadeIn">
                                           <div className="font-bold text-[#005c8d] uppercase mb-0.5">
-                                            {formatSubjectName(sub || { name: 'Predmet' }).toUpperCase()} - {lesson.teacherDisplayName && !lesson.teacherDisplayName.includes('undefined') ? lesson.teacherDisplayName : (teacher ? formatPersonName(teacher) : 'Nepoznat nastavnik')}
+                                            [{lesson.hour}] {formatSubjectName(sub || { name: 'Predmet' })} - {lesson.teacherDisplayName && !lesson.teacherDisplayName.includes('undefined') ? lesson.teacherDisplayName : (teacher ? formatPersonName(teacher) : 'Nepoznat nastavnik')}
                                             {lesson.groupName && ['GROUP_A', 'GROUP_B'].includes(lesson.groupName.toUpperCase()) ? <span className="text-gray-400 font-normal italic ml-1">({lesson.groupName === 'GROUP_A' ? 'Grupa A' : 'Grupa B'})</span> : (
                                               (lesson.groupName === 'grupa a' || lesson.groupName === 'Grupa A') ? <span className="text-gray-400 font-normal italic ml-1">(Grupa A)</span> :
                                               (lesson.groupName === 'grupa b' || lesson.groupName === 'Grupa B') ? <span className="text-gray-400 font-normal italic ml-1">(Grupa B)</span> : ''
@@ -2986,87 +3043,28 @@ setStudents(uniqueStudents);
                                             </div>
                                           ) : null}
   
-                                          {/* Gumb "Unesi izostanak" i prikaz izostanaka za dan/sat */}
-                                          <div className="mt-2 p-2 bg-red-50/40 border border-red-100/55 rounded flex flex-col gap-1.5">
-                                            <div className="flex items-center justify-between gap-4">
-                                              <span className="text-[9px] font-black uppercase text-red-700 tracking-wider flex items-center gap-1">
-                                              <Clock size={10} /> Izostanci za sat:
-                                            </span>
-                                            {canEdit && (
-                                              <button
-                                                onClick={(e) => {
-                                                  e.preventDefault();
-                                                  e.stopPropagation();
-                                                  setAbsenceEntryLesson(lesson);
-                                                  setAbsenceEntrySelectedStudents(lessonAbsences.map(a => a.studentId));
-                                                  setShowAbsenceEntryModal(true);
-                                                  console.log("OPEN ABSENCE ENTRY FOR LESSON", lesson);
-                                                }}
-                                                className="text-[9px] font-black uppercase text-red-600 hover:text-red-800 transition-colors flex items-center gap-1 bg-white border border-red-200 px-1.5 py-0.5 rounded shadow-sm hover:shadow active:scale-95 cursor-pointer"
-                                              >
-                                                <UserX size={10} /> Unesi izostanak
-                                              </button>
-                                            )}
-                                          </div>
-                                          {lessonAbsences.length > 0 ? (
-                                            <div className="flex flex-wrap gap-1 mt-0.5">
-                                              {lessonAbsences.map(a => {
-                                                const studentObj = students.find(s => s.id === a.studentId);
-                                                const displayStatus = a.status === 'PENDING' ? 'Čeka odluku' : (a.status === 'JUSTIFIED' ? 'Opravdano' : 'Neopravdano');
-                                                const badgeColor = a.status === 'JUSTIFIED' ? 'bg-green-100 text-green-700 border-green-200' : (a.status === 'UNJUSTIFIED' ? 'bg-red-100 text-red-700 border-red-200' : 'bg-amber-100 text-amber-700 border-amber-200');
-                                                return (
-                                                  <span key={a.id} className={cn("inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold border gap-1", badgeColor)}>
-                                                    <span>{studentObj ? studentObj.name : 'Nepoznat učenik'}</span>
-                                                    <span className="opacity-75 font-normal">({displayStatus})</span>
-                                                  </span>
-                                                );
-                                              })}
-                                            </div>
-                                          ) : (
-                                            <div className="text-[9px] text-gray-400 italic">Nema prijavljenih izostanaka za ovaj sat.</div>
-                                          )}
                                         </div>
                                       </div>
                                       
                                       {canEdit && (
-                                        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                                          <button 
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                              setAbsenceEntryLesson(lesson);
-                                              setAbsenceEntrySelectedStudents(lessonAbsences.map(a => a.studentId));
-                                              setShowAbsenceEntryModal(true);
-                                              console.log("OPEN ABSENCE ENTRY FOR LESSON", lesson);
-                                            }}
-                                            className={cn(
-                                              "p-1 px-2 border transition-all rounded-sm flex items-center gap-1 cursor-pointer",
-                                              lessonAbsences.length > 0 
-                                                ? "text-red-600 bg-red-50 border-red-200 hover:bg-red-100" 
-                                                : "text-gray-400 border-transparent hover:text-red-700 hover:bg-red-50 hover:border-red-100"
-                                            )}
-                                            title={`Unesi izostanke${lessonAbsences.length > 0 ? ` (Prijavljeno: ${lessonAbsences.length})` : ''}`}
-                                          >
-                                            <UserX size={12} />
-                                          </button>
+                                        <div className="flex items-center gap-1 shrink-0">
                                           <button 
                                             onClick={() => openLessonModal(hour, lesson)}
-                                            className="p-1 px-2 text-gray-400 hover:text-[#005c8d] hover:bg-white border border-transparent hover:border-gray-200 transition-all rounded-sm"
+                                            className="px-2 py-1 bg-[#005c8d] text-white font-bold text-[10px] hover:bg-[#004a70]"
                                             title="Uredi"
                                           >
-                                            <Edit2 size={12} />
+                                            Uredi
                                           </button>
                                           <button 
                                             onClick={(e) => handleLessonDelete(e, lesson.id)}
-                                            className="p-1 px-2 text-gray-400 hover:text-red-500 hover:bg-white border border-transparent hover:border-gray-200 transition-all rounded-sm"
+                                            className="px-2 py-1 bg-red-600 text-white font-bold text-[10px] hover:bg-red-700"
                                             title="Obriši"
                                           >
-                                            <Trash2 size={12} />
+                                            Obriši
                                           </button>
                                         </div>
                                       )}
                                     </div>
-                                  </div>
                                 );
                               })
                             ) : null}
@@ -3090,6 +3088,37 @@ setStudents(uniqueStudents);
                             )}
                           </div>
                         </td>
+                        <td className="border-r border-gray-200 p-2 align-middle text-center">
+                          {lessons.length > 0 ? (
+                            <div className="flex flex-col items-center gap-1">
+                              {lessons.map(lesson => {
+                                const lessonAbsences = dailyAbsences.filter(a => a.lessonId === lesson.id);
+                                const canEdit = isAdminUser || lesson.teacherId === user?.id;
+                                return (
+                                  <button
+                                    key={`absence-action-${lesson.id}`}
+                                    type="button"
+                                    onClick={() => canEdit && openAbsenceEntryForLesson(lesson)}
+                                    disabled={!canEdit}
+                                    className={cn(
+                                      "relative w-6 h-6 inline-flex items-center justify-center border text-slate-500",
+                                      canEdit ? "hover:border-[#005c8d] hover:text-[#005c8d] bg-white" : "opacity-40 cursor-not-allowed",
+                                      lessonAbsences.length > 0 && "border-red-300 text-red-700 bg-red-50"
+                                    )}
+                                    title="Unesi izostanak"
+                                  >
+                                    <UserX size={13} />
+                                    {lessonAbsences.length > 0 && (
+                                      <span className="absolute -right-1 -top-1 min-w-3 h-3 px-0.5 rounded-full bg-red-600 text-white text-[7px] leading-3 font-bold">
+                                        {lessonAbsences.length}
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+                        </td>
                         <td className="border-r border-gray-200 p-2 align-middle text-[10px] text-gray-400 italic leading-tight">
                           {isOccupied ? (
                             <div className="flex flex-col gap-2">
@@ -3100,19 +3129,6 @@ setStudents(uniqueStudents);
                               ))}
                             </div>
                           ) : '--'}
-                        </td>
-                        <td className="p-2 align-middle text-center">
-                          {isOccupied ? (
-                            <div className="flex flex-col gap-1 items-center">
-                               {lessons.map(l => (
-                                 <span key={`status-${l.id}`} className={cn("text-[8px] font-bold px-1 uppercase border", l.isHeld ? "bg-green-50 text-green-600 border-green-200" : "bg-red-50 text-red-600 border-red-200")}>
-                                   {l.isHeld ? "Održano" : "Nije odr."}
-                                 </span>
-                               ))}
-                            </div>
-                          ) : (
-                            <span className="text-[9px] text-gray-200 font-bold uppercase">Upis...</span>
-                          )}
                         </td>
                       </tr>
                     );
@@ -3236,7 +3252,7 @@ setStudents(uniqueStudents);
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-gray-300 w-full max-w-4xl flex flex-col max-h-[95vh] shadow-[10px_10px_0px_rgba(0,0,0,0.05)]">
             <div className="bg-[#005c8d] p-2 text-white flex items-center justify-between shrink-0">
-              <h3 className="text-[11px] font-bold uppercase tracking-tight">Unos podataka za {editingHour}. sat</h3>
+              <h3 className="text-[13px] font-bold">Unos sadržaja za {editingHour}. sat</h3>
               <button onClick={() => setShowLessonModal(false)} className="hover:text-red-200"><X size={16} /></button>
             </div>
             
@@ -3245,122 +3261,118 @@ setStudents(uniqueStudents);
                 onClick={() => setActiveLessonTab('SADRZAJ')}
                 className={cn("px-6 py-2 border-r border-gray-200", activeLessonTab === 'SADRZAJ' ? "bg-white text-[#005c8d] border-b-2 border-b-[#005c8d]" : "text-gray-500 hover:bg-gray-100")}
               >
-                Sadržaj sata
+                Sadržaj radnog sata
               </button>
               <button 
                 onClick={() => setActiveLessonTab('IZOSTANCI')}
                 className={cn("px-6 py-2 border-r border-gray-200", activeLessonTab === 'IZOSTANCI' ? "bg-white text-[#005c8d] border-b-2 border-b-[#005c8d]" : "text-gray-500 hover:bg-gray-100")}
               >
-                Učenici (Izostanci)
+                Izostanci
               </button>
               <button 
                 onClick={() => setActiveLessonTab('MATERIJALI')}
                 className={cn("px-6 py-2 border-r border-gray-200", activeLessonTab === 'MATERIJALI' ? "bg-white text-[#005c8d] border-b-2 border-b-[#005c8d]" : "text-gray-500 hover:bg-gray-100")}
               >
-                Opis / Napomena
+                Nastavni materijali
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4">
               {activeLessonTab === 'SADRZAJ' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-[11px]">
-                   <div className="space-y-3">
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-gray-500 uppercase block tracking-tight">Status sata</label>
-                        <div className="flex border border-gray-300">
-                          <button 
-                            onClick={() => setLessonForm({...lessonForm, isHeld: true})}
-                            className={cn("flex-1 py-1 font-bold uppercase border-r border-gray-300", lessonForm.isHeld ? "bg-[#005c8d] text-white" : "bg-white text-gray-400")}
-                          >
-                            Održan
-                          </button>
-                          <button 
-                            onClick={() => setLessonForm({...lessonForm, isHeld: false})}
-                            className={cn("flex-1 py-1 font-bold uppercase", !lessonForm.isHeld ? "bg-red-600 text-white" : "bg-white text-gray-400")}
-                          >
-                            Nije održan
-                          </button>
-                        </div>
-                      </div>
+                <div className="text-[13px] max-w-3xl">
+                  <div className="grid grid-cols-[90px_1fr] items-center gap-x-2 gap-y-2">
+                    <label className="text-gray-700">Sat održan:</label>
+                    <button
+                      type="button"
+                      onClick={() => setLessonForm({...lessonForm, isHeld: !lessonForm.isHeld})}
+                      className={cn(
+                        "w-28 border border-gray-300 px-2 py-1 text-left font-bold",
+                        lessonForm.isHeld ? "bg-[#005c8d] text-white" : "bg-white text-gray-600"
+                      )}
+                    >
+                      <span className={cn("inline-block h-4 w-4 mr-2 align-middle border", lessonForm.isHeld ? "bg-white border-white" : "bg-gray-100 border-gray-400")} />
+                      Da
+                    </button>
 
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black text-gray-400 uppercase block tracking-widest">Nastavni predmet</label>
-                        <select 
-                          className="w-full border border-gray-300 p-2 focus:border-[#005c8d] outline-none font-bold"
-                          value={lessonForm.subjectId}
-                          onChange={e => setLessonForm({...lessonForm, subjectId: e.target.value})}
-                        >
-                          <option value="">-- Odaberite predmet --</option>
-                          {lessonSubjectOptions.map(s => (
-                            <option key={s.id} value={s.id}>
-                              {formatSubjectName(s)}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                    <label className="text-gray-700">Predmet:</label>
+                    <select
+                      className="w-full border border-gray-300 px-2 py-1 focus:border-[#005c8d] outline-none"
+                      value={lessonForm.subjectId}
+                      onChange={e => setLessonForm({...lessonForm, subjectId: e.target.value})}
+                    >
+                      <option value="">-- Odaberite predmet --</option>
+                      {lessonSubjectOptions.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {formatSubjectName(s)}
+                        </option>
+                      ))}
+                    </select>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-black text-gray-400 uppercase block tracking-widest">Grupa</label>
-                          <select 
-                            className="w-full border border-gray-300 p-2 focus:border-[#005c8d] outline-none font-bold"
-                            value={lessonForm.groupName || 'FULL_CLASS'}
-                            onChange={e => setLessonForm({...lessonForm, groupName: e.target.value})}
-                          >
-                            <option value="FULL_CLASS">Cijeli razred</option>
-                            <option value="GROUP_A">Grupa A</option>
-                            <option value="GROUP_B">Grupa B</option>
-                          </select>
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-black text-gray-400 uppercase block tracking-widest">Blok sat</label>
-                          <select 
-                            className="w-full border border-gray-300 p-2 focus:border-[#005c8d] outline-none font-bold"
-                            value={lessonForm.blockCount || 1}
-                            onChange={e => {
-                              const val = parseInt(e.target.value);
-                              setLessonForm({
-                                ...lessonForm, 
-                                blockCount: val,
-                                isBlock: val > 1
-                              });
-                            }}
-                          >
-                            <option value="1">1 sat</option>
-                            <option value="2">2 sata</option>
-                            <option value="3">3 sata</option>
-                            <option value="4">4 sata</option>
-                            <option value="5">5 sati</option>
-                            <option value="6">6 sati</option>
-                            <option value="7">7 sati</option>
-                            <option value="8">8 sati</option>
-                          </select>
-                        </div>
-                      </div>
-                   </div>
+                    <label className="text-gray-700">Grupa:</label>
+                    <select
+                      className="w-full border border-gray-300 px-2 py-1 focus:border-[#005c8d] outline-none"
+                      value={lessonForm.groupName || 'FULL_CLASS'}
+                      onChange={e => setLessonForm({...lessonForm, groupName: e.target.value})}
+                    >
+                      <option value="FULL_CLASS">Nema grupe</option>
+                      <option value="GROUP_A">Grupa A</option>
+                      <option value="GROUP_B">Grupa B</option>
+                    </select>
 
-                   <div className="space-y-4">
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black text-gray-400 uppercase block tracking-widest">Nastavna jedinica (tema) *</label>
-                        <textarea 
-                          rows={6}
-                          className="w-full border border-gray-300 p-3 focus:border-[#005c8d] outline-none font-medium placeholder:font-normal placeholder:text-gray-300"
-                          placeholder="Upišite naziv/sadržaj nastavne jedinice..."
-                          value={lessonForm.topic}
-                          onChange={e => setLessonForm({...lessonForm, topic: e.target.value})}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-black text-gray-400 uppercase block tracking-widest">Bilješka nastavnika</label>
-                        <textarea 
-                          rows={2}
-                          className="w-full border-2 border-gray-100 p-4 rounded-lg focus:border-[#005c8d] outline-none font-medium text-sm"
-                          placeholder="Napomene, zadaća..."
-                          value={lessonForm.notes}
-                          onChange={e => setLessonForm({...lessonForm, notes: e.target.value})}
-                        />
-                      </div>
-                   </div>
+                    <label className="text-gray-700">Blok sat:</label>
+                    <select
+                      className="w-full border border-gray-300 px-2 py-1 focus:border-[#005c8d] outline-none"
+                      value={lessonForm.blockCount || 1}
+                      onChange={e => {
+                        const val = parseInt(e.target.value);
+                        setLessonForm({
+                          ...lessonForm,
+                          blockCount: val,
+                          isBlock: val > 1
+                        });
+                      }}
+                    >
+                      <option value="1">Ne</option>
+                      <option value="2">2 sata</option>
+                      <option value="3">3 sata</option>
+                      <option value="4">4 sata</option>
+                      <option value="5">5 sati</option>
+                      <option value="6">6 sati</option>
+                      <option value="7">7 sati</option>
+                      <option value="8">8 sati</option>
+                    </select>
+                  </div>
+
+                  <div className="mt-3 text-gray-500">
+                    <div>Prethodno upisani sat:</div>
+                    <div className="text-gray-400">
+                      {dailyLessons
+                        .filter(l => l.hour < editingHour && l.subjectId === lessonForm.subjectId)
+                        .sort((a, b) => b.hour - a.hour)[0]
+                        ? `[${dailyLessons.filter(l => l.hour < editingHour && l.subjectId === lessonForm.subjectId).sort((a, b) => b.hour - a.hour)[0].hour}] ${formatSubjectName(allSubjects.find(s => s.id === lessonForm.subjectId))} - ${dailyLessons.filter(l => l.hour < editingHour && l.subjectId === lessonForm.subjectId).sort((a, b) => b.hour - a.hour)[0].topic || ''}`
+                        : '--'}
+                    </div>
+                  </div>
+
+                  <div className="mt-3">
+                    <label className="block mb-1 text-gray-700">Nastavna jedinica: <span className="font-bold">*</span></label>
+                    <textarea
+                      rows={5}
+                      className="w-full border border-gray-300 p-2 focus:border-[#005c8d] outline-none"
+                      value={lessonForm.topic}
+                      onChange={e => setLessonForm({...lessonForm, topic: e.target.value})}
+                    />
+                  </div>
+
+                  <div className="mt-3">
+                    <label className="block mb-1 text-gray-700">Napomena:</label>
+                    <textarea
+                      rows={2}
+                      className="w-full border border-gray-300 p-2 focus:border-[#005c8d] outline-none"
+                      value={lessonForm.notes}
+                      onChange={e => setLessonForm({...lessonForm, notes: e.target.value})}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -3435,7 +3447,7 @@ setStudents(uniqueStudents);
                 onClick={saveLessonDetailed}
                 className="px-6 py-1.5 bg-[#005c8d] text-white border border-[#004a70] font-bold text-[10px] uppercase hover:bg-[#004a70]"
               >
-                Spremi podatke
+                {lessonForm.id ? 'Spremi promjene' : 'Unesi novi radni sat'}
               </button>
             </div>
           </div>
@@ -3444,93 +3456,96 @@ setStudents(uniqueStudents);
 
       {/* ABSENCE ENTRY MODAL (e-Dnevnik style) */}
       {showAbsenceEntryModal && absenceEntryLesson && (
-        <div className="fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-300 w-full max-w-lg flex flex-col max-h-[85vh] shadow-[10px_10px_0px_rgba(0,0,0,0.05)] animate-fadeIn">
-            <div className="bg-red-700 p-2 text-white flex items-center justify-between shrink-0">
-              <h3 className="text-[11px] font-bold uppercase tracking-tight flex items-center gap-1.5">
-                <UserX size={14} />
-                <span>Odsutni učenici - {selectedDate ? new Date(selectedDate).toLocaleDateString('hr-HR') : ''}.</span>
-              </h3>
-              <button 
-                onClick={() => {
-                  setShowAbsenceEntryModal(false);
-                  setAbsenceEntryLesson(null);
-                }} 
-                className="hover:text-red-200 cursor-pointer text-white border-none bg-transparent"
-              >
-                <X size={16} />
-              </button>
-            </div>
-            
-            <div className="p-4 bg-red-50/50 border-b border-gray-200 shrink-0 text-[11px]">
-              <div className="font-bold text-gray-700 uppercase">
-                Predmet: <span className="text-red-800">{absenceEntryLesson.hour}. sat / {formatSubjectName(allSubjects.find(s => s.id === absenceEntryLesson.subjectId)) || 'Nepoznato'}</span>
-              </div>
-              <p className="text-[10px] text-gray-500 mt-1 italic leading-tight">
-                Označite učenike koji nisu prisutni na ovom nastavnom satu.
-              </p>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              <div className="border border-gray-300 divide-y divide-gray-100 bg-white">
-                {sortStudentsBySurname(students)
-                  .map((student, idx) => {
-                    const isSelected = absenceEntrySelectedStudents.includes(student.id);
-                    return (
-                      <div 
-                        key={student.id} 
-                        onClick={() => {
-                          if (isSelected) {
-                            setAbsenceEntrySelectedStudents(prev => prev.filter(id => id !== student.id));
-                          } else {
-                            setAbsenceEntrySelectedStudents(prev => [...prev, student.id]);
-                          }
-                        }}
-                        className={cn(
-                          "flex items-center justify-between p-2.5 hover:bg-red-50/30 transition-colors cursor-pointer text-[11px]",
-                          isSelected ? "bg-red-50/40" : ""
-                        )}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="text-gray-400 font-bold w-4 text-right">{idx + 1}.</span>
-                          <span className={cn("font-bold text-gray-800", isSelected && "text-red-800")}>
-                            {student.name}
-                          </span>
-                        </div>
-                        <div className="flex items-center">
-                          <input 
-                            type="checkbox"
-                            checked={isSelected}
-                            readOnly
-                            className="w-4 h-4 text-red-600 focus:ring-red-500 border-gray-300 rounded cursor-pointer pointer-events-none"
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-
-            <div className="bg-gray-50 p-3 border-t border-gray-300 flex justify-end items-center gap-3 shrink-0">
-              <div className="text-[10px] text-gray-500 font-bold uppercase mr-auto flex items-center gap-1">
-                <span>Odabrano odsutnih:</span>
-                <span className="text-red-700 font-black">{absenceEntrySelectedStudents.length}</span>
-              </div>
-              <button 
+        <div className="fixed inset-0 bg-black/30 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-300 w-full max-w-3xl flex flex-col max-h-[88vh] shadow-lg animate-fadeIn">
+            <div className="relative px-6 py-4 border-b border-gray-200 text-center">
+              <button
+                type="button"
                 onClick={() => {
                   setShowAbsenceEntryModal(false);
                   setAbsenceEntryLesson(null);
                 }}
-                className="px-4 py-1.5 border border-gray-300 text-gray-600 font-bold text-[10px] uppercase hover:bg-white cursor-pointer"
+                className="absolute right-3 top-3 text-gray-500 hover:text-gray-900"
+                title="Zatvori"
+              >
+                <X size={16} />
+              </button>
+              <h3 className="text-[16px] font-normal text-gray-800">
+                Odsutni učenici - {selectedDate ? new Date(selectedDate).toLocaleDateString('hr-HR') : ''} ({selectedDate ? getDayName(selectedDate).toLowerCase() : ''})
+              </h3>
+              <div className="mt-1 text-[13px]">
+                <span>Predmet: </span>
+                <select
+                  className="border border-gray-300 px-2 py-0.5 text-[12px] focus:border-[#005c8d] outline-none"
+                  value={absenceEntryLesson.id}
+                  onChange={(event) => {
+                    const nextLesson = dailyLessons.find(l => l.id === event.target.value);
+                    if (nextLesson) openAbsenceEntryForLesson(nextLesson);
+                  }}
+                >
+                  {dailyLessons.map(lesson => (
+                    <option key={lesson.id} value={lesson.id}>
+                      {lesson.hour}. sat , {formatSubjectName(allSubjects.find(s => s.id === lesson.subjectId))}
+                    </option>
+                  ))}
+                </select>
+                <span className="ml-1 font-bold">*</span>
+              </div>
+            </div>
+
+            <div className="px-6 py-2 flex items-center justify-between text-[12px]">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSaveAbsenceEntry}
+                  className="px-3 py-1.5 bg-[#005c8d] text-white font-bold hover:bg-[#004a70]"
+                >
+                  Unesi
+                </button>
+                <span>Odabrano učenika: <strong>{absenceEntrySelectedStudents.length}</strong></span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAbsenceEntryModal(false);
+                  setAbsenceEntryLesson(null);
+                }}
+                className="px-3 py-1.5 bg-[#005c8d] text-white font-bold hover:bg-[#004a70]"
               >
                 Odustani
               </button>
-              <button 
-                onClick={handleSaveAbsenceEntry}
-                className="px-6 py-1.5 bg-red-700 text-white border border-red-800 font-bold text-[10px] uppercase hover:bg-red-800 shadow-sm active:scale-95 cursor-pointer"
-              >
-                Unesi
-              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 pb-6">
+              <div className="border-t border-gray-200">
+                {sortStudentsBySurname(students).map((student, idx) => {
+                  const isSelected = absenceEntrySelectedStudents.includes(student.id);
+                  return (
+                    <button
+                      type="button"
+                      key={student.id}
+                      onClick={() => {
+                        if (isSelected) {
+                          setAbsenceEntrySelectedStudents(prev => prev.filter(id => id !== student.id));
+                        } else {
+                          setAbsenceEntrySelectedStudents(prev => [...prev, student.id]);
+                        }
+                      }}
+                      className={cn(
+                        "w-full flex items-center justify-between border-b border-gray-200 px-2 py-2 text-left text-[13px]",
+                        isSelected ? "bg-red-100 text-red-900" : "bg-gray-50 text-gray-400"
+                      )}
+                    >
+                      <span>{idx + 1}. {formatPersonName(student)}</span>
+                      {isSelected ? (
+                        <CheckCircle size={17} className="text-green-600" />
+                      ) : (
+                        <XCircle size={17} className="text-gray-400" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
