@@ -163,6 +163,30 @@ async function startServer() {
       next();
     });
 
+    app.get("/api/health/env", (_req, res) => {
+      const supabaseUrlLooksValid = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(supabaseUrl);
+      res.json({
+        success: true,
+        environment: {
+          vercel: process.env.VERCEL === "1",
+          nodeEnv: process.env.NODE_ENV || null
+        },
+        supabase: {
+          hasUrl: Boolean(supabaseUrl),
+          urlLooksValid: supabaseUrlLooksValid,
+          urlHost: supabaseUrl ? (() => {
+            try {
+              return new URL(supabaseUrl).host;
+            } catch {
+              return "INVALID_URL";
+            }
+          })() : null,
+          hasServiceRoleKey: Boolean(supabaseServiceKey),
+          serviceRoleKeyLooksLikeJwt: /^eyJ/i.test(supabaseServiceKey || "")
+        }
+      });
+    });
+
     // In-memory caches for backend session inactivity monitoring
     const tokenUserCacheForInactivity = new Map<string, { userId: string; expires: number }>();
     const userLastActivityMap = new Map<string, number>();
