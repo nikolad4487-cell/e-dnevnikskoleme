@@ -103,6 +103,17 @@ const getGradeLevel = (className?: string) => {
 
 const storageKey = (studentId?: string) => `studentCertificates:${studentId || 'unknown'}`;
 
+const loadImageAsDataUrl = async (url: string) => {
+  const response = await fetch(url);
+  const blob = await response.blob();
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+};
+
 export default function PotvrdePage() {
   const { user: currentUser } = useAuth();
   const { selectedChildId, selectedClassId, selectedSchoolId } = useSelection();
@@ -199,22 +210,10 @@ export default function PotvrdePage() {
     }
   };
 
-  const drawCroatianMark = (doc: jsPDF, x: number, y: number) => {
-    const size = 2.2;
-    doc.setDrawColor(190, 190, 190);
-    for (let row = 0; row < 5; row += 1) {
-      for (let col = 0; col < 5; col += 1) {
-        doc.setFillColor((row + col) % 2 === 0 ? 219 : 255, (row + col) % 2 === 0 ? 48 : 255, (row + col) % 2 === 0 ? 52 : 255);
-        doc.rect(x + col * size, y + row * size, size, size, 'FD');
-      }
-    }
-    doc.setDrawColor(0, 0, 0);
-    doc.rect(x, y, size * 5, size * 5);
-  };
-
   const buildPdf = async (record: CertificateRecord) => {
     const doc = new jsPDF('p', 'mm', 'a4');
     await registerUnicodeFont(doc);
+    const coatOfArmsDataUrl = await loadImageAsDataUrl('/coat-of-arms-croatia.png').catch(() => '');
     doc.setFont('NotoSans', 'normal');
     doc.setTextColor(0, 0, 0);
 
@@ -285,23 +284,27 @@ export default function PotvrdePage() {
     doc.line(tableX + colA, tableY, tableX + colA, tableY + totalHeight);
 
     let currentY = tableY;
-    verificationRows.forEach((row) => {
+    verificationRows.forEach((row, index) => {
       const rowTop = currentY;
       const rowBottom = currentY + row.height;
       if (!row.spanValue) {
         doc.line(tableX + colA + colB, rowTop, tableX + colA + colB, rowBottom);
       }
       currentY = rowBottom;
-      doc.line(tableX, currentY, tableX + totalWidth, currentY);
+      const nextRow = verificationRows[index + 1];
+      const rowLineStartX = row.topSection && nextRow?.topSection ? tableX + colA : tableX;
+      doc.line(rowLineStartX, currentY, tableX + totalWidth, currentY);
     });
 
     const topSectionHeight = verificationRows
       .filter((row) => row.topSection)
       .reduce((sum, row) => sum + row.height, 0);
-    drawCroatianMark(doc, tableX + 19.5, tableY + 8);
+    if (coatOfArmsDataUrl) {
+      doc.addImage(coatOfArmsDataUrl, 'PNG', tableX + colA / 2 - 6.5, tableY + 6, 13, 17.3);
+    }
     doc.setFontSize(4.8);
-    doc.text('Republika Hrvatska', tableX + colA / 2, tableY + Math.min(38, topSectionHeight - 16), { align: 'center' });
-    doc.text('Ministarstvo znanosti, obrazovanja i mladih', tableX + colA / 2, tableY + Math.min(44, topSectionHeight - 10), { align: 'center' });
+    doc.text('Republika Hrvatska', tableX + colA / 2, tableY + Math.min(34, topSectionHeight - 16), { align: 'center' });
+    doc.text('Ministarstvo znanosti, obrazovanja i mladih', tableX + colA / 2, tableY + Math.min(40, topSectionHeight - 10), { align: 'center' });
 
     doc.setFontSize(5.2);
     currentY = tableY;
