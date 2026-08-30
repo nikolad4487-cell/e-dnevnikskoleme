@@ -217,7 +217,7 @@ export default function ClassSelectionPage() {
               id: school.id,
               name: school.name || 'Nepoznata ustanova',
               type: school.type || school.subtype,
-              roles: existing?.roles?.length ? existing.roles : (isProfileGlobalAdmin ? [Role.ADMIN] : ['DOSTUPNO'])
+              roles: existing?.roles?.length ? existing.roles : (isProfileGlobalAdmin ? [Role.ADMIN] : [Role.SCHOOL_ADMIN])
             });
           });
         }

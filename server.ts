@@ -77,12 +77,22 @@ function writeJsonFile(filename: string, data: any[]) {
   }
 }
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "";
+function normalizeSupabaseUrl(value: string | undefined): string {
+  const cleaned = String(value || "").trim().replace(/^['"]|['"]$/g, "");
+  if (!cleaned) return "";
+  if (/^https?:\/\//i.test(cleaned)) return cleaned.replace(/\/+$/, "");
+  if (/^[a-z0-9-]+\.supabase\.co$/i.test(cleaned)) return `https://${cleaned}`;
+  return cleaned.replace(/\/+$/, "");
+}
+
+const supabaseUrl = normalizeSupabaseUrl(process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL);
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || "";
 
 // Supabase Admin Client (Service Role)
 let supabaseAdmin: any;
 if (supabaseUrl && supabaseServiceKey) {
+  console.log("[SERVER] Supabase admin URL configured:", supabaseUrl);
+  console.log("[SERVER] Supabase service key configured:", Boolean(supabaseServiceKey));
   supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
@@ -90,7 +100,10 @@ if (supabaseUrl && supabaseServiceKey) {
     }
   });
 } else {
-  console.warn("[SERVER] Supabase credentials missing. Admin features and seeder will be unavailable.");
+  console.warn("[SERVER] Supabase credentials missing. Admin features and seeder will be unavailable.", {
+    hasSupabaseUrl: Boolean(supabaseUrl),
+    hasServiceRoleKey: Boolean(supabaseServiceKey)
+  });
 }
 
 async function startServer() {
@@ -4039,7 +4052,20 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       const { data, error } = authResult;
 
       if (error) {
-        console.error(`[LOGIN_API] Supabase signIn Error for ${DemoresolvedEmail}:`, error.message);
+        console.error(`[LOGIN_API] Supabase signIn Error for ${DemoresolvedEmail}:`, {
+          name: error.name,
+          message: error.message,
+          status: (error as any).status,
+          hasSupabaseUrl: Boolean(supabaseUrl),
+          supabaseUrl
+        });
+        if (/fetch failed/i.test(error.message || "")) {
+          return res.status(503).json({
+            success: false,
+            error: "Povezivanje sa Supabase Auth poslužiteljem nije uspjelo. Provjerite SUPABASE_URL/VITE_SUPABASE_URL na Vercelu.",
+            code: "SUPABASE_AUTH_FETCH_FAILED"
+          });
+        }
         if (error.message === 'Invalid login credentials') {
           return res.status(401).json({ error: "Neispravni podaci za prijavu." });
         }
@@ -4146,9 +4172,19 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       console.error('[AUTH_LOGIN] Failed:', {
         name: error instanceof Error ? error.name : 'UnknownError',
         message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
+        stack: error instanceof Error ? error.stack : undefined,
+        hasSupabaseUrl: Boolean(supabaseUrl),
+        supabaseUrl,
+        hasServiceRoleKey: Boolean(supabaseServiceKey)
       });
       res.setHeader('Content-Type', 'application/json');
+      if (/fetch failed/i.test(error?.message || "")) {
+        return res.status(503).json({
+          success: false,
+          error: "Povezivanje sa Supabase poslužiteljem nije uspjelo. Provjerite SUPABASE_URL/VITE_SUPABASE_URL i SUPABASE_SERVICE_ROLE_KEY na Vercelu.",
+          code: "SUPABASE_FETCH_FAILED"
+        });
+      }
       res.status(500).json({
         success: false,
         error: 'Prijava trenutno nije moguća.'

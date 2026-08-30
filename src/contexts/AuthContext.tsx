@@ -527,7 +527,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   console.log("HOSTNAME", hostname);
 
-  const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz";
+  const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz" || hostname === "ednevnik.skolehr.xyz";
   const isStudentDomain = hostname === "ocjene.skolehr.xyz";
 
   if (typeof window !== 'undefined' && hostname && !isTeacherDomain && !isStudentDomain && !hostname.includes('localhost') && !hostname.includes('run.app') && !hostname.includes('vercel.app') && !hostname.includes('127.0.0.1')) {
