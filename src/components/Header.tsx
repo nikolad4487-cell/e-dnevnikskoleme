@@ -201,6 +201,10 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
 
               <button
                 type="button"
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  navigate('/student/potvrde');
+                }}
                 className="w-full flex items-center justify-between px-3 py-3 text-xs text-slate-800 hover:bg-slate-50 transition-colors border-b border-gray-100"
               >
                 <span>POTVRDE</span>

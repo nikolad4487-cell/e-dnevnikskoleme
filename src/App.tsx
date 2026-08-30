@@ -37,6 +37,7 @@ const RasporedPage = lazy(() => import('./pages/student/RasporedPage'));
 const StudentIspitiPage = lazy(() => import('./pages/student/StudentIspitiPage'));
 const OsobniPodaciPage = lazy(() => import('./pages/student/OsobniPodaciPage'));
 const FinalThesisPage = lazy(() => import('./pages/student/FinalThesisPage'));
+const PotvrdePage = lazy(() => import('./pages/student/PotvrdePage'));
 const FinalThesisTeacherPage = lazy(() => import('./pages/teacher/FinalThesisTeacherPage'));
 
 const RavnateljDashboardPage = lazy(() => import('./pages/admin/RavnateljDashboardPage'));
@@ -312,6 +313,7 @@ export default function App() {
                           <Route path="izostanci" element={<IzostanciPage />} />
                           <Route path="raspored" element={<RasporedPage />} />
                           <Route path="osobni-podaci" element={<OsobniPodaciPage />} />
+                          <Route path="potvrde" element={<PotvrdePage />} />
                           <Route path="zavrsni-rad" element={<FinalThesisPage />} />
                           <Route path="kalendar" element={<SkolskiKalendarPage readOnly={true} />} />
                           <Route path="informativka" element={<InformativkaPage />} />
