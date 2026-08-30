@@ -245,57 +245,77 @@ export default function PotvrdePage() {
     const colA = 50;
     const colB = 34;
     const colC = 86;
-    const rowHeights = [10, 10, 10, 10, 10, 16, 12, 10];
     const totalWidth = colA + colB + colC;
-    const totalHeight = rowHeights.reduce((sum, height) => sum + height, 0);
+    const lineHeight = 3;
+    const cellPadding = 2;
+    const verificationInfo = 'Elektronički zapis se čuva i najviše 3 mjeseca od trenutka generiranja te se u tom roku može izvršiti provjera elektroničkog zapisa koji se pristupa korištenjem broja zapisa i kontrolnog broja otisnutog u kontrolnom dijelu elektroničkog zapisa, putem Internet adrese https://ocjene.skole.hr/potvrde/verify';
 
+    doc.setFontSize(5.2);
     doc.setLineWidth(0.25);
+
+    const verificationRows = [
+      { left: '', label: 'Vrijeme izdavanja', value: formatDateTime(record.issuedAt), topSection: true },
+      { left: '', label: 'Izdavatelj certifikata', value: 'C=HR L=Zagreb O=Hrvatska akademska i istraživačka mreža - CARNet\nOU=RIS CN=Odjel za razvoj usluga', topSection: true },
+      { left: '', label: 'Serijski broj', value: record.verification.serialNumber, topSection: true },
+      { left: '', label: 'Algoritam potpisa', value: 'RSA-SHA256', topSection: true },
+      { left: '', label: 'Broj zapisa', value: record.verification.recordNumber, topSection: true },
+      { left: '', label: 'Kontrolni broj', value: record.verification.controlNumber, topSection: true },
+      { left: 'Elektronički pečat', label: '', value: record.verification.seal, spanValue: true },
+      { left: 'Informacije za provjeru dokumenta', label: '', value: verificationInfo, spanValue: true },
+      { left: 'Napomena', label: '', value: 'Elektronički pečat kreiran je certifikatom Hrvatske akademske i istraživačke mreže', spanValue: true },
+    ].map((row) => {
+      const leftLines = doc.splitTextToSize(row.left, colA - cellPadding * 2);
+      const labelLines = row.spanValue ? [] : doc.splitTextToSize(row.label, colB - cellPadding * 2);
+      const valueWidth = row.spanValue ? colB + colC - cellPadding * 2 : colC - cellPadding * 2;
+      const valueLines = row.value
+        .split('\n')
+        .flatMap((line) => doc.splitTextToSize(line, valueWidth));
+      const contentLines = Math.max(leftLines.length, labelLines.length, valueLines.length);
+      return {
+        ...row,
+        leftLines,
+        labelLines,
+        valueLines,
+        height: Math.max(row.topSection ? 10 : 12, contentLines * lineHeight + cellPadding * 2),
+      };
+    });
+
+    const totalHeight = verificationRows.reduce((sum, row) => sum + row.height, 0);
     doc.rect(tableX, tableY, totalWidth, totalHeight);
     doc.line(tableX + colA, tableY, tableX + colA, tableY + totalHeight);
-    doc.line(tableX + colA + colB, tableY, tableX + colA + colB, tableY + totalHeight - rowHeights[5] - rowHeights[6] - rowHeights[7]);
-
-    let lineY = tableY;
-    rowHeights.forEach((height) => {
-      lineY += height;
-      doc.line(tableX, lineY, tableX + totalWidth, lineY);
-    });
-
-    drawCroatianMark(doc, tableX + 18, tableY + 10);
-    doc.setFontSize(5.5);
-    doc.text('Republika Hrvatska', tableX + 25, tableY + 33, { align: 'center' });
-    doc.text('Ministarstvo znanosti, obrazovanja i mladih', tableX + 25, tableY + 39, { align: 'center' });
-
-    doc.setFontSize(5.5);
-    const rows = [
-      ['Vrijeme izdavanja', formatDateTime(record.issuedAt)],
-      ['Izdavatelj certifikata', 'C=HR L=Zagreb O=Hrvatska akademska i istraživačka mreža - CARNet\nOU=RIS CN=Odjel za razvoj usluga'],
-      ['Serijski broj', record.verification.serialNumber],
-      ['Algoritam potpisa', 'RSA-SHA256'],
-      ['Broj zapisa', record.verification.recordNumber],
-    ];
 
     let currentY = tableY;
-    rows.forEach(([label, value], index) => {
-      const centerY = currentY + rowHeights[index] / 2 + 1.5;
-      doc.text(label, tableX + colA + 2, centerY);
-      doc.text(doc.splitTextToSize(value, colC - 4), tableX + colA + colB + 2, currentY + 4);
-      currentY += rowHeights[index];
+    verificationRows.forEach((row) => {
+      const rowTop = currentY;
+      const rowBottom = currentY + row.height;
+      if (!row.spanValue) {
+        doc.line(tableX + colA + colB, rowTop, tableX + colA + colB, rowBottom);
+      }
+      currentY = rowBottom;
+      doc.line(tableX, currentY, tableX + totalWidth, currentY);
     });
 
-    doc.text('Kontrolni broj', tableX + colA + 2, currentY + 6);
-    doc.text(record.verification.controlNumber, tableX + colA + colB + 2, currentY + 6);
-    currentY += rowHeights[5] - 6;
+    const topSectionHeight = verificationRows
+      .filter((row) => row.topSection)
+      .reduce((sum, row) => sum + row.height, 0);
+    drawCroatianMark(doc, tableX + 19.5, tableY + 8);
+    doc.setFontSize(4.8);
+    doc.text('Republika Hrvatska', tableX + colA / 2, tableY + Math.min(38, topSectionHeight - 16), { align: 'center' });
+    doc.text('Ministarstvo znanosti, obrazovanja i mladih', tableX + colA / 2, tableY + Math.min(44, topSectionHeight - 10), { align: 'center' });
 
-    doc.text('Elektronički pečat', tableX + 2, currentY + 8);
-    doc.text(doc.splitTextToSize(record.verification.seal, totalWidth - colA - 4), tableX + colA + 2, currentY + 4);
-    currentY += rowHeights[6];
-
-    doc.text('Informacije za provjeru dokumenta', tableX + 2, currentY + 5);
-    doc.text(doc.splitTextToSize('Elektronički zapis se čuva i najviše 3 mjeseca od trenutka generiranja te se u tom roku može izvršiti provjera elektroničkog zapisa koji se pristupa korištenjem broja zapisa i kontrolnog broja otisnutog u kontrolnom dijelu elektroničkog zapisa, putem Internet adrese https://ocjene.skole.hr/potvrde/verify', totalWidth - colA - 4), tableX + colA + 2, currentY + 3);
-    currentY += rowHeights[7];
-
-    doc.text('Napomena', tableX + 2, currentY + 5);
-    doc.text('Elektronički pečat kreiran je certifikatom Hrvatske akademske i istraživačke mreže', tableX + colA + 2, currentY + 5);
+    doc.setFontSize(5.2);
+    currentY = tableY;
+    verificationRows.forEach((row) => {
+      const textY = currentY + cellPadding + 2;
+      if (row.leftLines.length > 0) {
+        doc.text(row.leftLines, tableX + cellPadding, textY);
+      }
+      if (!row.spanValue && row.labelLines.length > 0) {
+        doc.text(row.labelLines, tableX + colA + cellPadding, textY);
+      }
+      doc.text(row.valueLines, tableX + colA + (row.spanValue ? cellPadding : colB + cellPadding), textY);
+      currentY += row.height;
+    });
 
     return doc;
   };
