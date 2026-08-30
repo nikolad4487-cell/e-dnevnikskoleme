@@ -85,13 +85,17 @@ function normalizeSupabaseUrl(value: string | undefined): string {
   return cleaned.replace(/\/+$/, "");
 }
 
-const supabaseUrl = normalizeSupabaseUrl(process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL);
+const FALLBACK_SUPABASE_URL = "https://hkqlbeetlvrplaeubncc.supabase.co";
+const configuredSupabaseUrl = normalizeSupabaseUrl(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL);
+const configuredSupabaseUrlLooksValid = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(configuredSupabaseUrl);
+const supabaseUrl = configuredSupabaseUrlLooksValid ? configuredSupabaseUrl : FALLBACK_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || "";
 
 // Supabase Admin Client (Service Role)
 let supabaseAdmin: any;
 if (supabaseUrl && supabaseServiceKey) {
   console.log("[SERVER] Supabase admin URL configured:", supabaseUrl);
+  console.log("[SERVER] Supabase URL source:", configuredSupabaseUrlLooksValid ? "environment" : "fallback");
   console.log("[SERVER] Supabase service key configured:", Boolean(supabaseServiceKey));
   supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
@@ -102,6 +106,8 @@ if (supabaseUrl && supabaseServiceKey) {
 } else {
   console.warn("[SERVER] Supabase credentials missing. Admin features and seeder will be unavailable.", {
     hasSupabaseUrl: Boolean(supabaseUrl),
+    configuredSupabaseUrl,
+    usingFallbackSupabaseUrl: !configuredSupabaseUrlLooksValid,
     hasServiceRoleKey: Boolean(supabaseServiceKey)
   });
 }
@@ -173,6 +179,9 @@ async function startServer() {
         },
         supabase: {
           hasUrl: Boolean(supabaseUrl),
+          configuredUrlPresent: Boolean(configuredSupabaseUrl),
+          configuredUrlLooksValid: configuredSupabaseUrlLooksValid,
+          usingFallbackUrl: !configuredSupabaseUrlLooksValid,
           urlLooksValid: supabaseUrlLooksValid,
           urlHost: supabaseUrl ? (() => {
             try {
