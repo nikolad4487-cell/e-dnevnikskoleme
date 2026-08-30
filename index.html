@@ -6,8 +6,22 @@
     <meta name="theme-color" content="#005c8d" />
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
+    <link id="favicon" rel="icon" type="image/png" href="/favicon-ednevnik.png" />
+    <link id="apple-touch-icon" rel="apple-touch-icon" href="/favicon-ednevnik.png" />
     <link rel="manifest" href="/manifest.json" />
     <title>Sustav e-Dnevnik</title>
+    <script>
+      (() => {
+        const hostname = window.location.hostname;
+        const iconPath = hostname === 'e-ocjene.skolehr.xyz'
+          ? '/favicon-e-ocjene.png'
+          : '/favicon-ednevnik.png';
+        const favicon = document.getElementById('favicon');
+        const appleTouchIcon = document.getElementById('apple-touch-icon');
+        if (favicon) favicon.setAttribute('href', iconPath);
+        if (appleTouchIcon) appleTouchIcon.setAttribute('href', iconPath);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
