@@ -1,19 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
-import { logSystemAction } from '../../utils/auditLogger';
-import { 
-  FileText, Plus, Trash2, Calendar, User, 
-  AlertCircle, CheckCircle2, History, XCircle, Ban
-} from 'lucide-react';
+import { Ban } from 'lucide-react';
 import { ThesisApplication } from '../../types';
-import { FinalExamDefenseSchedule } from '../../components/FinalExamDefenseSchedule';
+
+type ThesisFormState = {
+  title: string;
+  mentorId: string;
+  examTerm: string;
+  studentNote: string;
+};
+
+const emptyForm: ThesisFormState = {
+  title: '',
+  mentorId: '',
+  examTerm: '',
+  studentNote: '',
+};
+
+const formatDate = (value?: string) => {
+  if (!value) return '—';
+  return new Date(value).toLocaleDateString('hr-HR');
+};
 
 export default function FinalThesisPage() {
   const { user, isParent } = useAuth();
-  const { selectedChildId } = useSelection();
+  const { selectedChildId, selectedClassId, selectedSchoolId } = useSelection();
   const studentId = isParent ? selectedChildId : user?.id;
 
   const [applications, setApplications] = useState<ThesisApplication[]>([]);
@@ -21,726 +35,378 @@ export default function FinalThesisPage() {
   const [loading, setLoading] = useState(true);
   const [isAccessible, setIsAccessible] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [enrolledClassId, setEnrolledClassId] = useState<string>('');
   const [showCreateForm, setShowCreateForm] = useState(false);
-  
-  // Checking access logic
+  const [showPastApplications, setShowPastApplications] = useState(false);
+  const [deregisterNote, setDeregisterNote] = useState('');
+  const [form, setForm] = useState<ThesisFormState>(emptyForm);
+
+  const sortedApplications = useMemo(
+    () => [...applications].sort((a, b) => String(b.submitted_at || '').localeCompare(String(a.submitted_at || ''))),
+    [applications]
+  );
+
+  const activeApp = sortedApplications.find(app => app.status === 'CREATED' || app.status === 'ACCEPTED' || app.status === 'COMPLETED');
+  const latestDeregistered = sortedApplications.find(app => app.status === 'DEREGISTERED');
+  const pastApplications = sortedApplications.filter(app => app.id !== activeApp?.id);
+  const isAccepted = activeApp?.status === 'ACCEPTED' || activeApp?.status === 'COMPLETED';
+  const isRegistered = Boolean(activeApp?.application_classification_number || activeApp?.application_registry_number);
+
+  const mentorName = (mentorId?: string) => mentors.find(m => m.id === mentorId)?.name || '—';
+
   useEffect(() => {
     if (!studentId) return;
-    const checkAccess = async () => {
-        const { data: enrollment } = await supabase
-            .from('student_class_enrollments')
-            .select('class_id, student_id, classes:class_id(grade_level, program_id, programs:program_id(duration_years))')
-            .eq('student_id', studentId)
-            .eq('status', 'ACTIVE')
-            .maybeSingle();
 
-        if (enrollment && enrollment.classes) {
-            setEnrolledClassId(enrollment.class_id);
-            const clazz = enrollment.classes as any;
-            const program = clazz.programs as any;
-            if (program && clazz.grade_level !== undefined) {
-               setIsAccessible(clazz.grade_level === program.duration_years);
-            } else {
-               setIsAccessible(false);
-            }
-        } else {
-            setIsAccessible(false);
-        }
+    const checkAccess = async () => {
+      const { data: enrollment } = await supabase
+        .from('student_class_enrollments')
+        .select('classes:class_id(grade_level, programs:program_id(duration_years))')
+        .eq('student_id', studentId)
+        .eq('status', 'ACTIVE')
+        .maybeSingle();
+
+      const clazz = enrollment?.classes as any;
+      const program = clazz?.programs as any;
+      setIsAccessible(Boolean(clazz?.grade_level && program?.duration_years && clazz.grade_level === program.duration_years));
     };
+
     checkAccess();
   }, [studentId]);
-
-  // Form State
-  const [title, setTitle] = useState('');
-  const [mentorId, setMentorId] = useState('');
-  const [examTerm, setExamTerm] = useState('Ljetni');
-  const [studentNote, setStudentNote] = useState('');
-  const [uploadNote, setUploadNote] = useState('');
-  const [isSpeciallySubmittingPdf, setIsSpeciallySubmittingPdf] = useState(false);
-
-  // Deregistration State
-  const [showDeregisterModal, setShowDeregisterModal] = useState(false);
-  const [deregisteringApp, setDeregisteringApp] = useState<ThesisApplication | null>(null);
-  const [deregisterNote, setDeregisterNote] = useState('');
 
   const fetchAppData = async () => {
     if (!studentId) return;
     setLoading(true);
     try {
-      // Fetch mentors
       const { data: mentorsData } = await supabase
         .from('user_profiles')
         .select('id, name, role')
         .in('role', ['TEACHER', 'HOMEROOM', 'ADMIN', 'SCHOOL_ADMIN']);
       setMentors(mentorsData || []);
 
-      // Fetch applications via api route
       const response = await fetch(`/api/final-thesis?studentId=${studentId}`);
       if (response.ok) {
-        const data = await response.json();
-        setApplications(data || []);
+        setApplications(await response.json());
       } else {
-        // Fallback to Supabase directly
         const { data } = await supabase
           .from('final_thesis')
           .select('*')
           .eq('student_id', studentId)
           .order('submitted_at', { ascending: false });
-        if (data) setApplications(data as any[]);
+        setApplications((data || []) as any[]);
       }
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      toast.error('Greška pri učitavanju podataka.');
+      toast.error('Greška pri učitavanju završnih radova.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (isAccessible) {
-        fetchAppData();
-    }
+    if (isAccessible) fetchAppData();
   }, [studentId, isAccessible]);
 
-  // Check if has active application
-  const activeApp = applications.find(
-    app => app.status === 'CREATED' || app.status === 'ACCEPTED'
-  );
+  useEffect(() => {
+    if (activeApp?.status === 'CREATED') {
+      setForm({
+        title: activeApp.thesis_title || '',
+        mentorId: activeApp.mentor_id || '',
+        examTerm: activeApp.exam_period || '',
+        studentNote: activeApp.student_note || '',
+      });
+      setShowCreateForm(false);
+    } else if (!activeApp) {
+      setForm(emptyForm);
+      setShowCreateForm(true);
+    }
+  }, [activeApp?.id, activeApp?.status]);
 
-  const handleSubmitApplication = async (e: React.FormEvent) => {
+  const resetForm = () => {
+    setForm(emptyForm);
+    setShowCreateForm(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!studentId) return;
-    if (activeApp) {
-      toast.error('Već imate aktivnu prijavu!');
-      return;
-    }
-    if (!title.trim() || !mentorId || !examTerm) {
-      toast.error('Molimo popunite sva obavezna polja.');
+    if (!form.title.trim() || !form.mentorId || !form.examTerm) {
+      toast.error('Molimo popunite naziv rada, rok i mentora.');
       return;
     }
 
     setSubmitting(true);
     try {
-      // Get student's class and school from user profile or enrollment
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('class_id, school_id')
-        .eq('id', studentId)
-        .maybeSingle();
-
-      const class_id = profile?.class_id || 'N/A';
-      const school_id = profile?.school_id || 'N/A';
-
-      const appPayload = {
+      const payload = {
         student_id: studentId,
-        class_id,
-        school_id,
-        thesis_title: title.trim(),
-        mentor_id: mentorId,
-        exam_period: examTerm,
-        student_note: studentNote.trim(),
-        status: 'CREATED'
+        class_id: selectedClassId || activeApp?.class_id || 'N/A',
+        school_id: selectedSchoolId || activeApp?.school_id || 'N/A',
+        thesis_title: form.title.trim(),
+        mentor_id: form.mentorId,
+        exam_period: form.examTerm,
+        student_note: form.studentNote.trim(),
+        status: 'CREATED',
       };
 
-      const response = await fetch('/api/final-thesis', {
-        method: 'POST',
+      const response = await fetch(activeApp?.status === 'CREATED' ? `/api/final-thesis/${activeApp.id}` : '/api/final-thesis', {
+        method: activeApp?.status === 'CREATED' ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(appPayload)
+        body: JSON.stringify(payload),
       });
 
-      if (response.ok) {
-        toast.success('Prijava uspješno podnesena!');
-        setTitle('');
-        setMentorId('');
-        setStudentNote('');
-        setShowCreateForm(false);
-        fetchAppData();
-      } else {
-        throw new Error('Could not submit');
-      }
-    } catch (err: any) {
-      toast.error('Greška pri slanju prijave.');
+      if (!response.ok) throw new Error('Save failed');
+
+      toast.success(activeApp?.status === 'CREATED' ? 'Prijava je spremljena.' : 'Završni rad je prijavljen.');
+      setShowCreateForm(false);
+      await fetchAppData();
+    } catch (err) {
+      console.error(err);
+      toast.error('Spremanje prijave nije uspjelo.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleDeleteApplication = async (id: string) => {
-    if (!confirm('Jeste li sigurni da želite obrisati prijavu?')) return;
+  const handleDelete = async () => {
+    if (!activeApp || activeApp.status !== 'CREATED') return;
+    if (!window.confirm('Želite li trajno izbrisati ovu prijavu završnog rada?')) return;
 
     try {
-      const response = await fetch(`/api/final-thesis/${id}`, {
-        method: 'DELETE'
-      });
-
-      if (response.ok) {
-        toast.success('Prijava uspješno obrisana.');
-        fetchAppData();
-      } else {
-        throw new Error('Delete failed');
-      }
-    } catch (err: any) {
-      toast.error('Greška pri brisanju prijave.');
+      const response = await fetch(`/api/final-thesis/${activeApp.id}`, { method: 'DELETE' });
+      if (!response.ok) throw new Error('Delete failed');
+      toast.success('Prijava je izbrisana.');
+      resetForm();
+      await fetchAppData();
+    } catch (err) {
+      console.error(err);
+      toast.error('Brisanje prijave nije uspjelo.');
     }
   };
 
-  const handleDeregisterSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!deregisteringApp || !deregisterNote.trim()) {
-      toast.error('Molimo unesite razlog odjave.');
-      return;
-    }
+  const handleDeregister = async () => {
+    if (!activeApp) return;
 
     try {
-      const response = await fetch(`/api/final-thesis/${deregisteringApp.id}`, {
+      const response = await fetch(`/api/final-thesis/${activeApp.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: 'DEREGISTERED',
-          deregistration_note: deregisterNote,
-          deregistered_at: new Date().toISOString()
-        })
+          deregistration_note: deregisterNote.trim(),
+          deregistered_at: new Date().toISOString(),
+        }),
       });
 
-      if (response.ok) {
-        toast.success('Barijera uspješno odjavljena te poslana na odobrenje.');
-        setShowDeregisterModal(false);
-        setDeregisteringApp(null);
-        setDeregisterNote('');
-        fetchAppData();
-      } else {
-        throw new Error('Deregistration update failed');
-      }
+      if (!response.ok) throw new Error('Deregister failed');
+      toast.success('Završni rad je odjavljen.');
+      setDeregisterNote('');
+      resetForm();
+      await fetchAppData();
     } catch (err) {
-      toast.error('Greška pri odjavi.');
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'CREATED':
-        return <span className="px-2 py-1 text-xs font-black bg-blue-100 text-blue-800 rounded">PODNESENO (CREATED)</span>;
-      case 'ACCEPTED':
-        return <span className="px-2 py-1 text-xs font-black bg-emerald-100 text-emerald-800 rounded">PRIHVAĆENO (ACCEPTED)</span>;
-      case 'REJECTED':
-        return <span className="px-2 py-1 text-xs font-black bg-rose-100 text-rose-800 rounded">ODBIJENO (REJECTED)</span>;
-      case 'DEREGISTERED':
-        return <span className="px-2 py-1 text-xs font-black bg-amber-100 text-amber-800 rounded">ODJAVLJENO (DEREGISTERED)</span>;
-      case 'COMPLETED':
-        return <span className="px-2 py-1 text-xs font-black bg-indigo-100 text-indigo-800 rounded">DOVRŠENO (COMPLETED)</span>;
-      default:
-        return <span className="px-2 py-1 text-xs font-black bg-gray-100 text-gray-800 rounded">{status}</span>;
+      console.error(err);
+      toast.error('Odjava završnog rada nije uspjela.');
     }
   };
 
   if (loading || isAccessible === null) {
-    return (
-      <div className="p-8 flex items-center justify-center font-sans text-gray-500">
-        Učitavanje podataka o završnom radu...
-      </div>
-    );
+    return <div className="p-8 text-gray-500">Učitavanje podataka o završnom radu...</div>;
   }
 
   if (!isAccessible) {
     return (
-        <div className="p-8 flex flex-col items-center justify-center font-sans text-gray-500 space-y-4">
-            <Ban size={48} className="text-amber-500" />
-            <p className="text-center text-lg font-bold">Završni rad dostupan je samo učenicima završnih razreda.</p>
-        </div>
+      <div className="p-8 flex flex-col items-center justify-center font-sans text-gray-500 space-y-4">
+        <Ban size={48} className="text-amber-500" />
+        <p className="text-center text-lg font-bold">Završni rad dostupan je samo učenicima završnih razreda.</p>
+      </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-5 w-full space-y-6 font-sans bg-white min-h-full">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-base font-normal text-slate-900">ZAVRŠNI RAD</h1>
-        {!activeApp && (
+    <div className="p-4 md:p-5 w-full min-h-full bg-white font-sans">
+      <div className="flex items-center justify-between gap-4 mb-10">
+        <h1 className="text-lg font-normal text-slate-950">
+          {showCreateForm || activeApp?.status === 'CREATED' || latestDeregistered ? 'PRIJAVA ZAVRŠNOG RADA' : 'ZAVRŠNI RAD'}
+        </h1>
+        <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => setShowCreateForm(true)}
-            className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium"
+            onClick={() => setShowPastApplications(prev => !prev)}
+            className="bg-[#0784d3] text-white px-4 py-2 rounded-md text-sm font-medium"
           >
-            Kreiraj novi
+            Prošle prijave
           </button>
-        )}
+          {!showCreateForm && !activeApp && (
+            <button
+              type="button"
+              onClick={resetForm}
+              className="bg-[#0784d3] text-white px-4 py-2 rounded-md text-sm font-medium"
+            >
+              Kreiraj novi
+            </button>
+          )}
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6">
-        {/* Left/Middle area: Active application orsubmission form */}
-        <div className="lg:col-span-2 space-y-6">
-          {activeApp && !showCreateForm ? (
-            <div className="bg-white rounded-lg border border-slate-100 shadow-sm overflow-hidden animate-in fade-in duration-300">
-              <div className="p-3 space-y-4">
-                <div>
-                  <p className="text-sm font-bold text-gray-900">Naslov - {activeApp.thesis_title}</p>
-                  <p className="text-xs text-gray-900">Mentor - {mentors.find(m => m.id === activeApp.mentor_id)?.name || 'Opći mentor / Nepoznato'}</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 hidden">
-                  <div>
-                    <h3 className="text-xs text-gray-400 font-black uppercase tracking-wider">Odabrani mentor</h3>
-                    <p className="font-semibold text-gray-800 mt-1 flex items-center gap-1">
-                      <User size={14} className="text-gray-400" />
-                      {mentors.find(m => m.id === activeApp.mentor_id)?.name || 'Opći mentor / Nepoznato'}
-                    </p>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs text-gray-400 font-black uppercase tracking-wider">Rok obrane</h3>
-                    <p className="font-semibold text-gray-800 mt-1 flex items-center gap-1">
-                      <Calendar size={14} className="text-gray-400" />
-                      {activeApp.exam_period} rok
-                    </p>
-                  </div>
-                </div>
-
-                {activeApp.student_note && (
-                  <div className="bg-slate-50 p-3 rounded border border-slate-100">
-                    <h3 className="text-[10px] text-gray-400 font-black uppercase tracking-wider">Vaša napomena</h3>
-                    <p className="text-xs text-gray-700 mt-1 whitespace-pre-wrap">{activeApp.student_note}</p>
-                  </div>
-                )}
-
-                {activeApp.status === 'ACCEPTED' && (
-                  <div className="bg-emerald-50 text-emerald-800 p-3.5 rounded border border-emerald-200 flex items-center gap-2 font-semibold text-xs leading-normal">
-                    <CheckCircle2 size={16} className="text-emerald-600 flex-shrink-0" />
-                    <span>
-                      Mentor je prihvatio prijavu dana: {activeApp.accepted_at ? new Date(activeApp.accepted_at).toLocaleDateString('hr-HR') : '—'}
-                    </span>
-                  </div>
-                )}
-
-                {activeApp.application_classification_number && (
-                  <div className="bg-emerald-50/50 p-3 rounded border border-emerald-100 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="font-bold text-emerald-800 block">Klasa prijavnice:</span>
-                      <span className="font-mono text-gray-700">{activeApp.application_classification_number}</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-emerald-800 block">Urudžbeni broj prijavnice:</span>
-                      <span className="font-mono text-gray-700">{activeApp.application_registry_number}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* PDF Work Upload & Revision Control System */}
-                <div className="bg-slate-50 border border-slate-200 rounded-lg p-5 space-y-4">
-                  <div className="flex items-center gap-2 border-b pb-2">
-                    <span className="text-xs font-black text-slate-900 uppercase tracking-wider">📁 Dokumentacija završnog rada (PDF)</span>
-                  </div>
-
-                  {/* Versions history list */}
-                  {activeApp.versions && activeApp.versions.length > 0 ? (
-                    <div className="space-y-2">
-                      <span className="text-[10px] font-black text-slate-400 uppercase block">Predane verzije rada:</span>
-                      {activeApp.versions.map((v: any, vIdx: number) => (
-                        <div key={vIdx} className="flex justify-between items-center text-xs p-3 bg-white border rounded">
-                          <div className="space-y-0.5">
-                            <span className="font-black text-slate-900">Verzija v{v.version_num}</span>
-                            <span className="text-slate-500 font-medium block">Datoteka: {v.filename}</span>
-                            {v.notes && <p className="text-[10px] text-slate-400 italic">" {v.notes} "</p>}
-                          </div>
-                          <span className="text-[9px] text-[#005c8d] bg-[#005c8d]/5 px-2 py-1 font-bold rounded">
-                            Predano: {new Date(v.uploaded_at).toLocaleDateString('hr-HR')}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400 italic">Još niste priložili niti jednu verziju rada u PDF formatu.</p>
-                  )}
-
-                  {/* Upload Form */}
-                  {(!activeApp.submission_confirmed) && (
-                    <div className="pt-2 border-t border-dashed space-y-3">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase block">Priloži rad (PDF format)</label>
-                          <input 
-                            type="file" 
-                            accept=".pdf"
-                            onChange={async (e) => {
-                              const files = e.target.files;
-                              if (!files || files.length === 0) return;
-                              const file = files[0];
-                              
-                              try {
-                                setIsSpeciallySubmittingPdf(true);
-                                const currentVersions = activeApp.versions || [];
-                                const newVerNum = currentVersions.length + 1;
-                                
-                                const nextVer = {
-                                  version_num: newVerNum,
-                                  filename: file.name,
-                                  uploaded_at: new Date().toISOString(),
-                                  notes: uploadNote || 'Inicijalna predaja rada.'
-                                };
-
-                                const updatedVersions = [...currentVersions, nextVer];
-
-                                const response = await fetch(`/api/final-thesis/${activeApp.id}`, {
-                                  method: 'PUT',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                    versions: updatedVersions,
-                                    pdf_url: file.name,
-                                    submitted_at: new Date().toISOString()
-                                  })
-                                });
-
-                                if (response.ok) {
-                                  toast.success(`Uspješno učitana verzija v${newVerNum} rada!`);
-                                  setUploadNote('');
-                                  
-                                  // Log audit action
-                                  await logSystemAction({
-                                    executor_id: studentId,
-                                    school_id: activeApp.school_id || 'N/A',
-                                    action_type: 'UPLOAD_THESIS_VERSION',
-                                    entity_type: 'FINAL_THESIS',
-                                    entity_id: activeApp.id,
-                                    new_value: { filename: file.name, version: newVerNum }
-                                  });
-
-                                  fetchAppData();
-                                }
-                              } catch (uploadErr) {
-                                toast.error('Nije moguće učitati PDF.');
-                              } finally {
-                                setIsSpeciallySubmittingPdf(false);
-                              }
-                            }}
-                            className="bg-white text-xs border rounded p-1 animate-pulse"
-                          />
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-[10px] font-black text-slate-400 uppercase block">Popratna bilješka uz verziju</label>
-                          <input 
-                            type="text" 
-                            placeholder="npr. Ispravljena poglavlja..."
-                            value={uploadNote}
-                            onChange={(e) => setUploadNote(e.target.value)}
-                            className="w-full bg-white border rounded p-1.5 text-xs text-slate-800 focus:outline-none"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Submission Confirmation Toggle */}
-                  {activeApp.versions && activeApp.versions.length > 0 && (
-                    <div className="pt-4 border-t border-slate-200">
-                      {activeApp.submission_confirmed ? (
-                        <div className="bg-emerald-50 border border-emerald-200 p-3 rounded text-emerald-800 text-xs font-bold uppercase tracking-tight flex items-center justify-between">
-                          <span>✅ Predaja završnog rada konačno potvrđena!</span>
-                          <span className="text-[10px] text-emerald-600 font-extrabold font-mono uppercase">
-                            Status: Zaključano
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="bg-amber-50 border border-amber-200 p-4 rounded space-y-3">
-                          <div className="text-amber-905 text-xs font-bold leading-relaxed">
-                            ⚠️ Pažnja: Nakon konačne potvrde predaje rada, dokumenti i verzije će biti zaključani te poslani mentoru i ispitnom povjerenstvu na procjenu.
-                          </div>
-                          <button 
-                            type="button"
-                            onClick={async () => {
-                              if (!window.confirm('Potvrđujem da je predana verzija rada konačna i ispravna. Želite li nastaviti s konačnim zaključivanjem predaje?')) return;
-                              
-                              try {
-                                const response = await fetch(`/api/final-thesis/${activeApp.id}`, {
-                                  method: 'PUT',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                    submission_confirmed: true,
-                                    submission_confirmed_at: new Date().toISOString(),
-                                    status: 'COMPLETED' // Elevate status to complete pending defense
-                                  })
-                                });
-
-                                if (response.ok) {
-                                  toast.success('Konačna predaja rada uspješno zaključana i potvrđena!');
-                                  
-                                  // Log audit action
-                                  await logSystemAction({
-                                    executor_id: studentId,
-                                    school_id: activeApp.school_id || 'N/A',
-                                    action_type: 'CONFIRM_THESIS_SUBMISSION',
-                                    entity_type: 'FINAL_THESIS',
-                                    entity_id: activeApp.id,
-                                    new_value: { confirmed_at: new Date().toISOString() }
-                                  });
-
-                                  fetchAppData();
-                                }
-                              } catch (err) {
-                                console.error(err);
-                              }
-                            }}
-                            className="bg-slate-900 hover:bg-slate-850 text-white text-[10px] font-black uppercase tracking-wider px-4 py-2 rounded shadow-sm inline-flex items-center gap-1.5"
-                          >
-                            🔒 Konačno potvrdi predaju rada
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-4 border-t border-gray-100 flex items-center justify-between text-xs text-gray-400">
-                  <span>Datum podnošenja: {new Date(activeApp.submitted_at).toLocaleDateString('hr-HR')}</span>
-                  
-                  {activeApp.status === 'CREATED' && (
-                    <button
-                      onClick={() => handleDeleteApplication(activeApp.id)}
-                      className="flex items-center gap-1 text-red-600 hover:text-red-800 font-black uppercase tracking-wider transition-colors"
-                    >
-                      <Trash2 size={14} />
-                      Obriši prijavu
-                    </button>
-                  )}
-
-                  {activeApp.status === 'ACCEPTED' && (
-                    <button
-                      onClick={() => {
-                        setDeregisteringApp(activeApp);
-                        setShowDeregisterModal(true);
-                      }}
-                      className="flex items-center gap-1 text-amber-600 hover:text-amber-800 font-black uppercase tracking-wider transition-colors"
-                    >
-                      <Ban size={14} />
-                      Odjavi obranu radnje
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : showCreateForm ? (
-            <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-              {applications.filter(app => app.status === 'REJECTED').slice(0, 1).map(rejectedApp => (
-                <div key={rejectedApp.id} className="bg-rose-50 border border-rose-200 text-rose-900 rounded p-4 mb-5 text-xs leading-normal">
-                  <div className="flex items-start gap-2">
-                    <XCircle size={16} className="text-rose-600 mt-0.5 flex-shrink-0" />
-                    <div>
-                      <strong className="block text-rose-800 font-bold mb-0.5">Prethodna prijava odbijena:</strong>
-                      <span>
-                        Mentor je odbio prijavu dana: {rejectedApp.rejected_at ? new Date(rejectedApp.rejected_at).toLocaleDateString('hr-HR') : '—'}
-                      </span>
-                      {rejectedApp.rejection_note && (
-                        <div className="mt-2 bg-rose-100/50 p-2.5 rounded border border-rose-200 text-rose-800 italic">
-                          <strong>Razlog odbijanja:</strong> {rejectedApp.rejection_note}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              <div className="flex items-center gap-2 text-[#005c8d] mb-4 border-b border-gray-100 pb-3">
-                <Plus size={20} />
-                <h2 className="font-black uppercase text-sm tracking-wider">Nova prijava završnog rada</h2>
-              </div>
-
-              <form onSubmit={handleSubmitApplication} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-black uppercase tracking-wider text-gray-500 mb-1">
-                    Predloženi naslov završnog rada <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder="Unesite točan ili predloženi naslov rada..."
-                    className="w-full text-sm font-semibold p-2.5 border border-gray-300 rounded focus:outline-[#005c8d]"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-black uppercase tracking-wider text-gray-500 mb-1">
-                      Mentor <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      required
-                      value={mentorId}
-                      onChange={(e) => setMentorId(e.target.value)}
-                      className="w-full text-sm font-semibold p-2.5 border border-gray-300 rounded bg-white focus:outline-[#005c8d]"
-                    >
-                      <option value="">-- Odaberite mentora --</option>
-                      {mentors.map(m => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-black uppercase tracking-wider text-gray-500 mb-1">
-                      Rok obrane <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      required
-                      value={examTerm}
-                      onChange={(e) => setExamTerm(e.target.value)}
-                      className="w-full text-sm font-semibold p-2.5 border border-gray-300 rounded bg-white focus:outline-[#005c8d]"
-                    >
-                      <option value="Zimski">Zimski rok</option>
-                      <option value="Ljetni">Ljetni rok</option>
-                      <option value="Jesenski">Jesenski rok</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-black uppercase tracking-wider text-gray-500 mb-1">
-                    Napomena mentoru (ili dodatne napomene)
-                  </label>
-                  <textarea
-                    value={studentNote}
-                    onChange={(e) => setStudentNote(e.target.value)}
-                    placeholder="Unesite važne informacije, dogovorene detalje..."
-                    className="w-full text-sm p-2.5 border border-gray-300 rounded h-24 focus:outline-[#005c8d] resize-none"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full bg-[#005c8d] hover:bg-[#004a70] text-white py-3 rounded text-center text-xs font-black uppercase tracking-widest transition-all shadow-md disabled:opacity-50"
-                >
-                  {submitting ? 'Slanje...' : 'POŠALJI PRIJAVU RADNJE'}
-                </button>
-              </form>
-            </div>
+      {showPastApplications && (
+        <div className="mb-8 space-y-2">
+          <h2 className="text-base font-normal text-slate-950">PROŠLE PRIJAVE</h2>
+          {pastApplications.length === 0 ? (
+            <div className="rounded-md border border-slate-100 bg-white p-3 text-sm text-slate-500 shadow-sm">Nema prošlih prijava.</div>
           ) : (
-            <div className="bg-white rounded-lg border border-slate-100 shadow-sm p-4 text-sm text-slate-500">
-              Nema aktivne prijave završnog rada.
+            pastApplications.map(app => (
+              <div key={app.id} className="rounded-md border border-slate-100 bg-white p-3 text-sm shadow-sm">
+                <div className="font-bold">Naslov - {app.thesis_title}</div>
+                <div>Mentor - {mentorName(app.mentor_id)}</div>
+                <div>Status - {app.status}</div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {!showCreateForm && activeApp && activeApp.status !== 'CREATED' && (
+        <div className="space-y-4">
+          <div className="rounded-md border border-slate-100 bg-white p-3 text-sm shadow-sm">
+            <div className="font-bold">Naslov - {activeApp.thesis_title}</div>
+            <div>Mentor - {mentorName(activeApp.mentor_id)}</div>
+          </div>
+
+          {isAccepted && (
+            <div className="max-w-6xl mx-auto space-y-4 pt-6">
+              <h2 className="text-xl font-bold text-slate-950">Prijava završnog rada:</h2>
+              <div>
+                <label className="text-base normal-case tracking-normal text-slate-950 mb-0">Naziv rada</label>
+                <textarea readOnly value={activeApp.thesis_title || ''} className="min-h-[42px]" />
+              </div>
+              <div>
+                <label className="text-base normal-case tracking-normal text-slate-950 mb-0">Rok</label>
+                <input readOnly value={activeApp.exam_period || ''} />
+              </div>
+              <div>
+                <label className="text-base normal-case tracking-normal text-slate-950 mb-0">Mentor</label>
+                <input readOnly value={mentorName(activeApp.mentor_id)} />
+              </div>
+              <div>
+                <label className="text-base normal-case tracking-normal text-slate-950 mb-0">Napomena</label>
+                <textarea readOnly value={activeApp.student_note || ''} />
+              </div>
+
+              <h2 className="text-xl font-bold text-slate-950">Odobravanje završnog rada:</h2>
+              <div className="rounded-md border border-slate-100 bg-white p-4 text-base shadow-sm">
+                Mentor je prihvatio prijavu dana: {formatDate(activeApp.accepted_at)}.
+              </div>
+
+              {isRegistered && (
+                <>
+                  <h3 className="text-base font-bold text-slate-950">Podaci o prijavi</h3>
+                  <div className="rounded-md border border-slate-100 bg-white p-4 text-base leading-8 shadow-sm">
+                    <div>Klasa: {activeApp.application_classification_number || '—'}</div>
+                    <div>Ur. Broj: {activeApp.application_registry_number || '—'}</div>
+                    <div>Datum: {formatDate(activeApp.application_data_entered_at || activeApp.accepted_at)}</div>
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="text-base normal-case tracking-normal text-slate-950 mb-0">Napomena mentora</label>
+                <textarea readOnly value={(activeApp as any).mentor_note || activeApp.rejection_note || ''} />
+              </div>
+
+              <div className="flex justify-center">
+                <button
+                  type="button"
+                  onClick={handleDeregister}
+                  className="bg-[#0784d3] text-white px-6 py-3 rounded-md text-lg"
+                >
+                  Odjavi
+                </button>
+              </div>
             </div>
           )}
         </div>
+      )}
 
-        {/* Right sidebar: Rules and summary info */}
-        <div className="space-y-6 hidden">
-          <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-5 text-xs text-amber-900 leading-relaxed space-y-3">
-            <h3 className="font-black text-xs uppercase text-amber-800 flex items-center gap-1">
-              <AlertCircle size={14} /> Pravila i upute za završni rad
-            </h3>
-            <ul className="list-disc pl-4 space-y-2 font-medium">
-              <li>Možete imati <strong>samo jednu</strong> aktivnu prijavu za obranu.</li>
-              <li>Dok je prijava u statusu <strong>CREATED</strong>, možete je obrisati i ponovno poslati ako ste napravili pogrešku.</li>
-              <li>Nakon što mentor <strong>PRIHVATI (ACCEPTED)</strong> projekt, prijava se zaključava i ne može se obrisati.</li>
-              <li>Ako trebate promijeniti prihvaćenu obranu, morate podnijeti <strong>zahtjev za odjavu</strong> uz obavezan razlog.</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-8">
-        <FinalExamDefenseSchedule classId={enrolledClassId} />
-      </div>
-
-      {/* History of submissions wrapper */}
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="font-black uppercase text-sm tracking-wider text-gray-800 mb-4 flex items-center gap-2">
-          <History size={18} className="text-gray-500" />
-          Povijest prijava i odjava
-        </h2>
-
-        {applications.filter(app => app.id !== activeApp?.id).length === 0 ? (
-          <p className="text-xs text-gray-400 italic font-bold">Nema povijesnih unosa prijava.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse text-xs">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-gray-400 uppercase font-black">
-                  <th className="p-3">Naslov rada</th>
-                  <th className="p-3">Mentor</th>
-                  <th className="p-3">Rok obrane</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3">Prijavnica Klasa/Urbroj</th>
-                  <th className="p-3">Odjavnica Klasa/Urbroj</th>
-                  <th className="p-3">Razlog odbijanja / odjave</th>
-                </tr>
-              </thead>
-              <tbody>
-                {applications
-                  .filter(app => app.id !== activeApp?.id)
-                  .map((app) => (
-                    <tr key={app.id} className="border-b border-gray-100 hover:bg-gray-50">
-                      <td className="p-3 font-bold text-gray-800">{app.thesis_title}</td>
-                      <td className="p-3 font-semibold text-gray-600">
-                        {mentors.find(m => m.id === app.mentor_id)?.name || 'Opći mentor'}
-                      </td>
-                      <td className="p-3 font-semibold text-gray-600">{app.exam_period}</td>
-                      <td className="p-3 font-bold">{getStatusBadge(app.status)}</td>
-                      <td className="p-3 font-mono text-gray-500">
-                        {app.application_classification_number ? (
-                          <>
-                            {app.application_classification_number} <br />
-                            {app.application_registry_number}
-                          </>
-                        ) : '—'}
-                      </td>
-                      <td className="p-3 font-mono text-gray-500">
-                        {app.deregistration_classification_number ? (
-                          <>
-                            {app.deregistration_classification_number} <br />
-                            {app.deregistration_registry_number}
-                          </>
-                        ) : '—'}
-                      </td>
-                      <td className="p-3 text-red-700 italic max-w-xs truncate">
-                        {app.status === 'REJECTED' ? app.rejection_note : (app.deregistration_note || '—')}
-                      </td>
-                    </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* Deregister Modal */}
-      {showDeregisterModal && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
-            <h3 className="text-base font-black text-gray-800 uppercase tracking-tight mb-2">Odjava obrane završnog rada</h3>
-            <p className="text-xs text-gray-500 mb-4">Molimo unesite valjan razlog za odjavu obrane. Ovaj zahtjev šalje se mentoru i školi na odobrenje.</p>
-            
-            <form onSubmit={handleDeregisterSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-black uppercase text-gray-400 mb-1">Razlog odjave i objašnjenje</label>
-                <textarea
-                  required
-                  value={deregisterNote}
-                  onChange={(e) => setDeregisterNote(e.target.value)}
-                  placeholder="Unesite razloge npr. promjena teme, medicinski razlozi..."
-                  className="w-full text-xs p-3 border border-gray-300 rounded h-24 focus:outline-[#005c8d] resize-none"
-                />
+      {(showCreateForm || activeApp?.status === 'CREATED') && (
+        <div className="max-w-6xl mx-auto">
+          {latestDeregistered && !activeApp && (
+            <div className="mb-5">
+              <div className="rounded-md border border-slate-100 bg-white p-5 text-base shadow-sm">
+                Završni rad je odjavljen dana: {formatDate(latestDeregistered.deregistered_at)}.
               </div>
+              <label className="text-base normal-case tracking-normal text-slate-950 mb-0">Napomena uz odjavu:</label>
+              <textarea readOnly value={latestDeregistered.deregistration_note || ''} />
+            </div>
+          )}
 
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowDeregisterModal(false);
-                    setDeregisteringApp(null);
-                  }}
-                  className="px-4 py-2 border border-gray-300 text-gray-600 rounded text-xs font-black uppercase tracking-wider"
-                >
-                  Odustani
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-amber-600 text-white rounded text-xs font-black uppercase tracking-wider hover:bg-amber-700"
-                >
-                  Pošalji zahtjev
-                </button>
+          <form onSubmit={handleSave} className="space-y-0">
+            <h2 className="text-xl font-bold text-slate-950 mb-5">Prijava završnog rada:</h2>
+
+            <label className="text-base normal-case tracking-normal text-slate-950 mb-0">Naziv rada</label>
+            <textarea
+              required
+              value={form.title}
+              onChange={e => setForm({ ...form, title: e.target.value })}
+              placeholder="Unesite naziv rada"
+              className="min-h-[42px]"
+            />
+
+            <label className="text-base normal-case tracking-normal text-slate-950 mb-0">Rok</label>
+            <select required value={form.examTerm} onChange={e => setForm({ ...form, examTerm: e.target.value })}>
+              <option value="">odaberite rok prijave</option>
+              <option value="Zimski">zimski rok</option>
+              <option value="Ljetni">ljetni rok</option>
+              <option value="Jesenski">jesenski rok</option>
+            </select>
+
+            <label className="text-base normal-case tracking-normal text-slate-950 mb-0">Mentor</label>
+            <select required value={form.mentorId} onChange={e => setForm({ ...form, mentorId: e.target.value })}>
+              <option value="">odaberite mentora</option>
+              {mentors.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+
+            <label className="text-base normal-case tracking-normal text-slate-950 mb-0">Napomena</label>
+            <textarea
+              value={form.studentNote}
+              onChange={e => setForm({ ...form, studentNote: e.target.value })}
+              placeholder="Unesite napomenu"
+              className="min-h-[58px]"
+            />
+
+            {activeApp?.status === 'CREATED' && (
+              <div className="pt-4">
+                <label className="text-base normal-case tracking-normal text-slate-950 mb-0">Napomena uz odjavu:</label>
+                <textarea value={deregisterNote} onChange={e => setDeregisterNote(e.target.value)} />
               </div>
-            </form>
-          </div>
+            )}
+
+            <div className="flex items-center justify-center gap-10 md:gap-52 pt-3">
+              <button
+                type="submit"
+                disabled={submitting}
+                className="bg-[#0784d3] text-white px-6 py-3 rounded-md text-lg disabled:opacity-60"
+              >
+                Spremi
+              </button>
+              {activeApp?.status === 'CREATED' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleDeregister}
+                    className="bg-[#0784d3] text-white px-6 py-3 rounded-md text-lg"
+                  >
+                    Odjavi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    className="bg-red-600 text-white px-6 py-3 rounded-md text-lg"
+                  >
+                    Izbriši
+                  </button>
+                </>
+              )}
+            </div>
+          </form>
         </div>
       )}
     </div>
