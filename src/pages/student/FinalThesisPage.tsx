@@ -22,6 +22,7 @@ export default function FinalThesisPage() {
   const [isAccessible, setIsAccessible] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [enrolledClassId, setEnrolledClassId] = useState<string>('');
+  const [showCreateForm, setShowCreateForm] = useState(false);
   
   // Checking access logic
   useEffect(() => {
@@ -153,6 +154,7 @@ export default function FinalThesisPage() {
         setTitle('');
         setMentorId('');
         setStudentNote('');
+        setShowCreateForm(false);
         fetchAppData();
       } else {
         throw new Error('Could not submit');
@@ -250,32 +252,32 @@ export default function FinalThesisPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6 font-sans">
-      <div className="border-b border-gray-200 pb-4">
-        <h1 className="text-2xl font-black text-[#005c8d] uppercase tracking-tight">Prijava i obrana završnog rada</h1>
-        <p className="text-xs text-gray-500 font-bold uppercase mt-1">Pregled vašeg rada i rokova obrane</p>
+    <div className="p-4 md:p-5 w-full space-y-6 font-sans bg-white min-h-full">
+      <div className="flex items-center justify-between gap-4">
+        <h1 className="text-base font-normal text-slate-900">ZAVRŠNI RAD</h1>
+        {!activeApp && (
+          <button
+            type="button"
+            onClick={() => setShowCreateForm(true)}
+            className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium"
+          >
+            Kreiraj novi
+          </button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {/* Left/Middle area: Active application orsubmission form */}
         <div className="lg:col-span-2 space-y-6">
-          {activeApp ? (
-            <div className="bg-white rounded-lg border-2 border-blue-200 shadow-sm overflow-hidden animate-in fade-in duration-300">
-              <div className="bg-blue-50 px-6 py-4 border-b border-blue-100 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-[#005c8d]">
-                  <FileText size={20} />
-                  <span className="font-black uppercase text-xs tracking-wider">Aktivna prijava završnog rada</span>
-                </div>
-                {getStatusBadge(activeApp.status)}
-              </div>
-
-              <div className="p-6 space-y-4">
+          {activeApp && !showCreateForm ? (
+            <div className="bg-white rounded-lg border border-slate-100 shadow-sm overflow-hidden animate-in fade-in duration-300">
+              <div className="p-3 space-y-4">
                 <div>
-                  <h3 className="text-xs text-gray-400 font-black uppercase tracking-wider">Naslov završnog rada</h3>
-                  <p className="text-base font-bold text-gray-900 mt-1">{activeApp.thesis_title}</p>
+                  <p className="text-sm font-bold text-gray-900">Naslov - {activeApp.thesis_title}</p>
+                  <p className="text-xs text-gray-900">Mentor - {mentors.find(m => m.id === activeApp.mentor_id)?.name || 'Opći mentor / Nepoznato'}</p>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1 hidden">
                   <div>
                     <h3 className="text-xs text-gray-400 font-black uppercase tracking-wider">Odabrani mentor</h3>
                     <p className="font-semibold text-gray-800 mt-1 flex items-center gap-1">
@@ -515,7 +517,7 @@ export default function FinalThesisPage() {
                 </div>
               </div>
             </div>
-          ) : (
+          ) : showCreateForm ? (
             <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
               {applications.filter(app => app.status === 'REJECTED').slice(0, 1).map(rejectedApp => (
                 <div key={rejectedApp.id} className="bg-rose-50 border border-rose-200 text-rose-900 rounded p-4 mb-5 text-xs leading-normal">
@@ -612,11 +614,15 @@ export default function FinalThesisPage() {
                 </button>
               </form>
             </div>
+          ) : (
+            <div className="bg-white rounded-lg border border-slate-100 shadow-sm p-4 text-sm text-slate-500">
+              Nema aktivne prijave završnog rada.
+            </div>
           )}
         </div>
 
         {/* Right sidebar: Rules and summary info */}
-        <div className="space-y-6">
+        <div className="space-y-6 hidden">
           <div className="bg-amber-50/70 border border-amber-200 rounded-lg p-5 text-xs text-amber-900 leading-relaxed space-y-3">
             <h3 className="font-black text-xs uppercase text-amber-800 flex items-center gap-1">
               <AlertCircle size={14} /> Pravila i upute za završni rad

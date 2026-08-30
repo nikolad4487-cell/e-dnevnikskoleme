@@ -1,4 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -8,6 +11,7 @@ import { BookOpen, GraduationCap, ChevronRight, ArrowLeft } from 'lucide-react';
 import { mappers, mapList } from '../../lib/mappers';
 
 export default function OcjenePage() {
+  const navigate = useNavigate();
   const { user, isParent } = useAuth();
   const { selectedClassId, selectedChildId, selectedSchoolId } = useSelection();
   const [grades, setGrades] = useState<Grade[]>([]);
@@ -21,6 +25,7 @@ export default function OcjenePage() {
   const [loading, setLoading] = useState(true);
   const [targetStudent, setTargetStudent] = useState<User | null>(null);
   const [selectedSubject, setSelectedSubject] = useState<string | null>(null);
+  const [showAllGrades, setShowAllGrades] = useState(false);
 
   useEffect(() => {
     if (!targetStudent?.id || !selectedClassId || !selectedSubject || !selectedSchoolId) return;
@@ -95,7 +100,11 @@ export default function OcjenePage() {
         }
 
         // Get class
-        const { data: classData } = await supabase.from('classes').select('*').eq('id', selectedClassId).single();
+        const { data: classData } = await supabase
+          .from('classes')
+          .select('*, programs:program_id(*)')
+          .eq('id', selectedClassId)
+          .single();
         if (classData) setCurrentClass(classData);
 
         // Fetch target student profile if it's parent view
@@ -249,6 +258,93 @@ export default function OcjenePage() {
 
   const MONTHS_ORDER = ['IX', 'X', 'XI', 'XII', 'I', 'II', 'III', 'IV', 'V', 'VI'];
   const MONTH_MAP = { 9: 'IX', 10: 'X', 11: 'XI', 12: 'XII', 1: 'I', 2: 'II', 3: 'III', 4: 'IV', 5: 'V', 6: 'VI' };
+  const uniqueSubjects = Object.values(subjects.reduce((acc, curr) => {
+    if (!acc[curr.name]) {
+      acc[curr.name] = { ...curr, ids: [curr.id] };
+    } else {
+      acc[curr.name].ids.push(curr.id);
+    }
+    return acc;
+  }, {} as Record<string, Subject & { ids: string[] }>)).sort((a: any, b: any) => (String(a.name || "")).localeCompare(b.name));
+
+  const getSubjectTeachersString = (subjectIds: string[]) => {
+    const matchedCsts = subjectTeachers.filter(c => subjectIds.includes(c.subjectId));
+    const matchedTeachers = matchedCsts.map(c => teachers[c.teacherId]).filter(Boolean);
+    const uniqueTeachers = Array.from(new Map(matchedTeachers.map(item => [item.id, item])).values());
+    return uniqueTeachers.length > 0
+      ? uniqueTeachers.map(t => formatPersonName(t)).join(', ')
+      : 'Nastavnik nije dodijeljen';
+  };
+
+  const formatGradeDate = (date?: string) => date ? new Date(date).toLocaleDateString('hr-HR', { day: 'numeric', month: 'numeric' }) + '.' : '—';
+  const canAccessFinalThesis = Boolean(currentClass?.grade_level && currentClass?.programs?.duration_years && currentClass.grade_level === currentClass.programs.duration_years);
+
+  const downloadAllGradesPdf = () => {
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const studentName = targetStudent ? formatPersonName(targetStudent) : 'Ucenik';
+    let y = 20;
+
+    uniqueSubjects.forEach((subject: any) => {
+      const rows = grades
+        .filter(g => subject.ids.includes(g.subjectId) && !g.isFinal)
+        .sort((a, b) => (String(b.date || '')).localeCompare(a.date || ''))
+        .map(g => [
+          formatGradeDate(g.date),
+          g.note || '—',
+          g.category || g.element || '—',
+          String(g.value ?? '—')
+        ]);
+
+      if (rows.length === 0) return;
+      if (y > 250) {
+        doc.addPage();
+        y = 20;
+      }
+
+      autoTable(doc, {
+        startY: y,
+        head: [[formatSubjectName(subject), '', '', ''], ['Datum', 'Bilješka', 'Element vrednovanja', 'Ocjena']],
+        body: rows,
+        theme: 'grid',
+        styles: {
+          font: 'helvetica',
+          fontSize: 8,
+          cellPadding: 2,
+          textColor: [0, 0, 0],
+          lineColor: [185, 193, 204],
+          lineWidth: 0.1,
+          valign: 'middle',
+          halign: 'center'
+        },
+        headStyles: {
+          fillColor: [238, 243, 247],
+          textColor: [0, 0, 0],
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        columnStyles: {
+          0: { cellWidth: 20, halign: 'center' },
+          1: { cellWidth: 100, halign: 'center' },
+          2: { cellWidth: 48, halign: 'center' },
+          3: { cellWidth: 20, halign: 'center' }
+        },
+        didParseCell: data => {
+          if (data.section === 'head' && data.row.index === 0 && data.column.index === 0) {
+            data.cell.colSpan = 4;
+          }
+          if (data.section === 'head' && data.row.index === 0 && data.column.index > 0) {
+            data.cell.text = [];
+          }
+        },
+        margin: { left: 10, right: 10 }
+      });
+      y = (doc as any).lastAutoTable.finalY + 7;
+    });
+
+    doc.setFontSize(7);
+    doc.text(`${studentName} - ${currentClass?.school_year || ''}`, 10, 290);
+    doc.save(`${studentName.replace(/\s+/g, '-')}-${String(currentClass?.school_year || 'ocjene').replace(/[/.]/g, '_')}.pdf`);
+  };
 
   if (loading) {
     return (
@@ -267,38 +363,78 @@ export default function OcjenePage() {
       <div className="flex flex-col h-full bg-white overflow-auto font-sans">
         <div className="p-4 md:p-5 w-full space-y-6">
           <div className="flex items-center justify-between gap-4">
-            <h1 className="text-base font-normal text-slate-900 leading-none">ODABIR PREDMETA</h1>
+            <h1 className="text-base font-normal text-slate-900 leading-none">{showAllGrades ? 'SVE OCJENE' : 'ODABIR PREDMETA'}</h1>
             <div className="hidden md:flex items-center gap-3">
-              <button className="px-4 py-2 bg-[#1780c2] text-white rounded-md text-sm font-medium">Sve ocjene</button>
-              <button className="px-4 py-2 bg-[#1780c2] text-white rounded-md text-sm font-medium">PDF</button>
-              <button className="px-4 py-2 bg-[#1780c2] text-white rounded-md text-sm font-medium">Završni rad</button>
+              <button onClick={() => setShowAllGrades(prev => !prev)} className="px-4 py-2 bg-[#1780c2] text-white rounded-md text-sm font-medium">{showAllGrades ? 'Odabir predmeta' : 'Sve ocjene'}</button>
+              <button onClick={downloadAllGradesPdf} className="px-4 py-2 bg-[#1780c2] text-white rounded-md text-sm font-medium">PDF</button>
+              {canAccessFinalThesis && (
+                <button onClick={() => navigate('/student/zavrsni-rad')} className="px-4 py-2 bg-[#1780c2] text-white rounded-md text-sm font-medium">Završni rad</button>
+              )}
             </div>
           </div>
 
+          {showAllGrades ? (
+            <div className="space-y-5">
+              <div className="flex justify-end">
+                <div className="relative group">
+                  <button className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium min-w-[220px] text-left">Odaberite predmet</button>
+                  <div className="absolute right-0 top-full mt-1 w-72 bg-white border border-slate-200 shadow-xl rounded-md overflow-hidden hidden group-hover:block z-20">
+                    {uniqueSubjects.map((subject: any) => (
+                      <button
+                        key={subject.name}
+                        onClick={() => {
+                          setSelectedSubject(subject.ids[0]);
+                          setShowAllGrades(false);
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-slate-50"
+                      >
+                        {formatSubjectName(subject)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {uniqueSubjects.map((subject: any) => {
+                const subjectGrades = grades
+                  .filter(g => subject.ids.includes(g.subjectId) && !g.isFinal)
+                  .sort((a,b) => (String(b.date || "")).localeCompare(a.date || ''));
+                if (subjectGrades.length === 0) return null;
+                return (
+                  <div key={subject.name} className="bg-white border border-slate-200 rounded-lg shadow-sm overflow-hidden">
+                    <div className="bg-[#1780c2] text-white text-center font-bold py-2">{formatSubjectName(subject)}</div>
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr>
+                          <th className="text-center text-slate-950 bg-white border border-slate-200 normal-case text-sm">Datum</th>
+                          <th className="text-center text-slate-950 bg-white border border-slate-200 normal-case text-sm">Bilješka</th>
+                          <th className="text-center text-slate-950 bg-white border border-slate-200 normal-case text-sm">Element vrednovanja</th>
+                          <th className="text-center text-slate-950 bg-white border border-slate-200 normal-case text-sm">Ocjena</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {subjectGrades.map(g => (
+                          <tr key={g.id}>
+                            <td className="text-center border border-slate-200 text-slate-950">{formatGradeDate(g.date)}</td>
+                            <td className="border border-slate-200 text-slate-950 whitespace-pre-wrap">{g.note || '—'}</td>
+                            <td className="text-center border border-slate-200 text-slate-950">{g.category || g.element || '—'}</td>
+                            <td className="text-center border border-slate-200 text-slate-950">{g.value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
           <div className="grid grid-cols-1 gap-2">
-            {Object.values(subjects.reduce((acc, curr) => {
-              if (!acc[curr.name]) {
-                acc[curr.name] = { ...curr, ids: [curr.id] };
-              } else {
-                acc[curr.name].ids.push(curr.id);
-              }
-              return acc;
-            }, {} as Record<string, Subject & { ids: string[] }>)).sort((a: any, b: any) => (String(a.name || "")).localeCompare(b.name)).map((subject: any) => {
+            {uniqueSubjects.map((subject: any) => {
               const subjectGrades = grades.filter(g => subject.ids.includes(g.subjectId) && !g.isFinal);
               const subjectAvg = subjectGrades.length > 0 
                 ? (subjectGrades.reduce((acc, curr) => acc + curr.value, 0) / subjectGrades.length).toFixed(2)
                 : '-';
-              
-              const matchedCsts = subjectTeachers.filter(c => subject.ids.includes(c.subjectId));
-              const matchedTeachers = matchedCsts
-                .map(c => teachers[c.teacherId])
-                .filter(Boolean);
-              
-              const uniqueTeachers = Array.from(new Map(matchedTeachers.map(item => [item.id, item])).values());
-              
-              const teachersString = uniqueTeachers.length > 0 
-                ? uniqueTeachers.map(t => formatPersonName(t)).join(', ')
-                : 'Nastavnik nije dodijeljen';
+              const teachersString = getSubjectTeachersString(subject.ids);
 
               return (
                 <button
@@ -336,6 +472,7 @@ export default function OcjenePage() {
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
     );

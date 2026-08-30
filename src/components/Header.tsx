@@ -30,6 +30,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
+  const [isDarkTheme, setIsDarkTheme] = useState(() => localStorage.getItem('studentTheme') === 'dark');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   
   const menuRef = useRef<HTMLDivElement>(null);
@@ -53,6 +54,11 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('student-dark', isDarkTheme);
+    localStorage.setItem('studentTheme', isDarkTheme ? 'dark' : 'light');
+  }, [isDarkTheme]);
 
   useEffect(() => {
     if (!user) return;
@@ -237,9 +243,10 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
               )}
               <button
                 type="button"
+                onClick={() => setIsDarkTheme(prev => !prev)}
                 className="w-full flex items-center justify-between px-3 py-3 text-xs text-slate-800 hover:bg-slate-50 transition-colors border-b border-gray-100"
               >
-                <span>TAMNI PRIKAZ</span>
+                <span>{isDarkTheme ? 'SVIJETLI PRIKAZ' : 'TAMNI PRIKAZ'}</span>
                 <Moon size={16} />
               </button>
               <button

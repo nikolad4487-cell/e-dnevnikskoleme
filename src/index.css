@@ -124,3 +124,55 @@
   @apply mb-5 flex flex-col gap-1;
 }
 
+html.student-dark body {
+  background: #2b2b2f !important;
+  color: #f7f7f7 !important;
+}
+
+html.student-dark header,
+html.student-dark main,
+html.student-dark aside,
+html.student-dark [class*="bg-white"] {
+  background-color: #2b2b2f !important;
+  color: #ffffff !important;
+}
+
+html.student-dark aside {
+  background-color: #333338 !important;
+  border-color: #242428 !important;
+}
+
+html.student-dark [class*="text-slate"],
+html.student-dark [class*="text-gray"] {
+  color: #ffffff !important;
+}
+
+html.student-dark [class*="border-slate"],
+html.student-dark [class*="border-gray"] {
+  border-color: #44444a !important;
+}
+
+html.student-dark [class*="shadow"] {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35) !important;
+}
+
+html.student-dark input,
+html.student-dark select,
+html.student-dark textarea,
+html.student-dark table td,
+html.student-dark table th {
+  background-color: #333338 !important;
+  color: #ffffff !important;
+  border-color: #44444a !important;
+}
+
+html.student-dark table tr,
+html.student-dark .ed-card {
+  background-color: #2f2f34 !important;
+}
+
+html.student-dark [class*="bg-[#1780c2]"],
+html.student-dark [class*="bg-[#005c8d]"] {
+  background-color: #0067a0 !important;
+}
+
