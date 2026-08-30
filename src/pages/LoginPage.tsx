@@ -14,7 +14,7 @@ export default function LoginPage() {
   const hostname = window.location.hostname;
   console.log("HOSTNAME", hostname);
 
-  const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz";
+  const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz" || hostname === "ednevnik.skolehr.xyz";
   const isStudentDomain = hostname === "ocjene.skolehr.xyz";
 
   useEffect(() => {
@@ -109,7 +109,10 @@ export default function LoginPage() {
       console.log("LOGIN INPUT", identifier);
       console.log("NORMALIZED LOGIN EMAIL", normalizedEmail);
       
-      const response = await fetch('/api/auth/login', {
+      const loginUrl = '/api/auth/login';
+      console.log("LOGIN API URL", loginUrl);
+
+      const response = await fetch(loginUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -120,6 +123,9 @@ export default function LoginPage() {
         })
       });
 
+      console.log("LOGIN RESPONSE STATUS", response.status);
+      console.log("LOGIN RESPONSE OK", response.ok);
+
       const contentType = response.headers.get('content-type') || '';
       
       if (!contentType.includes('application/json')) {
@@ -128,11 +134,21 @@ export default function LoginPage() {
         throw new Error('Prijava trenutno nije moguća (komunikacija sa serverom nije uspjela). Molimo pokušajte ponovno.');
       }
 
-      const result = await response.json();
-      console.log("LOGIN API RESULT", result);
+      const raw = await response.text();
+      console.log("LOGIN RAW RESPONSE", raw);
+
+      let result: any = null;
+      try {
+        result = raw ? JSON.parse(raw) : null;
+      } catch (parseError) {
+        console.error("LOGIN JSON PARSE ERROR", parseError, raw);
+        throw new Error('Prijava trenutno nije moguća (server nije vratio ispravan JSON odgovor).');
+      }
+
+      console.log("LOGIN API RESULT", JSON.stringify(result, null, 2));
 
       if (!response.ok) {
-        throw new Error(result.error || 'Greška pri prijavi.');
+        throw new Error(result?.error || raw || 'Greška pri prijavi.');
       }
 
       if (result?.requiresAuthenticatorSetup || result?.redirectTo === "/setup-authenticator") {
@@ -218,6 +234,9 @@ export default function LoginPage() {
     } catch (err: any) {
       console.error('LOGIN REQUEST FAILED', err);
       let msg = err.message || 'Neispravna e-mail adresa ili lozinka.';
+      if (err instanceof TypeError && /fetch/i.test(err.message || '')) {
+        msg = 'Povezivanje s poslužiteljem nije uspjelo. Provjerite je li Vercel API aktivan i jesu li postavljene Supabase varijable.';
+      }
       if (err.message.includes('Invalid login credentials') || err.message.includes('Neispravni podaci za prijavu')) {
         msg = 'Neispravni podaci za prijavu.';
       }

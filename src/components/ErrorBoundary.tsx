@@ -31,13 +31,7 @@ export class ErrorBoundary extends Component<Props, State> {
       /dynamically/i.test(error.message)
     );
     if (isChunkError) {
-      const lastReload = sessionStorage.getItem('last_chunk_reload');
-      const now = Date.now();
-      if (!lastReload || now - parseInt(lastReload) > 10000) {
-        sessionStorage.setItem('last_chunk_reload', String(now));
-        window.location.reload();
-        return;
-      }
+      console.warn("Chunk/preload error caught. Automatic hard reload is disabled.", error);
     }
 
     // Safely record to database if available

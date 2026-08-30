@@ -146,7 +146,7 @@ export default function App() {
   const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
   console.log("HOSTNAME", hostname);
 
-  const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz";
+  const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz" || hostname === "ednevnik.skolehr.xyz";
   const isStudentDomain = hostname === "ocjene.skolehr.xyz";
 
   const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
