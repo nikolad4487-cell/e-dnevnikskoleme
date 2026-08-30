@@ -113,12 +113,8 @@ export default function BiljeskePage() {
   if (loading) return <div className="flex-1 flex items-center justify-center p-8 text-gray-400 font-bold uppercase text-xs tracking-widest">Učitavanje...</div>;
 
   return (
-    <div className="flex-1 overflow-auto bg-[#f1f5f9]">
-      <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
-        <div className="flex items-center gap-3 border-b-2 border-[#005c8d]/10 pb-4">
-          <ClipboardList className="text-[#005c8d]" size={20} />
-          <h2 className="text-sm font-black uppercase text-[#005c8d] tracking-widest">Bilješke i opći podaci</h2>
-        </div>
+    <div className="flex-1 overflow-auto bg-white">
+      <div className="w-full p-4 md:p-5 space-y-4">
 
         <div className="space-y-6">
           <div className="border-b border-gray-300 pb-2">
@@ -127,8 +123,9 @@ export default function BiljeskePage() {
 
           {/* 1. Razrednik */}
           {homeroomTeacher && (
-              <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm space-y-2">
-                <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Razrednik</h3>
+              <div className="space-y-2">
+                <h3 className="text-base font-bold text-slate-900">Razrednik</h3>
+                <div className="bg-white border border-gray-200 rounded-md p-3 shadow-sm">
                  <div className="flex items-center gap-2 text-[13px]">
                   <span className="font-bold text-[14px] text-gray-900">{homeroomTeacher.name}</span>
                   <span className="text-gray-500 text-[12px]">{homeroomTeacher.email}</span>
@@ -136,13 +133,15 @@ export default function BiljeskePage() {
                 {classNotes?.homeroomInfo && (
                     <div className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap mt-2 pt-2 border-t border-gray-100">{classNotes.homeroomInfo}</div>
                 )}
+                </div>
               </div>
           )}
 
           {/* 2. Zamjenik razrednika */}
           {deputyTeacher && (
-              <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm space-y-2">
-                <h3 className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Zamjenik razrednika</h3>
+              <div className="space-y-2">
+                <h3 className="text-base font-bold text-slate-900">Zamjenik razrednika</h3>
+                <div className="bg-white border border-gray-200 rounded-md p-3 shadow-sm">
                 <div className="flex items-center gap-2 text-[13px]">
                   <span className="font-bold text-[14px] text-gray-900">{deputyTeacher.name}</span>
                   <span className="text-gray-500 text-[12px]">{deputyTeacher.email}</span>
@@ -150,6 +149,7 @@ export default function BiljeskePage() {
                 {classNotes?.deputyInfo && (
                   <div className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap mt-2 pt-2 border-t border-gray-100">{classNotes.deputyInfo}</div>
                 )}
+                </div>
               </div>
           )}
 

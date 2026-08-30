@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { User, LogOut, Settings, Repeat, Bell, Building2, Shield } from 'lucide-react';
+import { User, LogOut, Settings, Repeat, Bell, Building2, Shield, Menu } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
@@ -13,7 +13,7 @@ interface HeaderProps {
 }
 
 export function Header({ showNav = true, hideClass = false }: HeaderProps) {
-  const { user, signOut, formattedRoles, userSchoolRoles, isStudent, isParent, isSuperAdmin: authIsSuperAdmin, isSchoolAdmin: authIsSchoolAdmin } = useAuth();
+  const { user, signOut, formattedRoles, userSchoolRoles, isStudent, isParent, isStudentPortal, isSuperAdmin: authIsSuperAdmin, isSchoolAdmin: authIsSchoolAdmin } = useAuth();
   const { 
     selectedSchoolId, 
     selectedYearId, 
@@ -24,6 +24,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
   const [schoolLabel, setSchoolLabel] = useState('');
   const [yearLabel, setYearLabel] = useState('');
   const [classLabel, setClassLabel] = useState('');
+  const [homeroomLabel, setHomeroomLabel] = useState('');
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -84,6 +85,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
       let sLabel = '';
       let yLabel = '';
       let cLabel = '';
+      let hLabel = '';
 
       if (selectedSchoolId && !hideContextLabels) {
         const { data: sData } = await supabase.from('schools').select('name').eq('id', selectedSchoolId).single();
@@ -94,12 +96,19 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
         if (yData && isMounted) yLabel = yData.name;
       }
       if (selectedClassId && !hideContextLabels && !isClassSelectionPage) {
-         const { data: cData } = await supabase.from('classes').select('name, school_year').eq('id', selectedClassId).single();
+         const { data: cData } = await supabase
+           .from('classes')
+           .select('name, school_year, homeroom:homeroom_teacher_id(name)')
+           .eq('id', selectedClassId)
+           .single();
          if (cData && isMounted) {
            cLabel = cData.name;
            if (!yLabel && cData.school_year) {
              yLabel = cData.school_year;
            }
+           const rawHomeroom = (cData as any).homeroom;
+           const homeroom = Array.isArray(rawHomeroom) ? rawHomeroom[0] : rawHomeroom;
+           hLabel = homeroom?.name || '';
          }
       }
 
@@ -107,6 +116,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
         setSchoolLabel(sLabel);
         setYearLabel(yLabel);
         setClassLabel(cLabel);
+        setHomeroomLabel(hLabel);
       }
     };
 
@@ -121,6 +131,92 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
     clearSelection();
     navigate('/login');
   };
+
+  if (isStudentPortal && !isSchoolAdminRoute) {
+    return (
+      <header className="bg-white text-slate-950 z-50 h-[88px] flex items-center justify-between px-6 lg:px-10 sticky top-0 shadow-md border-b border-slate-200">
+        <div className="flex items-center gap-12 min-w-0">
+          <Link to="/student/ocjene" className="shrink-0">
+            <div className="text-[40px] leading-none font-black text-[#6b6f75] tracking-tight">e-Dnevnik</div>
+            <div className="flex h-1 mt-1 w-full">
+              <span className="bg-[#40a94b] flex-1"></span>
+              <span className="bg-[#b7509c] flex-1"></span>
+              <span className="bg-[#4d79bd] flex-1"></span>
+            </div>
+          </Link>
+
+          {!hideContextLabels && (schoolLabel || classLabel) && (
+            <button
+              type="button"
+              onClick={() => navigate('/select-class')}
+              className="hidden md:grid grid-cols-[42px_1fr] gap-3 text-left hover:bg-slate-50 rounded-sm px-3 py-2 transition-colors"
+              title="Promijeni razred"
+            >
+              <div>
+                <div className="text-lg font-black leading-none">{classLabel}</div>
+                <div className="text-xs font-medium mt-1">{yearLabel ? yearLabel.replace(/^20/, '').replace('/20', '/') : ''}</div>
+              </div>
+              <div className="min-w-0">
+                <div className="font-black text-sm leading-tight truncate">{schoolLabel}</div>
+                {homeroomLabel && (
+                  <div className="text-xs text-slate-700 leading-tight">
+                    razrednik: {homeroomLabel}
+                  </div>
+                )}
+              </div>
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 relative shrink-0" ref={menuRef}>
+          <div className="text-right hidden sm:block">
+            <div className="text-base font-bold leading-tight">{formatPersonName(user)}</div>
+          </div>
+          <button
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="w-9 h-9 rounded-md bg-white border border-slate-200 shadow-sm flex items-center justify-center hover:bg-slate-50"
+            aria-label="Izbornik"
+          >
+            <Menu size={22} />
+          </button>
+
+          {isMenuOpen && (
+            <div className="absolute right-0 top-full mt-2 w-52 bg-white text-gray-800 border border-gray-200 shadow-xl rounded py-1 z-[100] animate-in fade-in zoom-in-95 duration-100">
+              {(isStudent || isParent) && (
+                <button
+                  onClick={() => {
+                    setIsMenuOpen(false);
+                    navigate('/student/osobni-podaci');
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
+                >
+                  <User size={14} />
+                  Osobni podaci
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  navigate('/student/postavke');
+                }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
+              >
+                <Settings size={14} />
+                Postavke
+              </button>
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors min-h-[44px]"
+              >
+                <LogOut size={14} />
+                Odjava
+              </button>
+            </div>
+          )}
+        </div>
+      </header>
+    );
+  }
 
   return (
     <header className="bg-[#005c8d] text-white z-50 h-[44px] lg:h-[50px] flex items-center justify-between px-3 lg:px-4 sticky top-0 shadow-md">

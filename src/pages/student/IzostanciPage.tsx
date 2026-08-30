@@ -238,22 +238,18 @@ export default function IzostanciPage() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#f8fafc] overflow-hidden">
+    <div className="flex flex-col h-full bg-white overflow-hidden">
       {/* Title Header */}
-      <div className="bg-white border-b border-gray-200 p-4 md:px-6 flex items-center gap-3">
-        <div className="w-8 h-8 rounded-lg bg-blue-50 text-[#005c8d] flex items-center justify-center">
-          <UserX size={18} />
-        </div>
-        <div>
-          <h2 className="text-sm font-black uppercase text-gray-800 tracking-wide">
-            Pregled izostanaka učenika
-          </h2>
-          <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Izostanci, zakašnjenja i opravdanja po mjesecima i satima</p>
+      <div className="bg-white p-4 md:px-5 flex items-center justify-between gap-3">
+        <h2 className="text-base font-normal text-slate-900">IZOSTANCI</h2>
+        <div className="hidden md:flex gap-3">
+          <button className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium">Graf</button>
+          <button className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium min-w-[220px] text-left">Odaberite mjesec</button>
         </div>
       </div>
 
       {/* Grid Summary Stats */}
-      <div className="p-4 grid grid-cols-2 md:grid-cols-5 gap-3 bg-white border-b border-gray-200 shadow-xs flex-shrink-0">
+      <div className="p-4 md:px-5 grid grid-cols-2 md:grid-cols-5 gap-3 bg-white flex-shrink-0">
         <div className="border border-slate-200 p-3 bg-slate-50/50">
           <div className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Ukupno sati</div>
           <div className="text-xl font-bold text-slate-700 mt-1">{stats.total}</div>

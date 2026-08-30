@@ -221,9 +221,19 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
   const [isBurgerOpen, setIsBurgerOpen] = React.useState(false);
 
   // (Will add burger menu logic later if needed in layout, but for now focus on the structure)
+  const studentSidebarItems: NavItem[] = [
+    { label: 'Ocjene', path: '/student/ocjene', icon: <BookOpen size={18} /> },
+    { label: 'Bilješke', path: '/student/biljeske', icon: <FileText size={18} /> },
+    { label: 'Ispiti', path: '/student/ispiti', icon: <ClipboardList size={18} /> },
+    { label: 'Izostanci', path: '/student/izostanci', icon: <Clock size={18} /> },
+    { label: 'Raspored', path: '/student/raspored', icon: <Calendar size={18} /> },
+    { label: 'Informativka', path: '/student/informativka', icon: <List size={18} /> },
+  ];
+
+  const isStudentSidebarActive = (path: string) => location.pathname.startsWith(path);
 
   return (
-    <div className="min-h-screen bg-[#f0f2f5] flex flex-col font-sans">
+    <div className={cn("min-h-screen flex flex-col font-sans", isStaff ? "bg-[#f0f2f5]" : "bg-white")}>
       {/* Header */}
       <Header />
       
@@ -402,8 +412,56 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
           </div>
         )}
 
-        <main className="flex-1 flex flex-col w-full mb-16 lg:mb-0">
-          <div key={effectiveClassId || 'none'} className="bg-white border-b border-r border-[#005c8d]/20 flex-1 flex flex-col min-h-0">
+        {!isStaff && (
+          <aside className="hidden lg:flex w-[345px] shrink-0 bg-[#f7f7f7] border-r border-slate-100 flex-col pt-6">
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="w-12 h-12 flex items-center justify-center text-slate-900 hover:bg-slate-100 transition-colors ml-2 mb-4"
+              aria-label="Izbornik"
+            >
+              <Menu size={22} />
+            </button>
+
+            <nav className="flex flex-col gap-1 pr-0">
+              {studentSidebarItems
+                .filter(item => item.label !== 'Završni rad' || canAccessThesis)
+                .map(item => {
+                  const active = isStudentSidebarActive(item.path);
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      className={cn(
+                        "min-h-[44px] flex items-center gap-3 pl-5 pr-4 text-base font-bold transition-colors rounded-r-[22px] mr-0",
+                        active
+                          ? "bg-[#1780c2] text-white"
+                          : "text-slate-900 hover:bg-slate-100"
+                      )}
+                    >
+                      {item.icon}
+                      {item.label}
+                    </Link>
+                  );
+                })}
+            </nav>
+
+            <div className="mt-auto px-6 pb-8 text-center text-slate-900">
+              <div className="text-xs leading-tight mb-2">
+                <div>CARNET Helpdesk</div>
+                <div>Podrška obrazovnom sustavu</div>
+              </div>
+              <div className="text-[46px] font-black text-[#6f7277] leading-none tracking-tight">CARNET</div>
+              <div className="text-xs mt-3 leading-tight">
+                <div>tel: +385 1 6661 500</div>
+                <div>e-mail: helpdesk@skole.hr</div>
+              </div>
+            </div>
+          </aside>
+        )}
+
+        <main className={cn("flex-1 flex flex-col w-full", isStaff ? "mb-16 lg:mb-0" : "mb-16 lg:mb-0 bg-white")}>
+          <div key={effectiveClassId || 'none'} className={cn("flex-1 flex flex-col min-h-0", isStaff ? "bg-white border-b border-r border-[#005c8d]/20" : "bg-white")}>
             {children}
           </div>
         </main>

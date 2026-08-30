@@ -261,13 +261,14 @@ export default function StudentIspitiPage() {
   };
 
   return (
-    <div className="flex-1 overflow-auto bg-[#f1f5f9]">
-      <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-8">
-        <div className="flex items-center gap-3 border-b-2 border-[#005c8d]/10 pb-4">
-          <FileText className="text-[#005c8d]" size={22} />
-          <div>
-            <h2 className="text-sm font-black uppercase text-[#005c8d] tracking-widest">Ispiti i pisane provjere</h2>
-            <p className="text-[10px] text-gray-400 uppercase mt-0.5 font-bold tracking-wider">Pregled planiranih ispitnih rokova i provjera znanja</p>
+    <div className="flex-1 overflow-auto bg-white">
+      <div className="w-full p-4 md:p-5 space-y-8">
+        <div className="flex items-center justify-between gap-4">
+          <h2 className="text-base font-normal text-slate-900">ISPITI</h2>
+          <div className="hidden md:flex gap-3">
+            <button className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium">Kalendar</button>
+            <button className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium">PDF</button>
+            <button className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium min-w-[220px] text-left">Odaberite mjesec</button>
           </div>
         </div>
 

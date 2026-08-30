@@ -264,14 +264,18 @@ export default function OcjenePage() {
   // --- SUBJECT SELECTION VIEW ---
   if (!selectedSubject) {
     return (
-      <div className="flex flex-col h-full bg-slate-50 overflow-auto font-sans">
-        <div className="p-4 md:p-8 max-w-5xl mx-auto w-full space-y-6">
-          <div className="border-b-2 border-slate-200 pb-4">
-            <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase leading-none">Odabir predmeta</h1>
-            <p className="text-slate-500 font-medium text-xs mt-2 uppercase tracking-wider">Prikaz svih aktivnih predmeta i uspjeha</p>
+      <div className="flex flex-col h-full bg-white overflow-auto font-sans">
+        <div className="p-4 md:p-5 w-full space-y-6">
+          <div className="flex items-center justify-between gap-4">
+            <h1 className="text-base font-normal text-slate-900 leading-none">ODABIR PREDMETA</h1>
+            <div className="hidden md:flex items-center gap-3">
+              <button className="px-4 py-2 bg-[#1780c2] text-white rounded-md text-sm font-medium">Sve ocjene</button>
+              <button className="px-4 py-2 bg-[#1780c2] text-white rounded-md text-sm font-medium">PDF</button>
+              <button className="px-4 py-2 bg-[#1780c2] text-white rounded-md text-sm font-medium">Završni rad</button>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-1 gap-2">
             {Object.values(subjects.reduce((acc, curr) => {
               if (!acc[curr.name]) {
                 acc[curr.name] = { ...curr, ids: [curr.id] };
@@ -300,15 +304,12 @@ export default function OcjenePage() {
                 <button
                   key={subject.name}
                   onClick={() => setSelectedSubject(subject.ids[0])}
-                  className="group bg-white border border-slate-200 rounded-xl p-5 flex items-center justify-between hover:border-[#005c8d] hover:shadow-md transition-all text-left"
+                  className="group bg-white border border-slate-100 rounded-lg px-3 py-2.5 flex items-center justify-between hover:shadow-md transition-all text-left shadow-sm"
                 >
                   <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-[#005c8d] transition-colors">
-                      <BookOpen size={20} />
-                    </div>
                     <div>
-                      <h3 className="font-black text-slate-900 uppercase tracking-tight text-sm leading-none mb-1">{formatSubjectName(subject)}</h3>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                      <h3 className="font-bold text-slate-900 text-sm leading-tight">{formatSubjectName(subject)}</h3>
+                      <p className="text-xs font-normal text-slate-700 leading-tight">
                         {teachersString}
                       </p>
                     </div>
@@ -316,22 +317,20 @@ export default function OcjenePage() {
                   
                   <div className="flex items-center gap-6">
                     <div className="text-right">
-                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-[0.2em] mb-1">Prosjek</p>
                       <p className={cn(
-                        "text-lg font-black leading-none",
-                        subjectAvg === '-' ? "text-slate-200" : "text-[#005c8d]"
+                        "min-w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold",
+                        subjectAvg === '-' ? "text-slate-300" : "bg-[#1780c2] text-white"
                       )}>
                         {subjectAvg}
                       </p>
                     </div>
-                    <ChevronRight size={16} className="text-slate-300 group-hover:text-[#005c8d] transition-colors" strokeWidth={3} />
                   </div>
                 </button>
               );
             })}
 
             {subjects.length === 0 && (
-              <div className="py-20 text-center bg-white border-2 border-dashed border-slate-200 rounded-3xl">
+              <div className="py-20 text-center bg-white border-2 border-dashed border-slate-200 rounded-lg">
                 <GraduationCap size={48} className="mx-auto text-slate-200 mb-4" />
                 <p className="text-slate-400 font-bold uppercase tracking-widest text-xs">Nema aktivnih upisa predmeta</p>
               </div>
@@ -372,7 +371,7 @@ export default function OcjenePage() {
 
   return (
     <div className="flex flex-col h-full bg-white overflow-auto font-sans">
-      <div className="p-4 md:p-8 max-w-6xl mx-auto w-full space-y-8">
+      <div className="p-4 md:p-5 w-full space-y-8">
         {/* Back navigation & Subject Selector */}
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 border-b-2 border-slate-100 pb-6">
           <div>
@@ -418,10 +417,10 @@ export default function OcjenePage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[800px]">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-300 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  <th className="p-4 border-r border-slate-300 w-1/4">Elementi vrednovanja</th>
+                <tr className="bg-[#1780c2] border-b border-[#1780c2] text-[10px] font-black text-white uppercase tracking-widest">
+                  <th className="p-4 border-r border-blue-100/40 w-1/4">Elementi vrednovanja</th>
                   {MONTHS_ORDER.map(m => (
-                    <th key={m} className="p-2 border-r border-slate-300 text-center w-12">{m}</th>
+                    <th key={m} className="p-2 border-r border-blue-100/40 text-center w-12">{m}</th>
                   ))}
                 </tr>
               </thead>
@@ -497,11 +496,11 @@ export default function OcjenePage() {
           <div className="hidden md:block bg-white border border-slate-300 overflow-hidden shadow-sm">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-300 text-slate-400">
-                  <th className="p-4 text-[9px] font-black uppercase tracking-widest text-center w-28 border-r border-slate-200">Datum</th>
-                  <th className="p-4 text-[9px] font-black uppercase tracking-widest text-center w-20 border-r border-slate-200">Ocjena</th>
-                  <th className="p-4 text-[9px] font-black uppercase tracking-widest border-r border-slate-200">Element</th>
-                  <th className="p-4 text-[9px] font-black uppercase tracking-widest">Bilješka</th>
+                <tr className="bg-[#1780c2] border-b border-[#1780c2] text-white">
+                  <th className="p-3 text-xs font-bold text-center w-28 border-r border-blue-100/40">Datum</th>
+                  <th className="p-3 text-xs font-bold text-center w-20 border-r border-blue-100/40">Ocjena</th>
+                  <th className="p-3 text-xs font-bold border-r border-blue-100/40">Element</th>
+                  <th className="p-3 text-xs font-bold">Bilješka</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200 font-medium">

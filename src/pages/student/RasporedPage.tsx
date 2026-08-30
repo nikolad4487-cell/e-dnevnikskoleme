@@ -208,14 +208,13 @@ export default function RasporedPage() {
   }
 
   return (
-    <div className="flex flex-col w-full h-full bg-[#f8fafc]">
-      <div className="bg-[#005c8d] p-4 text-white flex items-center justify-between border-b border-[#004a70] shadow-sm">
-        <h2 className="text-sm font-black uppercase tracking-wider flex items-center gap-2">
-          <BookOpen size={16} />
-          Tjedni raspored sati {classData?.name ? `— Razred: ${classData.name}` : ''}
+    <div className="flex flex-col w-full h-full bg-white">
+      <div className="p-4 md:px-5 flex items-center justify-between">
+        <h2 className="text-base font-normal text-slate-900">
+          RASPORED
         </h2>
-        <div className="text-[10px] font-black uppercase tracking-wide opacity-90 border-l border-white/20 pl-3">
-          Učenik: {studentData ? formatPersonName(studentData) : '—'}
+        <div className="hidden md:block text-sm text-slate-600">
+          {studentData ? formatPersonName(studentData) : '—'}
         </div>
       </div>
 
