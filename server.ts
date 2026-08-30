@@ -122,6 +122,86 @@ if (supabaseUrl && supabaseServiceKey) {
   });
 }
 
+async function signInWithPasswordDirect(email: string, password: string) {
+  const authKey = supabaseAnonKey || supabaseServiceKey;
+  if (!supabaseUrl || !authKey) {
+    return {
+      data: null,
+      error: {
+        name: "MissingSupabaseAuthConfig",
+        message: "Supabase Auth configuration is missing.",
+        status: 500
+      }
+    };
+  }
+
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": authKey,
+        "Authorization": `Bearer ${authKey}`
+      },
+      body: JSON.stringify({ email, password })
+    });
+
+    const raw = await response.text();
+    console.log("[LOGIN_API] Direct Supabase Auth status:", response.status);
+    console.log("[LOGIN_API] Direct Supabase Auth raw length:", raw.length);
+
+    let parsed: any = null;
+    if (raw) {
+      try {
+        parsed = JSON.parse(raw);
+      } catch (parseError) {
+        console.error("[LOGIN_API] Direct Supabase Auth JSON parse error:", parseError);
+      }
+    }
+
+    if (!response.ok) {
+      return {
+        data: null,
+        error: {
+          name: "SupabaseAuthHttpError",
+          message: parsed?.error_description || parsed?.msg || parsed?.message || raw || "Supabase Auth request failed.",
+          status: response.status
+        }
+      };
+    }
+
+    return {
+      data: {
+        user: parsed?.user,
+        session: {
+          access_token: parsed?.access_token,
+          refresh_token: parsed?.refresh_token,
+          expires_in: parsed?.expires_in,
+          expires_at: parsed?.expires_at,
+          token_type: parsed?.token_type,
+          user: parsed?.user
+        }
+      },
+      error: null
+    };
+  } catch (error: any) {
+    console.error("[LOGIN_API] Direct Supabase Auth fetch failed:", {
+      name: error?.name,
+      message: error?.message,
+      cause: error?.cause?.message || String(error?.cause || "")
+    });
+    return {
+      data: null,
+      error: {
+        name: error?.name || "SupabaseAuthFetchError",
+        message: error?.message || "fetch failed",
+        cause: error?.cause?.message || String(error?.cause || ""),
+        status: 503
+      }
+    };
+  }
+}
+
 async function startServer() {
   try {
     const app = express();
@@ -4073,25 +4153,16 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       // Try '1234' first as the standard password, falling back to '123456' for compatibility
       let authResult;
       if (loginType === 'STAFF') {
-        let res = await supabaseAuthClient.auth.signInWithPassword({
-          email: DemoresolvedEmail,
-          password: '1234'
-        });
+        let res = await signInWithPasswordDirect(DemoresolvedEmail, '1234');
         if (res.error && res.error.message === 'Invalid login credentials') {
-          const retryRes = await supabaseAuthClient.auth.signInWithPassword({
-            email: DemoresolvedEmail,
-            password: '123456'
-          });
+          const retryRes = await signInWithPasswordDirect(DemoresolvedEmail, '123456');
           if (!retryRes.error) {
             res = retryRes;
           }
         }
         authResult = res;
       } else {
-        authResult = await supabaseAuthClient.auth.signInWithPassword({
-          email: DemoresolvedEmail,
-          password: password
-        });
+        authResult = await signInWithPasswordDirect(DemoresolvedEmail, password);
       }
 
       const { data, error } = authResult;
@@ -4108,7 +4179,8 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           return res.status(503).json({
             success: false,
             error: "Povezivanje sa Supabase Auth poslužiteljem nije uspjelo. Provjerite SUPABASE_URL/VITE_SUPABASE_URL na Vercelu.",
-            code: "SUPABASE_AUTH_FETCH_FAILED"
+            code: "SUPABASE_AUTH_FETCH_FAILED",
+            cause: (error as any).cause || null
           });
         }
         if (error.message === 'Invalid login credentials') {
