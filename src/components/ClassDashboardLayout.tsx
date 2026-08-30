@@ -7,6 +7,7 @@ import { useSelection } from '../contexts/SelectionContext';
 import { Role } from '../types';
 import { cn, formatPersonName } from '../lib/utils';
 import { Header } from './Header';
+import { useClassAdminAccess } from '../hooks/useClassAdminAccess';
 
 interface NavItem {
   id?: string;
@@ -44,6 +45,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
+  const { canAccessClassAdmin } = useClassAdminAccess(effectiveClassId);
 
   // isAdminPath is only for the specific /admin/* routes, not /admin-skole/*
   const isAdminPath = location.pathname.startsWith('/admin/') && !location.pathname.startsWith('/admin-skole');
@@ -151,7 +153,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     { id: 'kalendar-skole', label: 'Kalendar škole', path: '/teacher/kalendar', icon: <Calendar size={14} /> },
     { id: 'dokumenti-skole', label: 'Dokumenti škole', path: '/teacher/dokumenti', icon: <FileText size={14} /> },
     { id: 'raspored', label: 'Raspored', path: `${classPathPrefix}/raspored`, icon: <Calendar size={14} /> },
-    { id: 'admin', label: 'Admin razreda', path: `${classPathPrefix}/admin`, icon: <Settings size={14} /> },
+    ...(canAccessClassAdmin ? [{ id: 'admin', label: 'Admin razreda', path: `${classPathPrefix}/admin`, icon: <Settings size={14} /> }] : []),
     ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : [])
   ] : [
     { label: 'Pretraživanje', path: '/teacher/pretrazivanje' },
@@ -292,7 +294,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                           { label: 'Pedagoška dokumentacija', path: `/class/${effectiveClassId}/pedagoska-dokumentacija`, icon: <FileText size={14} /> },
                           ...(canAccessThesis ? [{ label: 'Završni radovi', path: '/teacher/zavrsni-radovi', icon: <FileSpreadsheet size={14} /> }] : []),
                           { label: 'Raspored sati', path: `/class/${effectiveClassId}/raspored`, icon: <Calendar size={14} /> },
-                          { label: 'Admin razreda', path: `/class/${effectiveClassId}/admin`, icon: <Settings size={14} /> },
+                          ...(canAccessClassAdmin ? [{ label: 'Admin razreda', path: `/class/${effectiveClassId}/admin`, icon: <Settings size={14} /> }] : []),
                         ]
                       });
                     } else {

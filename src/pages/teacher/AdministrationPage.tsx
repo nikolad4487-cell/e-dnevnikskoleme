@@ -149,6 +149,7 @@ export default function AdministrationPage() {
 
   // If we are in class administration mode but data hasn't arrived yet
   const isMissingClassData = isClassAdminMode && !selectedClassData && !loading;
+  const isClassAdminAccessDenied = isClassAdminMode && !!selectedClassData && !canManageClass;
 
   const filteredPrograms = React.useMemo(() => {
     if (!selectedClassData || !programs) return [];
@@ -3368,7 +3369,22 @@ setAllSubjects(uniqueSub2);
            </div>
         </div>
       )}
-      {!isMissingClassData && (
+      {isClassAdminAccessDenied && (
+        <div className="flex-1 flex flex-col items-center justify-center bg-slate-50 p-10 text-center">
+           <ShieldAlert size={48} className="text-amber-500 mb-4" />
+           <h2 className="text-xl font-black text-slate-800 uppercase">Nemate ovlasti za Admin razreda</h2>
+           <p className="text-sm text-slate-600 mt-2 max-w-md">
+             Kartici Admin razreda mogu pristupiti samo razrednik, zamjenik razrednika i administratori.
+           </p>
+           <button 
+             onClick={() => navigate(`/class/${selectedClassId || effectiveClassId}/imenik`)}
+             className="mt-6 bg-[#005c8d] text-white px-6 py-2 font-black text-[10px] uppercase hover:bg-[#004a70]"
+           >
+             Povratak u imenik
+           </button>
+        </div>
+      )}
+      {!isMissingClassData && !isClassAdminAccessDenied && (
         <>
           <div className="ed-header !bg-[#005c8d] !text-white h-8 !px-3">
         <h2 className="text-[12px] font-bold flex items-center gap-2 uppercase tracking-tight">

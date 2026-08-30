@@ -8,6 +8,7 @@ import { Loader2, ShieldAlert, BookOpen, List, ClipboardList, FileText, FileSpre
 import { cn } from '../../lib/utils';
 import { mappers } from '../../lib/mappers';
 import { ImenikTable } from '../../components/ImenikTable';
+import { canManageClassAdministration } from '../../hooks/useClassAdminAccess';
 
 const TeacherIzostanciPage = lazy(() => import('./IzostanciPage'));
 const BiljeskePage = lazy(() => import('./BiljeskePage'));
@@ -40,6 +41,7 @@ export default function ClassDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [accessDenied, setAccessDenied] = useState(false);
   const [students, setStudents] = useState<any[]>([]);
+  const [currentClass, setCurrentClass] = useState<Class | null>(null);
 
   useEffect(() => {
     const profile = user;
@@ -53,12 +55,13 @@ export default function ClassDashboardPage() {
     if (classId) {
       checkAccessAndLoad();
     }
-  }, [classId, user]);
+  }, [classId, user, userSchoolRoles]);
 
   const checkAccessAndLoad = async () => {
     if (!user || !classId) return;
     setLoading(true);
     setAccessDenied(false);
+    setCurrentClass(null);
 
     console.log("CLASS PAGE load start", classId);
 
@@ -85,6 +88,7 @@ export default function ClassDashboardPage() {
 
       const mappedClass = mappers.class(rawClass);
       const selectedClass = mappedClass;
+      setCurrentClass(mappedClass);
       console.log("SELECTED CLASS", selectedClass);
 
       // 2. Fetch Students (Učenici)
@@ -187,6 +191,8 @@ export default function ClassDashboardPage() {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  const canAccessClassAdmin = canManageClassAdministration(user, userSchoolRoles, currentClass, isMainAdmin);
+
   const tabs = [
     { id: 'imenik', label: 'Imenik', path: 'imenik', icon: BookOpen },
     { id: 'pregled-rada', label: 'Pregled rada', path: 'pregled-rada', icon: List },
@@ -195,7 +201,7 @@ export default function ClassDashboardPage() {
     { id: 'zapisnici', label: 'Zapisnici', path: 'zapisnici', icon: FileText },
     { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: 'pedagoska-dokumentacija', icon: FileText },
     { id: 'raspored', label: 'Raspored', path: 'raspored', icon: Calendar },
-    { id: 'admin', label: 'Admin razreda', path: 'admin', icon: Settings },
+    ...(canAccessClassAdmin ? [{ id: 'admin', label: 'Admin razreda', path: 'admin', icon: Settings }] : []),
   ];
 
   const burgerItems = [
@@ -256,7 +262,24 @@ export default function ClassDashboardPage() {
     />
   );
 
-  const activeSidebarLinks = sidebarLinks[currentTab] || [];
+  const activeSidebarLinks = currentTab === 'admin' && !canAccessClassAdmin ? [] : (sidebarLinks[currentTab] || []);
+
+  const renderClassAdminRoute = (element: React.ReactNode) => {
+    if (loading) {
+      return (
+        <div className="p-20 flex flex-col items-center justify-center opacity-50">
+          <Loader2 className="w-8 h-8 animate-spin text-gray-300 mb-4" />
+          <span className="text-[10px] font-bold uppercase text-gray-400">Provjera ovlasti...</span>
+        </div>
+      );
+    }
+
+    if (!canAccessClassAdmin) {
+      return <Navigate to={`/class/${classId}/imenik`} replace />;
+    }
+
+    return element;
+  };
 
   if (accessDenied) {
     return (
@@ -357,11 +380,11 @@ export default function ClassDashboardPage() {
               <Route path="izvjestaji" element={<IzvjestajiPage />} />
               <Route path="informativka" element={<InformativkaPage />} />
               
-              <Route path="admin" element={<AdministrationPage />} />
-              <Route path="administration" element={<AdministrationPage />} />
-              <Route path="predmeti" element={<ClassSubjectsPage />} />
-              <Route path="ucenici" element={<ClassStudentsPage />} />
-              <Route path="upisi-predmeta" element={<StudentSubjectEnrollmentPage />} />
+              <Route path="admin" element={renderClassAdminRoute(<AdministrationPage />)} />
+              <Route path="administration" element={renderClassAdminRoute(<AdministrationPage />)} />
+              <Route path="predmeti" element={renderClassAdminRoute(<ClassSubjectsPage />)} />
+              <Route path="ucenici" element={renderClassAdminRoute(<ClassStudentsPage />)} />
+              <Route path="upisi-predmeta" element={renderClassAdminRoute(<StudentSubjectEnrollmentPage />)} />
               
               <Route path="student/:studentId" element={<StudentDashboard />} />
               <Route path="students/:studentId" element={<StudentDashboard />} />
