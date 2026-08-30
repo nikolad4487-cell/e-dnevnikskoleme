@@ -6,7 +6,7 @@ import { Role, SchoolYear, isSuperAdminUser, hasAnyRole } from '../types';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, ArrowRight, Calendar, Plus, Award, FileText, UserX, Clock, Building2, Shield, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { cn, formatPersonName, getProgramDisplayName, getRoleLabel } from '../lib/utils';
+import { cn, getProgramDisplayName, getRoleLabel } from '../lib/utils';
 import { Header } from '../components/Header';
 
 interface ClassWithDetails {
@@ -45,6 +45,7 @@ export default function ClassSelectionPage() {
   const [availableSchools, setAvailableSchools] = useState<SchoolOption[]>([]);
   const [schoolMenuOpen, setSchoolMenuOpen] = useState(false);
   const [switchingSchool, setSwitchingSchool] = useState(false);
+  const [selectedGradeFilter, setSelectedGradeFilter] = useState<'ALL' | string>('ALL');
   const navigate = useNavigate();
   const lastClassesFetchKey = React.useRef("");
 
@@ -526,6 +527,33 @@ export default function ClassSelectionPage() {
     return false;
   });
 
+  const availableGradeFilters = React.useMemo(() => {
+    return Array.from(
+      new Set(
+        filteredClasses
+          .map(cls => Number(cls.gradeLevel))
+          .filter(grade => Number.isFinite(grade) && grade > 0)
+      )
+    ).sort((a, b) => a - b);
+  }, [filteredClasses]);
+
+  const staffVisibleClasses = React.useMemo(() => {
+    const visible = selectedGradeFilter === 'ALL'
+      ? filteredClasses
+      : filteredClasses.filter(cls => String(cls.gradeLevel) === selectedGradeFilter);
+
+    return [...visible].sort((a, b) => (String(a.name || "")).localeCompare(String(b.name || ""), 'hr', { numeric: true }));
+  }, [filteredClasses, selectedGradeFilter]);
+
+  useEffect(() => {
+    if (
+      selectedGradeFilter !== 'ALL' &&
+      !availableGradeFilters.some(grade => String(grade) === selectedGradeFilter)
+    ) {
+      setSelectedGradeFilter('ALL');
+    }
+  }, [availableGradeFilters, selectedGradeFilter]);
+
   const selectedYear = schoolYears.find(y => y.id === selectedYearId);
 
   const handleSwitchSchool = async (school: SchoolOption) => {
@@ -728,11 +756,6 @@ export default function ClassSelectionPage() {
         <div className="mb-10 text-center">
           <h1 className="text-2xl font-black text-[#005c8d] uppercase tracking-tight mb-2">Odabir razreda</h1>
           <div className="w-12 h-1 bg-[#005c8d] mx-auto opacity-20"></div>
-          {isStaff && (
-            <p className="text-[10px] text-slate-500 uppercase font-bold mt-4 tracking-widest">
-              Zaposlenik: {formatPersonName(user)}
-            </p>
-          )}
         </div>
 
         {schoolYears.length === 0 ? (
@@ -915,6 +938,7 @@ export default function ClassSelectionPage() {
           )
         ) : (
           /* Staff Standard Row Style */
+          <div className="space-y-4">
           <div className="bg-white border border-[#dee2e6] rounded-sm shadow-sm overflow-hidden">
             <div className="bg-[#f1f3f5] px-6 py-4 border-b border-[#dee2e6] flex justify-between items-center">
               <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#005c8d]">Odaberite razrednu knjigu</h2>
@@ -928,6 +952,39 @@ export default function ClassSelectionPage() {
                 </button>
               )}
             </div>
+
+            {availableGradeFilters.length > 1 && (
+              <div className="px-6 py-3 border-b border-[#dee2e6] bg-white flex flex-wrap items-center gap-2">
+                <span className="text-[11px] text-slate-600 font-bold mr-2">Razredi:</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedGradeFilter('ALL')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-sm text-xs font-black transition-colors",
+                    selectedGradeFilter === 'ALL'
+                      ? "bg-[#005c8d] text-white"
+                      : "bg-[#4b4a70] text-white hover:bg-[#005c8d]"
+                  )}
+                >
+                  Svi
+                </button>
+                {availableGradeFilters.map(grade => (
+                  <button
+                    key={grade}
+                    type="button"
+                    onClick={() => setSelectedGradeFilter(String(grade))}
+                    className={cn(
+                      "px-3 py-1.5 rounded-sm text-xs font-black transition-colors",
+                      selectedGradeFilter === String(grade)
+                        ? "bg-[#005c8d] text-white"
+                        : "bg-[#4b4a70] text-white hover:bg-[#005c8d]"
+                    )}
+                  >
+                    {grade}.
+                  </button>
+                ))}
+              </div>
+            )}
 
             {filteredClasses.length === 0 ? (
               <div className="px-6 py-16 text-center">
@@ -972,73 +1029,59 @@ export default function ClassSelectionPage() {
                   <p className="text-slate-400 text-xs italic mt-2">Nemate dodijeljenih razreda za odabranu školsku godinu. Obratite se administratoru škole.</p>
                 )}
               </div>
+            ) : staffVisibleClasses.length === 0 ? (
+              <div className="px-6 py-10 text-center">
+                <p className="text-slate-500 text-xs font-bold">
+                  Nema razrednih knjiga za odabrani filter.
+                </p>
+              </div>
             ) : (
-              <div className="divide-y divide-[#dee2e6]">
-                {filteredClasses
-                  .sort((a, b) => (String(a.name || "")).localeCompare(b.name))
-                  .map((cls) => (
-                    <div 
+              <div className="divide-y divide-white">
+                {staffVisibleClasses
+                  .map((cls) => {
+                    const rowClassName =
+                      cls.userRoleInClass === 'HOMEROOM'
+                        ? "bg-[#c9c79f] hover:bg-[#bfbd93]"
+                        : cls.userRoleInClass === 'DEPUTY'
+                          ? "bg-[#f39a32] hover:bg-[#ed8f22]"
+                          : "bg-white hover:bg-[#f8f9fa]";
+
+                    return (
+                    <button 
                       key={cls.id} 
-                      className="flex flex-col md:flex-row md:items-center p-6 hover:bg-[#f8f9fa] transition-colors group cursor-pointer text-sm"
+                      type="button"
+                      className={cn(
+                        "w-full grid grid-cols-1 md:grid-cols-[140px_1fr_1fr] gap-3 md:gap-6 items-center px-6 py-3 transition-colors text-left text-sm cursor-pointer",
+                        rowClassName
+                      )}
                       onClick={() => handleSelect(cls)}
                     >
-                      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
-                        {/* Name & Role */}
-                        <div className="flex items-center gap-3">
-                          <span className="text-xl font-black text-slate-800 tracking-tight min-w-[3rem]">{cls.name}</span>
-                          <div className="flex flex-col gap-1">
-                            {cls.userRoleInClass && (
-                              <span className={cn(
-                                "text-[9px] font-black uppercase px-2 py-0.5 rounded-sm border inline-block w-fit",
-                                cls.userRoleInClass === 'HOMEROOM' ? "text-green-600 bg-green-50 border-green-200" :
-                                cls.userRoleInClass === 'DEPUTY' ? "text-orange-600 bg-orange-50 border-orange-200" :
-                                cls.userRoleInClass === 'ADMIN' ? "text-blue-600 bg-blue-50 border-blue-200" :
-                                "text-slate-500 bg-slate-50 border-slate-200"
-                              )}>
-                                {cls.userRoleInClass === 'HOMEROOM' ? 'Razrednik' : 
-                                 cls.userRoleInClass === 'DEPUTY' ? 'Zamjenik' : 
-                                 cls.userRoleInClass === 'ADMIN' ? 'Admin' : 
-                                 cls.userRoleInClass === 'STUDENT' ? 'Učenik' : 'Nastavnik'}
-                              </span>
-                            )}
-                            {selectedYear?.status === 'ARCHIVED' && (
-                              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-sm bg-amber-100 text-amber-700 border border-amber-200 inline-block w-fit">Arhiva</span>
-                            )}
-                          </div>
-                        </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-black text-slate-900 tracking-tight">{cls.name}</span>
+                        {selectedYear?.status === 'ARCHIVED' && (
+                          <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-sm bg-amber-100 text-amber-700 border border-amber-200 inline-block w-fit">Arhiva</span>
+                        )}
+                      </div>
 
-                        {/* Homeroom / Deputy Teacher */}
-                        <div className="flex flex-col gap-0.5 text-slate-600 font-bold uppercase text-[11px] tracking-tight border-l-0 md:border-l border-slate-200 md:pl-6 h-full justify-center">
-                          <span className="text-slate-300 font-black block md:hidden">NASTAVNICI:</span>
-                          <div className="truncate">
-                            {(() => {
-                              const teachers = [];
-                              if (cls.homeroomTeacherName) teachers.push(cls.homeroomTeacherName);
-                              if (cls.deputyTeacherName) teachers.push(cls.deputyTeacherName);
-                              return teachers.length > 0 ? teachers.join(', ') : 'NIJE DODIJELJEN';
-                            })()}
-                          </div>
-                        </div>
+                      <div className="text-[11px] text-slate-800 font-medium truncate">
+                        {(() => {
+                          const teachers = [];
+                          if (cls.homeroomTeacherName) teachers.push(cls.homeroomTeacherName);
+                          if (cls.deputyTeacherName) teachers.push(cls.deputyTeacherName);
+                          return teachers.length > 0 ? teachers.join(', ') : 'Nije dodijeljen';
+                        })()}
+                      </div>
 
-                        {/* Description / Program */}
-                        <div className="text-slate-500 font-medium border-l-0 md:border-l border-slate-200 md:pl-6 h-full flex items-center">
-                          <span className="text-slate-300 font-black block md:hidden mr-2">TIP:</span>
-                          {cls.programName || `${cls.gradeLevel}. razred srednje škole`}
+                      <div className="text-[11px] text-slate-800 font-medium md:text-right">
+                        <div className="truncate">
+                          {cls.programName || `${cls.gradeLevel}. razred`}
                         </div>
                       </div>
-                      
-                      <div className="mt-6 md:mt-0 md:ml-6">
-                        <button
-                          className="inline-flex items-center justify-center gap-2 py-2.5 px-8 rounded-sm text-xs font-black uppercase tracking-widest transition-all bg-[#005c8d] text-white hover:bg-[#004a70] shadow-sm active:scale-95 w-full md:w-auto"
-                        >
-                          Pristupi
-                          <ArrowRight size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    </button>
+                  )})}
               </div>
             )}
+          </div>
           </div>
         )}
           </>
