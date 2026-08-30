@@ -241,7 +241,7 @@ export default function PotvrdePage() {
     doc.text(doc.splitTextToSize(feeText, 155), 28, 128);
 
     const tableX = 28;
-    const tableY = 220;
+    const tableY = 195;
     const colA = 50;
     const colB = 34;
     const colC = 86;
