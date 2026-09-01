@@ -292,7 +292,7 @@ export default function InactivityTracker() {
                 onClick={resetTimerFromCurrentActivity}
                 className="w-full bg-[#005c8d] hover:bg-[#004a70] text-white py-3.5 px-6 text-xs font-black uppercase tracking-widest transition-all rounded shadow-md cursor-pointer active:scale-95"
               >
-                Nastavi rad
+                Ostani prijavljen
               </button>
               <button
                 onClick={handleManualLogout}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
+import { getLocalDateISO } from '../lib/utils';
 
 interface Props {
   isOpen: boolean;
@@ -12,7 +13,7 @@ interface Props {
 }
 
 export default function GroupNotesModal({ isOpen, onClose, classId, subjectId, students, onSuccess }: Props) {
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getLocalDateISO());
   const [sharedNote, setSharedNote] = useState('');
   
   const [studentData, setStudentData] = useState<Record<string, { note: string }>>(

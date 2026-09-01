@@ -266,12 +266,7 @@ export default function ClassDashboardPage() {
 
   const renderClassAdminRoute = (element: React.ReactNode) => {
     if (loading) {
-      return (
-        <div className="p-20 flex flex-col items-center justify-center opacity-50">
-          <Loader2 className="w-8 h-8 animate-spin text-gray-300 mb-4" />
-          <span className="text-[10px] font-bold uppercase text-gray-400">Provjera ovlasti...</span>
-        </div>
-      );
+      return null;
     }
 
     if (!canAccessClassAdmin) {
@@ -342,12 +337,7 @@ export default function ClassDashboardPage() {
         
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden relative w-full h-full" key={classId}>
-          <Suspense fallback={
-            <div className="p-20 flex flex-col items-center justify-center opacity-50">
-              <Loader2 className="w-8 h-8 animate-spin text-gray-300 mb-4" />
-              <span className="text-[10px] font-bold uppercase text-gray-400">Priprema...</span>
-            </div>
-          }>
+          <Suspense fallback={null}>
             <Routes>
               <Route index element={<Navigate to="imenik" replace />} />
               <Route path="imenik" element={renderStudentsTable()} />

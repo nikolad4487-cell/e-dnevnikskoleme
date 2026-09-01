@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'react-hot-toast';
+import { getGradeDateBounds, getLocalDateISO, isGradeDateAllowed } from '../lib/utils';
 
 interface Props {
   isOpen: boolean;
@@ -14,7 +15,8 @@ interface Props {
 
 export default function GroupGradesModal({ isOpen, onClose, classId, subjectId, students, gradingElements, onSuccess }: Props) {
   const [selectedElement, setSelectedElement] = useState(gradingElements[0] || '');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const gradeDateBounds = getGradeDateBounds();
+  const [selectedDate, setSelectedDate] = useState(getLocalDateISO());
   const [sharedGrade, setSharedGrade] = useState<number | null>(null);
   const [sharedNote, setSharedNote] = useState('');
   
@@ -32,6 +34,10 @@ export default function GroupGradesModal({ isOpen, onClose, classId, subjectId, 
 
   const handleSave = async () => {
     if (!classId || !subjectId) return;
+    if (!isGradeDateAllowed(selectedDate)) {
+      toast.error('Datum ocjene može biti samo u prethodnom ili tekućem mjesecu.');
+      return;
+    }
     setIsSaving(true);
     try {
       const payloads = Object.entries(studentData)
@@ -43,7 +49,9 @@ export default function GroupGradesModal({ isOpen, onClose, classId, subjectId, 
             value: data.grade,
             element: selectedElement,
             note: data.note,
-            date: selectedDate
+            date: selectedDate,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
         }));
       
       if (payloads.length === 0) {
@@ -73,7 +81,7 @@ export default function GroupGradesModal({ isOpen, onClose, classId, subjectId, 
                 <select value={selectedElement} onChange={e => setSelectedElement(e.target.value)} className="flex-grow border rounded p-2 text-sm">
                     {gradingElements.map(el => <option key={el} value={el}>{el}</option>)}
                 </select>
-                <input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="border rounded p-2 text-sm" />
+                <input type="date" value={selectedDate} min={gradeDateBounds.min} max={gradeDateBounds.max} onChange={e => setSelectedDate(e.target.value)} className="border rounded p-2 text-sm" />
              </div>
             
             <div className="flex gap-2 items-center">

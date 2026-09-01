@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, Grade, Subject, StudentNote, Exam, FinalGrade, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary, specialExamTypeLabels, DeletionReason, deletionReasonLabels } from '../../types';
-import { cn, formatName, getSurname, formatSubjectDisplayName, formatSubjectName, finalGradeLabels, sortStudentsBySurname } from '../../lib/utils';
+import { cn, formatName, getSurname, formatSubjectDisplayName, formatSubjectName, finalGradeLabels, sortStudentsBySurname, getGradeDateBounds, getLocalDateISO, isGradeDateAllowed } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2, Check } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
@@ -20,7 +20,8 @@ const deletionReasonOptions = Object.values(DeletionReason).map(value => ({
   label: deletionReasonLabels[value]
 }));
 
-
+const todayDateISO = getLocalDateISO();
+const gradeDateBounds = getGradeDateBounds();
 
 function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effectiveClassId, selectedSchoolId, user, classes, onRefresh }: any) {
   const [period, setPeriod] = useState<'FIRST_TERM' | 'SECOND_TERM'>('FIRST_TERM');
@@ -141,7 +142,7 @@ function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effect
                 <label className="flex items-center gap-2"><input type="radio" checked={period === 'FIRST_TERM'} onChange={() => setPeriod('FIRST_TERM')} /> 1. polugodište</label>
                 <label className="flex items-center gap-2"><input type="radio" checked={period === 'SECOND_TERM'} onChange={() => setPeriod('SECOND_TERM')} /> 2. polugodište</label>
             </div>
-            {loading ? <div className="p-10 text-center">Učitavanje...</div> : 
+            {loading ? null : 
             <table className="w-full text-[11px] border-collapse">
                 <thead className="text-gray-400 uppercase font-bold text-left border-b">
                     <tr><th className="p-2">Učenik</th><th className="p-2">Prosjek</th><th className="p-2">Zaključak</th></tr>
@@ -348,7 +349,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     category: '', 
     note: '', 
     isImportant: true, 
-    customDate: new Date().toISOString().split('T')[0] 
+    customDate: todayDateISO 
   });
   const [newSpecialExam, setNewSpecialExam] = useState<{
     type: 'SUPPLEMENTARY' | 'REMEDIAL' | 'DIFFERENCE' | 'SUPPLEMENTARY_WORK' | 'MAKEUP_EXAM' | 'DIFFERENTIAL_EXAM' | 'CLASS_EXAM' | 'SUBJECT_EXAM';
@@ -361,24 +362,24 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     type: 'SUPPLEMENTARY',
     note: '',
     grade: 0,
-    customDate: new Date().toISOString().split('T')[0],
+    customDate: todayDateISO,
     gradeLevel: 1,
     subjectId: ''
   });
   const [newNote, setNewNote] = useState({
     content: '',
-    customDate: new Date().toISOString().split('T')[0]
+    customDate: todayDateISO
   });
   const [selectedFinalPeriod, setSelectedFinalPeriod] = useState<'1' | '2' | 'FINAL'>('2');
   const [groupGradeForm, setGroupGradeForm] = useState({
     category: '',
     isImportant: true,
-    customDate: new Date().toISOString().split('T')[0],
+    customDate: todayDateISO,
     note: '',
     studentGrades: {} as Record<string, { value: number | null, note: string }>
   });
   const [groupNoteForm, setGroupNoteForm] = useState({
-    customDate: new Date().toISOString().split('T')[0],
+    customDate: todayDateISO,
     content: '',
     studentNotes: {} as Record<string, string>
   });
@@ -1183,6 +1184,11 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
       return;
     }
 
+    if (!isGradeDateAllowed(newGrade.customDate)) {
+      toast.error('Datum ocjene može biti samo u prethodnom ili tekućem mjesecu.');
+      return;
+    }
+
     if (!canEditGrades(activeSubject.id)) {
 
     try {
@@ -1200,7 +1206,9 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         grade_type: 'REGULAR',
         is_final: false,
         weight: 1,
-        date: newGrade.customDate
+        date: newGrade.customDate,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       }]);
       if (error) {
         toast.error(`Greška: ${error.message}`);
@@ -1314,7 +1322,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
       }]);
       if (error) throw error;
       setShowNoteModal(false);
-      setNewNote({ content: '', customDate: new Date().toISOString().split('T')[0] });
+      setNewNote({ content: '', customDate: todayDateISO });
       fetchGradesAndNotes();
     } catch (err) {
       console.error(err);
@@ -1343,7 +1351,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         exam_type: newSpecialExam.type,
         note: newSpecialExam.note || null,
         grade_value: newSpecialExam.grade || null,
-        exam_date: newSpecialExam.customDate || new Date().toISOString().split('T')[0],
+        exam_date: newSpecialExam.customDate || todayDateISO,
         exam_grade_level: newSpecialExam.gradeLevel
       };
       
@@ -1668,6 +1676,10 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
 
   const handleGroupGradeSubmit = async () => {
     if (!activeSubject || !user || !effectiveClassId || !selectedSchoolId) return;
+    if (!isGradeDateAllowed(groupGradeForm.customDate)) {
+      toast.error('Datum ocjene može biti samo u prethodnom ili tekućem mjesecu.');
+      return;
+    }
     setLoading(true);
     try {
       const inserts = [];
@@ -1688,7 +1700,9 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
             grade_type: 'REGULAR',
             is_final: false,
             weight: 1,
-            date: groupGradeForm.customDate
+            date: groupGradeForm.customDate,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           });
         }
       }
@@ -1850,7 +1864,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
 
   const renderStudents = () => {
     console.log("[IMENIK] renderStudents called");
-    if (!students) return <div className="p-10 text-center">Učitavanje...</div>;
+  if (!students) return null;
 
     return (
       <ImenikTable 
@@ -2304,7 +2318,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                   type: 'SUPPLEMENTARY',
                   note: '',
                   grade: 0,
-                  customDate: new Date().toISOString().split('T')[0],
+                  customDate: todayDateISO,
                   gradeLevel: 1,
                   subjectId: activeSubject?.id || ''
                 });
@@ -2380,7 +2394,6 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
 
   return (
     <div className="flex flex-col h-full bg-white">
-      {loading && (<div className="fixed inset-0 bg-white/50 backdrop-blur-sm z-[200] flex flex-col items-center justify-center"><div className="w-10 h-10 border-4 border-[#005c8d] border-t-transparent rounded-full animate-spin mb-2" /><span className="font-black text-[10px] uppercase text-[#005c8d]">Učitavanje...</span></div>)}
 
       {/* Modern Horizontal Navigation and Action Panel */}
       <div className="p-3 bg-slate-50 border-b border-gray-200 shrink-0 flex flex-col gap-3">
@@ -2556,7 +2569,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                 {[1,2,3,4,5].map(v => (<button key={v} onClick={() => setNewGrade({...newGrade, value: v})} className={cn("w-10 h-10 border font-bold text-lg", newGrade.value === v ? "bg-[#005c8d] text-white border-[#005c8d]" : "bg-white text-gray-400 border-gray-300 hover:border-[#005c8d]")}>{v}</button>))}
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Datum</label><input type="date" value={newGrade.customDate} onChange={e => setNewGrade({...newGrade, customDate: e.target.value})} className="w-full border p-1 text-[11px] font-bold" /></div>
+                <div className="space-y-1"><label className="text-[10px] font-bold uppercase text-gray-400">Datum</label><input type="date" value={newGrade.customDate} min={gradeDateBounds.min} max={gradeDateBounds.max} onChange={e => setNewGrade({...newGrade, customDate: e.target.value})} className="w-full border p-1 text-[11px] font-bold" /></div>
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold uppercase text-gray-400">Važno</label>
                   <div className="flex border overflow-hidden">
@@ -2660,7 +2673,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                     <label className="text-[10px] font-black uppercase text-gray-400 block mb-1">Datum ispita</label>
                     <input 
                       type="date" 
-                      value={newSpecialExam.customDate || new Date().toISOString().split('T')[0]} 
+                      value={newSpecialExam.customDate || todayDateISO} 
                       onChange={e => setNewSpecialExam({...newSpecialExam, customDate: e.target.value})} 
                       className="w-full border p-1.5 text-[11px] font-bold leading-tight" 
                     />
@@ -2716,7 +2729,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
               <div className="p-4 bg-gray-50 border-b border-gray-300 shrink-0">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                     <div><label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Element</label><select value={groupGradeForm.category} onChange={e=>setGroupGradeForm({...groupGradeForm, category: e.target.value})} className="w-full border p-1 text-[11px] font-bold leading-tight"><option value="">--odaberi--</option>{gradingElementNames.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
-                    <div><label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Datum</label><input type="date" value={groupGradeForm.customDate} onChange={e=>setGroupGradeForm({...groupGradeForm, customDate: e.target.value})} className="w-full border p-1 text-[11px] font-bold" /></div>
+                    <div><label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Datum</label><input type="date" value={groupGradeForm.customDate} min={gradeDateBounds.min} max={gradeDateBounds.max} onChange={e=>setGroupGradeForm({...groupGradeForm, customDate: e.target.value})} className="w-full border p-1 text-[11px] font-bold" /></div>
                     <div className="md:col-span-2"><label className="text-[10px] font-bold uppercase text-gray-400 block mb-1">Vrijednost za sve (napomena)</label><div className="flex gap-1"><input type="text" value={groupGradeForm.note} onChange={e=>setGroupGradeForm({...groupGradeForm, note: e.target.value})} className="flex-1 border p-1 text-[11px]" /><button onClick={()=>{const newG={...groupGradeForm.studentGrades}; students.forEach(s=>{if(!newG[s.id])newG[s.id]={value:null,note:''};newG[s.id].note=groupGradeForm.note;});setGroupGradeForm({...groupGradeForm, studentGrades:newG});}} className="bg-[#005c8d] text-white px-2 py-1 text-[10px] font-bold uppercase">Kopiraj</button></div></div>
                 </div>
               </div>

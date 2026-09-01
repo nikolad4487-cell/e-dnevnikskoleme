@@ -5,6 +5,60 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+const ZAGREB_TIME_ZONE = "Europe/Zagreb";
+
+export function getLocalDateISO(date: Date = new Date()): string {
+  const formatter = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: ZAGREB_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  });
+  return formatter.format(date);
+}
+
+export function formatCroatianDate(value?: string | Date | null): string {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("hr-HR", {
+    timeZone: ZAGREB_TIME_ZONE,
+    day: "numeric",
+    month: "numeric",
+    year: "numeric"
+  });
+}
+
+export function formatCroatianDateTime(value?: string | Date | null): string {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("hr-HR", {
+    timeZone: ZAGREB_TIME_ZONE,
+    day: "numeric",
+    month: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+export function getGradeDateBounds(today: Date = new Date()): { min: string; max: string } {
+  const currentDate = new Date(getLocalDateISO(today));
+  const minDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+  const maxDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0);
+  return {
+    min: getLocalDateISO(minDate),
+    max: getLocalDateISO(maxDate)
+  };
+}
+
+export function isGradeDateAllowed(dateValue?: string | null, today: Date = new Date()): boolean {
+  if (!dateValue) return false;
+  const { min, max } = getGradeDateBounds(today);
+  return dateValue >= min && dateValue <= max;
+}
+
 export const getSurname = (fullName?: string) => {
   if (!fullName) return '';
   const parts = fullName.trim().split(' ');

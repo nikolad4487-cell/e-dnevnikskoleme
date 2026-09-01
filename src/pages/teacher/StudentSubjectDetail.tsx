@@ -3,14 +3,23 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { Role, DeletionReason, deletionReasonLabels } from '../../types';
-import { sortStudentsBySurname, formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
+import {
+  sortStudentsBySurname,
+  formatSubjectDisplayName,
+  formatSubjectName,
+  formatPersonName,
+  getLocalDateISO,
+  formatCroatianDate,
+  formatCroatianDateTime,
+  getGradeDateBounds,
+  isGradeDateAllowed
+} from '../../lib/utils';
 import { toast } from 'react-hot-toast';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import GroupGradesModal from '../../components/GroupGradesModal';
 import GroupNotesModal from '../../components/GroupNotesModal';
 import GroupFinalGradesModal from '../../components/GroupFinalGradesModal';
 import { 
-  Loader2, 
   ChevronLeft, 
   ChevronRight, 
   Shuffle, 
@@ -41,6 +50,9 @@ const mapApiStudentNote = (note: any) => ({
   author_name: note.author_name || note.author?.name,
   created_at: note.created_at
 });
+
+const todayDateISO = getLocalDateISO();
+const gradeDateBounds = getGradeDateBounds();
 
 interface ElementGroup {
   name: string;
@@ -136,7 +148,7 @@ export default function StudentSubjectDetail() {
   const { user, isMainAdmin, isTeacher, userSchoolRoles } = useAuth();
 
   // App state
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
   const [currentTime, setCurrentTime] = useState('');
   const [student, setStudent] = useState<any>(null);
@@ -181,17 +193,17 @@ export default function StudentSubjectDetail() {
   const [newGradeVal, setNewGradeVal] = useState<number>(5);
   const [newGradeElement, setNewGradeElement] = useState<string>('');
   const [newGradeNote, setNewGradeNote] = useState<string>('');
-  const [newGradeDate, setNewGradeDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [newGradeDate, setNewGradeDate] = useState<string>(todayDateISO);
 
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
   const [newNoteContent, setNewNoteContent] = useState('');
-  const [newNoteDate, setNewNoteDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [newNoteDate, setNewNoteDate] = useState<string>(todayDateISO);
 
   const [showAddExamModal, setShowAddExamModal] = useState(false);
   const [newExamType, setNewExamType] = useState('Dopunski ispit');
   const [newExamNote, setNewExamNote] = useState('');
   const [newExamGrade, setNewExamGrade] = useState<number | ''>('');
-  const [newExamDate, setNewExamDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [newExamDate, setNewExamDate] = useState<string>(todayDateISO);
 
   const [showFinalModal, setShowFinalModal] = useState<{ isOpen: boolean; term: 'FIRST_SEMESTER' | 'SECOND_SEMESTER' }>({ isOpen: false, term: 'FIRST_SEMESTER' });
   const [finalGradeValue, setFinalGradeValue] = useState<string>('');
@@ -236,6 +248,26 @@ export default function StudentSubjectDetail() {
     const json = await res.json();
     if (!res.ok || json.error) throw new Error(json.error || 'Greška pri dohvaćanju bilješki.');
     return (json.data || []).map(mapApiStudentNote);
+  };
+
+  const getTeacherNamesById = async (teacherIds: string[]) => {
+    const uniqueTeacherIds = Array.from(new Set(teacherIds.filter(Boolean)));
+    if (uniqueTeacherIds.length === 0) return new Map<string, string>();
+
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('id, name, surname, first_name, last_name')
+      .in('id', uniqueTeacherIds);
+
+    if (error) {
+      console.warn('Teacher profile fetch failed:', error);
+      return new Map<string, string>();
+    }
+
+    return new Map((data || []).map((profile: any) => [
+      profile.id,
+      formatPersonName(profile) || profile.name || 'Nastavnik'
+    ]));
   };
 
   // Main data fetch
@@ -326,7 +358,11 @@ export default function StudentSubjectDetail() {
         setNewGradeElement(elementNames[0]);
       }
 
-      setGrades(grData || []);
+      const teacherNames = await getTeacherNamesById((grData || []).map((g: any) => g.teacher_id || g.teacherId));
+      setGrades((grData || []).map((grade: any) => ({
+        ...grade,
+        teacher_name: teacherNames.get(grade.teacher_id || grade.teacherId) || 'Nastavnik'
+      })));
       const mappedFinGrData = (finGrData || []).map((fg: any) => {
         const isStatus = ["NEOCIJENJEN", "OSLOBODEN", "ODRADENO", "NEODRADENO"].includes(fg.value);
         return {
@@ -407,6 +443,11 @@ export default function StudentSubjectDetail() {
     e.preventDefault();
     if (!user || !studentId || !subjectId || !classId) return;
 
+    if (!isGradeDateAllowed(newGradeDate)) {
+      toast.error('Datum ocjene može biti samo u prethodnom ili tekućem mjesecu.');
+      return;
+    }
+
     try {
       const payload = {
         student_id: studentId,
@@ -420,7 +461,9 @@ export default function StudentSubjectDetail() {
         date: newGradeDate,
         is_final: false,
         weight: 1,
-        is_important: false
+        is_important: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       };
 
       const { error } = await supabase.from('grades').insert([payload]);
@@ -724,7 +767,7 @@ export default function StudentSubjectDetail() {
     const todayMonth = String(today.getMonth() + 1).padStart(2, '0');
     
     if (todayYear === year && todayMonth === monthNum) {
-      return today.toISOString().split('T')[0];
+      return getLocalDateISO(today);
     }
     return `${year}-${monthNum}-15`;
   };
@@ -781,6 +824,11 @@ export default function StudentSubjectDetail() {
       Number(existingGrade.value) === Number(editingGrade.value) &&
       (existingGrade.element || '') === (editingGrade.element || '') &&
       (existingGrade.date || '') === (editingGrade.date || '');
+
+    if (existingGrade && (existingGrade.date || '') !== (editingGrade.date || '') && !isGradeDateAllowed(editingGrade.date)) {
+      toast.error('Datum ocjene može biti samo u prethodnom ili tekućem mjesecu.');
+      return;
+    }
 
     if (!canDeleteGrade(editingGrade) && !(isCreator && onlyNoteChanged)) {
       toast.error('Nakon 10 minuta možete mijenjati samo bilješku uz vlastitu ocjenu.');
@@ -1057,10 +1105,13 @@ export default function StudentSubjectDetail() {
     combinedLog.push({
       id: g.id,
       date: g.date,
+      displayDate: formatCroatianDate(g.date),
       type: 'GRADE',
       value: g.value,
       element: g.element || 'Uobičajeno',
       note: g.note || '',
+      authorName: g.teacher_name || g.author_name || 'Nastavnik',
+      createdAt: formatCroatianDateTime(g.created_at || g.createdAt),
       raw: g
     });
   });
@@ -1068,6 +1119,7 @@ export default function StudentSubjectDetail() {
     combinedLog.push({
       id: n.id,
       date: n.date,
+      displayDate: formatCroatianDate(n.date),
       type: 'NOTE',
       value: '-',
       element: 'BILJEŠKA NASTAVNIKA',
@@ -1081,14 +1133,7 @@ export default function StudentSubjectDetail() {
   combinedLog.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   if (loading) {
-    return (
-      <div className="p-16 flex items-center justify-center bg-white h-full min-h-[400px]">
-        <div className="flex flex-col items-center gap-2">
-          <Loader2 className="w-8 h-8 animate-spin text-[#005c8d]" />
-          <span className="text-xs uppercase font-extrabold text-[#005c8d]">Učitavanje podataka predmeta...</span>
-        </div>
-      </div>
-    );
+    return null;
   }
 
   if (!isEnrolled) {
@@ -1607,30 +1652,28 @@ export default function StudentSubjectDetail() {
                     <table className="w-full table-fixed text-left text-xs border-collapse">
                       <thead>
                         <tr className="border-b border-gray-200 bg-slate-50 text-[10px] font-extrabold text-gray-500 uppercase sticky top-0 bg-white">
-                          <th className="pb-2 pt-1 font-bold w-[10%]">DATUM</th>
-                          <th className="pb-2 pt-1 font-bold text-center w-[5%]">OCJ.</th>
-                          <th className="pb-2 pt-1 font-bold w-[15%]">ELEMENT</th>
-                          <th className="pb-2 pt-1 font-bold w-[60%]">BILJEŠKA</th>
-                          {canEdit && <th className="pb-2 pt-1 font-bold text-right w-[10%]">AKCIJE</th>}
+                          <th className="pb-2 pt-1 font-bold w-[12%]">DATUM</th>
+                          <th className="pb-2 pt-1 font-bold text-center w-[7%]">OCJENA</th>
+                          <th className="pb-2 pt-1 font-bold w-[51%]">BILJEŠKA</th>
+                          <th className="pb-2 pt-1 font-bold text-right w-[30%]">UNOS</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
                         {combinedLog.map(item => (
                           <tr key={item.id} className="hover:bg-slate-50/50">
-                            <td className="py-2.5 text-gray-500 text-[11px] whitespace-nowrap w-[10%]">{item.date}</td>
-                            <td className="py-2.5 text-center font-extrabold text-slate-900 w-[5%]">{item.value}</td>
-                            <td className="py-2.5 font-bold uppercase text-[9px] text-gray-500 w-[15%] break-words">{item.element}</td>
-                            <td className="py-2.5 text-slate-700 italic w-[60%] whitespace-normal break-words">
+                            <td className="py-2.5 text-gray-500 text-[11px] whitespace-nowrap w-[12%]">{item.displayDate}</td>
+                            <td className="py-2.5 text-center font-extrabold text-slate-900 w-[7%]">{item.value}</td>
+                            <td className="py-2.5 text-slate-700 italic w-[51%] whitespace-normal break-words">
                               <div>{item.note || '-'}</div>
-                              {item.type === 'NOTE' && (
-                                <div className="mt-1 text-[9px] not-italic font-bold uppercase tracking-wide text-slate-400">
-                                  {item.authorName || 'Nastavnik'} · {item.createdAt}
-                                </div>
-                              )}
                             </td>
-                             <td className="py-2.5 text-right whitespace-nowrap w-[10%]">
-                               {canEdit && (
-                                 <div className="flex items-center justify-end gap-1.5">
+                             <td className="py-2.5 text-right w-[30%]">
+                               <div className="flex items-center justify-end gap-3">
+                                 <div className="min-w-0 text-right">
+                                   <div className="text-[10px] font-black uppercase text-slate-700 truncate">{item.authorName || 'Nastavnik'}</div>
+                                   <div className="mt-0.5 text-[10px] font-semibold text-slate-400 whitespace-nowrap">{item.createdAt || '-'}</div>
+                                 </div>
+                                 {canEdit && (
+                                   <div className="flex items-center justify-end gap-1.5 shrink-0">
                                    <button 
                                      onClick={() => {
                                        if (item.type === 'GRADE') {
@@ -1673,8 +1716,9 @@ export default function StudentSubjectDetail() {
                                        <Trash2 className="w-3.5 h-3.5" />
                                      </button>
                                    )}
-                                 </div>
-                               )}
+                                   </div>
+                                 )}
+                               </div>
                              </td>
                           </tr>
                         ))}
@@ -1742,6 +1786,8 @@ export default function StudentSubjectDetail() {
                   type="date"
                   required
                   value={newGradeDate}
+                  min={gradeDateBounds.min}
+                  max={gradeDateBounds.max}
                   onChange={(e) => setNewGradeDate(e.target.value)}
                   className="w-full text-sm border border-gray-300 rounded p-2 focus:outline-none focus:border-[#005c8d]"
                 />
@@ -2042,6 +2088,8 @@ export default function StudentSubjectDetail() {
                 <input 
                   type="date"
                   value={editingGrade.date}
+                  min={gradeDateBounds.min}
+                  max={gradeDateBounds.max}
                   onChange={(e) => setEditingGrade({ ...editingGrade, date: e.target.value })}
                   className="w-full text-sm border border-gray-300 rounded p-2 focus:outline-none focus:border-[#005c8d]"
                 />
