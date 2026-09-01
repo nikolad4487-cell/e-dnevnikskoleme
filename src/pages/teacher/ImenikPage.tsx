@@ -313,6 +313,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     loading: boolean;
     message?: string;
     showTotp?: boolean;
+    showReason?: boolean;
   }>({
     isOpen: false,
     id: '',
@@ -1210,6 +1211,16 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
 
   const handleUpdateGradeNote = async () => {
     if (!selectedGrade) return;
+    const isGradeAdmin = isMainAdmin || [Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(highestRole as Role);
+    const isCreator = selectedGrade.teacherId === user?.id || (selectedGrade as any).teacher_id === user?.id;
+    const createdAt = selectedGrade.createdAt ? new Date(selectedGrade.createdAt).getTime() : Date.now();
+    const isWithinTenMinutes = Number.isFinite(createdAt) && Date.now() - createdAt <= 10 * 60 * 1000;
+
+    if (!isGradeAdmin && (!isCreator || !isWithinTenMinutes)) {
+      toast.error('Ocjenu možete uređivati samo unutar 10 minuta od unosa.');
+      return;
+    }
+
     const payload = { note: gradeEditForm.note, updated_at: new Date().toISOString() };
     console.log("UPDATE GRADE NOTE PAYLOAD", payload);
     try {
@@ -1239,12 +1250,16 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     const now = new Date();
     const diffMinutes = (now.getTime() - createdAt.getTime()) / (1000 * 60);
 
-    const selectedClass = classes.find(c => c.id === effectiveClassId);
-    const isClassAdmin = isMainAdmin || highestRole === Role.ADMIN || selectedClass?.homeroomTeacherId === user?.id || selectedClass?.deputyTeacherId === user?.id;
+    const isGradeAdmin = isMainAdmin || [Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(highestRole as Role);
     const isCreator = grade.teacherId === user?.id || (grade as any).teacher_id === user?.id;
 
-    if (!isClassAdmin && !isCreator) {
+    if (!isGradeAdmin && !isCreator) {
       toast.error('Možete obrisati samo ocjene koje ste Vi unijeli.');
+      return;
+    }
+
+    if (!isGradeAdmin && diffMinutes > 10) {
+      toast.error('Ocjenu možete obrisati samo unutar 10 minuta od unosa. Nakon toga brisanje može napraviti samo admin.');
       return;
     }
 
@@ -1253,10 +1268,11 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
       id: gradeId,
       type: 'GRADE',
       loading: false,
-      message: diffMinutes > 45
-        ? 'Ocjena je starija od 45 minuta. Za brisanje unesite TOTP kod.'
+      message: isGradeAdmin
+        ? 'Za brisanje ocjene unesite TOTP kod i razlog brisanja.'
         : 'Jeste li sigurni da želite obrisati ovu ocjenu?',
-      showTotp: diffMinutes > 45
+      showTotp: isGradeAdmin,
+      showReason: isGradeAdmin
     });
   };
 
@@ -1486,7 +1502,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     });
   };
 
-  const confirmDelete = async (totpCode?: string) => {
+  const confirmDelete = async (totpCode?: string, reason?: string) => {
     if (!deleteDialog.id || !deleteDialog.type) return;
 
     if (deleteDialog.showTotp) {
@@ -1512,6 +1528,11 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         toast.error(data?.error || 'Neispravan TOTP kod.');
         return;
       }
+    }
+
+    if (deleteDialog.showReason && !reason?.trim()) {
+      toast.error('Upišite razlog brisanja.');
+      return;
     }
     
     setDeleteDialog(prev => ({ ...prev, loading: true }));
@@ -1559,6 +1580,19 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         setSelectedGrade(null);
         setShowAdminDeleteAuth(false);
         setDeleteConfirmationCode('');
+        if (deleteDialog.showReason) {
+          await fetch('/api/audit-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              actionType: 'DELETE_GRADE',
+              recordId: deleteDialog.id,
+              userId: user?.id,
+              userRole: highestRole,
+              details: `Deleted grade ${deleteDialog.id}. Reason: ${reason?.trim()}`
+            })
+          });
+        }
       }
 
       await fetchGradesAndNotes();
@@ -1571,7 +1605,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
       if (deleteDialog.type === 'FINAL_GRADE') console.log("DELETE FINAL GRADE ERROR", err);
       toast.error('Brisanje nije uspjelo.');
     } finally {
-      setDeleteDialog({ isOpen: false, id: '', type: null, loading: false });
+      setDeleteDialog({ isOpen: false, id: '', type: null, loading: false, showTotp: false, showReason: false });
     }
   };
 
@@ -2736,6 +2770,8 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         loading={deleteDialog.loading}
         message={deleteDialog.message}
         showTotp={deleteDialog.showTotp}
+        showReason={deleteDialog.showReason}
+        reasonLabel="Razlog brisanja ocjene"
       />
 
       <GroupFinalGradeModal
@@ -2814,6 +2850,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
           classes={classes}
           effectiveClassId={effectiveClassId}
           isMainAdmin={isMainAdmin}
+          highestRole={highestRole}
           showAdminAuth={showAdminDeleteAuth}
           setShowAdminAuth={setShowAdminDeleteAuth}
           authCode={deleteConfirmationCode}
@@ -2837,6 +2874,7 @@ function GradeDetailsModal({
   classes,
   effectiveClassId,
   isMainAdmin,
+  highestRole,
   showAdminAuth,
   setShowAdminAuth,
   authCode,
@@ -2847,10 +2885,9 @@ function GradeDetailsModal({
   const diffMinutes = (now.getTime() - createdAt.getTime()) / (1000 * 60);
   
   const selectedClass = classes.find((c: any) => c.id === effectiveClassId);
-  const isClassAdmin = isMainAdmin || selectedClass?.homeroomTeacherId === user?.id || selectedClass?.deputyTeacherId === user?.id;
+  const isGradeAdmin = isMainAdmin || [Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(highestRole as Role);
   const isCreator = grade.teacherId === user?.id;
-  const canDeleteDirectly = diffMinutes <= 45 && (isClassAdmin || isCreator);
-  const canDeleteWithAuth = diffMinutes > 45 && (isClassAdmin || isCreator);
+  const canDeleteDirectly = isGradeAdmin || (diffMinutes <= 10 && isCreator);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] flex items-center justify-center p-4">
@@ -2932,7 +2969,7 @@ function GradeDetailsModal({
               </div>
            ) : (
              <div className="pt-4 border-t border-gray-100">
-               {(canDeleteDirectly || canDeleteWithAuth) && (
+               {canDeleteDirectly && (
                  <button 
                    onClick={() => onDelete(grade.id, false)}
                    className="w-full py-2 bg-white border border-red-200 text-red-500 text-[10px] font-black uppercase hover:bg-red-50 transition-colors flex items-center justify-center gap-2"
@@ -2940,8 +2977,11 @@ function GradeDetailsModal({
                    <Trash2 size={12}/> Obriši ocjenu
                  </button>
                )}
-               {diffMinutes > 45 && !isClassAdmin && !isCreator && (
+               {!isGradeAdmin && !isCreator && (
                  <p className="text-[9px] text-gray-400 italic text-center">Možete brisati samo ocjene koje ste Vi unijeli.</p>
+               )}
+               {!isGradeAdmin && isCreator && diffMinutes > 10 && (
+                 <p className="text-[9px] text-gray-400 italic text-center">Ocjena se može obrisati samo unutar 10 minuta od unosa.</p>
                )}
              </div>
            )}

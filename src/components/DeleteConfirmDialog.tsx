@@ -5,11 +5,13 @@ import { cn } from '../lib/utils';
 interface DeleteConfirmDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (totpCode?: string) => void;
+  onConfirm: (totpCode?: string, reason?: string) => void;
   title?: string;
   message?: string;
   loading?: boolean;
   showTotp?: boolean;
+  showReason?: boolean;
+  reasonLabel?: string;
 }
 
 export function DeleteConfirmDialog({
@@ -19,9 +21,19 @@ export function DeleteConfirmDialog({
   title = "Jeste li sigurni?",
   message = "Jeste li sigurni da želite obrisati ovaj zapis?",
   loading = false,
-  showTotp = false
+  showTotp = false,
+  showReason = false,
+  reasonLabel = "Razlog brisanja"
 }: DeleteConfirmDialogProps) {
   const [totpCode, setTotpCode] = React.useState('');
+  const [reason, setReason] = React.useState('');
+
+  React.useEffect(() => {
+    if (!isOpen) {
+      setTotpCode('');
+      setReason('');
+    }
+  }, [isOpen]);
   
   if (!isOpen) return null;
 
@@ -55,6 +67,18 @@ export function DeleteConfirmDialog({
                />
             </div>
           )}
+
+          {showReason && (
+            <div className="mb-4">
+               <label className="block text-[10px] font-black text-gray-700 uppercase tracking-widest mb-1.5">{reasonLabel}</label>
+               <textarea
+                 value={reason}
+                 onChange={(e) => setReason(e.target.value)}
+                 className="w-full border border-gray-300 p-2 text-sm font-bold focus:ring-1 focus:ring-red-500 min-h-[80px] resize-y"
+                 placeholder="Upišite razlog..."
+               />
+            </div>
+          )}
           
           <div className="flex gap-2 mt-8">
             <button
@@ -65,8 +89,8 @@ export function DeleteConfirmDialog({
               Odustani
             </button>
             <button
-              onClick={() => showTotp ? onConfirm(totpCode) : onConfirm()}
-              disabled={loading || (showTotp && !totpCode)}
+              onClick={() => onConfirm(showTotp ? totpCode : undefined, showReason ? reason : undefined)}
+              disabled={loading || (showTotp && !totpCode) || (showReason && !reason.trim())}
               className="flex-1 px-4 py-2 bg-red-600 text-white text-[10px] font-black uppercase hover:bg-red-700 transition-colors flex items-center justify-center disabled:opacity-50"
             >
               {loading ? (

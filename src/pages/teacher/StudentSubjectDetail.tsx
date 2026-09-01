@@ -145,6 +145,7 @@ export default function StudentSubjectDetail() {
     loading: boolean;
     message: string;
     showTotp?: boolean;
+    showReason?: boolean;
   }>({
     isOpen: false,
     id: '',
@@ -403,10 +404,24 @@ export default function StudentSubjectDetail() {
     }
   };
 
+  const isAdminForCurrentSchool = () => {
+    const schoolId = classroom?.school_id || classroom?.schoolId;
+    return isMainAdmin || (userSchoolRoles || []).some(r =>
+      r?.schoolId === schoolId && [Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(r.role as Role)
+    );
+  };
+
+  const isWithinMinutes = (createdAt: string | undefined, minutes: number) => {
+    const createdTime = createdAt ? new Date(createdAt).getTime() : Date.now();
+    if (!Number.isFinite(createdTime)) return true;
+    return Date.now() - createdTime <= minutes * 60 * 1000;
+  };
+
   const canDeleteGrade = (g: any) => {
-    if (isMainAdmin) return true;
+    if (isAdminForCurrentSchool()) return true;
     if (!isTeacher) return false;
-    return g?.teacher_id === user?.id || g?.teacherId === user?.id;
+    const isCreator = g?.teacher_id === user?.id || g?.teacherId === user?.id;
+    return isCreator && isWithinMinutes(g?.created_at || g?.createdAt, 10);
   };
 
   const canDeleteNote = (n: any) => {
@@ -415,19 +430,29 @@ export default function StudentSubjectDetail() {
 
   const triggerDeleteGrade = (id: string) => {
     const grade = grades.find(g => g.id === id);
-    const createdAt = grade?.created_at || grade?.createdAt;
-    const createdTime = createdAt ? new Date(createdAt).getTime() : Date.now();
-    const isOlderThan45Minutes = Number.isFinite(createdTime) && Date.now() - createdTime > 45 * 60 * 1000;
+    const isGradeAdmin = isAdminForCurrentSchool();
+    const isCreator = grade?.teacher_id === user?.id || grade?.teacherId === user?.id;
+
+    if (!isGradeAdmin && !isCreator) {
+      toast.error('Možete obrisati samo ocjene koje ste Vi unijeli.');
+      return;
+    }
+
+    if (!isGradeAdmin && !isWithinMinutes(grade?.created_at || grade?.createdAt, 10)) {
+      toast.error('Ocjenu možete obrisati samo unutar 10 minuta od unosa. Nakon toga brisanje može napraviti samo admin.');
+      return;
+    }
 
     setDeleteDialog({
       isOpen: true,
       id,
       type: 'GRADE',
       loading: false,
-      message: isOlderThan45Minutes
-        ? 'Ocjena je starija od 45 minuta. Za brisanje unesite TOTP kod.'
+      message: isGradeAdmin
+        ? 'Za brisanje ocjene unesite TOTP kod i razlog brisanja.'
         : 'Jeste li sigurni da želite obrisati ovu ocjenu i bilješku?',
-      showTotp: isOlderThan45Minutes
+      showTotp: isGradeAdmin,
+      showReason: isGradeAdmin
     });
   };
 
@@ -441,7 +466,7 @@ export default function StudentSubjectDetail() {
     });
   };
 
-  const confirmDelete = async (totpCode?: string) => {
+  const confirmDelete = async (totpCode?: string, reason?: string) => {
     if (!deleteDialog.id || !deleteDialog.type) return;
 
     if (deleteDialog.showTotp) {
@@ -469,11 +494,30 @@ export default function StudentSubjectDetail() {
       }
     }
 
+    if (deleteDialog.showReason && !reason?.trim()) {
+      toast.error('Upišite razlog brisanja.');
+      return;
+    }
+
     setDeleteDialog(prev => ({ ...prev, loading: true }));
     try {
       const tableName = deleteDialog.type === 'GRADE' ? 'grades' : 'student_notes';
       const { error } = await supabase.from(tableName).delete().eq('id', deleteDialog.id);
       if (error) throw error;
+
+      if (deleteDialog.type === 'GRADE' && deleteDialog.showReason) {
+        await fetch('/api/audit-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            actionType: 'DELETE_GRADE',
+            recordId: deleteDialog.id,
+            userId: user?.id,
+            userRole: 'ADMIN',
+            details: `Deleted grade ${deleteDialog.id}. Reason: ${reason?.trim()}`
+          })
+        });
+      }
       
       toast.success(deleteDialog.type === 'GRADE' ? 'Ocjena i bilješka uspješno obrisane.' : 'Bilješka uspješno obrisana.');
       loadAllData();
@@ -481,7 +525,7 @@ export default function StudentSubjectDetail() {
       console.error('Error deleting record:', err);
       toast.error('Povezivanje/brisanje nije uspjelo.');
     } finally {
-      setDeleteDialog({ isOpen: false, id: '', type: null, loading: false, message: '', showTotp: false });
+      setDeleteDialog({ isOpen: false, id: '', type: null, loading: false, message: '', showTotp: false, showReason: false });
     }
   };
 
@@ -662,6 +706,12 @@ export default function StudentSubjectDetail() {
   const handleEditGradeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingGrade) return;
+
+    if (!canDeleteGrade(editingGrade)) {
+      toast.error('Ocjenu možete uređivati samo unutar 10 minuta od unosa.');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('grades')
@@ -2053,11 +2103,13 @@ export default function StudentSubjectDetail() {
       {/* DELETE CONFIRM DIALOG */}
       <DeleteConfirmDialog
         isOpen={deleteDialog.isOpen}
-        onClose={() => setDeleteDialog({ isOpen: false, id: '', type: null, loading: false, message: '', showTotp: false })}
+        onClose={() => setDeleteDialog({ isOpen: false, id: '', type: null, loading: false, message: '', showTotp: false, showReason: false })}
         onConfirm={confirmDelete}
         title="POTVRDA BRISANJA"
         message={deleteDialog.message || ''}
         showTotp={deleteDialog.showTotp}
+        showReason={deleteDialog.showReason}
+        reasonLabel="Razlog brisanja ocjene"
         loading={deleteDialog.loading}
       />
       

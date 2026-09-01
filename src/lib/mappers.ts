@@ -166,6 +166,7 @@ export const mappers = {
     justifiedBy: raw.justified_by,
     resolvedBy: raw.resolved_by,
     resolvedAt: raw.resolved_at,
+    createdAt: raw.created_at,
   }),
 
   note: (raw: any) => ({

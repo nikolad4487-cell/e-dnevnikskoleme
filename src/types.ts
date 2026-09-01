@@ -318,6 +318,7 @@ export type Absence = {
   justifiedBy?: string;
   resolvedBy?: string;
   resolvedAt?: string;
+  createdAt?: string;
 };
 
 export type Grade = {

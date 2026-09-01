@@ -109,34 +109,11 @@ export default function TeacherIzostanciPage() {
 
   const confirmDeleteAbsence = async (totpCode?: string) => {
     if (!deleteDialog.id) return;
-    
-    // TOTP check
-    if (isMainAdmin || highestRole === Role.ADMIN) {
-      if (!totpCode) {
-        toast.error('Potreban je autentifikator kod.');
-        return;
-      }
-      
-      const res = await fetch('/api/verify-totp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ authUserId: user?.id, totpCode })
-      });
-      
-      console.log("VERIFY RESPONSE STATUS", res.status);
-      console.log("VERIFY RESPONSE URL", res.url);
-      
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        toast.error("API ruta za provjeru autentifikatora nije dostupna.");
-        return;
-      }
 
-      const data = await res.json();
-      if (!data || !data.success) {
-        toast.error(data?.error || 'Neispravan autentifikator kod.');
-        return;
-      }
+    const absence = absences.find(a => a.id === deleteDialog.id);
+    if (!absence || !canDeleteAbsence(absence)) {
+      toast.error('Nemate ovlasti za brisanje ovog izostanka.');
+      return;
     }
 
     setDeleteDialog(prev => ({ ...prev, loading: true }));
@@ -164,6 +141,20 @@ export default function TeacherIzostanciPage() {
     } finally {
         setDeleteDialog({ isOpen: false, id: '', loading: false });
     }
+  };
+
+  const isAdminForAbsences = isMainAdmin || [Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(highestRole as Role);
+
+  const isWithin48Hours = (absence: Absence) => {
+    const timestamp = absence.createdAt || (absence as any).created_at;
+    const createdAt = timestamp ? new Date(timestamp).getTime() : Date.now();
+    if (!Number.isFinite(createdAt)) return true;
+    return Date.now() - createdAt <= 48 * 60 * 60 * 1000;
+  };
+
+  const canDeleteAbsence = (absence: Absence) => {
+    if (isAdminForAbsences || isHomeroomTeacher) return true;
+    return absence.teacherId === user?.id && isWithin48Hours(absence);
   };
 
   const studentStats = useMemo(() => {
@@ -248,8 +239,8 @@ export default function TeacherIzostanciPage() {
             lessons={lessons} 
             onJustify={(date: string) => setJustifyingDate(date)}
             onDelete={(id: string) => setDeleteDialog({ isOpen: true, id, loading: false })}
-            showDeleteButton={isMainAdmin || highestRole === Role.ADMIN}
-            showJustifyButton={isMainAdmin || highestRole === Role.ADMIN || isHomeroomTeacher}
+            canDeleteAbsence={canDeleteAbsence}
+            showJustifyButton={isAdminForAbsences || isHomeroomTeacher}
           />
         )}
       </div>
@@ -259,15 +250,15 @@ export default function TeacherIzostanciPage() {
           onClose={() => setDeleteDialog({ ...deleteDialog, isOpen: false })}
           onConfirm={confirmDeleteAbsence}
           loading={deleteDialog.loading}
-          showTotp={isMainAdmin || highestRole === Role.ADMIN}
+          showTotp={false}
           title="Potvrda brisanja izostanka"
-          message="Za brisanje izostanka potrebno je potvrditi radnju kodom iz autentifikatora."
+          message="Jeste li sigurni da želite obrisati ovaj izostanak?"
       />
     </div>
   );
 }
 
-const StudentDetailView = ({ student, absences, lessons, onJustify, onDelete, showDeleteButton, showJustifyButton }: any) => {
+const StudentDetailView = ({ student, absences, lessons, onJustify, onDelete, canDeleteAbsence, showJustifyButton }: any) => {
     // Group absences by date
     const grouped = absences.reduce((acc: any, a: any) => {
         if (!acc[a.date]) acc[a.date] = [];
@@ -294,6 +285,7 @@ const StudentDetailView = ({ student, absences, lessons, onJustify, onDelete, sh
                 {dates.map(date => {
                     const absList = grouped[date];
                     const hasPending = absList.some((a: any) => a.status === AbsenceStatus.PENDING);
+                    const deletableAbsence = absList.find((a: any) => canDeleteAbsence(a));
                     return (
                         <tr key={date} className="border-b">
                             <td className="p-2 border-r font-bold">{new Date(date).toLocaleDateString()}</td>
@@ -318,7 +310,7 @@ const StudentDetailView = ({ student, absences, lessons, onJustify, onDelete, sh
                             })}
                             <td className="p-2 text-center flex gap-1 justify-center">
                                 {hasPending && showJustifyButton && <button onClick={() => onJustify(date)} className="bg-[#005c8d] text-white px-2 py-1 uppercase text-[9px] font-bold">Opravdaj</button>}
-                                {showDeleteButton && <button onClick={() => onDelete(absList[0].id)} className="bg-red-600 text-white px-2 py-1 uppercase text-[9px] font-bold"><Trash2 size={10} /></button>}
+                                {deletableAbsence && <button onClick={() => onDelete(deletableAbsence.id)} className="bg-red-600 text-white px-2 py-1 uppercase text-[9px] font-bold"><Trash2 size={10} /></button>}
                             </td>
                         </tr>
                     );
