@@ -16,12 +16,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   const navigate = useNavigate();
   
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-screen bg-slate-50">
-        <div className="w-8 h-8 border-4 border-[#005c8d] border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-slate-500 font-medium italic">Učitavanje podataka...</p>
-      </div>
-    );
+    return <div className="min-h-screen bg-slate-50" />;
   }
 
   // Handle Auth Error specifically
