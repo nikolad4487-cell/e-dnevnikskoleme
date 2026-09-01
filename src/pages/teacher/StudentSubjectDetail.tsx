@@ -33,6 +33,15 @@ const deletionReasonOptions = Object.values(DeletionReason).map(value => ({
   label: deletionReasonLabels[value]
 }));
 
+const mapApiStudentNote = (note: any) => ({
+  ...note,
+  teacher_id: note.author_id || note.teacher_id,
+  content: note.text_content || note.content,
+  date: note.reference_date || note.date,
+  author_name: note.author_name || note.author?.name,
+  created_at: note.created_at
+});
+
 interface ElementGroup {
   name: string;
   gradesByMonth: Record<string, any[]>;
@@ -210,6 +219,25 @@ export default function StudentSubjectDetail() {
     return () => clearInterval(interval);
   }, []);
 
+  const getAuthHeaders = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) throw new Error('Niste prijavljeni.');
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${session.access_token}`
+    };
+  };
+
+  const fetchStudentNotes = async () => {
+    if (!studentId || !subjectId || !classId) return [];
+    const headers = await getAuthHeaders();
+    const params = new URLSearchParams({ studentId, subjectId, classId });
+    const res = await fetch(`/api/student-notes?${params.toString()}`, { headers });
+    const json = await res.json();
+    if (!res.ok || json.error) throw new Error(json.error || 'Greška pri dohvaćanju bilješki.');
+    return (json.data || []).map(mapApiStudentNote);
+  };
+
   // Main data fetch
   const loadAllData = async () => {
     if (!studentId || !classId || !subjectId) return;
@@ -228,7 +256,6 @@ export default function StudentSubjectDetail() {
         { data: gemData, error: gemError },
         { data: grData, error: grError },
         { data: finGrData, error: finGrError },
-        { data: nData, error: nError },
         { data: examData, error: examError }
       ] = await Promise.all([
         supabase.from('user_profiles').select('*').eq('id', studentId).single(),
@@ -242,11 +269,10 @@ export default function StudentSubjectDetail() {
         supabase.from('grading_elements').select('name').eq('class_id', classId).eq('subject_id', subjectId),
         supabase.from('grades').select('*').eq('student_id', studentId).eq('subject_id', subjectId).eq('class_id', classId),
         supabase.from('final_grades').select('*').eq('student_id', studentId).eq('subject_id', subjectId).eq('class_id', classId),
-        supabase.from('student_notes').select('*').eq('student_id', studentId).eq('subject_id', subjectId).eq('class_id', classId),
         supabase.from('exams').select('*').eq('student_id', studentId).eq('subject_id', subjectId).eq('class_id', classId),
       ]);
 
-      console.log("QUERY RESULTS", { profile, subData, classData, enrollments, gemData, grData, finGrData, nData, examData });
+      console.log("QUERY RESULTS", { profile, subData, classData, enrollments, gemData, grData, finGrData, examData });
       if (profileError) console.error("Profile Error", profileError);
       if (subError) console.error("Subject Error", subError);
       if (classError) console.error("Class Error", classError);
@@ -254,7 +280,6 @@ export default function StudentSubjectDetail() {
       if (gemError) console.error("Gem Error", gemError);
       if (grError) console.error("Grades Error", grError);
       if (finGrError) console.error("Final Grades Error", finGrError);
-      if (nError) console.error("Notes Error", nError);
       if (examError) console.error("Exams Error", examError);
 
       if (profile) setStudent(profile);
@@ -311,7 +336,7 @@ export default function StudentSubjectDetail() {
         };
       });
       setFinalGrades(mappedFinGrData);
-      setNotes(nData || []);
+      setNotes(await fetchStudentNotes());
       setExams(examData || []);
 
       const { data: isTeacherAssigned } = await supabase
@@ -516,8 +541,18 @@ export default function StudentSubjectDetail() {
         ? grades.find(g => g.id === deleteDialog.id)
         : null;
       const tableName = deleteDialog.type === 'GRADE' ? 'grades' : 'student_notes';
-      const { error } = await supabase.from(tableName).delete().eq('id', deleteDialog.id);
-      if (error) throw error;
+      if (deleteDialog.type === 'NOTE') {
+        const headers = await getAuthHeaders();
+        const res = await fetch(`/api/student-notes/${deleteDialog.id}`, {
+          method: 'DELETE',
+          headers
+        });
+        const json = await res.json();
+        if (!res.ok || json.error) throw new Error(json.error || 'Greška pri brisanju bilješke.');
+      } else {
+        const { error } = await supabase.from(tableName).delete().eq('id', deleteDialog.id);
+        if (error) throw error;
+      }
 
       if (deleteDialog.type === 'GRADE' && deleteDialog.showReason) {
         const deletedAt = new Date().toISOString();
@@ -700,18 +735,23 @@ export default function StudentSubjectDetail() {
     if (!user || !studentId || !subjectId || !classId) return;
 
     try {
+      const headers = await getAuthHeaders();
       const payload = {
         student_id: studentId,
         subject_id: subjectId,
         class_id: classId,
-        teacher_id: user.id,
         school_id: classroom?.school_id || classroom?.schoolId || null,
-        content: newNoteContent,
-        date: newNoteDate
+        text_content: newNoteContent,
+        reference_date: newNoteDate
       };
 
-      const { error } = await supabase.from('student_notes').insert([payload]);
-      if (error) throw error;
+      const res = await fetch('/api/student-notes', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || 'Greška pri dodavanju bilješke.');
 
       setShowAddNoteModal(false);
       setNewNoteContent('');
@@ -780,14 +820,17 @@ export default function StudentSubjectDetail() {
       return;
     }
     try {
-      const { error } = await supabase
-        .from('student_notes')
-        .update({
-          content: editingNote.content,
-          date: editingNote.date
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/student-notes/${editingNote.id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({
+          text_content: editingNote.content,
+          reference_date: editingNote.date
         })
-        .eq('id', editingNote.id);
-      if (error) throw error;
+      });
+      const json = await res.json();
+      if (!res.ok || json.error) throw new Error(json.error || 'Greška pri izmjeni bilješke.');
       setEditingNote(null);
       loadAllData();
       toast.success('Bilješka je uspješno izmijenjena.');
@@ -1029,6 +1072,8 @@ export default function StudentSubjectDetail() {
       value: '-',
       element: 'BILJEŠKA NASTAVNIKA',
       note: n.content,
+      authorName: n.author_name,
+      createdAt: n.created_at,
       raw: n
     });
   });
@@ -1575,7 +1620,14 @@ export default function StudentSubjectDetail() {
                             <td className="py-2.5 text-gray-500 text-[11px] whitespace-nowrap w-[10%]">{item.date}</td>
                             <td className="py-2.5 text-center font-extrabold text-slate-900 w-[5%]">{item.value}</td>
                             <td className="py-2.5 font-bold uppercase text-[9px] text-gray-500 w-[15%] break-words">{item.element}</td>
-                            <td className="py-2.5 text-slate-700 italic w-[60%] whitespace-normal break-words">{item.note || '-'}</td>
+                            <td className="py-2.5 text-slate-700 italic w-[60%] whitespace-normal break-words">
+                              <div>{item.note || '-'}</div>
+                              {item.type === 'NOTE' && (
+                                <div className="mt-1 text-[9px] not-italic font-bold uppercase tracking-wide text-slate-400">
+                                  {item.authorName || 'Nastavnik'} · {item.createdAt}
+                                </div>
+                              )}
+                            </td>
                              <td className="py-2.5 text-right whitespace-nowrap w-[10%]">
                                {canEdit && (
                                  <div className="flex items-center justify-end gap-1.5">

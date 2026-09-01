@@ -116,6 +116,8 @@ export function formatSubjectDisplayName(subjectName: string, subjectType: strin
     .replace(/\s*\(praksa\)\s*$/i, '')
     .replace(/\s*\(Praksa\)\s*$/i, '')
     .replace(/\s*\(practice\)\s*$/i, '')
+    .replace(/\s*\(dopunska nastava\)\s*$/i, '')
+    .replace(/\s*\(dodatna nastava\)\s*$/i, '')
     .trim();
     
   const resolvedType = getForcedSubjectType(cleaned, subjectType);
@@ -124,6 +126,10 @@ export function formatSubjectDisplayName(subjectName: string, subjectType: strin
   if (t === 'IZBORNI') return `${cleaned} (Izborni)`;
   
   if (t === 'PRAKSA') return `${cleaned} (Praksa)`;
+
+  if (t === 'DOPUNSKA_NASTAVA') return `${cleaned} (Dopunska nastava)`;
+
+  if (t === 'DODATNA_NASTAVA') return `${cleaned} (Dodatna nastava)`;
   
   return cleaned;
 }
@@ -137,11 +143,15 @@ export function formatSubjectName(subject: any) {
   return formatSubjectDisplayName(name, type);
 }
 
-export function normalizeSubjectType(type: string | null | undefined): 'REDOVNI' | 'IZBORNI' | 'PRAKSA' {
+export type NormalizedSubjectType = 'REDOVNI' | 'IZBORNI' | 'PRAKSA' | 'DOPUNSKA_NASTAVA' | 'DODATNA_NASTAVA';
+
+export function normalizeSubjectType(type: string | null | undefined): NormalizedSubjectType {
   const value = String(type || "").toUpperCase().trim();
 
   if (value === "IZBORNI" || value === "ELECTIVE") return "IZBORNI";
   if (value === "PRAKSA" || value === "PRACTICE") return "PRAKSA";
+  if (value === "DOPUNSKA_NASTAVA" || value === "DOPUNSKA NASTAVA" || value === "REMEDIAL") return "DOPUNSKA_NASTAVA";
+  if (value === "DODATNA_NASTAVA" || value === "DODATNA NASTAVA" || value === "SUPPLEMENTARY") return "DODATNA_NASTAVA";
   if (value === "REDOVNI" || value === "REQUIRED") return "REDOVNI";
 
   return "REDOVNI";
@@ -241,7 +251,7 @@ export function normalizeText(value: string | null | undefined): string {
     .replace(/đ/g, "d");
 }
 
-export function getForcedSubjectType(subjectName: string, selectedType: string): 'REDOVNI' | 'IZBORNI' | 'PRAKSA' {
+export function getForcedSubjectType(subjectName: string, selectedType: string): NormalizedSubjectType {
   const name = normalizeText(subjectName);
   
   if (name.includes("prakticna nastava") || name.includes("praksa")) {
@@ -256,6 +266,8 @@ export function getForcedSubjectType(subjectName: string, selectedType: string):
   const val = String(selectedType || "").toUpperCase().trim();
   if (val === "IZBORNI" || val === "ELECTIVE") return "IZBORNI";
   if (val === "PRAKSA" || val === "PRACTICE") return "PRAKSA";
+  if (val === "DOPUNSKA_NASTAVA" || val === "DOPUNSKA NASTAVA" || val === "REMEDIAL") return "DOPUNSKA_NASTAVA";
+  if (val === "DODATNA_NASTAVA" || val === "DODATNA NASTAVA" || val === "SUPPLEMENTARY") return "DODATNA_NASTAVA";
   return "REDOVNI";
 }
 

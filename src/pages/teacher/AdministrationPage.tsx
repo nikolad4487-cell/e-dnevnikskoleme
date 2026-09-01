@@ -33,6 +33,30 @@ async function safeReadJson(response: Response) {
   }
 }
 
+const SUBJECT_STATUS_OPTIONS = [
+  'redovni',
+  'izborni',
+  'fakultativni',
+  'praksa',
+  'dopunska nastava',
+  'dodatna nastava',
+  'REDOVNI',
+  'IZBORNI',
+  'FAKULTATIVNI',
+  'PRAKSA',
+  'DOPUNSKA_NASTAVA',
+  'DODATNA_NASTAVA'
+] as const;
+
+const SELECTIVE_ATTENDANCE_SUBJECT_STATUSES = new Set<string>([
+  'dopunska nastava',
+  'dodatna nastava',
+  'DOPUNSKA_NASTAVA',
+  'DODATNA_NASTAVA'
+]);
+
+type SubjectAdministrationStatus = typeof SUBJECT_STATUS_OPTIONS[number];
+
 export default function AdministrationPage() {
   const navigate = useNavigate();
   const { classId: routeClassId } = useParams<{ classId: string }>();
@@ -266,7 +290,7 @@ export default function AdministrationPage() {
   const [showSubjectTableModal, setShowSubjectTableModal] = useState(false);
   const [subjectRows, setSubjectRows] = useState([{
     subjectId: '',
-    subjectType: 'REDOVNI' as 'REDOVNI' | 'IZBORNI' | 'PRAKSA',
+    subjectType: 'REDOVNI' as SubjectAdministrationStatus,
     teacherIds: [] as string[],
     isForeignLanguage: false,
     addToAllStudents: true
@@ -2631,6 +2655,11 @@ setAllSubjects(uniqueSub2);
       toast.error('Molimo popunite sva polja');
       return;
     }
+
+    if (!SUBJECT_STATUS_OPTIONS.includes(assignmentForm.subjectType as any)) {
+      toast.error('Odaberite ispravan status predmeta.');
+      return;
+    }
     
     console.log("CREATE ASSIGNMENT CLICKED", assignmentForm);
     
@@ -2654,6 +2683,7 @@ setAllSubjects(uniqueSub2);
 
       const subjectName = allSubjects.find(s => s.id === assignmentForm.subjectId)?.name || '';
       const finalSubjectType = getForcedSubjectType(subjectName, existingCS?.subject_type || assignmentForm.subjectType);
+      const isSelectiveAttendanceSubject = SELECTIVE_ATTENDANCE_SUBJECT_STATUSES.has(finalSubjectType);
 
       const classSubjectPayload = {
         class_id: assignmentForm.classId,
@@ -2669,7 +2699,7 @@ setAllSubjects(uniqueSub2);
       console.log("CLASS SUBJECT CREATE PAYLOAD", classSubjectPayload);
       console.log("CLASS SUBJECT TEACHER PAYLOAD", payload);
       console.log("GROUP NAME", assignmentForm.groupName);
-      console.log("ADD SUBJECT TO ALL STUDENTS", assignmentForm.addToAllStudents);
+      console.log("ADD SUBJECT TO ALL STUDENTS", isSelectiveAttendanceSubject ? false : assignmentForm.addToAllStudents);
 
       const { error: csError } = await supabase.from('class_subjects').upsert([classSubjectPayload], { onConflict: 'class_id,subject_id' });
       if (csError) throw csError;
@@ -2687,7 +2717,7 @@ setAllSubjects(uniqueSub2);
         if (error) throw error;
         toast.success('Zaduženje kreirano');
 
-        if (assignmentForm.addToAllStudents) {
+        if (!isSelectiveAttendanceSubject && assignmentForm.addToAllStudents) {
            const classData = classes.find(c => c.id === assignmentForm.classId);
            if (classData) {
               const { data: students } = await supabase.from('student_class_enrollments').select('*').eq('class_id', assignmentForm.classId).eq('status', 'ACTIVE');
@@ -3835,7 +3865,14 @@ setAllSubjects(uniqueSub2);
                               <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest leading-none">Vrsta predmeta</label>
                               <select 
                                 value={assignmentForm.subjectType}
-                                onChange={e => setAssignmentForm({...assignmentForm, subjectType: e.target.value})}
+                                onChange={e => {
+                                  const subjectType = e.target.value;
+                                  setAssignmentForm({
+                                    ...assignmentForm,
+                                    subjectType,
+                                    addToAllStudents: SELECTIVE_ATTENDANCE_SUBJECT_STATUSES.has(subjectType) ? false : assignmentForm.addToAllStudents
+                                  });
+                                }}
                                 disabled={!!editingAssignmentId}
                                 className="w-full border border-gray-300 p-2 text-xs font-bold focus:border-[#005c8d] outline-none"
                                 required
@@ -3929,6 +3966,7 @@ setAllSubjects(uniqueSub2);
                                     type="checkbox"
                                     checked={assignmentForm.addToAllStudents}
                                     onChange={e => setAssignmentForm({...assignmentForm, addToAllStudents: e.target.checked})}
+                                    disabled={SELECTIVE_ATTENDANCE_SUBJECT_STATUSES.has(assignmentForm.subjectType)}
                                     className="w-4 h-4 cursor-pointer focus:outline-[#005c8d]"
                                   />
                                   Dodaj svim učenicima
@@ -7051,6 +7089,9 @@ setAllSubjects(uniqueSub2);
                         newRows[i].subjectId = e.target.value;
                         const subj = allSubjects.find(s => s.id === e.target.value);
                         newRows[i].subjectType = getForcedSubjectType(subj?.name || '', 'REDOVNI');
+                        if (SELECTIVE_ATTENDANCE_SUBJECT_STATUSES.has(newRows[i].subjectType)) {
+                          newRows[i].addToAllStudents = false;
+                        }
                         setSubjectRows(newRows);
                       }} className="w-full border border-gray-300 p-1">
                         <option value="">Odaberi</option>
@@ -7060,12 +7101,18 @@ setAllSubjects(uniqueSub2);
                     <td className="p-2">
                        <select value={row.subjectType} onChange={e => {
                          const newRows = [...subjectRows];
-                         newRows[i].subjectType = e.target.value as any;
+                         const subjectType = e.target.value as SubjectAdministrationStatus;
+                         newRows[i].subjectType = subjectType;
+                         if (SELECTIVE_ATTENDANCE_SUBJECT_STATUSES.has(subjectType)) {
+                           newRows[i].addToAllStudents = false;
+                         }
                          setSubjectRows(newRows);
                        }} className="w-full border border-gray-300 p-1">
                          <option value="REDOVNI">Redovni</option>
                          <option value="IZBORNI">Izborni</option>
                          <option value="PRAKSA">Praksa</option>
+                         <option value="DOPUNSKA_NASTAVA">Dopunska nastava</option>
+                         <option value="DODATNA_NASTAVA">Dodatna nastava</option>
                        </select>
                     </td>
                     <td className="p-2">
@@ -7095,7 +7142,7 @@ setAllSubjects(uniqueSub2);
                         const newRows = [...subjectRows];
                         newRows[i].addToAllStudents = e.target.checked;
                         setSubjectRows(newRows);
-                      }}/>
+                      }} disabled={SELECTIVE_ATTENDANCE_SUBJECT_STATUSES.has(row.subjectType)}/>
                     </td>
                     <td className="p-2"><button type="button" onClick={() => setSubjectRows(subjectRows.filter((_, idx) => idx !== i))}><X size={14} className="text-red-500"/></button></td>
                   </tr>

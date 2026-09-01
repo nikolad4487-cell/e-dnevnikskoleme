@@ -360,6 +360,9 @@ export const mappers = {
     content: raw.content,
     category: raw.category,
     date: raw.date,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+    authorName: raw.author_name || raw.author?.name,
   }),
 
   studentSubjectEnrollment: (raw: any) => ({

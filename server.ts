@@ -375,6 +375,226 @@ async function startServer() {
       next();
     });
 
+    const notePrivilegedRoles = new Set(["TEACHER", "HOMEROOM", "HOMEROOM_TEACHER", "ADMIN", "SCHOOL_ADMIN", "MAIN_ADMIN", "SUPER_ADMIN"]);
+
+    async function resolveAuthenticatedUser(req: any) {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+      const authHeader = req.headers.authorization || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.replace("Bearer ", "") : "";
+      if (!token) {
+        return { error: "Missing authorization header", status: 401 };
+      }
+
+      const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token);
+      if (authError || !authData?.user) {
+        return { error: "Invalid session token", status: 401 };
+      }
+
+      const authUserId = authData.user.id;
+      let { data: profile } = await supabaseAdmin
+        .from("user_profiles")
+        .select("id, auth_user_id, name, email")
+        .eq("auth_user_id", authUserId)
+        .maybeSingle();
+
+      if (!profile) {
+        const { data: fallbackProfile } = await supabaseAdmin
+          .from("user_profiles")
+          .select("id, auth_user_id, name, email")
+          .eq("id", authUserId)
+          .maybeSingle();
+        profile = fallbackProfile;
+      }
+
+      const userId = profile?.id || authUserId;
+      const { data: roles } = await supabaseAdmin
+        .from("user_school_roles")
+        .select("school_id, role")
+        .eq("user_id", userId);
+
+      return { userId, profile, roles: roles || [], token };
+    }
+
+    function fullNameFromProfile(profile: any) {
+      return profile?.name || "Nastavnik";
+    }
+
+    function canSeeFullNoteTimestamp(auth: any, schoolId?: string | null) {
+      const schoolRoles = (auth.roles || [])
+        .filter((role: any) => !schoolId || role.school_id === schoolId)
+        .map((role: any) => role.role);
+      return schoolRoles.some(role => notePrivilegedRoles.has(String(role)));
+    }
+
+    function serializeStudentNote(note: any, author: any, showFullTimestamp: boolean) {
+      const createdAt = note.created_at ? new Date(note.created_at) : new Date();
+      const createdAtValue = showFullTimestamp
+        ? createdAt.toLocaleString("hr-HR", { timeZone: "Europe/Zagreb" })
+        : createdAt.toLocaleDateString("hr-HR", { timeZone: "Europe/Zagreb" });
+
+      return {
+        id: note.id,
+        student_id: note.student_id,
+        subject_id: note.subject_id,
+        class_id: note.class_id,
+        school_id: note.school_id,
+        text_content: note.content,
+        content: note.content,
+        reference_date: note.date,
+        date: note.date,
+        created_at: createdAtValue,
+        updated_at: note.updated_at,
+        author_id: note.teacher_id,
+        teacher_id: note.teacher_id,
+        author_name: fullNameFromProfile(author),
+        author: author ? { id: author.id, name: fullNameFromProfile(author) } : null
+      };
+    }
+
+    async function fetchStudentNoteAuthorMap(notes: any[]) {
+      const ids = Array.from(new Set(notes.map(note => note.teacher_id).filter(Boolean)));
+      if (ids.length === 0) return new Map<string, any>();
+      const { data: profiles } = await supabaseAdmin
+        .from("user_profiles")
+        .select("id, name")
+        .in("id", ids);
+      return new Map((profiles || []).map((profile: any) => [profile.id, profile]));
+    }
+
+    async function canManageStandaloneNote(auth: any, note: any) {
+      if (note.teacher_id === auth.userId) return true;
+      const schoolRoles = (auth.roles || [])
+        .filter((role: any) => !note.school_id || role.school_id === note.school_id)
+        .map((role: any) => role.role);
+      return schoolRoles.some(role => ["ADMIN", "SCHOOL_ADMIN", "MAIN_ADMIN", "SUPER_ADMIN"].includes(String(role)));
+    }
+
+    app.get("/api/student-notes", async (req, res) => {
+      try {
+        const auth = await resolveAuthenticatedUser(req);
+        if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+        const { studentId, subjectId, classId } = req.query;
+        if (!studentId || !subjectId || !classId) {
+          return res.status(400).json({ error: "Missing studentId, subjectId or classId" });
+        }
+
+        const { data: notes, error } = await supabaseAdmin
+          .from("student_notes")
+          .select("*")
+          .eq("student_id", studentId)
+          .eq("subject_id", subjectId)
+          .eq("class_id", classId)
+          .order("date", { ascending: false })
+          .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        const schoolId = notes?.[0]?.school_id || null;
+        const showFullTimestamp = canSeeFullNoteTimestamp(auth, schoolId);
+        const authorMap = await fetchStudentNoteAuthorMap(notes || []);
+        res.json({
+          success: true,
+          data: (notes || []).map((note: any) => serializeStudentNote(note, authorMap.get(note.teacher_id), showFullTimestamp))
+        });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.post("/api/student-notes", async (req, res) => {
+      try {
+        const auth = await resolveAuthenticatedUser(req);
+        if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+        const { student_id, studentId, subject_id, subjectId, text_content, textContent, reference_date, referenceDate, class_id, classId, school_id, schoolId } = req.body || {};
+        const now = new Date().toISOString();
+        const payload = {
+          student_id: student_id || studentId,
+          subject_id: subject_id || subjectId,
+          class_id: class_id || classId,
+          school_id: school_id || schoolId || null,
+          content: text_content || textContent,
+          date: reference_date || referenceDate,
+          teacher_id: auth.userId,
+          created_at: now,
+          updated_at: now
+        };
+
+        if (!payload.student_id || !payload.subject_id || !payload.class_id || !payload.content || !payload.date) {
+          return res.status(400).json({ error: "Missing required note fields" });
+        }
+
+        const { data, error } = await supabaseAdmin
+          .from("student_notes")
+          .insert(payload)
+          .select("*")
+          .single();
+
+        if (error) throw error;
+        res.json({ success: true, data: serializeStudentNote(data, auth.profile, canSeeFullNoteTimestamp(auth, data.school_id)) });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.patch("/api/student-notes/:id", async (req, res) => {
+      try {
+        const auth = await resolveAuthenticatedUser(req);
+        if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+        const { data: existing, error: fetchError } = await supabaseAdmin
+          .from("student_notes")
+          .select("*")
+          .eq("id", req.params.id)
+          .maybeSingle();
+        if (fetchError) throw fetchError;
+        if (!existing) return res.status(404).json({ error: "Note not found" });
+        if (!(await canManageStandaloneNote(auth, existing))) return res.status(403).json({ error: "Not authorized to edit this note" });
+
+        const { text_content, textContent, reference_date, referenceDate } = req.body || {};
+        const updatePayload: any = { updated_at: new Date().toISOString() };
+        if (text_content !== undefined || textContent !== undefined) updatePayload.content = text_content ?? textContent;
+        if (reference_date !== undefined || referenceDate !== undefined) updatePayload.date = reference_date ?? referenceDate;
+
+        const { data, error } = await supabaseAdmin
+          .from("student_notes")
+          .update(updatePayload)
+          .eq("id", req.params.id)
+          .select("*")
+          .single();
+
+        if (error) throw error;
+        res.json({ success: true, data: serializeStudentNote(data, auth.profile, canSeeFullNoteTimestamp(auth, data.school_id)) });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.delete("/api/student-notes/:id", async (req, res) => {
+      try {
+        const auth = await resolveAuthenticatedUser(req);
+        if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+        const { data: existing, error: fetchError } = await supabaseAdmin
+          .from("student_notes")
+          .select("*")
+          .eq("id", req.params.id)
+          .maybeSingle();
+        if (fetchError) throw fetchError;
+        if (!existing) return res.status(404).json({ error: "Note not found" });
+        if (!(await canManageStandaloneNote(auth, existing))) return res.status(403).json({ error: "Not authorized to delete this note" });
+
+        const { error } = await supabaseAdmin
+          .from("student_notes")
+          .delete()
+          .eq("id", req.params.id);
+        if (error) throw error;
+        res.json({ success: true });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
   // TOTP Verification
   app.post("/api/verify-totp", async (req, res) => {
     try {

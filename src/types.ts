@@ -472,6 +472,9 @@ export type StudentNote = {
   content: string;
   category?: string;
   date: string;
+  createdAt?: string;
+  updatedAt?: string;
+  authorName?: string;
 };
 
 export type StudentNotes = {
