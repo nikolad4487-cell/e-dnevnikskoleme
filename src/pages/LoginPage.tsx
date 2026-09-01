@@ -391,17 +391,8 @@ export default function LoginPage() {
               disabled={isGlobalLoading}
               className="w-full h-14 flex items-center justify-center bg-[#005c8d] text-white text-[11px] font-black uppercase tracking-[0.2em] border border-[#004a70] hover:bg-[#004a70] transition-all disabled:opacity-50 mt-8 group"
             >
-              {isGlobalLoading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  {authLoading && supabaseUser ? 'Učitavanje profila...' : 'Prijavljivanje...'}
-                </div>
-              ) : (
-                <>
-                  Prijavi se u sustav
-                  <ChevronRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />
-                </>
-              )}
+              Prijavi se u sustav
+              <ChevronRight size={16} className="ml-2 group-hover:translate-x-1 transition-transform" />
             </button>
           </form>
         </div>

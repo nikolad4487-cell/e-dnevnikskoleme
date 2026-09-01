@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { School, Role } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { Loader2, ArrowRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Header } from '../components/Header';
 import { parseSchoolAddress } from './admin/SchoolsManagementPage';
@@ -129,12 +129,7 @@ export default function SchoolSelectionPage() {
   };
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-white">
-        <Loader2 className="w-8 h-8 animate-spin text-[#005c8d] mb-4" />
-        <p className="text-slate-500 font-medium">Učitavanje popisa škola...</p>
-      </div>
-    );
+    return null;
   }
 
   return (

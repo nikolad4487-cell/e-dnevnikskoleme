@@ -16,7 +16,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   const navigate = useNavigate();
   
   if (loading) {
-    return <div className="min-h-screen bg-slate-50" />;
+    return null;
   }
 
   // Handle Auth Error specifically

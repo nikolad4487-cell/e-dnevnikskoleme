@@ -1,7 +1,7 @@
 import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { ShieldAlert, Users, Loader2 } from 'lucide-react';
+import { ShieldAlert, Users } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { SelectionProvider, useSelection } from './contexts/SelectionContext';
@@ -165,7 +165,7 @@ export default function App() {
           <TitleManager />
           <Toaster position="top-right" />
           <InactivityTracker />
-          <Suspense fallback={<div className="flex items-center justify-center min-h-screen font-sans">Učitavanje...</div>}>
+          <Suspense fallback={null}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/auth/setup-authenticator" element={
@@ -436,14 +436,7 @@ function SelectionGuard({ children, role }: { children: React.ReactNode, role: '
   
   if (role === 'STUDENT' && !selectedClassId) {
     if (loading) {
-      return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-white">
-          <Loader2 className="w-8 h-8 animate-spin text-[#005c8d]" />
-          <p className="mt-4 text-xs font-bold text-slate-500 uppercase tracking-widest animate-pulse">
-            Provjera podataka upisa...
-          </p>
-        </div>
-      );
+      return null;
     }
 
     if (errorText) {
