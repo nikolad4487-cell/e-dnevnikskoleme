@@ -171,7 +171,7 @@ function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effect
 
 export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' | 'SUBJECTS' | 'GRADES' | 'NOTES' }) {
   const { classId: routeClassId } = useParams<{ classId: string }>();
-  const { user, isMainAdmin } = useAuth();
+  const { user, isMainAdmin, highestRole } = useAuth();
   const { selectedSchoolId, selectedClassId: contextClassId, isArchived } = useSelection();
   const location = useLocation();
   
@@ -312,11 +312,13 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     type: 'GRADE' | 'NOTE' | 'SPECIAL_EXAM' | 'FINAL_GRADE' | null;
     loading: boolean;
     message?: string;
+    showTotp?: boolean;
   }>({
     isOpen: false,
     id: '',
     type: null,
-    loading: false
+    loading: false,
+    showTotp: false
   });
 
   const [showGradeModal, setShowGradeModal] = useState(false);
@@ -1238,24 +1240,12 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     const diffMinutes = (now.getTime() - createdAt.getTime()) / (1000 * 60);
 
     const selectedClass = classes.find(c => c.id === effectiveClassId);
-    const isClassAdmin = isMainAdmin || selectedClass?.homeroomTeacherId === user?.id || selectedClass?.deputyTeacherId === user?.id;
+    const isClassAdmin = isMainAdmin || highestRole === Role.ADMIN || selectedClass?.homeroomTeacherId === user?.id || selectedClass?.deputyTeacherId === user?.id;
+    const isCreator = grade.teacherId === user?.id || (grade as any).teacher_id === user?.id;
 
-    if (!isClassAdmin && diffMinutes > 45) {
-      toast.error('Ocjena se može obrisati samo unutar 45 minuta od unosa. Nakon toga je može obrisati samo admin.');
+    if (!isClassAdmin && !isCreator) {
+      toast.error('Možete obrisati samo ocjene koje ste Vi unijeli.');
       return;
-    }
-
-    if (isClassAdmin && diffMinutes > 45 && !adminOverride) {
-      setSelectedGrade(grade);
-      setShowAdminDeleteAuth(true);
-      return;
-    }
-
-    if (isClassAdmin && diffMinutes > 45 && adminOverride) {
-      if (deleteConfirmationCode !== '8899') {
-         toast.error('Neispravan autorizacijski kod.');
-         return;
-      }
     }
 
     setDeleteDialog({
@@ -1263,7 +1253,10 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
       id: gradeId,
       type: 'GRADE',
       loading: false,
-      message: 'Jeste li sigurni da želite obrisati ovu ocjenu?'
+      message: diffMinutes > 45
+        ? 'Ocjena je starija od 45 minuta. Za brisanje unesite TOTP kod.'
+        : 'Jeste li sigurni da želite obrisati ovu ocjenu?',
+      showTotp: diffMinutes > 45
     });
   };
 
@@ -1493,8 +1486,33 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     });
   };
 
-  const confirmDelete = async () => {
+  const confirmDelete = async (totpCode?: string) => {
     if (!deleteDialog.id || !deleteDialog.type) return;
+
+    if (deleteDialog.showTotp) {
+      if (!totpCode) {
+        toast.error('Potreban je TOTP kod.');
+        return;
+      }
+
+      const res = await fetch('/api/verify-totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authUserId: user?.id, totpCode })
+      });
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        toast.error('API ruta za provjeru autentifikatora nije dostupna.');
+        return;
+      }
+
+      const data = await res.json();
+      if (!data?.success) {
+        toast.error(data?.error || 'Neispravan TOTP kod.');
+        return;
+      }
+    }
     
     setDeleteDialog(prev => ({ ...prev, loading: true }));
 
@@ -2717,6 +2735,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         onConfirm={confirmDelete}
         loading={deleteDialog.loading}
         message={deleteDialog.message}
+        showTotp={deleteDialog.showTotp}
       />
 
       <GroupFinalGradeModal
@@ -2829,8 +2848,9 @@ function GradeDetailsModal({
   
   const selectedClass = classes.find((c: any) => c.id === effectiveClassId);
   const isClassAdmin = isMainAdmin || selectedClass?.homeroomTeacherId === user?.id || selectedClass?.deputyTeacherId === user?.id;
-  const canDeleteDirectly = diffMinutes <= 45 || (isClassAdmin && diffMinutes <= 45);
-  const canDeleteWithAuth = isClassAdmin && diffMinutes > 45;
+  const isCreator = grade.teacherId === user?.id;
+  const canDeleteDirectly = diffMinutes <= 45 && (isClassAdmin || isCreator);
+  const canDeleteWithAuth = diffMinutes > 45 && (isClassAdmin || isCreator);
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[400] flex items-center justify-center p-4">
@@ -2920,8 +2940,8 @@ function GradeDetailsModal({
                    <Trash2 size={12}/> Obriši ocjenu
                  </button>
                )}
-               {diffMinutes > 45 && !isClassAdmin && (
-                 <p className="text-[9px] text-gray-400 italic text-center">Ocjena je starija od 45 minuta i ne može se obrisati.</p>
+               {diffMinutes > 45 && !isClassAdmin && !isCreator && (
+                 <p className="text-[9px] text-gray-400 italic text-center">Možete brisati samo ocjene koje ste Vi unijeli.</p>
                )}
              </div>
            )}

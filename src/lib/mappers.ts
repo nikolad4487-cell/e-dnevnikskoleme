@@ -129,6 +129,8 @@ export const mappers = {
     blockCount: raw.block_count,
     createdByUserId: raw.created_by_user_id,
     teacherDisplayName: raw.teacher_display_name,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
   }),
 
   grade: (raw: any) => ({

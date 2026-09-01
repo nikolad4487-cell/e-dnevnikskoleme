@@ -1202,6 +1202,19 @@ setStudents(uniqueStudents);
     setAbsenceEditForm({ status: '', absenceType: '', note: '' });
   };
 
+  const isRecordOlderThan45Minutes = (record?: { createdAt?: string; created_at?: string; updatedAt?: string; updated_at?: string } | null) => {
+    const timestamp = record?.createdAt || record?.created_at || record?.updatedAt || record?.updated_at;
+    if (!timestamp) return false;
+    const createdAt = new Date(timestamp);
+    if (Number.isNaN(createdAt.getTime())) return false;
+    return Date.now() - createdAt.getTime() > 45 * 60 * 1000;
+  };
+
+  const lessonDeleteRequiresTotp = (lessonId?: string) => {
+    const lesson = lessonId ? dailyLessons.find(l => l.id === lessonId) : null;
+    return isRecordOlderThan45Minutes(lesson as any);
+  };
+
   const handleAddWeek = () => {
     const nextWeekNum = weeks.length + 1;
     const defaultName = `${nextWeekNum}. radni tjedan`;
@@ -1483,23 +1496,12 @@ setStudents(uniqueStudents);
     const lesson = dailyLessons.find(l => l.id === lessonId);
     if (!lesson) return;
 
-    // Time-based check
-    const createdAt = new Date((lesson as any).createdAt || (lesson as any).updatedAt || (lesson as any).created_at || Date.now());
-    const now = new Date();
-    const isOver24Hours = (now.getTime() - createdAt.getTime()) > (24 * 60 * 60 * 1000);
+    const canDeleteOwnLesson = lesson.teacherId === user?.id;
+    const canDeleteAsAdmin = isAdminUser;
 
-    // RBAC: Admins or Razrednik can bypass time check
-    const isRazrednik = selectedClass && (selectedClass.homeroomTeacherId === user?.id || selectedClass.deputyTeacherId === user?.id);
-    const canBypassTime = isMainAdmin || highestRole === Role.ADMIN || isRazrednik;
-
-    if (!canBypassTime && lesson.teacherId !== user?.id) {
+    if (!canDeleteAsAdmin && !canDeleteOwnLesson) {
        toast.error('Niste ovlašteni za brisanje ovog sata.');
        return;
-    }
-
-    if (!canBypassTime && isOver24Hours) {
-        toast.error('Prošlo je više od 24 sata od unosa sata. Sat više ne možete uređivati niti brisati. Obratite se razredniku ili administratoru.');
-        return;
     }
 
     setDeleteDialog({ isOpen: true, id: lessonId, type: 'LESSON', loading: false });
@@ -1510,8 +1512,7 @@ setStudents(uniqueStudents);
     
     // Check if TOTP is required for this deletion type and user
     const lesson = deleteDialog.type === 'LESSON' ? dailyLessons.find(l => l.id === deleteDialog.id) : null;
-    const isRazrednik = selectedClass && (selectedClass.homeroomTeacherId === user?.id || selectedClass.deputyTeacherId === user?.id);
-    const requiresTotp = (deleteDialog.type === 'LESSON' && (isMainAdmin || highestRole === Role.ADMIN || isRazrednik)) || deleteDialog.type === 'ABSENCE'; // Assuming we handle absence deletion confirmation too
+    const requiresTotp = (deleteDialog.type === 'LESSON' && isRecordOlderThan45Minutes(lesson as any)) || deleteDialog.type === 'ABSENCE';
 
     if (requiresTotp) {
       if (!totpCode) {
@@ -4224,7 +4225,10 @@ setStudents(uniqueStudents);
         onClose={() => setDeleteDialog({ ...deleteDialog, isOpen: false })}
         onConfirm={confirmDelete}
         loading={deleteDialog.loading}
-        showTotp={deleteDialog.type === 'LESSON' && (isMainAdmin || highestRole === Role.ADMIN || (selectedClass && (selectedClass.homeroomTeacherId === user?.id || selectedClass.deputyTeacherId === user?.id)))}
+        showTotp={deleteDialog.type === 'LESSON' && lessonDeleteRequiresTotp(deleteDialog.id)}
+        message={deleteDialog.type === 'LESSON' && lessonDeleteRequiresTotp(deleteDialog.id)
+          ? 'Ovaj sat je stariji od 45 minuta. Za brisanje unesite TOTP kod.'
+          : undefined}
       />
 
       {/* Choice Dialog for Single vs Block Deletion */}

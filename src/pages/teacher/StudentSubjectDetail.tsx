@@ -144,12 +144,14 @@ export default function StudentSubjectDetail() {
     type: 'GRADE' | 'NOTE' | null;
     loading: boolean;
     message: string;
+    showTotp?: boolean;
   }>({
     isOpen: false,
     id: '',
     type: null,
     loading: false,
-    message: ''
+    message: '',
+    showTotp: false
   });
   
   // Data lists
@@ -404,10 +406,7 @@ export default function StudentSubjectDetail() {
   const canDeleteGrade = (g: any) => {
     if (isMainAdmin) return true;
     if (!isTeacher) return false;
-    if (!g || !g.created_at) return true; // fallback
-    const diffMs = new Date().getTime() - new Date(g.created_at).getTime();
-    const diffMins = diffMs / (1000 * 60);
-    return diffMins <= 45;
+    return g?.teacher_id === user?.id || g?.teacherId === user?.id;
   };
 
   const canDeleteNote = (n: any) => {
@@ -415,12 +414,20 @@ export default function StudentSubjectDetail() {
   };
 
   const triggerDeleteGrade = (id: string) => {
+    const grade = grades.find(g => g.id === id);
+    const createdAt = grade?.created_at || grade?.createdAt;
+    const createdTime = createdAt ? new Date(createdAt).getTime() : Date.now();
+    const isOlderThan45Minutes = Number.isFinite(createdTime) && Date.now() - createdTime > 45 * 60 * 1000;
+
     setDeleteDialog({
       isOpen: true,
       id,
       type: 'GRADE',
       loading: false,
-      message: 'Jeste li sigurni da želite obrisati ovu ocjenu i bilješku?'
+      message: isOlderThan45Minutes
+        ? 'Ocjena je starija od 45 minuta. Za brisanje unesite TOTP kod.'
+        : 'Jeste li sigurni da želite obrisati ovu ocjenu i bilješku?',
+      showTotp: isOlderThan45Minutes
     });
   };
 
@@ -434,8 +441,33 @@ export default function StudentSubjectDetail() {
     });
   };
 
-  const confirmDelete = async () => {
+  const confirmDelete = async (totpCode?: string) => {
     if (!deleteDialog.id || !deleteDialog.type) return;
+
+    if (deleteDialog.showTotp) {
+      if (!totpCode) {
+        toast.error('Potreban je TOTP kod.');
+        return;
+      }
+
+      const res = await fetch('/api/verify-totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ authUserId: user?.id, totpCode })
+      });
+
+      const contentType = res.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        toast.error('API ruta za provjeru autentifikatora nije dostupna.');
+        return;
+      }
+
+      const data = await res.json();
+      if (!data?.success) {
+        toast.error(data?.error || 'Neispravan TOTP kod.');
+        return;
+      }
+    }
 
     setDeleteDialog(prev => ({ ...prev, loading: true }));
     try {
@@ -449,14 +481,14 @@ export default function StudentSubjectDetail() {
       console.error('Error deleting record:', err);
       toast.error('Povezivanje/brisanje nije uspjelo.');
     } finally {
-      setDeleteDialog({ isOpen: false, id: '', type: null, loading: false, message: '' });
+      setDeleteDialog({ isOpen: false, id: '', type: null, loading: false, message: '', showTotp: false });
     }
   };
 
   const handleDeleteGrade = async (id: string) => {
     const gObj = grades.find(g => g.id === id);
     if (gObj && !canDeleteGrade(gObj)) {
-      toast.error('Nemate pravo brisanja ove ocjene jer je rok od 45 minuta istekao.');
+      toast.error('Možete obrisati samo ocjene koje ste Vi unijeli.');
       return;
     }
     triggerDeleteGrade(id);
@@ -2021,11 +2053,11 @@ export default function StudentSubjectDetail() {
       {/* DELETE CONFIRM DIALOG */}
       <DeleteConfirmDialog
         isOpen={deleteDialog.isOpen}
-        onClose={() => setDeleteDialog({ isOpen: false, id: '', type: null, loading: false, message: '' })}
+        onClose={() => setDeleteDialog({ isOpen: false, id: '', type: null, loading: false, message: '', showTotp: false })}
         onConfirm={confirmDelete}
         title="POTVRDA BRISANJA"
         message={deleteDialog.message || ''}
-        showTotp={false}
+        showTotp={deleteDialog.showTotp}
         loading={deleteDialog.loading}
       />
       

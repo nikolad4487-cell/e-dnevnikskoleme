@@ -293,6 +293,8 @@ export type Lesson = {
   blockCount: number;
   createdByUserId?: string;
   teacherDisplayName?: string;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export enum AbsenceStatus {
