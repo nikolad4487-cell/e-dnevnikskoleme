@@ -501,6 +501,232 @@ async function startServer() {
       return schoolRoles.some(role => ["ADMIN", "SCHOOL_ADMIN", "MAIN_ADMIN", "SUPER_ADMIN"].includes(String(role)));
     }
 
+    const adminRoles = new Set(["ADMIN", "SCHOOL_ADMIN", "MAIN_ADMIN", "SUPER_ADMIN"]);
+    const deletionReasons = new Set([
+      "WRONG_GRADE_VALUE",
+      "WRONG_STUDENT",
+      "WRONG_GRADING_ELEMENT",
+      "EXAM_CANCELED_OR_INSPECTION",
+      "TECHNICAL_ERROR_OR_DUPLICATE"
+    ]);
+
+    function hasAdminRole(auth: any, schoolId?: string | null) {
+      return (auth.roles || []).some((role: any) => {
+        const roleName = String(role.role || "").toUpperCase();
+        return adminRoles.has(roleName) && (!schoolId || !role.school_id || role.school_id === schoolId);
+      });
+    }
+
+    function isHomeroomTeacherForClass(auth: any, classBook: any) {
+      return classBook?.homeroom_teacher_id === auth.userId;
+    }
+
+    function isWithinHours(createdAt: string | undefined, hours: number) {
+      const createdTime = createdAt ? new Date(createdAt).getTime() : Number.NaN;
+      if (!Number.isFinite(createdTime)) return false;
+      return Date.now() - createdTime <= hours * 60 * 60 * 1000;
+    }
+
+    async function verifyTotpForProfile(profileId: string, totpCode?: string) {
+      if (!totpCode) {
+        return { ok: false, status: 400, code: "TOTP_REQUIRED", error: "Potreban je TOTP kod." };
+      }
+
+      let { data: profile, error: profileError } = await supabaseAdmin
+        .from("user_profiles")
+        .select("id, auth_user_id, authenticator_secret")
+        .eq("id", profileId)
+        .maybeSingle();
+
+      if (profileError || !profile) {
+        const { data: fallbackProfile, error: fallbackError } = await supabaseAdmin
+          .from("user_profiles")
+          .select("id, auth_user_id, authenticator_secret")
+          .eq("auth_user_id", profileId)
+          .maybeSingle();
+        profile = fallbackProfile;
+        profileError = fallbackError;
+      }
+
+      if (profileError) {
+        return { ok: false, status: 500, code: "TOTP_LOOKUP_FAILED", error: profileError.message };
+      }
+      if (!profile) {
+        return { ok: false, status: 404, code: "USER_NOT_FOUND", error: "Korisnički profil nije pronađen." };
+      }
+      if (!profile.authenticator_secret) {
+        return { ok: false, status: 403, code: "TOTP_NOT_CONFIGURED", error: "Korisnik nema postavljen autentifikator." };
+      }
+
+      const isValid = profile.authenticator_secret === "123456"
+        ? totpCode === "123456"
+        : authenticator.check(totpCode, profile.authenticator_secret);
+
+      if (!isValid) {
+        return { ok: false, status: 400, code: "INVALID_TOTP", error: "Neispravan TOTP kod." };
+      }
+
+      return { ok: true };
+    }
+
+    async function writeImmutableFinalGradeAudit(params: {
+      finalGrade: any;
+      classBook: any;
+      adminId: string;
+      reason: string;
+      detailedNote: string;
+      deletedAt: string;
+    }) {
+      const details = JSON.stringify({
+        deletedRecord: params.finalGrade,
+        classBook: {
+          id: params.classBook?.id,
+          isLocked: Boolean(params.classBook?.is_locked)
+        },
+        adminId: params.adminId,
+        deletedAt: params.deletedAt,
+        deletionReason: params.reason,
+        detailedNote: params.detailedNote
+      });
+
+      const { error } = await supabaseAdmin.from("audit_logs").insert({
+        action_type: "DELETE_FINAL_GRADE",
+        record_id: params.finalGrade.id,
+        user_id: params.adminId,
+        user_role: "ADMIN",
+        details,
+        reason: params.reason,
+        created_at: params.deletedAt
+      });
+
+      if (error) throw error;
+    }
+
+    app.patch("/api/classes/:id/classbook-lock", async (req, res) => {
+      try {
+        const auth = await resolveAuthenticatedUser(req);
+        if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+        const { data: classBook, error: classError } = await supabaseAdmin
+          .from("classes")
+          .select("id, school_id, homeroom_teacher_id, is_locked")
+          .eq("id", req.params.id)
+          .maybeSingle();
+
+        if (classError) throw classError;
+        if (!classBook) return res.status(404).json({ error: "Imenik nije pronađen." });
+
+        if (!hasAdminRole(auth, classBook.school_id) && !isHomeroomTeacherForClass(auth, classBook)) {
+          return res.status(403).json({ code: "UNAUTHORIZED_ROLE", error: "Samo razrednik ili admin mogu zaključati ili otključati imenik." });
+        }
+
+        const isLocked = Boolean(req.body?.is_locked ?? req.body?.isLocked);
+        const { data, error } = await supabaseAdmin
+          .from("classes")
+          .update({
+            is_locked: isLocked,
+            locked_at: isLocked ? new Date().toISOString() : null,
+            locked_by: isLocked ? auth.userId : null,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", req.params.id)
+          .select("*")
+          .single();
+
+        if (error) throw error;
+        res.json({ success: true, data });
+      } catch (err: any) {
+        console.error("[SERVER] PATCH /api/classes/:id/classbook-lock error:", err);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    app.delete("/api/final-grades/:id", async (req, res) => {
+      try {
+        const auth = await resolveAuthenticatedUser(req);
+        if (auth.error) return res.status(auth.status).json({ error: auth.error });
+
+        const { data: finalGrade, error: finalGradeError } = await supabaseAdmin
+          .from("final_grades")
+          .select("*")
+          .eq("id", req.params.id)
+          .maybeSingle();
+
+        if (finalGradeError) throw finalGradeError;
+        if (!finalGrade) return res.status(404).json({ error: "Zaključna ocjena nije pronađena." });
+
+        const { data: classBook, error: classError } = await supabaseAdmin
+          .from("classes")
+          .select("id, school_id, homeroom_teacher_id, is_locked")
+          .eq("id", finalGrade.class_id)
+          .maybeSingle();
+
+        if (classError) throw classError;
+        if (!classBook) return res.status(404).json({ error: "Imenik nije pronađen." });
+
+        const isAdmin = hasAdminRole(auth, classBook.school_id);
+
+        if (classBook.is_locked && !isAdmin) {
+          return res.status(423).json({ code: "CLASS_LOCKED", error: "Imenik je zaključan. Nastavnik ne može mijenjati ili brisati zaključne ocjene." });
+        }
+
+        if (isAdmin) {
+          const { totpCode, totp_code, reason, detailedNote, detailed_note, note } = req.body || {};
+          const selectedReason = reason;
+          const selectedNote = String(detailedNote ?? detailed_note ?? note ?? "").trim();
+
+          if (!deletionReasons.has(String(selectedReason))) {
+            return res.status(400).json({ code: "DELETION_REASON_REQUIRED", error: "Odaberite razlog brisanja zaključne ocjene." });
+          }
+          if (!selectedNote) {
+            return res.status(400).json({ code: "DETAILED_NOTE_REQUIRED", error: "Upišite detaljnu napomenu za audit zapis." });
+          }
+
+          const totpResult = await verifyTotpForProfile(auth.userId, totpCode || totp_code);
+          if (!totpResult.ok) {
+            return res.status(totpResult.status || 400).json({ code: totpResult.code, error: totpResult.error });
+          }
+
+          const deletedAt = new Date().toISOString();
+          const { error: deleteError } = await supabaseAdmin
+            .from("final_grades")
+            .delete()
+            .eq("id", finalGrade.id);
+          if (deleteError) throw deleteError;
+
+          await writeImmutableFinalGradeAudit({
+            finalGrade,
+            classBook,
+            adminId: auth.userId,
+            reason: selectedReason,
+            detailedNote: selectedNote,
+            deletedAt
+          });
+
+          return res.json({ success: true });
+        }
+
+        if (finalGrade.teacher_id !== auth.userId) {
+          return res.status(403).json({ code: "UNAUTHORIZED_ROLE", error: "Možete obrisati samo zaključne ocjene koje ste Vi unijeli." });
+        }
+
+        if (!isWithinHours(finalGrade.created_at, 48)) {
+          return res.status(403).json({ code: "TIME_LIMIT_EXCEEDED", error: "Zaključnu ocjenu možete obrisati samo unutar 48 sati od unosa." });
+        }
+
+        const { error: deleteError } = await supabaseAdmin
+          .from("final_grades")
+          .delete()
+          .eq("id", finalGrade.id);
+        if (deleteError) throw deleteError;
+
+        res.json({ success: true });
+      } catch (err: any) {
+        console.error("[SERVER] DELETE /api/final-grades/:id error:", err);
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     app.get("/api/student-notes", async (req, res) => {
       try {
         const auth = await resolveAuthenticatedUser(req);

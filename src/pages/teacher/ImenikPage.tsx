@@ -23,7 +23,7 @@ const deletionReasonOptions = Object.values(DeletionReason).map(value => ({
 const todayDateISO = getLocalDateISO();
 const gradeDateBounds = getGradeDateBounds();
 
-function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effectiveClassId, selectedSchoolId, user, classes, onRefresh }: any) {
+function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effectiveClassId, selectedSchoolId, user, classes, onRefresh, canOverrideClassBookLock }: any) {
   const [period, setPeriod] = useState<'FIRST_TERM' | 'SECOND_TERM'>('FIRST_TERM');
   const [studentData, setStudentData] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -63,6 +63,12 @@ function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effect
   const handleSave = async () => {
     setSaving(true);
     const selectedClass = classes.find((c: any) => c.id === effectiveClassId);
+    if ((selectedClass?.isLocked || selectedClass?.is_locked) && !canOverrideClassBookLock) {
+      toast.error('Imenik je zaključan. Zaključne ocjene više ne može mijenjati nastavnik.');
+      setSaving(false);
+      return;
+    }
+
     const schoolYearId = selectedClass?.school_year_id || '';
     const teacherId = user?.id;
 
@@ -938,6 +944,23 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     return assignment?.teacherId === user?.id;
   };
 
+  const isAdminForCurrentClass = () => {
+    return isMainAdmin || [Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(highestRole as Role);
+  };
+
+  const getCurrentClassBook = () => classes.find(c => c.id === effectiveClassId);
+
+  const isClassBookLocked = () => {
+    const selectedClass = getCurrentClassBook();
+    return Boolean(selectedClass?.isLocked || selectedClass?.is_locked);
+  };
+
+  const isWithinHours = (createdAt: string | undefined, hours: number) => {
+    const createdTime = createdAt ? new Date(createdAt).getTime() : Number.NaN;
+    if (!Number.isFinite(createdTime)) return false;
+    return Date.now() - createdTime <= hours * 60 * 60 * 1000;
+  };
+
   const isStudentActiveGlobal = (studentId: string) => {
     const enrollment = studentEnrollments.find(e => e.student_id === studentId);
     return enrollment?.status === 'ACTIVE';
@@ -1441,6 +1464,11 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
       setLoading(true);
       
       const selectedClass = classes.find(c => c.id === effectiveClassId);
+      if ((selectedClass?.isLocked || selectedClass?.is_locked) && !isAdminForCurrentClass()) {
+        toast.error('Imenik je zaključan. Zaključne ocjene više ne može mijenjati nastavnik.');
+        return;
+      }
+
       const schoolYearId = selectedClass?.school_year_id || '';
       
       const period = selectedFinalPeriod === '1' ? 'FIRST_TERM' : 'SECOND_TERM';
@@ -1512,19 +1540,44 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
   };
 
   const handleDeleteFinalGrade = async (fgId: string) => {
+    const finalGrade = finalGrades.find((fg: any) => fg.id === fgId) as any;
+    if (!finalGrade) return;
+
+    const isAdmin = isAdminForCurrentClass();
+    const isCreator = finalGrade.teacher_id === user?.id || finalGrade.teacherId === user?.id;
+
+    if (isClassBookLocked() && !isAdmin) {
+      toast.error('Imenik je zaključan. Nastavnik ne može brisati zaključne ocjene.');
+      return;
+    }
+
+    if (!isAdmin && !isCreator) {
+      toast.error('Možete obrisati samo zaključne ocjene koje ste Vi unijeli.');
+      return;
+    }
+
+    if (!isAdmin && !isWithinHours(finalGrade.created_at || finalGrade.createdAt, 48)) {
+      toast.error('Zaključnu ocjenu možete obrisati samo unutar 48 sati od unosa.');
+      return;
+    }
+
     setDeleteDialog({
       isOpen: true,
       id: fgId,
       type: 'FINAL_GRADE',
       loading: false,
-      message: "Jeste li sigurni da želite obrisati zaključnu ocjenu?"
+      message: isAdmin
+        ? "Za brisanje zaključne ocjene unesite TOTP kod, razlog i detaljnu napomenu."
+        : "Jeste li sigurni da želite obrisati zaključnu ocjenu?",
+      showTotp: isAdmin,
+      showReason: isAdmin
     });
   };
 
   const confirmDelete = async (totpCode?: string, reason?: string, detailedNote?: string) => {
     if (!deleteDialog.id || !deleteDialog.type) return;
 
-    if (deleteDialog.showTotp) {
+    if (deleteDialog.showTotp && deleteDialog.type !== 'FINAL_GRADE') {
       if (!totpCode) {
         toast.error('Potreban je TOTP kod.');
         return;
@@ -1585,6 +1638,39 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
       return;
     }
 
+    if (deleteDialog.type === 'FINAL_GRADE') {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.access_token) throw new Error('Niste prijavljeni.');
+
+        const res = await fetch(`/api/final-grades/${deleteDialog.id}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({
+            totpCode,
+            reason,
+            detailedNote
+          })
+        });
+        const json = await res.json();
+        if (!res.ok || json.error) throw new Error(json.error || 'Brisanje zaključne ocjene nije uspjelo.');
+
+        toast.success('Zaključna ocjena uspješno obrisana.');
+        await fetchGradesAndNotes();
+        await fetchStudentsData();
+        await fetchWarningData();
+      } catch (err: any) {
+        console.error("DELETE FINAL GRADE ERROR", err);
+        toast.error(err.message || 'Brisanje zaključne ocjene nije uspjelo.');
+      } finally {
+        setDeleteDialog({ isOpen: false, id: '', type: null, loading: false, showTotp: false, showReason: false });
+      }
+      return;
+    }
+
     let tableName = '';
     const deletedGradeDetails = deleteDialog.type === 'GRADE'
       ? currentGrades.find(g => g.id === deleteDialog.id)
@@ -1593,14 +1679,11 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     switch (deleteDialog.type) {
       case 'GRADE': tableName = 'grades'; console.log("DELETE GRADE CLICKED", { id: deleteDialog.id }); break;
       case 'NOTE': tableName = 'student_notes'; console.log("DELETE NOTE CLICKED", { id: deleteDialog.id }); break;
-      case 'FINAL_GRADE': tableName = 'final_grades'; console.log("DELETE FINAL GRADE CLICKED", { id: deleteDialog.id }); break;
     }
 
     try {
       const { error } = await supabase.from(tableName).delete().eq('id', deleteDialog.id);
       if (error) throw error;
-      
-      if (deleteDialog.type === 'FINAL_GRADE') console.log("FINAL GRADE DELETE SUCCESS", deleteDialog.id);
 
       toast.success('Zapis je uspješno obrisan.');
       if (deleteDialog.type === 'GRADE') {
@@ -1637,7 +1720,6 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
       console.error("DELETE ERROR", err);
       if (deleteDialog.type === 'GRADE') console.log("DELETE GRADE ERROR", err);
       if (deleteDialog.type === 'NOTE') console.log("DELETE NOTE ERROR", err);
-      if (deleteDialog.type === 'FINAL_GRADE') console.log("DELETE FINAL GRADE ERROR", err);
       toast.error('Brisanje nije uspjelo.');
     } finally {
       setDeleteDialog({ isOpen: false, id: '', type: null, loading: false, showTotp: false, showReason: false });
@@ -2824,7 +2906,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         message={deleteDialog.message}
         showTotp={deleteDialog.showTotp}
         showReason={deleteDialog.showReason}
-        reasonLabel="Razlog brisanja ocjene"
+        reasonLabel={deleteDialog.type === 'FINAL_GRADE' ? 'Razlog brisanja zaključne ocjene' : 'Razlog brisanja ocjene'}
         reasonOptions={deletionReasonOptions}
         showDetailedNote={deleteDialog.showReason}
         detailedNoteLabel="Detaljna napomena"
@@ -2840,6 +2922,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         user={user}
         classes={classes}
         onRefresh={fetchGradesAndNotes}
+        canOverrideClassBookLock={isAdminForCurrentClass()}
       />
 
       {showGradingElementsModal && activeSubject && (

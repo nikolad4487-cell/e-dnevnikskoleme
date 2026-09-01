@@ -170,7 +170,7 @@ export default function StudentSubjectDetail() {
   const [deleteDialog, setDeleteDialog] = useState<{
     isOpen: boolean;
     id: string;
-    type: 'GRADE' | 'NOTE' | null;
+    type: 'GRADE' | 'NOTE' | 'FINAL_GRADE' | null;
     loading: boolean;
     message: string;
     showTotp?: boolean;
@@ -529,6 +529,14 @@ export default function StudentSubjectDetail() {
     return Date.now() - createdTime <= minutes * 60 * 1000;
   };
 
+  const isWithinHours = (createdAt: string | undefined, hours: number) => {
+    const createdTime = createdAt ? new Date(createdAt).getTime() : Number.NaN;
+    if (!Number.isFinite(createdTime)) return false;
+    return Date.now() - createdTime <= hours * 60 * 60 * 1000;
+  };
+
+  const isClassBookLocked = () => Boolean(classroom?.is_locked || classroom?.isLocked);
+
   const canDeleteGrade = (g: any) => {
     if (isAdminForCurrentSchool()) return true;
     if (!isTeacher) return false;
@@ -584,7 +592,7 @@ export default function StudentSubjectDetail() {
   const confirmDelete = async (totpCode?: string, reason?: string, detailedNote?: string) => {
     if (!deleteDialog.id || !deleteDialog.type) return;
 
-    if (deleteDialog.showTotp) {
+    if (deleteDialog.showTotp && deleteDialog.type !== 'FINAL_GRADE') {
       if (!totpCode) {
         toast.error('Potreban je TOTP kod.');
         return;
@@ -621,6 +629,25 @@ export default function StudentSubjectDetail() {
 
     setDeleteDialog(prev => ({ ...prev, loading: true }));
     try {
+      if (deleteDialog.type === 'FINAL_GRADE') {
+        const headers = await getAuthHeaders();
+        const res = await fetch(`/api/final-grades/${deleteDialog.id}`, {
+          method: 'DELETE',
+          headers,
+          body: JSON.stringify({
+            totpCode,
+            reason,
+            detailedNote
+          })
+        });
+        const json = await res.json();
+        if (!res.ok || json.error) throw new Error(json.error || 'Greška pri brisanju zaključne ocjene.');
+
+        toast.success('Zaključna ocjena uspješno obrisana.');
+        await loadAllData();
+        return;
+      }
+
       const deletedGradeDetails = deleteDialog.type === 'GRADE'
         ? grades.find(g => g.id === deleteDialog.id)
         : null;
@@ -664,7 +691,7 @@ export default function StudentSubjectDetail() {
       loadAllData();
     } catch (err) {
       console.error('Error deleting record:', err);
-      toast.error('Povezivanje/brisanje nije uspjelo.');
+      toast.error(err instanceof Error ? err.message : 'Povezivanje/brisanje nije uspjelo.');
     } finally {
       setDeleteDialog({ isOpen: false, id: '', type: null, loading: false, message: '', showTotp: false, showReason: false });
     }
@@ -1012,6 +1039,11 @@ export default function StudentSubjectDetail() {
     console.log("FINAL GRADE SAVE CLICKED", { studentId, subjectId, classId, term: showFinalModal.term, finalGradeValue, finalGradeStatus });
     if (!user || !studentId || !subjectId || !classId) return;
 
+    if (isClassBookLocked() && !isAdminForCurrentSchool()) {
+      toast.error('Imenik je zaključan. Zaključne ocjene više ne može mijenjati nastavnik.');
+      return;
+    }
+
     try {
       const { term } = showFinalModal;
       const period = term; 
@@ -1079,36 +1111,35 @@ export default function StudentSubjectDetail() {
       return;
     }
 
-    try {
-      console.log("BEFORE FINAL GRADE DELETE", finalGrade.id);
+    const isAdmin = isAdminForCurrentSchool();
+    const isCreator = finalGrade.teacher_id === user?.id || finalGrade.teacherId === user?.id;
 
-      const result = await supabase
-        .from("final_grades")
-        .delete()
-        .eq("id", finalGrade.id)
-        .select();
-
-      console.log("DELETE FINAL GRADE RESULT", result);
-
-      if (result.error) {
-        console.error("DELETE FINAL GRADE ERROR", result.error);
-        alert("Greška pri brisanju zaključne ocjene: " + result.error.message);
-        return;
-      }
-
-      if (!result.data || result.data.length === 0) {
-        console.error("DELETE FINAL GRADE DID NOT DELETE ROW", finalGrade.id);
-        alert("Zaključna ocjena nije obrisana iz baze. Provjeri RLS policy ili ID.");
-        return;
-      }
-
-      console.log("DELETE FINAL GRADE SUCCESS", result.data);
-
-      await loadAllData();
-    } catch (err) {
-      console.error("DELETE FINAL GRADE CRASHED", err);
-      alert("Greška pri brisanju zaključne ocjene.");
+    if (isClassBookLocked() && !isAdmin) {
+      toast.error('Imenik je zaključan. Nastavnik ne može brisati zaključne ocjene.');
+      return;
     }
+
+    if (!isAdmin && !isCreator) {
+      toast.error('Možete obrisati samo zaključne ocjene koje ste Vi unijeli.');
+      return;
+    }
+
+    if (!isAdmin && !isWithinHours(finalGrade.created_at || finalGrade.createdAt, 48)) {
+      toast.error('Zaključnu ocjenu možete obrisati samo unutar 48 sati od unosa.');
+      return;
+    }
+
+    setDeleteDialog({
+      isOpen: true,
+      id: finalGrade.id,
+      type: 'FINAL_GRADE',
+      loading: false,
+      message: isAdmin
+        ? 'Za brisanje zaključne ocjene unesite TOTP kod, razlog i detaljnu napomenu.'
+        : 'Jeste li sigurni da želite obrisati zaključnu ocjenu?',
+      showTotp: isAdmin,
+      showReason: isAdmin
+    });
   };
 
   // Helper mapping month indices (0-11) to column keys
@@ -2298,7 +2329,7 @@ export default function StudentSubjectDetail() {
         message={deleteDialog.message || ''}
         showTotp={deleteDialog.showTotp}
         showReason={deleteDialog.showReason}
-        reasonLabel="Razlog brisanja ocjene"
+        reasonLabel={deleteDialog.type === 'FINAL_GRADE' ? 'Razlog brisanja zaključne ocjene' : 'Razlog brisanja ocjene'}
         reasonOptions={deletionReasonOptions}
         showDetailedNote={deleteDialog.showReason}
         detailedNoteLabel="Detaljna napomena"
@@ -2330,6 +2361,10 @@ export default function StudentSubjectDetail() {
         term={showFinalModal.term === 'FIRST_SEMESTER' ? 'FIRST_SEMESTER' : 'SECOND_SEMESTER'} // Placeholder for now, check how GroupFinalGradesModal expects props
         students={allClassStudents} 
         onSuccess={loadAllData} 
+        classBookLocked={isClassBookLocked()}
+        canOverrideClassBookLock={isAdminForCurrentSchool()}
+        teacherId={user?.id}
+        schoolYearId={classroom?.school_year_id || null}
       />
 
     </div>

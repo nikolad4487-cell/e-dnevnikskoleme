@@ -182,6 +182,10 @@ export type Class = {
   programType?: ProgramType;
   classVariant?: ClassVariant;
   isContinuationProgram?: boolean;
+  isLocked?: boolean;
+  is_locked?: boolean;
+  lockedAt?: string;
+  lockedBy?: string;
   schoolYearName?: string;
   schoolYearIsActive?: boolean;
   variant?: any;
@@ -352,6 +356,7 @@ export enum DeletionReason {
 export enum RecordType {
   WORKING_HOUR = 'WORKING_HOUR',
   GRADE = 'GRADE',
+  FINAL_GRADE = 'FINAL_GRADE',
   ABSENCE = 'ABSENCE',
   STANDALONE_NOTE = 'STANDALONE_NOTE'
 }

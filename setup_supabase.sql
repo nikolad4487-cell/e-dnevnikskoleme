@@ -53,9 +53,13 @@ ADD CONSTRAINT schedule_cells_class_id_fkey
 FOREIGN KEY (class_id) REFERENCES classes(id) ON DELETE CASCADE;
 
 -- final_grades updates
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS is_locked boolean NOT NULL DEFAULT false;
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS locked_at timestamptz;
+ALTER TABLE classes ADD COLUMN IF NOT EXISTS locked_by uuid REFERENCES user_profiles(id) ON DELETE SET NULL;
 ALTER TABLE final_grades ADD COLUMN IF NOT EXISTS term text DEFAULT 'FINAL';
 ALTER TABLE final_grades ADD COLUMN IF NOT EXISTS note text;
 ALTER TABLE final_grades ADD COLUMN IF NOT EXISTS school_year_id uuid;
+ALTER TABLE final_grades ADD COLUMN IF NOT EXISTS status text;
 
 -- Clean up final_grades duplicates
 DELETE FROM final_grades WHERE id IN (

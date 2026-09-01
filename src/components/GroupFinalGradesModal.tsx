@@ -10,11 +10,15 @@ interface Props {
   term: 'FIRST_SEMESTER' | 'SECOND_SEMESTER';
   students: any[];
   onSuccess: () => void;
+  classBookLocked?: boolean;
+  canOverrideClassBookLock?: boolean;
+  teacherId?: string;
+  schoolYearId?: string | null;
 }
 
 const STATUSES = ["NEOCIJENJEN", "OSLOBODEN", "ODRADENO", "NEODRADENO"];
 
-export default function GroupFinalGradesModal({ isOpen, onClose, classId, subjectId, term, students, onSuccess }: Props) {
+export default function GroupFinalGradesModal({ isOpen, onClose, classId, subjectId, term, students, onSuccess, classBookLocked = false, canOverrideClassBookLock = false, teacherId, schoolYearId }: Props) {
   const [studentData, setStudentData] = useState<Record<string, { grade: number | null, status: string | null }>>(
       students.reduce((acc, s) => ({...acc, [s.student_id]: { grade: null, status: null }}), {})
   );
@@ -25,6 +29,11 @@ export default function GroupFinalGradesModal({ isOpen, onClose, classId, subjec
 
   const handleSave = async () => {
     if (!classId || !subjectId) return;
+    if (classBookLocked && !canOverrideClassBookLock) {
+      toast.error('Imenik je zaključan. Zaključne ocjene više ne može mijenjati nastavnik.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const payloads = Object.entries(studentData)
@@ -33,6 +42,8 @@ export default function GroupFinalGradesModal({ isOpen, onClose, classId, subjec
             student_id: studentId,
             subject_id: subjectId,
             class_id: classId,
+            teacher_id: teacherId || null,
+            school_year_id: schoolYearId || null,
             period: term,
             term: term === 'FIRST_SEMESTER' ? 'FIRST_SEMESTER' : 'FINAL',
             value: data.grade ? data.grade.toString() : (data.status || ''),

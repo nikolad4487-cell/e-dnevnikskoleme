@@ -117,6 +117,9 @@ CREATE TABLE public.classes (
     deputy_teacher_id UUID REFERENCES public.user_profiles(id),
     program_id UUID,
     variant TEXT DEFAULT 'REGULAR',
+    is_locked BOOLEAN NOT NULL DEFAULT FALSE,
+    locked_at TIMESTAMPTZ,
+    locked_by UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -306,6 +309,7 @@ CREATE TABLE public.final_grades (
     term TEXT NOT NULL CHECK (term IN ('FIRST_SEMESTER', 'FINAL', 'FIRST_TERM', 'SECOND_TERM')),
     period TEXT,
     value TEXT NOT NULL,
+    status TEXT,
     note TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),

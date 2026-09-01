@@ -84,6 +84,10 @@ export const mappers = {
     program: raw.program ? mappers.program(raw.program) : undefined,
     classVariant: raw.class_variant,
     variant: raw.variant,
+    isLocked: raw.is_locked,
+    is_locked: raw.is_locked,
+    lockedAt: raw.locked_at,
+    lockedBy: raw.locked_by,
     homeroom: raw.homeroom ? mappers.user(raw.homeroom) : undefined,
     deputy: raw.deputy ? mappers.user(raw.deputy) : undefined,
     schoolYearName: raw.school_year_relation?.name,
@@ -150,6 +154,8 @@ export const mappers = {
     weight: raw.weight,
     isImportant: raw.is_important,
     date: raw.date,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
   }),
 
   absence: (raw: any) => ({
