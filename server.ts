@@ -527,6 +527,38 @@ async function startServer() {
       return Date.now() - createdTime <= hours * 60 * 60 * 1000;
     }
 
+    function isMissingColumnError(error: any, columnName: string) {
+      const message = String(error?.message || error?.details || "");
+      return error?.code === "42703" || error?.code === "PGRST204" || message.includes(columnName);
+    }
+
+    async function fetchClassBookForLocking(classId: string) {
+      const withLock = await supabaseAdmin
+        .from("classes")
+        .select("id, school_id, homeroom_teacher_id, is_locked")
+        .eq("id", classId)
+        .maybeSingle();
+
+      if (!withLock.error) return withLock;
+
+      if (!isMissingColumnError(withLock.error, "is_locked")) {
+        return withLock;
+      }
+
+      const withoutLock = await supabaseAdmin
+        .from("classes")
+        .select("id, school_id, homeroom_teacher_id")
+        .eq("id", classId)
+        .maybeSingle();
+
+      if (withoutLock.data) {
+        withoutLock.data.is_locked = false;
+        withoutLock.data.lock_column_missing = true;
+      }
+
+      return withoutLock;
+    }
+
     async function verifyTotpForProfile(profileId: string, totpCode?: string) {
       if (!totpCode) {
         return { ok: false, status: 400, code: "TOTP_REQUIRED", error: "Potreban je TOTP kod." };
@@ -607,17 +639,20 @@ async function startServer() {
         const auth = await resolveAuthenticatedUser(req);
         if (auth.error) return res.status(auth.status).json({ error: auth.error });
 
-        const { data: classBook, error: classError } = await supabaseAdmin
-          .from("classes")
-          .select("id, school_id, homeroom_teacher_id, is_locked")
-          .eq("id", req.params.id)
-          .maybeSingle();
+        const { data: classBook, error: classError } = await fetchClassBookForLocking(req.params.id);
 
         if (classError) throw classError;
         if (!classBook) return res.status(404).json({ error: "Imenik nije pronađen." });
 
         if (!hasAdminRole(auth, classBook.school_id) && !isHomeroomTeacherForClass(auth, classBook)) {
           return res.status(403).json({ code: "UNAUTHORIZED_ROLE", error: "Samo razrednik ili admin mogu zaključati ili otključati imenik." });
+        }
+
+        if (classBook.lock_column_missing) {
+          return res.status(409).json({
+            code: "CLASS_LOCK_COLUMN_MISSING",
+            error: "Baza još nema stupac classes.is_locked. Primijenite migraciju 20260901000000_add_classbook_lock_for_final_grades.sql."
+          });
         }
 
         const isLocked = Boolean(req.body?.is_locked ?? req.body?.isLocked);
@@ -655,11 +690,7 @@ async function startServer() {
         if (finalGradeError) throw finalGradeError;
         if (!finalGrade) return res.status(404).json({ error: "Zaključna ocjena nije pronađena." });
 
-        const { data: classBook, error: classError } = await supabaseAdmin
-          .from("classes")
-          .select("id, school_id, homeroom_teacher_id, is_locked")
-          .eq("id", finalGrade.class_id)
-          .maybeSingle();
+        const { data: classBook, error: classError } = await fetchClassBookForLocking(finalGrade.class_id);
 
         if (classError) throw classError;
         if (!classBook) return res.status(404).json({ error: "Imenik nije pronađen." });
