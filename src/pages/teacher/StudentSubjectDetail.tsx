@@ -193,7 +193,7 @@ export default function StudentSubjectDetail() {
 
   // Modals / Modifiers
   const [showAddGradeModal, setShowAddGradeModal] = useState(false);
-  const [newGradeVal, setNewGradeVal] = useState<number>(5);
+  const [newGradeVal, setNewGradeVal] = useState<number | null>(null);
   const [newGradeElement, setNewGradeElement] = useState<string>('');
   const [newGradeNote, setNewGradeNote] = useState<string>('');
   const [newGradeDate, setNewGradeDate] = useState<string>(todayDateISO);
@@ -476,6 +476,11 @@ export default function StudentSubjectDetail() {
     e.preventDefault();
     if (!user || !studentId || !subjectId || !classId) return;
 
+    if (newGradeVal === null) {
+      toast.error('Odaberite ocjenu prije spremanja.');
+      return;
+    }
+
     if (!isGradeDateAllowed(newGradeDate)) {
       toast.error('Datum ocjene može biti samo u prethodnom ili tekućem mjesecu.');
       return;
@@ -488,7 +493,7 @@ export default function StudentSubjectDetail() {
         class_id: classId,
         teacher_id: user.id,
         school_id: classroom?.school_id || classroom?.schoolId || null,
-        value: Number(newGradeVal),
+        value: newGradeVal,
         element: newGradeElement,
         note: newGradeNote || '',
         date: newGradeDate,
@@ -503,6 +508,7 @@ export default function StudentSubjectDetail() {
       if (error) throw error;
 
       setShowAddGradeModal(false);
+      setNewGradeVal(null);
       setNewGradeNote('');
       loadAllData();
     } catch (err) {
@@ -781,28 +787,33 @@ export default function StudentSubjectDetail() {
   };
 
   const getMonthDateString = (m: string): string => {
-    const year = ['IX', 'X', 'XI', 'XII'].includes(m) ? 2025 : 2026;
-    let monthNum = '09';
+    let monthNum = 9;
     switch (m) {
-      case 'IX': monthNum = '09'; break;
-      case 'X': monthNum = '10'; break;
-      case 'XI': monthNum = '11'; break;
-      case 'XII': monthNum = '12'; break;
-      case 'I': monthNum = '01'; break;
-      case 'II': monthNum = '02'; break;
-      case 'III': monthNum = '03'; break;
-      case 'IV': monthNum = '04'; break;
-      case 'V': monthNum = '05'; break;
-      case 'VI': monthNum = '06'; break;
+      case 'IX': monthNum = 9; break;
+      case 'X': monthNum = 10; break;
+      case 'XI': monthNum = 11; break;
+      case 'XII': monthNum = 12; break;
+      case 'I': monthNum = 1; break;
+      case 'II': monthNum = 2; break;
+      case 'III': monthNum = 3; break;
+      case 'IV': monthNum = 4; break;
+      case 'V': monthNum = 5; break;
+      case 'VI': monthNum = 6; break;
     }
-    const today = new Date();
-    const todayYear = today.getFullYear();
-    const todayMonth = String(today.getMonth() + 1).padStart(2, '0');
-    
-    if (todayYear === year && todayMonth === monthNum) {
-      return getLocalDateISO(today);
+
+    const today = new Date(getLocalDateISO());
+    const currentMonth = today.getMonth() + 1;
+
+    if (currentMonth === monthNum) {
+      return getLocalDateISO();
     }
-    return `${year}-${monthNum}-15`;
+
+    const previousMonthDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    if (previousMonthDate.getMonth() + 1 === monthNum) {
+      return getLocalDateISO(previousMonthDate);
+    }
+
+    return getLocalDateISO();
   };
 
   // Note actions
@@ -1784,7 +1795,7 @@ export default function StudentSubjectDetail() {
                 <label className="block text-[10px] font-black uppercase text-gray-500 mb-2">OCJENA (VRIJEDNOST)</label>
                 <GradeSelector 
                   value={newGradeVal}
-                  onChange={(val) => setNewGradeVal(val || 5)}
+                  onChange={(val) => setNewGradeVal(val)}
                 />
               </div>
 

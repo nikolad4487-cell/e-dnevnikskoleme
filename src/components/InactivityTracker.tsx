@@ -21,6 +21,7 @@ export default function InactivityTracker() {
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
   const lastStateWriteRef = useRef<number>(0);
   const isLoggingOutRef = useRef<boolean>(false);
+  const showModalRef = useRef<boolean>(false);
 
   const isLoginPage = location.pathname === '/login';
 
@@ -38,6 +39,10 @@ export default function InactivityTracker() {
       }
     };
   }, []);
+
+  useEffect(() => {
+    showModalRef.current = showModal;
+  }, [showModal]);
 
   const logoutAndRedirect = useCallback(async (isExpired: boolean) => {
     if (isLoggingOutRef.current) return;
@@ -67,7 +72,7 @@ export default function InactivityTracker() {
     localStorage.setItem('auth.lastActivity', timestamp.toString());
     lastStateWriteRef.current = timestamp;
     
-    if (showModal) {
+    if (showModalRef.current) {
       setShowModal(false);
       setTimeLeft(COUNTDOWN_TIME);
     }
@@ -75,7 +80,7 @@ export default function InactivityTracker() {
     if (notifyOthers && channelRef.current) {
       channelRef.current.postMessage({ type: 'RESET_TIMER', timestamp });
     }
-  }, [showModal]);
+  }, []);
 
   const resetTimerFromCurrentActivity = useCallback(() => {
     resetTimerLocal(Date.now(), true);
@@ -83,7 +88,7 @@ export default function InactivityTracker() {
 
   // Handle user activity from events (only tracker when modal is closed)
   const handleUserActivity = useCallback(() => {
-    if (showModal) return; // Do not register background activity while warning is showing
+    if (showModalRef.current) return; // Do not register background activity while warning is showing
     const now = Date.now();
     lastActivityRef.current = now;
     
@@ -91,7 +96,7 @@ export default function InactivityTracker() {
     if (now - lastStateWriteRef.current > 2000) {
       resetTimerLocal(now, true);
     }
-  }, [showModal, resetTimerLocal]);
+  }, [resetTimerLocal]);
 
   // Hook into route changes for reset
   useEffect(() => {
@@ -99,33 +104,6 @@ export default function InactivityTracker() {
       resetTimerFromCurrentActivity();
     }
   }, [location.pathname, user, isLoginPage]);
-
-  // Cleanly observe API fetches via standard PerformanceResourceTiming API
-  // Without ever violating the rule of replacing window.fetch / overwriting native APIs!
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    try {
-      const observer = new PerformanceObserver((list) => {
-        const entries = list.getEntries();
-        for (const entry of entries) {
-          if (entry.entryType === 'resource') {
-            const resEntry = entry as PerformanceResourceTiming;
-            if (resEntry.name.includes('/api/') || resEntry.name.includes('/rest/v1/')) {
-              // Reset the timer as client-initiated API activity arose
-              window.dispatchEvent(new CustomEvent('user-api-activity'));
-            }
-          }
-        }
-      });
-      observer.observe({ entryTypes: ['resource'] });
-      return () => {
-        observer.disconnect();
-      };
-    } catch (e) {
-      console.warn("[InactivityTracker] PerformanceObserver resource monitoring not supported by container runtime", e);
-    }
-  }, []);
 
   useEffect(() => {
     // We track inactivity for ALL authenticated users across the whole app
@@ -156,7 +134,7 @@ export default function InactivityTracker() {
         }
         logoutAndRedirect(true);
       } else if (inactiveTime >= WARNING_THRESHOLD) {
-        if (!showModal) {
+        if (!showModalRef.current) {
           setShowModal(true);
           // Set exact time left in countdown
           const remainingSecs = Math.max(0, Math.ceil((INACTIVITY_LIMIT - inactiveTime) / 1000));
@@ -164,7 +142,7 @@ export default function InactivityTracker() {
         }
       } else {
         // If another tab was active, close modal automatically
-        if (showModal) {
+        if (showModalRef.current) {
           setShowModal(false);
         }
       }
@@ -191,8 +169,8 @@ export default function InactivityTracker() {
 
     window.addEventListener('unauthorized-api-response', handleUnauthorizedApiResponse);
 
-    // Events to track activity (including route transitions and successful API fetches)
-    const events = ['click', 'mousedown', 'mousemove', 'keypress', 'keydown', 'scroll', 'touchstart', 'user-api-activity'];
+    // Events to track real user activity. Background API calls do not keep the session alive.
+    const events = ['click', 'mousedown', 'mousemove', 'keypress', 'keydown', 'scroll', 'touchstart'];
     events.forEach(event => {
       window.addEventListener(event, handleUserActivity);
     });
@@ -207,7 +185,7 @@ export default function InactivityTracker() {
       window.removeEventListener('unauthorized-api-response', handleUnauthorizedApiResponse);
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [user, isLoginPage, logoutAndRedirect, handleUserActivity, showModal, resetTimerLocal]);
+  }, [user, isLoginPage, logoutAndRedirect, handleUserActivity, resetTimerLocal]);
 
   // Countdown timer when the modal is visible
   useEffect(() => {

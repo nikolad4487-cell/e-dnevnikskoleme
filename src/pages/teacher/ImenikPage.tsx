@@ -344,8 +344,8 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
   const [showGroupFinalGradeModal, setShowGroupFinalGradeModal] = useState(false);
   const [showGradingElementsModal, setShowGradingElementsModal] = useState(false);
   
-  const [newGrade, setNewGrade] = useState({ 
-    value: 5, 
+  const [newGrade, setNewGrade] = useState<{ value: number | null; category: string; note: string; isImportant: boolean; customDate: string }>({ 
+    value: null, 
     category: '', 
     note: '', 
     isImportant: true, 
@@ -1181,6 +1181,11 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     
     if (!isStudentActiveGlobal(activeStudent.id)) {
       toast.error('Nije moguće unositi podatke za ispisanog učenika.');
+      return;
+    }
+
+    if (newGrade.value === null) {
+      toast.error('Odaberite ocjenu prije spremanja.');
       return;
     }
 
@@ -2109,7 +2114,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                                 toast.error("Ocjene se mogu unositi samo za trenutni i prethodni mjesec.");
                                 return;
                               }
-                              setNewGrade({ ...newGrade, category: cat, note: '', value: 5 }); 
+                              setNewGrade({ ...newGrade, category: cat, note: '', value: null }); 
                               setShowGradeModal(true);
                             }
                           }}>

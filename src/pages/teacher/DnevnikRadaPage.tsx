@@ -5,7 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, AbsenceStatus } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
-import { cn, getSurname, formatPersonName, sortStudentsBySurname, formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
+import { cn, getSurname, formatPersonName, sortStudentsBySurname, formatSubjectDisplayName, formatSubjectName, getLocalDateISO } from '../../lib/utils';
 import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, UserX, AlertTriangle } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { ScheduleGrid as SharedScheduleGrid } from '../../components/ScheduleGrid';
@@ -146,7 +146,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   useEffect(() => {
     if (view === 'WEEK_DETAIL' && !selectedWeek && weeks.length > 0) {
       // Find current week based on date or just pick the last one
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalDateISO();
       const activeWeek = weeks.find(w => today >= w.startDate && today <= w.endDate) || weeks[weeks.length - 1];
       setSelectedWeek(activeWeek);
     }
@@ -482,7 +482,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [isSavingLektira, setIsSavingLektira] = useState(false);
   const [lektiraForm, setLektiraForm] = useState({
     subjectId: '',
-    completedDate: new Date().toISOString().split('T')[0],
+    completedDate: getLocalDateISO(),
     title: '',
     processingDetails: ''
   });
@@ -689,7 +689,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
 
       setLektiraForm({
         subjectId: '',
-        completedDate: new Date().toISOString().split('T')[0],
+        completedDate: getLocalDateISO(),
         title: '',
         processingDetails: ''
       });
@@ -1307,7 +1307,7 @@ setStudents(uniqueStudents);
         while(current <= end) {
           const dayOfWeek = current.getDay();
           if (newWeek.dailyTeachingStatus[dayOfWeek]) {
-            days.push(current.toISOString().split('T')[0]);
+            days.push(getLocalDateISO(current));
           }
           current.setDate(current.getDate() + 1);
         }
@@ -2815,7 +2815,7 @@ setStudents(uniqueStudents);
                   setEditingLektira(null);
                   setLektiraForm({
                     subjectId: getHrvatskiJezikSubjectId(),
-                    completedDate: new Date().toISOString().split('T')[0],
+                    completedDate: getLocalDateISO(),
                     title: '',
                     processingDetails: ''
                   });
@@ -2860,7 +2860,7 @@ setStudents(uniqueStudents);
                             try {
                               const d = new Date(lek.processed_at);
                               if (!isNaN(d.getTime())) {
-                                processedDateString = d.toISOString().split('T')[0];
+                                processedDateString = getLocalDateISO(d);
                               }
                             } catch (e) {
                               console.error('Error parsing processed_at date:', e);
@@ -2952,7 +2952,7 @@ setStudents(uniqueStudents);
                                 try {
                                   const d = new Date(lek.processed_at);
                                   if (!isNaN(d.getTime())) {
-                                    processedDateString = d.toISOString().split('T')[0];
+                                    processedDateString = getLocalDateISO(d);
                                   }
                                 } catch (e) {
                                   console.error('Error parsing processed_at date:', e);
