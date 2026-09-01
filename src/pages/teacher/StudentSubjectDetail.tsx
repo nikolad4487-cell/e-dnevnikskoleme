@@ -54,6 +54,9 @@ const mapApiStudentNote = (note: any) => ({
 const todayDateISO = getLocalDateISO();
 const gradeDateBounds = getGradeDateBounds();
 
+const getProfileDisplayName = (profile: any) =>
+  formatPersonName(profile) || profile?.full_name || profile?.name || 'Nastavnik';
+
 interface ElementGroup {
   name: string;
   gradesByMonth: Record<string, any[]>;
@@ -250,24 +253,54 @@ export default function StudentSubjectDetail() {
     return (json.data || []).map(mapApiStudentNote);
   };
 
+  const currentUserDisplayName = getProfileDisplayName(user);
+
   const getTeacherNamesById = async (teacherIds: string[]) => {
     const uniqueTeacherIds = Array.from(new Set(teacherIds.filter(Boolean)));
     if (uniqueTeacherIds.length === 0) return new Map<string, string>();
 
-    const { data, error } = await supabase
+    const names = new Map<string, string>();
+    const currentUserIds = [user?.id, user?.authUserId].filter(Boolean);
+    currentUserIds.forEach(id => {
+      if (uniqueTeacherIds.includes(String(id))) {
+        names.set(String(id), currentUserDisplayName);
+      }
+    });
+
+    const { data: profilesById, error: profileIdError } = await supabase
       .from('user_profiles')
-      .select('id, name, surname, first_name, last_name')
+      .select('id, auth_user_id, name, surname, first_name, last_name, full_name')
       .in('id', uniqueTeacherIds);
 
-    if (error) {
-      console.warn('Teacher profile fetch failed:', error);
-      return new Map<string, string>();
+    if (profileIdError) {
+      console.warn('Teacher profile fetch by id failed:', profileIdError);
     }
 
-    return new Map((data || []).map((profile: any) => [
-      profile.id,
-      formatPersonName(profile) || profile.name || 'Nastavnik'
-    ]));
+    (profilesById || []).forEach((profile: any) => {
+      const displayName = getProfileDisplayName(profile);
+      if (profile.id) names.set(profile.id, displayName);
+      if (profile.auth_user_id) names.set(profile.auth_user_id, displayName);
+    });
+
+    const missingIds = uniqueTeacherIds.filter(id => !names.has(id));
+    if (missingIds.length > 0) {
+      const { data: profilesByAuthId, error: authIdError } = await supabase
+        .from('user_profiles')
+        .select('id, auth_user_id, name, surname, first_name, last_name, full_name')
+        .in('auth_user_id', missingIds);
+
+      if (authIdError) {
+        console.warn('Teacher profile fetch by auth_user_id failed:', authIdError);
+      }
+
+      (profilesByAuthId || []).forEach((profile: any) => {
+        const displayName = getProfileDisplayName(profile);
+        if (profile.id) names.set(profile.id, displayName);
+        if (profile.auth_user_id) names.set(profile.auth_user_id, displayName);
+      });
+    }
+
+    return names;
   };
 
   // Main data fetch
@@ -361,7 +394,7 @@ export default function StudentSubjectDetail() {
       const teacherNames = await getTeacherNamesById((grData || []).map((g: any) => g.teacher_id || g.teacherId));
       setGrades((grData || []).map((grade: any) => ({
         ...grade,
-        teacher_name: teacherNames.get(grade.teacher_id || grade.teacherId) || 'Nastavnik'
+        teacher_name: teacherNames.get(grade.teacher_id || grade.teacherId) || 'Nepoznato'
       })));
       const mappedFinGrData = (finGrData || []).map((fg: any) => {
         const isStatus = ["NEOCIJENJEN", "OSLOBODEN", "ODRADENO", "NEODRADENO"].includes(fg.value);
@@ -1110,7 +1143,7 @@ export default function StudentSubjectDetail() {
       value: g.value,
       element: g.element || 'Uobičajeno',
       note: g.note || '',
-      authorName: g.teacher_name || g.author_name || 'Nastavnik',
+      authorName: g.teacher_name || g.author_name || 'Nepoznato',
       createdAt: formatCroatianDateTime(g.created_at || g.createdAt),
       raw: g
     });
@@ -1124,7 +1157,7 @@ export default function StudentSubjectDetail() {
       value: '-',
       element: 'BILJEŠKA NASTAVNIKA',
       note: n.content,
-      authorName: n.author_name,
+      authorName: n.author_name || 'Nepoznato',
       createdAt: n.created_at,
       raw: n
     });
@@ -1669,7 +1702,7 @@ export default function StudentSubjectDetail() {
                              <td className="py-2.5 text-right w-[30%]">
                                <div className="flex items-center justify-end gap-3">
                                  <div className="min-w-0 text-right">
-                                   <div className="text-[10px] font-black uppercase text-slate-700 truncate">{item.authorName || 'Nastavnik'}</div>
+                                   <div className="text-[10px] font-black uppercase text-slate-700 truncate">{item.authorName || 'Nepoznato'}</div>
                                    <div className="mt-0.5 text-[10px] font-semibold text-slate-400 whitespace-nowrap">{item.createdAt || '-'}</div>
                                  </div>
                                  {canEdit && (

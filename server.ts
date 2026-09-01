@@ -393,14 +393,14 @@ async function startServer() {
       const authUserId = authData.user.id;
       let { data: profile } = await supabaseAdmin
         .from("user_profiles")
-        .select("id, auth_user_id, name, email")
+        .select("id, auth_user_id, name, surname, full_name, email")
         .eq("auth_user_id", authUserId)
         .maybeSingle();
 
       if (!profile) {
         const { data: fallbackProfile } = await supabaseAdmin
           .from("user_profiles")
-          .select("id, auth_user_id, name, email")
+          .select("id, auth_user_id, name, surname, full_name, email")
           .eq("id", authUserId)
           .maybeSingle();
         profile = fallbackProfile;
@@ -416,7 +416,12 @@ async function startServer() {
     }
 
     function fullNameFromProfile(profile: any) {
-      return profile?.name || "Nastavnik";
+      if (!profile) return "Nepoznato";
+      const first = String(profile.name || profile.first_name || "").trim();
+      const last = String(profile.surname || profile.last_name || "").trim();
+      if (profile.full_name) return profile.full_name;
+      if (last && first && !first.toLowerCase().includes(last.toLowerCase())) return `${first} ${last}`;
+      return first || last || "Nepoznato";
     }
 
     function canSeeFullNoteTimestamp(auth: any, schoolId?: string | null) {
@@ -429,7 +434,14 @@ async function startServer() {
     function serializeStudentNote(note: any, author: any, showFullTimestamp: boolean) {
       const createdAt = note.created_at ? new Date(note.created_at) : new Date();
       const createdAtValue = showFullTimestamp
-        ? createdAt.toLocaleString("hr-HR", { timeZone: "Europe/Zagreb" })
+        ? createdAt.toLocaleString("hr-HR", {
+            timeZone: "Europe/Zagreb",
+            day: "numeric",
+            month: "numeric",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit"
+          })
         : createdAt.toLocaleDateString("hr-HR", { timeZone: "Europe/Zagreb" });
 
       return {
@@ -456,9 +468,29 @@ async function startServer() {
       if (ids.length === 0) return new Map<string, any>();
       const { data: profiles } = await supabaseAdmin
         .from("user_profiles")
-        .select("id, name")
+        .select("id, auth_user_id, name, surname, full_name")
         .in("id", ids);
-      return new Map((profiles || []).map((profile: any) => [profile.id, profile]));
+
+      const authorMap = new Map<string, any>();
+      (profiles || []).forEach((profile: any) => {
+        if (profile.id) authorMap.set(profile.id, profile);
+        if (profile.auth_user_id) authorMap.set(profile.auth_user_id, profile);
+      });
+
+      const missingIds = ids.filter(id => !authorMap.has(id));
+      if (missingIds.length > 0) {
+        const { data: authProfiles } = await supabaseAdmin
+          .from("user_profiles")
+          .select("id, auth_user_id, name, surname, full_name")
+          .in("auth_user_id", missingIds);
+
+        (authProfiles || []).forEach((profile: any) => {
+          if (profile.id) authorMap.set(profile.id, profile);
+          if (profile.auth_user_id) authorMap.set(profile.auth_user_id, profile);
+        });
+      }
+
+      return authorMap;
     }
 
     async function canManageStandaloneNote(auth: any, note: any) {
