@@ -393,14 +393,14 @@ async function startServer() {
       const authUserId = authData.user.id;
       let { data: profile } = await supabaseAdmin
         .from("user_profiles")
-        .select("id, auth_user_id, name, surname, full_name, email")
+        .select("id, auth_user_id, name, surname, full_name, email, role, access_role")
         .eq("auth_user_id", authUserId)
         .maybeSingle();
 
       if (!profile) {
         const { data: fallbackProfile } = await supabaseAdmin
           .from("user_profiles")
-          .select("id, auth_user_id, name, surname, full_name, email")
+          .select("id, auth_user_id, name, surname, full_name, email, role, access_role")
           .eq("id", authUserId)
           .maybeSingle();
         profile = fallbackProfile;
@@ -511,6 +511,9 @@ async function startServer() {
     ]);
 
     function hasAdminRole(auth: any, schoolId?: string | null) {
+      const profileRole = String(auth?.profile?.role || auth?.profile?.access_role || auth?.profile?.globalRole || "").toUpperCase();
+      if (adminRoles.has(profileRole)) return true;
+
       return (auth.roles || []).some((role: any) => {
         const roleName = String(role.role || "").toUpperCase();
         return adminRoles.has(roleName) && (!schoolId || !role.school_id || role.school_id === schoolId);
@@ -532,6 +535,26 @@ async function startServer() {
     function isRecordCreatedByAuthUser(record: any, auth: any) {
       const ids = authUserIds(auth);
       return ids.has(String(record?.teacher_id || record?.teacherId || record?.created_by || record?.createdBy || ""));
+    }
+
+    async function canTeachFinalGradeSubject(auth: any, finalGrade: any) {
+      const ids = Array.from(authUserIds(auth));
+      if (ids.length === 0 || !finalGrade?.class_id || !finalGrade?.subject_id) return false;
+
+      const { data, error } = await supabaseAdmin
+        .from("class_subject_teachers")
+        .select("id")
+        .eq("class_id", finalGrade.class_id)
+        .eq("subject_id", finalGrade.subject_id)
+        .in("teacher_id", ids)
+        .limit(1);
+
+      if (error) {
+        console.warn("[SERVER] Final grade subject assignment check failed:", error.message);
+        return false;
+      }
+
+      return Boolean(data?.length);
     }
 
     function isWithinHours(createdAt: string | undefined, hours: number) {
@@ -709,9 +732,22 @@ async function startServer() {
         if (!classBook) return res.status(404).json({ error: "Imenik nije pronađen." });
 
         const isAdmin = hasAdminRole(auth, classBook.school_id);
+        const isCreator = isRecordCreatedByAuthUser(finalGrade, auth);
+        const isWithinGracePeriod = isWithinHours(finalGrade.created_at, 48);
+        const canUseTeacherGracePeriod = isCreator || await canTeachFinalGradeSubject(auth, finalGrade);
 
         if (classBook.is_locked && !isAdmin) {
           return res.status(423).json({ code: "CLASS_LOCKED", error: "Imenik je zaključan. Nastavnik ne može mijenjati ili brisati zaključne ocjene." });
+        }
+
+        if (!classBook.is_locked && isWithinGracePeriod && canUseTeacherGracePeriod) {
+          const { error: deleteError } = await supabaseAdmin
+            .from("final_grades")
+            .delete()
+            .eq("id", finalGrade.id);
+          if (deleteError) throw deleteError;
+
+          return res.json({ success: true });
         }
 
         if (isAdmin) {
@@ -750,11 +786,11 @@ async function startServer() {
           return res.json({ success: true });
         }
 
-        if (!isRecordCreatedByAuthUser(finalGrade, auth)) {
+        if (!canUseTeacherGracePeriod) {
           return res.status(403).json({ code: "UNAUTHORIZED_ROLE", error: "Možete obrisati samo zaključne ocjene koje ste Vi unijeli." });
         }
 
-        if (!isWithinHours(finalGrade.created_at, 48)) {
+        if (!isWithinGracePeriod) {
           return res.status(403).json({ code: "TIME_LIMIT_EXCEEDED", error: "Zaključnu ocjenu možete obrisati samo unutar 48 sati od unosa." });
         }
 

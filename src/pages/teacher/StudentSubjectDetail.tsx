@@ -1119,18 +1119,21 @@ export default function StudentSubjectDetail() {
 
     const isAdmin = isAdminForCurrentSchool();
     const isCreator = isCreatedByCurrentUser(finalGrade);
+    const canUseTeacherGracePeriod = isCreator || canEdit;
+    const isFreshTeacherDelete = canUseTeacherGracePeriod && isWithinHours(finalGrade.created_at || finalGrade.createdAt, 48) && !isClassBookLocked();
+    const requiresAdminConfirmation = isAdmin && !isFreshTeacherDelete;
 
     if (isClassBookLocked() && !isAdmin) {
       toast.error('Imenik je zaključan. Nastavnik ne može brisati zaključne ocjene.');
       return;
     }
 
-    if (!isAdmin && !isCreator) {
+    if (!isAdmin && !canUseTeacherGracePeriod) {
       toast.error('Možete obrisati samo zaključne ocjene koje ste Vi unijeli.');
       return;
     }
 
-    if (!isAdmin && !isWithinHours(finalGrade.created_at || finalGrade.createdAt, 48)) {
+    if (!isAdmin && !isFreshTeacherDelete) {
       toast.error('Zaključnu ocjenu možete obrisati samo unutar 48 sati od unosa.');
       return;
     }
@@ -1140,11 +1143,11 @@ export default function StudentSubjectDetail() {
       id: finalGrade.id,
       type: 'FINAL_GRADE',
       loading: false,
-      message: isAdmin
+      message: requiresAdminConfirmation
         ? 'Za brisanje zaključne ocjene unesite TOTP kod, razlog i detaljnu napomenu.'
         : 'Jeste li sigurni da želite obrisati zaključnu ocjenu?',
-      showTotp: isAdmin,
-      showReason: isAdmin
+      showTotp: requiresAdminConfirmation,
+      showReason: requiresAdminConfirmation
     });
   };
 
