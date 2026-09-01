@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
-import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan } from '../../types';
+import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, AbsenceStatus } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
 import { cn, getSurname, formatPersonName, sortStudentsBySurname, formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
 import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, UserX, AlertTriangle } from 'lucide-react';
@@ -11,6 +11,30 @@ import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { ScheduleGrid as SharedScheduleGrid } from '../../components/ScheduleGrid';
 import { toast } from 'react-hot-toast';
 import { usePageTitle } from '../../hooks/usePageTitle';
+
+const absenceTypeOptions = [
+  'Bolest - roditelj',
+  'Bolest - liječnik',
+  'Smrtni slučaj',
+  'Natjecanje',
+  'Promet',
+  'Obiteljski razlog',
+  'Ostalo'
+];
+
+const getAbsenceStatusShortLabel = (status?: string) => {
+  if (status === AbsenceStatus.JUSTIFIED) return 'opra.';
+  if (status === AbsenceStatus.UNJUSTIFIED) return 'neopra.';
+  if (status === AbsenceStatus.OTHER) return 'ostalo';
+  return 'čeka';
+};
+
+const getAbsenceStatusCellClass = (status?: string) => {
+  if (status === AbsenceStatus.JUSTIFIED) return 'bg-green-100 text-green-800 border-green-300';
+  if (status === AbsenceStatus.UNJUSTIFIED) return 'bg-red-100 text-red-800 border-red-300';
+  if (status === AbsenceStatus.OTHER) return 'bg-yellow-100 text-yellow-800 border-yellow-300';
+  return 'bg-red-100 text-red-700 border-red-300';
+};
 
 export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA' }) {
   usePageTitle("Dnevnik rada");
@@ -145,6 +169,22 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [showAbsenceEntryModal, setShowAbsenceEntryModal] = useState(false);
   const [absenceEntryLesson, setAbsenceEntryLesson] = useState<Lesson | null>(null);
   const [absenceEntrySelectedStudents, setAbsenceEntrySelectedStudents] = useState<string[]>([]);
+  const [absenceEditModal, setAbsenceEditModal] = useState<{
+    isOpen: boolean;
+    studentId: string;
+    absenceIds: string[];
+    selectedIds: string[];
+  }>({
+    isOpen: false,
+    studentId: '',
+    absenceIds: [],
+    selectedIds: []
+  });
+  const [absenceEditForm, setAbsenceEditForm] = useState({
+    status: '' as AbsenceStatus | '',
+    absenceType: '',
+    note: ''
+  });
 
   // Modal State - Week
   const [showWeekModal, setShowWeekModal] = useState(false);
@@ -1141,6 +1181,27 @@ setStudents(uniqueStudents);
     setShowAbsenceEntryModal(true);
   };
 
+  const openAbsenceEditModal = (studentId: string, targetAbsences: any[]) => {
+    if (targetAbsences.length === 0) return;
+    const firstAbsence = targetAbsences[0];
+    setAbsenceEditModal({
+      isOpen: true,
+      studentId,
+      absenceIds: targetAbsences.map(absence => absence.id),
+      selectedIds: targetAbsences.map(absence => absence.id)
+    });
+    setAbsenceEditForm({
+      status: firstAbsence.status || '',
+      absenceType: firstAbsence.absenceType || '',
+      note: firstAbsence.note || ''
+    });
+  };
+
+  const closeAbsenceEditModal = () => {
+    setAbsenceEditModal({ isOpen: false, studentId: '', absenceIds: [], selectedIds: [] });
+    setAbsenceEditForm({ status: '', absenceType: '', note: '' });
+  };
+
   const handleAddWeek = () => {
     const nextWeekNum = weeks.length + 1;
     const defaultName = `${nextWeekNum}. radni tjedan`;
@@ -1830,6 +1891,55 @@ setStudents(uniqueStudents);
     }
   };
 
+  const handleSaveAbsenceEdit = async () => {
+    if (!user || absenceEditModal.selectedIds.length === 0) return;
+    if (!absenceEditForm.status) {
+      toast.error('Odaberite status izostanka.');
+      return;
+    }
+    if (!absenceEditForm.absenceType) {
+      toast.error('Odaberite tip izostanka.');
+      return;
+    }
+    if ((absenceEditForm.status === AbsenceStatus.UNJUSTIFIED || absenceEditForm.status === AbsenceStatus.OTHER) && !absenceEditForm.note.trim()) {
+      toast.error('Za neopravdani ili ostalo izostanak upišite razlog.');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('absences')
+        .update({
+          status: absenceEditForm.status,
+          absence_type: absenceEditForm.absenceType,
+          note: absenceEditForm.note.trim() || null,
+          resolved_by: user.id,
+          resolved_at: new Date().toISOString(),
+          justified_by: user.name || user.id
+        })
+        .in('id', absenceEditModal.selectedIds);
+
+      if (error) throw error;
+
+      toast.success('Izostanci su ažurirani.');
+      closeAbsenceEditModal();
+      await fetchAbsencesForDay();
+      if (view === 'ABSENCES' && selectedWeek && effectiveClassId) {
+        const { data: absData, error: absErr } = await supabase
+          .from('absences')
+          .select('*')
+          .eq('class_id', effectiveClassId)
+          .gte('date', selectedWeek.startDate)
+          .lte('date', selectedWeek.endDate);
+        if (!absErr) {
+          setCurrentWeekAbsences(mapList(absData || [], mappers.absence));
+        }
+      }
+    } catch (err: any) {
+      toast.error('Greška pri ažuriranju izostanka: ' + err.message);
+    }
+  };
+
   const saveExam = async () => {
     if (!effectiveClassId || !examForm.date || !examForm.subjectId) return;
     try {
@@ -2348,18 +2458,45 @@ setStudents(uniqueStudents);
                     )}
                     {sortStudentsBySurname(students).map(s => {
                       const studentAbsences = dayAbsences.filter(abs => abs.studentId === s.id);
-                      const justified = studentAbsences.filter(abs => abs.status === 'JUSTIFIED').length;
-                      const unjustified = studentAbsences.filter(abs => abs.status === 'UNJUSTIFIED').length;
-                      const reason = studentAbsences.map(abs => abs.note).filter(Boolean).join(', ');
+                      const justified = studentAbsences.filter(abs => abs.status === AbsenceStatus.JUSTIFIED).length;
+                      const unjustified = studentAbsences.filter(abs => abs.status === AbsenceStatus.UNJUSTIFIED).length;
+                      const reason = studentAbsences
+                        .map(abs => [abs.absenceType, abs.note].filter(Boolean).join(' - '))
+                        .filter(Boolean)
+                        .join(', ');
                       return (
                         <tr key={`absence-row-${s.id}`} className="hover:bg-gray-50 transition-colors">
-                          <td className="p-2 font-bold text-gray-700 bg-gray-50/20 border-r border-gray-200">{formatPersonName(s)}</td>
+                          <td className="p-2 font-bold text-gray-700 bg-gray-50/20 border-r border-gray-200">
+                            {studentAbsences.length > 0 ? (
+                              <button
+                                type="button"
+                                onClick={() => openAbsenceEditModal(s.id, studentAbsences)}
+                                className="text-left hover:text-[#005c8d] hover:underline"
+                                title="Uredi sve izostanke učenika za ovaj dan"
+                              >
+                                {formatPersonName(s)}
+                              </button>
+                            ) : (
+                              formatPersonName(s)
+                            )}
+                          </td>
                           <td className="p-1 text-center text-gray-400 border-r border-gray-200">/</td>
                           {absencePeriods.map(hour => {
-                            const hasAbsence = studentAbsences.some(abs => Number(abs.hour) === hour);
+                            const absence = studentAbsences.find(abs => Number(abs.hour) === hour);
                             return (
                               <td key={`absence-cell-${s.id}-${hour}`} className="p-1 text-center border-r border-gray-200">
-                                {hasAbsence ? <span className="text-lg font-bold text-slate-900 leading-none">{hour}</span> : <span className="text-gray-400">/</span>}
+                                {absence ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => openAbsenceEditModal(s.id, [absence])}
+                                    className={cn("w-8 h-8 border text-sm font-bold leading-none hover:ring-2 hover:ring-[#005c8d]/30", getAbsenceStatusCellClass(absence.status))}
+                                    title={`${hour}. sat - ${getAbsenceStatusShortLabel(absence.status)}`}
+                                  >
+                                    {hour}
+                                  </button>
+                                ) : (
+                                  <span className="text-gray-400">/</span>
+                                )}
                               </td>
                             );
                           })}
@@ -3548,6 +3685,134 @@ setStudents(uniqueStudents);
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ABSENCE STATUS EDIT MODAL */}
+      {absenceEditModal.isOpen && (
+        <div className="fixed inset-0 bg-black/40 z-[70] flex items-center justify-center p-4">
+          {(() => {
+            const selectedStudentObj = students.find(s => s.id === absenceEditModal.studentId);
+            const editableAbsences = [...dailyAbsences, ...currentWeekAbsences]
+              .filter((absence, index, self) =>
+                absenceEditModal.absenceIds.includes(absence.id) &&
+                self.findIndex(item => item.id === absence.id) === index
+              )
+              .sort((a, b) => Number(a.hour || 0) - Number(b.hour || 0));
+            const firstAbsence = editableAbsences[0];
+            const firstLesson = firstAbsence ? dailyLessons.find(l => l.id === firstAbsence.lessonId) : null;
+
+            return (
+              <div className="bg-white border border-gray-700 w-full max-w-2xl shadow-lg">
+                <div className="bg-[#06476b] text-white px-3 py-2 flex items-center justify-between">
+                  <h3 className="text-[18px] font-normal">
+                    {formatPersonName(selectedStudentObj || { name: 'Učenik' })}{editableAbsences.length === 1 && firstAbsence ? ` - ${firstAbsence.hour}. sat` : ''}
+                  </h3>
+                  <button type="button" onClick={closeAbsenceEditModal} className="text-white/80 hover:text-white">
+                    <X size={22} />
+                  </button>
+                </div>
+
+                <div className="p-4">
+                  {editableAbsences.length === 1 && (
+                    <div className="text-center text-[15px] mb-4">
+                      {formatSubjectName(allSubjects.find(s => s.id === firstLesson?.subjectId)) || 'Predmet'}
+                    </div>
+                  )}
+
+                  {editableAbsences.length > 1 && (
+                    <div className="mb-5">
+                      <label className="block mb-2 text-[12px] font-bold">Odaberite sate: <span className="text-[#005c8d]">*</span></label>
+                      <div className="flex flex-wrap gap-2 bg-red-50 border border-red-200 p-2">
+                        {editableAbsences.map(absence => {
+                          const isSelected = absenceEditModal.selectedIds.includes(absence.id);
+                          return (
+                            <button
+                              key={absence.id}
+                              type="button"
+                              onClick={() => {
+                                setAbsenceEditModal(prev => ({
+                                  ...prev,
+                                  selectedIds: isSelected
+                                    ? prev.selectedIds.filter(id => id !== absence.id)
+                                    : [...prev.selectedIds, absence.id]
+                                }));
+                              }}
+                              className={cn(
+                                "w-9 h-8 border text-[12px] font-bold",
+                                isSelected ? "bg-[#005c8d] text-white border-[#005c8d]" : "bg-red-100 text-red-300 border-red-200"
+                              )}
+                            >
+                              {absence.hour}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="text-center mt-2">
+                        <button
+                          type="button"
+                          onClick={() => setAbsenceEditModal(prev => ({ ...prev, selectedIds: [...prev.absenceIds] }))}
+                          className="px-12 py-2 border border-red-300 bg-red-50 text-red-900 text-[12px] font-bold hover:bg-red-100"
+                        >
+                          Odaberi sve
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-red-50 border border-red-200 p-3">
+                    <div className="flex flex-col md:flex-row md:items-center gap-3 text-[13px]">
+                      <label className="font-bold">Status:</label>
+                      <select
+                        className="border border-red-200 bg-white px-2 py-1"
+                        value={absenceEditForm.status}
+                        onChange={e => setAbsenceEditForm(prev => ({ ...prev, status: e.target.value as AbsenceStatus }))}
+                      >
+                        <option value="">---status---</option>
+                        <option value={AbsenceStatus.JUSTIFIED}>opravdano</option>
+                        <option value={AbsenceStatus.UNJUSTIFIED}>neopravdano</option>
+                        <option value={AbsenceStatus.OTHER}>ostalo</option>
+                      </select>
+                      <span className="text-[#005c8d] font-bold">*</span>
+
+                      <label className="font-bold md:ml-3">Tip:</label>
+                      <select
+                        className="border border-red-200 bg-white px-2 py-1 min-w-44"
+                        value={absenceEditForm.absenceType}
+                        onChange={e => setAbsenceEditForm(prev => ({ ...prev, absenceType: e.target.value }))}
+                      >
+                        <option value="">---tip---</option>
+                        {absenceTypeOptions.map(option => (
+                          <option key={option} value={option}>{option}</option>
+                        ))}
+                      </select>
+                      <span className="text-[#005c8d] font-bold">*</span>
+                    </div>
+
+                    <div className="border-t border-red-200 mt-4 pt-4">
+                      <label className="block mb-1 text-[13px] font-bold">Razlog:</label>
+                      <textarea
+                        rows={3}
+                        className="w-full border border-blue-400 bg-white p-2 text-[13px] focus:outline-none"
+                        value={absenceEditForm.note}
+                        onChange={e => setAbsenceEditForm(prev => ({ ...prev, note: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="border-t border-gray-200 mt-5 pt-5 text-center">
+                    <button
+                      type="button"
+                      onClick={handleSaveAbsenceEdit}
+                      className="px-5 py-2 bg-[#005c8d] text-white font-bold hover:bg-[#004a70]"
+                    >
+                      Unesi
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
 

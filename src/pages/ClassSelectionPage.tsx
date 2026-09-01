@@ -1035,7 +1035,7 @@ export default function ClassSelectionPage() {
                   .map((cls) => {
                     const rowClassName =
                       cls.userRoleInClass === 'HOMEROOM'
-                        ? "bg-[#c9c79f] hover:bg-[#bfbd93]"
+                        ? "bg-[#b9f3ad] hover:bg-[#a7eca0]"
                         : cls.userRoleInClass === 'DEPUTY'
                           ? "bg-[#f39a32] hover:bg-[#ed8f22]"
                           : "bg-white hover:bg-[#f8f9fa]";

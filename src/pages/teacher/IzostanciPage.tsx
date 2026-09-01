@@ -11,6 +11,16 @@ import { mappers, mapList } from '../../lib/mappers';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { usePageTitle } from '../../hooks/usePageTitle';
 
+const absenceTypeOptions = [
+  'Bolest - roditelj',
+  'Bolest - liječnik',
+  'Smrtni slučaj',
+  'Natjecanje',
+  'Promet',
+  'Obiteljski razlog',
+  'Ostalo'
+];
+
 export default function TeacherIzostanciPage() {
   usePageTitle("Izostanci");
   const { classId: routeClassId, studentId } = useParams<{ classId: string, studentId?: string }>();
@@ -319,21 +329,25 @@ const StudentDetailView = ({ student, absences, lessons, onJustify, onDelete, sh
 };
 
 const JustifyModal = ({ date, absences, onClose, onSuccess, user }: any) => {
-    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(absences.filter((a: any) => a.status === AbsenceStatus.PENDING).map((a: any) => a.id)));
-    const [status, setStatus] = useState<AbsenceStatus | ''>('');
-    const [type, setType] = useState<string>('');
-    const [note, setNote] = useState<string>('');
+    const pendingIds = absences.filter((a: any) => a.status === AbsenceStatus.PENDING).map((a: any) => a.id);
+    const allIds = absences.map((a: any) => a.id);
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(pendingIds.length > 0 ? pendingIds : allIds));
+    const [status, setStatus] = useState<AbsenceStatus | ''>(absences[0]?.status === AbsenceStatus.PENDING ? '' : absences[0]?.status || '');
+    const [type, setType] = useState<string>(absences[0]?.absenceType || '');
+    const [note, setNote] = useState<string>(absences[0]?.note || '');
     const [saving, setSaving] = useState(false);
+    const selectedCount = selectedIds.size;
 
     const onJustify = async () => {
+      if (selectedIds.size === 0) return toast.error('Odaberite barem jedan sat.');
       if (!status || !type) return toast.error('Status i tip su obavezni!');
-      if ((status === AbsenceStatus.UNJUSTIFIED || status === AbsenceStatus.OTHER) && !note) return toast.error('Napomena je obavezna!');
+      if ((status === AbsenceStatus.UNJUSTIFIED || status === AbsenceStatus.OTHER) && !note.trim()) return toast.error('Razlog je obavezan za neopravdano ili ostalo.');
       setSaving(true);
       try {
         const payload = {
           status: status,
           absence_type: type,
-          note: note,
+          note: note.trim() || null,
           resolved_by: user.id,
           resolved_at: new Date().toISOString(),
           justified_by: user.name || user.id
@@ -348,36 +362,83 @@ const JustifyModal = ({ date, absences, onClose, onSuccess, user }: any) => {
 
     return (
       <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white max-w-lg w-full p-6">
-           <h3 className="font-bold mb-4">Opravdanje za {new Date(date).toLocaleDateString()}</h3>
-           <div className="space-y-4">
-             {absences.map((a: any) => (
-               <div key={a.id} className="flex gap-2">
-                 <input type="checkbox" checked={selectedIds.has(a.id)} onChange={e => {
-                    const next = new Set(selectedIds);
-                    if (e.target.checked) next.add(a.id); else next.delete(a.id);
-                    setSelectedIds(next);
-                 }}/> 
-                 <span>{a.hour}. sat ({a.status})</span>
-               </div>
-             ))}
-             <select onChange={e => setStatus(e.target.value as any)} className="w-full border p-2">
-                <option value="">Status...</option>
-                <option value={AbsenceStatus.JUSTIFIED}>Opravdano</option>
-                <option value={AbsenceStatus.UNJUSTIFIED}>Neopravdano</option>
-                <option value={AbsenceStatus.OTHER}>Ostalo</option>
-             </select>
-             <select onChange={e => setType(e.target.value)} className="w-full border p-2">
-                <option value="">Tip...</option>
-                <option value="Bolest - roditelj">Bolest - roditelj</option>
-                <option value="Bolest - liječnik">Bolest - liječnik</option>
-                <option value="Promet">Promet</option>
-                <option value="Natjecanje">Natjecanje</option>
-                <option value="Ostalo">Ostalo</option>
-             </select>
-             <textarea className="w-full border p-2" placeholder="Napomena" onChange={e => setNote(e.target.value)}/>
-             <div className="flex gap-2"><button onClick={onClose} className="border px-4 py-2">Odustani</button><button onClick={onJustify} disabled={saving} className="bg-[#005c8d] text-white px-4 py-2">Unesi</button></div>
-           </div>
+        <div className="bg-white border border-gray-700 max-w-2xl w-full">
+          <div className="bg-[#06476b] text-white px-3 py-2 flex items-center justify-between">
+            <h3 className="text-[18px] font-normal">Uređivanje izostanaka za {new Date(date).toLocaleDateString('hr-HR')}</h3>
+            <button type="button" onClick={onClose} className="text-white/80 hover:text-white">×</button>
+          </div>
+
+          <div className="p-4 space-y-5">
+            <div>
+              <label className="block mb-2 text-[12px] font-bold">Odaberite sate: <span className="text-[#005c8d]">*</span></label>
+              <div className="flex flex-wrap gap-2 bg-red-50 border border-red-200 p-2">
+                {absences.sort((a: any, b: any) => Number(a.hour || 0) - Number(b.hour || 0)).map((absence: any) => {
+                  const isSelected = selectedIds.has(absence.id);
+                  return (
+                    <button
+                      key={absence.id}
+                      type="button"
+                      onClick={() => {
+                        const next = new Set(selectedIds);
+                        if (isSelected) next.delete(absence.id);
+                        else next.add(absence.id);
+                        setSelectedIds(next);
+                      }}
+                      className={cn(
+                        "w-9 h-8 border text-[12px] font-bold",
+                        isSelected ? "bg-[#005c8d] text-white border-[#005c8d]" : "bg-red-100 text-red-300 border-red-200"
+                      )}
+                    >
+                      {absence.hour}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="text-center mt-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds(new Set(allIds))}
+                  className="px-12 py-2 border border-red-300 bg-red-50 text-red-900 text-[12px] font-bold hover:bg-red-100"
+                >
+                  Odaberi sve
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 p-3">
+              <div className="flex flex-col md:flex-row md:items-center gap-3 text-[13px]">
+                <label className="font-bold">Status:</label>
+                <select value={status} onChange={e => setStatus(e.target.value as any)} className="border border-red-200 bg-white px-2 py-1">
+                  <option value="">---status---</option>
+                  <option value={AbsenceStatus.JUSTIFIED}>opravdano</option>
+                  <option value={AbsenceStatus.UNJUSTIFIED}>neopravdano</option>
+                  <option value={AbsenceStatus.OTHER}>ostalo</option>
+                </select>
+                <span className="text-[#005c8d] font-bold">*</span>
+
+                <label className="font-bold md:ml-3">Tip:</label>
+                <select value={type} onChange={e => setType(e.target.value)} className="border border-red-200 bg-white px-2 py-1 min-w-44">
+                  <option value="">---tip---</option>
+                  {absenceTypeOptions.map(option => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
+                <span className="text-[#005c8d] font-bold">*</span>
+              </div>
+
+              <div className="border-t border-red-200 mt-4 pt-4">
+                <div className="text-center text-[12px] text-gray-600 mb-3">Napomena nastavnika:</div>
+                <label className="block mb-1 text-[13px] font-bold">Razlog:</label>
+                <textarea className="w-full border border-gray-300 p-2 text-[13px]" rows={3} value={note} onChange={e => setNote(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="border-t border-gray-200 pt-4 text-center">
+              <button onClick={onJustify} disabled={saving || selectedCount === 0} className="bg-[#005c8d] disabled:bg-gray-300 text-white px-5 py-2 font-bold">
+                Unesi
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
