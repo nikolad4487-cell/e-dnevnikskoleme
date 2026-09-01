@@ -1268,13 +1268,15 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
 
     const isGradeAdmin = isMainAdmin || [Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(highestRole as Role);
     const isCreator = grade.teacherId === user?.id || (grade as any).teacher_id === user?.id;
+    const isOwnQuickDelete = isCreator && diffMinutes <= 10;
+    const requiresAdminConfirmation = isGradeAdmin && !isOwnQuickDelete;
 
     if (!isGradeAdmin && !isCreator) {
       toast.error('Možete obrisati samo ocjene koje ste Vi unijeli.');
       return;
     }
 
-    if (!isGradeAdmin && diffMinutes > 10) {
+    if (!isGradeAdmin && !isOwnQuickDelete) {
       toast.error('Ocjenu možete obrisati samo unutar 10 minuta od unosa. Nakon toga brisanje može napraviti samo admin.');
       return;
     }
@@ -1284,11 +1286,11 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
       id: gradeId,
       type: 'GRADE',
       loading: false,
-      message: isGradeAdmin
+      message: requiresAdminConfirmation
         ? 'Za brisanje ocjene unesite TOTP kod i razlog brisanja.'
         : 'Jeste li sigurni da želite obrisati ovu ocjenu?',
-      showTotp: isGradeAdmin,
-      showReason: isGradeAdmin
+      showTotp: requiresAdminConfirmation,
+      showReason: requiresAdminConfirmation
     });
   };
 
