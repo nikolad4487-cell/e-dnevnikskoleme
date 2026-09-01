@@ -537,10 +537,16 @@ export default function StudentSubjectDetail() {
 
   const isClassBookLocked = () => Boolean(classroom?.is_locked || classroom?.isLocked);
 
+  const isCreatedByCurrentUser = (record: any) => {
+    const currentUserIds = [user?.id, user?.authUserId, (user as any)?.auth_user_id].filter(Boolean).map(String);
+    const recordTeacherId = record?.teacher_id || record?.teacherId || record?.created_by || record?.createdBy;
+    return currentUserIds.includes(String(recordTeacherId));
+  };
+
   const canDeleteGrade = (g: any) => {
     if (isAdminForCurrentSchool()) return true;
     if (!isTeacher) return false;
-    const isCreator = g?.teacher_id === user?.id || g?.teacherId === user?.id;
+    const isCreator = isCreatedByCurrentUser(g);
     return isCreator && isWithinMinutes(g?.created_at || g?.createdAt, 10);
   };
 
@@ -552,7 +558,7 @@ export default function StudentSubjectDetail() {
   const triggerDeleteGrade = (id: string) => {
     const grade = grades.find(g => g.id === id);
     const isGradeAdmin = isAdminForCurrentSchool();
-    const isCreator = grade?.teacher_id === user?.id || grade?.teacherId === user?.id;
+    const isCreator = isCreatedByCurrentUser(grade);
     const isOwnQuickDelete = isCreator && isWithinMinutes(grade?.created_at || grade?.createdAt, 10);
     const requiresAdminConfirmation = isGradeAdmin && !isOwnQuickDelete;
 
@@ -892,7 +898,7 @@ export default function StudentSubjectDetail() {
 
     const existingGrade = grades.find(g => g.id === editingGrade.id);
     const isGradeAdmin = isAdminForCurrentSchool();
-    const isCreator = existingGrade?.teacher_id === user?.id || existingGrade?.teacherId === user?.id;
+    const isCreator = isCreatedByCurrentUser(existingGrade);
     const onlyNoteChanged = existingGrade &&
       Number(existingGrade.value) === Number(editingGrade.value) &&
       (existingGrade.element || '') === (editingGrade.element || '') &&
@@ -1112,7 +1118,7 @@ export default function StudentSubjectDetail() {
     }
 
     const isAdmin = isAdminForCurrentSchool();
-    const isCreator = finalGrade.teacher_id === user?.id || finalGrade.teacherId === user?.id;
+    const isCreator = isCreatedByCurrentUser(finalGrade);
 
     if (isClassBookLocked() && !isAdmin) {
       toast.error('Imenik je zaključan. Nastavnik ne može brisati zaključne ocjene.');

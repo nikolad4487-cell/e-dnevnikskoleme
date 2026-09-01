@@ -521,6 +521,19 @@ async function startServer() {
       return classBook?.homeroom_teacher_id === auth.userId;
     }
 
+    function authUserIds(auth: any) {
+      return new Set([
+        auth?.userId,
+        auth?.profile?.id,
+        auth?.profile?.auth_user_id
+      ].filter(Boolean).map(String));
+    }
+
+    function isRecordCreatedByAuthUser(record: any, auth: any) {
+      const ids = authUserIds(auth);
+      return ids.has(String(record?.teacher_id || record?.teacherId || record?.created_by || record?.createdBy || ""));
+    }
+
     function isWithinHours(createdAt: string | undefined, hours: number) {
       const createdTime = createdAt ? new Date(createdAt).getTime() : Number.NaN;
       if (!Number.isFinite(createdTime)) return false;
@@ -737,7 +750,7 @@ async function startServer() {
           return res.json({ success: true });
         }
 
-        if (finalGrade.teacher_id !== auth.userId) {
+        if (!isRecordCreatedByAuthUser(finalGrade, auth)) {
           return res.status(403).json({ code: "UNAUTHORIZED_ROLE", error: "Možete obrisati samo zaključne ocjene koje ste Vi unijeli." });
         }
 

@@ -961,6 +961,12 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     return Date.now() - createdTime <= hours * 60 * 60 * 1000;
   };
 
+  const isCreatedByCurrentUser = (record: any) => {
+    const currentUserIds = [user?.id, user?.authUserId, (user as any)?.auth_user_id].filter(Boolean).map(String);
+    const recordTeacherId = record?.teacher_id || record?.teacherId || record?.created_by || record?.createdBy;
+    return currentUserIds.includes(String(recordTeacherId));
+  };
+
   const isStudentActiveGlobal = (studentId: string) => {
     const enrollment = studentEnrollments.find(e => e.student_id === studentId);
     return enrollment?.status === 'ACTIVE';
@@ -1544,7 +1550,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     if (!finalGrade) return;
 
     const isAdmin = isAdminForCurrentClass();
-    const isCreator = finalGrade.teacher_id === user?.id || finalGrade.teacherId === user?.id;
+    const isCreator = isCreatedByCurrentUser(finalGrade);
 
     if (isClassBookLocked() && !isAdmin) {
       toast.error('Imenik je zaključan. Nastavnik ne može brisati zaključne ocjene.');
