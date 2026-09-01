@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
-import { Class, User, Role, Grade, Subject, StudentNote, Exam, FinalGrade, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary, specialExamTypeLabels } from '../../types';
+import { Class, User, Role, Grade, Subject, StudentNote, Exam, FinalGrade, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary, specialExamTypeLabels, DeletionReason, deletionReasonLabels } from '../../types';
 import { cn, formatName, getSurname, formatSubjectDisplayName, formatSubjectName, finalGradeLabels, sortStudentsBySurname } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
 import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2, Check } from 'lucide-react';
@@ -14,6 +14,11 @@ import { usePageTitle } from '../../hooks/usePageTitle';
 import { ImenikTable } from '../../components/ImenikTable';
 
 type ViewMode = 'STUDENTS' | 'SUBJECTS' | 'GRADES' | 'NOTES';
+
+const deletionReasonOptions = Object.values(DeletionReason).map(value => ({
+  value,
+  label: deletionReasonLabels[value]
+}));
 
 
 
@@ -1213,11 +1218,9 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     if (!selectedGrade) return;
     const isGradeAdmin = isMainAdmin || [Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(highestRole as Role);
     const isCreator = selectedGrade.teacherId === user?.id || (selectedGrade as any).teacher_id === user?.id;
-    const createdAt = selectedGrade.createdAt ? new Date(selectedGrade.createdAt).getTime() : Date.now();
-    const isWithinTenMinutes = Number.isFinite(createdAt) && Date.now() - createdAt <= 10 * 60 * 1000;
 
-    if (!isGradeAdmin && (!isCreator || !isWithinTenMinutes)) {
-      toast.error('Ocjenu možete uređivati samo unutar 10 minuta od unosa.');
+    if (!isGradeAdmin && !isCreator) {
+      toast.error('Možete uređivati samo bilješke uz ocjene koje ste Vi unijeli.');
       return;
     }
 
@@ -1280,7 +1283,8 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     const note = currentNotes.find(n => n.id === noteId);
     if (!note) return;
 
-    if (!isMainAdmin && note.teacherId !== user?.id) {
+    const isNotesAdmin = isMainAdmin || [Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(highestRole as Role);
+    if (!isNotesAdmin && note.teacherId !== user?.id) {
       toast.error('Niste ovlašteni za brisanje ove bilješke.');
       return;
     }
@@ -1502,7 +1506,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     });
   };
 
-  const confirmDelete = async (totpCode?: string, reason?: string) => {
+  const confirmDelete = async (totpCode?: string, reason?: string, detailedNote?: string) => {
     if (!deleteDialog.id || !deleteDialog.type) return;
 
     if (deleteDialog.showTotp) {
@@ -1530,8 +1534,13 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
       }
     }
 
-    if (deleteDialog.showReason && !reason?.trim()) {
-      toast.error('Upišite razlog brisanja.');
+    if (deleteDialog.showReason && !Object.values(DeletionReason).includes(reason as DeletionReason)) {
+      toast.error('Odaberite razlog brisanja.');
+      return;
+    }
+
+    if (deleteDialog.showReason && !detailedNote?.trim()) {
+      toast.error('Upišite detaljnu napomenu.');
       return;
     }
     
@@ -1562,6 +1571,9 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     }
 
     let tableName = '';
+    const deletedGradeDetails = deleteDialog.type === 'GRADE'
+      ? currentGrades.find(g => g.id === deleteDialog.id)
+      : null;
     
     switch (deleteDialog.type) {
       case 'GRADE': tableName = 'grades'; console.log("DELETE GRADE CLICKED", { id: deleteDialog.id }); break;
@@ -1581,6 +1593,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         setShowAdminDeleteAuth(false);
         setDeleteConfirmationCode('');
         if (deleteDialog.showReason) {
+          const deletedAt = new Date().toISOString();
           await fetch('/api/audit-log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1589,7 +1602,14 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
               recordId: deleteDialog.id,
               userId: user?.id,
               userRole: highestRole,
-              details: `Deleted grade ${deleteDialog.id}. Reason: ${reason?.trim()}`
+              reason,
+              details: JSON.stringify({
+                deletedRecord: deletedGradeDetails,
+                adminId: user?.id,
+                deletedAt,
+                deletionReason: reason,
+                detailedNote: detailedNote?.trim()
+              })
             })
           });
         }
@@ -1616,9 +1636,22 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     console.log("UPDATE STUDENT NOTE PAYLOAD", payload);
     try {
       if (editingNote.type === 'GRADE') {
+        const grade = currentGrades.find(g => g.id === editingNote.id);
+        const isGradeAdmin = isMainAdmin || [Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(highestRole as Role);
+        const isCreator = grade?.teacherId === user?.id || (grade as any)?.teacher_id === user?.id;
+        if (!isGradeAdmin && !isCreator) {
+          toast.error('Možete uređivati samo bilješke uz ocjene koje ste Vi unijeli.');
+          return;
+        }
         const { error } = await supabase.from('grades').update({ note: editingNote.content }).eq('id', editingNote.id);
         if (error) console.log("UPDATE GRADE NOTE ERROR", error);
       } else {
+        const note = currentNotes.find(n => n.id === editingNote.id);
+        const isNotesAdmin = isMainAdmin || [Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(highestRole as Role);
+        if (note && !isNotesAdmin && note.teacherId !== user?.id) {
+          toast.error('Možete uređivati samo bilješke koje ste Vi unijeli.');
+          return;
+        }
         const { error } = await supabase.from('student_notes').update(payload).eq('id', editingNote.id);
         if (error) {
             console.log("UPDATE STUDENT NOTE ERROR", error);
@@ -2772,6 +2805,9 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         showTotp={deleteDialog.showTotp}
         showReason={deleteDialog.showReason}
         reasonLabel="Razlog brisanja ocjene"
+        reasonOptions={deletionReasonOptions}
+        showDetailedNote={deleteDialog.showReason}
+        detailedNoteLabel="Detaljna napomena"
       />
 
       <GroupFinalGradeModal

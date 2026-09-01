@@ -341,6 +341,29 @@ export type Grade = {
   createdAt?: string;
 };
 
+export enum DeletionReason {
+  WRONG_GRADE_VALUE = 'WRONG_GRADE_VALUE',
+  WRONG_STUDENT = 'WRONG_STUDENT',
+  WRONG_GRADING_ELEMENT = 'WRONG_GRADING_ELEMENT',
+  EXAM_CANCELED_OR_INSPECTION = 'EXAM_CANCELED_OR_INSPECTION',
+  TECHNICAL_ERROR_OR_DUPLICATE = 'TECHNICAL_ERROR_OR_DUPLICATE'
+}
+
+export enum RecordType {
+  WORKING_HOUR = 'WORKING_HOUR',
+  GRADE = 'GRADE',
+  ABSENCE = 'ABSENCE',
+  STANDALONE_NOTE = 'STANDALONE_NOTE'
+}
+
+export const deletionReasonLabels: Record<DeletionReason, string> = {
+  [DeletionReason.WRONG_GRADE_VALUE]: 'Pogrešna vrijednost ocjene',
+  [DeletionReason.WRONG_STUDENT]: 'Pogrešan učenik',
+  [DeletionReason.WRONG_GRADING_ELEMENT]: 'Pogrešan element ocjenjivanja',
+  [DeletionReason.EXAM_CANCELED_OR_INSPECTION]: 'Ispit otkazan ili inspekcijski nalog',
+  [DeletionReason.TECHNICAL_ERROR_OR_DUPLICATE]: 'Tehnička greška ili duplikat'
+};
+
 export type FinalGrade = {
   id: string;
   studentId: string;

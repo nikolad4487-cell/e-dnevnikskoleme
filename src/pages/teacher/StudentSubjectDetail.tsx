@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
-import { Role } from '../../types';
+import { Role, DeletionReason, deletionReasonLabels } from '../../types';
 import { sortStudentsBySurname, formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
 import { toast } from 'react-hot-toast';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
@@ -27,6 +27,11 @@ import {
   Calendar,
   AlertTriangle
 } from 'lucide-react';
+
+const deletionReasonOptions = Object.values(DeletionReason).map(value => ({
+  value,
+  label: deletionReasonLabels[value]
+}));
 
 interface ElementGroup {
   name: string;
@@ -425,7 +430,8 @@ export default function StudentSubjectDetail() {
   };
 
   const canDeleteNote = (n: any) => {
-    return true; // Bilješke bez ocjene mogu se brisati u bilo kojem trenutku
+    if (isAdminForCurrentSchool()) return true;
+    return n?.teacher_id === user?.id || n?.teacherId === user?.id;
   };
 
   const triggerDeleteGrade = (id: string) => {
@@ -466,7 +472,7 @@ export default function StudentSubjectDetail() {
     });
   };
 
-  const confirmDelete = async (totpCode?: string, reason?: string) => {
+  const confirmDelete = async (totpCode?: string, reason?: string, detailedNote?: string) => {
     if (!deleteDialog.id || !deleteDialog.type) return;
 
     if (deleteDialog.showTotp) {
@@ -494,18 +500,27 @@ export default function StudentSubjectDetail() {
       }
     }
 
-    if (deleteDialog.showReason && !reason?.trim()) {
-      toast.error('Upišite razlog brisanja.');
+    if (deleteDialog.showReason && !Object.values(DeletionReason).includes(reason as DeletionReason)) {
+      toast.error('Odaberite razlog brisanja.');
+      return;
+    }
+
+    if (deleteDialog.showReason && !detailedNote?.trim()) {
+      toast.error('Upišite detaljnu napomenu.');
       return;
     }
 
     setDeleteDialog(prev => ({ ...prev, loading: true }));
     try {
+      const deletedGradeDetails = deleteDialog.type === 'GRADE'
+        ? grades.find(g => g.id === deleteDialog.id)
+        : null;
       const tableName = deleteDialog.type === 'GRADE' ? 'grades' : 'student_notes';
       const { error } = await supabase.from(tableName).delete().eq('id', deleteDialog.id);
       if (error) throw error;
 
       if (deleteDialog.type === 'GRADE' && deleteDialog.showReason) {
+        const deletedAt = new Date().toISOString();
         await fetch('/api/audit-log', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -514,7 +529,14 @@ export default function StudentSubjectDetail() {
             recordId: deleteDialog.id,
             userId: user?.id,
             userRole: 'ADMIN',
-            details: `Deleted grade ${deleteDialog.id}. Reason: ${reason?.trim()}`
+            reason,
+            details: JSON.stringify({
+              deletedRecord: deletedGradeDetails,
+              adminId: user?.id,
+              deletedAt,
+              deletionReason: reason,
+              detailedNote: detailedNote?.trim()
+            })
           })
         });
       }
@@ -700,6 +722,11 @@ export default function StudentSubjectDetail() {
   };
 
   const handleDeleteNote = async (id: string) => {
+    const note = notes.find(n => n.id === id);
+    if (note && !canDeleteNote(note)) {
+      toast.error('Možete obrisati samo bilješke koje ste Vi unijeli.');
+      return;
+    }
     triggerDeleteNote(id);
   };
 
@@ -707,21 +734,32 @@ export default function StudentSubjectDetail() {
     e.preventDefault();
     if (!editingGrade) return;
 
-    if (!canDeleteGrade(editingGrade)) {
-      toast.error('Ocjenu možete uređivati samo unutar 10 minuta od unosa.');
+    const existingGrade = grades.find(g => g.id === editingGrade.id);
+    const isGradeAdmin = isAdminForCurrentSchool();
+    const isCreator = existingGrade?.teacher_id === user?.id || existingGrade?.teacherId === user?.id;
+    const onlyNoteChanged = existingGrade &&
+      Number(existingGrade.value) === Number(editingGrade.value) &&
+      (existingGrade.element || '') === (editingGrade.element || '') &&
+      (existingGrade.date || '') === (editingGrade.date || '');
+
+    if (!canDeleteGrade(editingGrade) && !(isCreator && onlyNoteChanged)) {
+      toast.error('Nakon 10 minuta možete mijenjati samo bilješku uz vlastitu ocjenu.');
       return;
     }
 
     try {
-      const { error } = await supabase
-        .from('grades')
-        .update({
+      const updatePayload = !canDeleteGrade(editingGrade) && !isGradeAdmin
+        ? { note: editingGrade.note }
+        : {
           value: Number(editingGrade.value),
           element: editingGrade.element,
           category: editingGrade.element,
           note: editingGrade.note,
           date: editingGrade.date
-        })
+        };
+      const { error } = await supabase
+        .from('grades')
+        .update(updatePayload)
         .eq('id', editingGrade.id);
       if (error) throw error;
       setEditingGrade(null);
@@ -736,6 +774,11 @@ export default function StudentSubjectDetail() {
   const handleEditNoteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingNote) return;
+    const note = notes.find(n => n.id === editingNote.id);
+    if (note && !canDeleteNote(note)) {
+      toast.error('Možete uređivati samo bilješke koje ste Vi unijeli.');
+      return;
+    }
     try {
       const { error } = await supabase
         .from('student_notes')
@@ -2110,6 +2153,9 @@ export default function StudentSubjectDetail() {
         showTotp={deleteDialog.showTotp}
         showReason={deleteDialog.showReason}
         reasonLabel="Razlog brisanja ocjene"
+        reasonOptions={deletionReasonOptions}
+        showDetailedNote={deleteDialog.showReason}
+        detailedNoteLabel="Detaljna napomena"
         loading={deleteDialog.loading}
       />
       

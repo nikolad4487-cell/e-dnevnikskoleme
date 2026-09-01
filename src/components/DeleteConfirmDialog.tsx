@@ -5,13 +5,16 @@ import { cn } from '../lib/utils';
 interface DeleteConfirmDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (totpCode?: string, reason?: string) => void;
+  onConfirm: (totpCode?: string, reason?: string, detailedNote?: string) => void;
   title?: string;
   message?: string;
   loading?: boolean;
   showTotp?: boolean;
   showReason?: boolean;
   reasonLabel?: string;
+  reasonOptions?: Array<{ value: string; label: string }>;
+  showDetailedNote?: boolean;
+  detailedNoteLabel?: string;
 }
 
 export function DeleteConfirmDialog({
@@ -23,15 +26,20 @@ export function DeleteConfirmDialog({
   loading = false,
   showTotp = false,
   showReason = false,
-  reasonLabel = "Razlog brisanja"
+  reasonLabel = "Razlog brisanja",
+  reasonOptions,
+  showDetailedNote = false,
+  detailedNoteLabel = "Detaljna napomena"
 }: DeleteConfirmDialogProps) {
   const [totpCode, setTotpCode] = React.useState('');
   const [reason, setReason] = React.useState('');
+  const [detailedNote, setDetailedNote] = React.useState('');
 
   React.useEffect(() => {
     if (!isOpen) {
       setTotpCode('');
       setReason('');
+      setDetailedNote('');
     }
   }, [isOpen]);
   
@@ -71,11 +79,36 @@ export function DeleteConfirmDialog({
           {showReason && (
             <div className="mb-4">
                <label className="block text-[10px] font-black text-gray-700 uppercase tracking-widest mb-1.5">{reasonLabel}</label>
+               {reasonOptions?.length ? (
+                 <select
+                   value={reason}
+                   onChange={(e) => setReason(e.target.value)}
+                   className="w-full border border-gray-300 p-2 text-sm font-bold focus:ring-1 focus:ring-red-500 bg-white"
+                 >
+                   <option value="">-- odaberite razlog --</option>
+                   {reasonOptions.map(option => (
+                     <option key={option.value} value={option.value}>{option.label}</option>
+                   ))}
+                 </select>
+               ) : (
+                 <textarea
+                   value={reason}
+                   onChange={(e) => setReason(e.target.value)}
+                   className="w-full border border-gray-300 p-2 text-sm font-bold focus:ring-1 focus:ring-red-500 min-h-[80px] resize-y"
+                   placeholder="Upišite razlog..."
+                 />
+               )}
+            </div>
+          )}
+
+          {showDetailedNote && (
+            <div className="mb-4">
+               <label className="block text-[10px] font-black text-gray-700 uppercase tracking-widest mb-1.5">{detailedNoteLabel}</label>
                <textarea
-                 value={reason}
-                 onChange={(e) => setReason(e.target.value)}
+                 value={detailedNote}
+                 onChange={(e) => setDetailedNote(e.target.value)}
                  className="w-full border border-gray-300 p-2 text-sm font-bold focus:ring-1 focus:ring-red-500 min-h-[80px] resize-y"
-                 placeholder="Upišite razlog..."
+                 placeholder="Upišite dodatno pojašnjenje..."
                />
             </div>
           )}
@@ -89,8 +122,8 @@ export function DeleteConfirmDialog({
               Odustani
             </button>
             <button
-              onClick={() => onConfirm(showTotp ? totpCode : undefined, showReason ? reason : undefined)}
-              disabled={loading || (showTotp && !totpCode) || (showReason && !reason.trim())}
+              onClick={() => onConfirm(showTotp ? totpCode : undefined, showReason ? reason : undefined, showDetailedNote ? detailedNote : undefined)}
+              disabled={loading || (showTotp && !totpCode) || (showReason && !reason.trim()) || (showDetailedNote && !detailedNote.trim())}
               className="flex-1 px-4 py-2 bg-red-600 text-white text-[10px] font-black uppercase hover:bg-red-700 transition-colors flex items-center justify-center disabled:opacity-50"
             >
               {loading ? (
