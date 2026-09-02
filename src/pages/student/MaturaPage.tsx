@@ -21,35 +21,40 @@ type MaturaRegistration = {
   updated_at?: string;
 };
 
-const MATURA_SUBJECTS = [
+const REQUIRED_MATURA_SUBJECTS = [
   { name: 'Hrvatski jezik', hasLevels: false },
-  { name: 'Matematika', hasLevels: true },
   { name: 'Engleski jezik', hasLevels: true },
-  { name: 'Njemački jezik', hasLevels: true },
-  { name: 'Francuski jezik', hasLevels: true },
-  { name: 'Španjolski jezik', hasLevels: true },
-  { name: 'Talijanski jezik', hasLevels: true },
-  { name: 'Latinski jezik', hasLevels: true },
-  { name: 'Češki jezik', hasLevels: false },
-  { name: 'Mađarski jezik i književnost', hasLevels: false },
+  { name: 'Matematika', hasLevels: true },
   { name: 'Srpski jezik', hasLevels: false },
+  { name: 'Mađarski jezik i književnost', hasLevels: false },
+  { name: 'Talijanski jezik i književnost', hasLevels: false },
+  { name: 'Španjolski jezik', hasLevels: true },
+  { name: 'Latinski jezik', hasLevels: true },
+  { name: 'Njemački jezik', hasLevels: true },
+  { name: 'Talijanski jezik', hasLevels: true },
   { name: 'Grčki jezik', hasLevels: false },
-  { name: 'Filozofija', hasLevels: false },
-  { name: 'Glazbena umjetnost', hasLevels: false },
-  { name: 'Kemija', hasLevels: false },
-  { name: 'Psihologija', hasLevels: false },
-  { name: 'Fizika', hasLevels: false },
-  { name: 'Likovna umjetnost', hasLevels: false },
-  { name: 'Logika', hasLevels: false },
-  { name: 'Sociologija', hasLevels: false },
+  { name: 'Francuski jezik', hasLevels: true },
+] as const;
+
+const ELECTIVE_MATURA_SUBJECTS = [
   { name: 'Biologija', hasLevels: false },
   { name: 'Povijest', hasLevels: false },
-  { name: 'Informatika', hasLevels: false },
-  { name: 'Politika i gospodarstvo', hasLevels: false },
   { name: 'Geografija', hasLevels: false },
+  { name: 'Politika i gospodarstvo', hasLevels: false },
+  { name: 'Fizika', hasLevels: false },
+  { name: 'Logika', hasLevels: false },
+  { name: 'Filozofija', hasLevels: false },
+  { name: 'Likovna umjetnost', hasLevels: false },
+  { name: 'Psihologija', hasLevels: false },
+  { name: 'Informatika', hasLevels: false },
+  { name: 'Kemija', hasLevels: false },
+  { name: 'Sociologija', hasLevels: false },
   { name: 'Vjeronauk', hasLevels: false },
+  { name: 'Glazbena umjetnost', hasLevels: false },
   { name: 'Etika', hasLevels: false },
 ] as const;
+
+const MATURA_SUBJECTS = [...REQUIRED_MATURA_SUBJECTS, ...ELECTIVE_MATURA_SUBJECTS] as const;
 
 const levelLabels: Record<MaturaLevel, string> = {
   A_RAZINA: 'Viša razina',
@@ -73,6 +78,25 @@ const formatDateTime = (value?: string) => {
   });
 };
 
+const parseSchoolAddress = (value?: string) => {
+  if (!value) return { address: '', city: '' };
+  const trimmed = String(value).trim();
+
+  if (trimmed.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return {
+        address: String(parsed.address || '').trim(),
+        city: String(parsed.city || '').trim(),
+      };
+    } catch {
+      return { address: '', city: '' };
+    }
+  }
+
+  return { address: trimmed, city: '' };
+};
+
 export default function MaturaPage() {
   const { user, isParent } = useAuth();
   const { selectedChildId, selectedClassId, selectedSchoolId } = useSelection();
@@ -86,8 +110,13 @@ export default function MaturaPage() {
   const [saving, setSaving] = React.useState(false);
   const selectedSubjectConfig = MATURA_SUBJECTS.find(item => item.name === subject) || MATURA_SUBJECTS[0];
   const effectiveLevel: MaturaLevel = selectedSubjectConfig.hasLevels ? level : 'JEDNA_RAZINA';
+  const parsedSchoolAddress = parseSchoolAddress(schoolInfo?.address);
+  const schoolLocationLine = [
+    parsedSchoolAddress.address,
+    parsedSchoolAddress.city || schoolInfo?.city,
+  ].filter(Boolean).join(', ');
   const examLocation = schoolInfo
-    ? [schoolInfo.name, schoolInfo.address, schoolInfo.city].filter(Boolean).join(', ')
+    ? [schoolInfo.name, schoolLocationLine].filter(Boolean).join(', ')
     : '';
 
   React.useEffect(() => {
@@ -222,9 +251,16 @@ export default function MaturaPage() {
                 disabled={!canEdit || saving}
                 className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#1780c2]/20 disabled:bg-slate-50"
               >
-                {MATURA_SUBJECTS.map(item => (
-                  <option key={item.name} value={item.name}>{item.name}</option>
-                ))}
+                <optgroup label="Obavezni predmeti državne mature">
+                  {REQUIRED_MATURA_SUBJECTS.map(item => (
+                    <option key={item.name} value={item.name}>{item.name}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Izborni predmeti državne mature">
+                  {ELECTIVE_MATURA_SUBJECTS.map(item => (
+                    <option key={item.name} value={item.name}>{item.name}</option>
+                  ))}
+                </optgroup>
               </select>
             </div>
 
@@ -247,11 +283,54 @@ export default function MaturaPage() {
               <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Mjesto pisanja</label>
               <div className="border border-slate-200 bg-slate-50 rounded-sm px-3 py-2 text-sm text-slate-700 min-h-[42px]">
                 <div className="font-black text-slate-900">{schoolInfo?.name || 'Škola nije odabrana'}</div>
-                {(schoolInfo?.address || schoolInfo?.city) && (
+                {schoolLocationLine && (
                   <div className="text-xs font-medium text-slate-500 mt-0.5">
-                    {[schoolInfo?.address, schoolInfo?.city].filter(Boolean).join(', ')}
+                    {schoolLocationLine}
                   </div>
                 )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 border-t border-slate-100 pt-4">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-[#005c8d] mb-2">Obavezni predmeti državne mature</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {REQUIRED_MATURA_SUBJECTS.map(item => (
+                    <button
+                      key={item.name}
+                      type="button"
+                      onClick={() => setSubject(item.name)}
+                      disabled={!canEdit || saving}
+                      className={`px-2 py-1 border rounded-sm text-[10px] font-bold transition-colors ${
+                        subject === item.name
+                          ? 'border-[#005c8d] bg-[#005c8d] text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-[#005c8d]'
+                      }`}
+                    >
+                      {item.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-[#005c8d] mb-2">Izborni predmeti državne mature</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {ELECTIVE_MATURA_SUBJECTS.map(item => (
+                    <button
+                      key={item.name}
+                      type="button"
+                      onClick={() => setSubject(item.name)}
+                      disabled={!canEdit || saving}
+                      className={`px-2 py-1 border rounded-sm text-[10px] font-bold transition-colors ${
+                        subject === item.name
+                          ? 'border-[#005c8d] bg-[#005c8d] text-white'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-[#005c8d]'
+                      }`}
+                    >
+                      {item.name}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
 

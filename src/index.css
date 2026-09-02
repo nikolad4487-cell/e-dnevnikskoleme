@@ -13,6 +13,10 @@
 }
 
 @layer base {
+  html.font-large {
+    font-size: 112.5%;
+  }
+
   body {
     @apply text-slate-800 bg-[#f8fafc] text-[13.5px] leading-relaxed antialiased selection:bg-[#005c8d]/25 selection:text-[#005c8d];
   }

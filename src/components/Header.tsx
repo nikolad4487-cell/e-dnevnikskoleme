@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { User, LogOut, Settings, Repeat, Bell, Building2, Shield, Menu, X, Home, Moon, FileText } from 'lucide-react';
+import { User, LogOut, Settings, Repeat, Bell, Building2, Shield, Menu, X, Home, Moon, FileText, BookOpen } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
@@ -13,7 +13,7 @@ interface HeaderProps {
 }
 
 export function Header({ showNav = true, hideClass = false }: HeaderProps) {
-  const { user, signOut, formattedRoles, userSchoolRoles, isStudent, isParent, isStudentPortal, isSuperAdmin: authIsSuperAdmin, isSchoolAdmin: authIsSchoolAdmin } = useAuth();
+  const { user, signOut, formattedRoles, userSchoolRoles, isStudent, isParent, isStaff, isStudentPortal, isSuperAdmin: authIsSuperAdmin, isSchoolAdmin: authIsSchoolAdmin } = useAuth();
   const { 
     selectedSchoolId, 
     selectedYearId, 
@@ -31,6 +31,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isNotifOpen, setIsNotifOpen] = useState(false);
   const [isDarkTheme, setIsDarkTheme] = useState(() => localStorage.getItem('studentTheme') === 'dark');
+  const [fontScale, setFontScale] = useState(() => localStorage.getItem('fontScale') || 'normal');
   const [notifications, setNotifications] = useState<Notification[]>([]);
   
   const menuRef = useRef<HTMLDivElement>(null);
@@ -41,6 +42,10 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
   const hideContextLabels = isSchoolSelectionPage;
   const isSchoolAdminRoute = location.pathname.startsWith('/admin') || location.pathname.startsWith('/admin-skole');
   const finalHideClass = hideClass || isSchoolAdminRoute || isClassSelectionPage;
+  const uniqueSchoolIds = Array.from(new Set((userSchoolRoles || []).map(role => role.schoolId || (role as any).school_id).filter(Boolean)));
+  const canSwitchSchool = uniqueSchoolIds.length > 1;
+  const canUseSchoolAdmin = isSchoolAdminUser(user, userSchoolRoles);
+  const isPrincipal = formattedRoles?.toUpperCase().includes('RAVNATELJ') || String((user as any)?.role || '').toUpperCase().includes('PRINCIPAL');
   
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -59,6 +64,11 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
     document.documentElement.classList.toggle('student-dark', isDarkTheme);
     localStorage.setItem('studentTheme', isDarkTheme ? 'dark' : 'light');
   }, [isDarkTheme]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('font-large', fontScale === 'large');
+    localStorage.setItem('fontScale', fontScale);
+  }, [fontScale]);
 
   useEffect(() => {
     if (!user) return;
@@ -160,7 +170,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
             >
               <div>
                 <div className="text-lg font-black leading-none">{classLabel}</div>
-                <div className="text-xs font-medium mt-1">{yearLabel ? yearLabel.replace(/^20/, '').replace('/20', '/') : ''}</div>
+                <div className="text-xs font-medium mt-1">{yearLabel || ''}</div>
               </div>
               <div className="min-w-0">
                 <div className="font-black text-sm leading-tight truncate">{schoolLabel}</div>
@@ -278,6 +288,16 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
                  >
                    <Repeat size={12} /> Promijeni
                  </button>
+                 {canUseSchoolAdmin && (
+                   <button
+                     type="button"
+                     onClick={() => navigate('/admin-skole')}
+                     className="hidden lg:flex items-center gap-1 bg-white/10 hover:bg-white/20 p-1 px-2 rounded transition-colors text-[10px] font-bold"
+                     title="Administracija škole"
+                   >
+                     <Building2 size={12} /> Administracija škole
+                   </button>
+                 )}
                </>
              )}
           </div>
@@ -333,7 +353,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
           </button>
 
           {isMenuOpen && (
-          <div className="absolute right-0 top-full mt-2 w-52 bg-white text-gray-800 border border-gray-200 shadow-xl rounded py-1 z-[100] animate-in fade-in zoom-in-95 duration-100">
+          <div className="absolute right-0 top-full mt-2 w-72 bg-white text-gray-800 border border-gray-200 shadow-xl rounded py-1 z-[100] animate-in fade-in zoom-in-95 duration-100">
             {isSuperAdminUser(user, userSchoolRoles) && (
               <button 
                 onClick={() => {
@@ -358,18 +378,6 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
                 Administracija škole
               </button>
             )}
-            {(isStudent || isParent) && (
-              <button 
-                onClick={() => {
-                  setIsMenuOpen(false);
-                  navigate('/student/osobni-podaci');
-                }}
-                className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
-              >
-                <User size={14} />
-                Osobni podaci
-              </button>
-            )}
             <button 
               onClick={() => {
                 setIsMenuOpen(false);
@@ -387,6 +395,80 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
               <Settings size={14} />
               Postavke
             </button>
+            <button
+              onClick={() => {
+                setIsMenuOpen(false);
+                navigate(isStudent || isParent ? '/student/osobni-podaci' : '/teacher/postavke');
+              }}
+              className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
+            >
+              <User size={14} />
+              Osobni podaci
+            </button>
+            <button
+              onClick={() => {
+                setIsMenuOpen(false);
+                navigate('/select-class');
+              }}
+              className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
+            >
+              <BookOpen size={14} />
+              Odabir razredne knjige
+            </button>
+            {isStaff && (
+              <button
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  navigate('/admin-skole/razredi');
+                }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
+              >
+                <Menu size={14} />
+                Dodaj kombiniranu grupu učenika
+              </button>
+            )}
+            {canSwitchSchool && (
+              <button
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  navigate('/select-school');
+                }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
+              >
+                <Repeat size={14} />
+                Promijeni školu
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setFontScale(value => value === 'large' ? 'normal' : 'large')}
+              className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
+            >
+              <Settings size={14} />
+              Prilagodba veličine slova
+            </button>
+            <button
+              onClick={() => {
+                setIsMenuOpen(false);
+                navigate(isStudent || isParent ? '/student/postavke' : '/teacher/postavke');
+              }}
+              className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
+            >
+              <Settings size={14} />
+              Promijeni PIN
+            </button>
+            {isPrincipal && (
+              <button
+                onClick={() => {
+                  setIsMenuOpen(false);
+                  navigate('/admin-skole/postavke');
+                }}
+                className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
+              >
+                <Shield size={14} />
+                Suglasnost za obradu podataka
+              </button>
+            )}
             <button 
               onClick={handleLogout}
               className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-50 transition-colors min-h-[44px]"

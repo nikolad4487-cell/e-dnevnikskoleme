@@ -58,6 +58,10 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
   const { canAccessClassAdmin } = useClassAdminAccess(effectiveClassId);
   const [openDesktopNavId, setOpenDesktopNavId] = React.useState<string | null>(null);
 
+  React.useEffect(() => {
+    setOpenDesktopNavId(null);
+  }, [location.pathname]);
+
   // isAdminPath is only for the specific /admin/* routes, not /admin-skole/*
   const isAdminPath = location.pathname.startsWith('/admin/') && !location.pathname.startsWith('/admin-skole');
 
@@ -161,30 +165,18 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     },
     { id: 'zapisnici', label: 'Zapisnici', path: `${classPathPrefix}/zapisnici`, icon: <FileText size={14} /> },
     { id: 'izvjestaji', label: 'Izvještaji', path: '/teacher/izvjestaji', icon: <FileText size={14} /> },
-    { id: 'administracija', label: 'Administracija', path: canAccessClassAdmin ? `${classPathPrefix}/admin` : '/admin-skole', icon: <Settings size={14} /> },
-    { id: 'pretrazivanje', label: 'Pretraživanje', path: '/teacher/pretrazivanje', icon: <Search size={14} /> },
-    {
-      id: 'dokumenti-skole',
-      label: 'Dokumenti škole',
-      path: '/teacher/dokumenti',
-      icon: <FileText size={14} />,
-      children: [
-        { id: 'student-dosje', label: 'Digitalni dosje', path: '/teacher/student-dosje', icon: <FileText size={14} /> },
-        { id: 'matura', label: 'Matura', path: '/teacher/matura', icon: <GraduationCap size={14} /> },
-      ],
-    },
-    {
-      id: 'admin-razreda',
-      label: 'Admin razreda',
+    ...(canAccessClassAdmin || isSchoolAdmin ? [{
+      id: 'administracija',
+      label: 'Administracija',
       path: canAccessClassAdmin ? `${classPathPrefix}/admin` : '/admin-skole',
       icon: <Settings size={14} />,
-      children: [
-        ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : []),
-      ],
-    },
+    }] : []),
+    { id: 'pretrazivanje', label: 'Pretraživanje', path: '/teacher/pretrazivanje', icon: <Search size={14} /> },
     { id: 'vise', label: '', path: '#', icon: <Menu size={16} />, children: [
       { id: 'kalendar-skole', label: 'Kalendar škole', path: '/teacher/kalendar', icon: <Calendar size={14} /> },
       { id: 'dokumenti-skole', label: 'Dokumenti škole', path: '/teacher/dokumenti', icon: <FileText size={14} /> },
+      { id: 'student-dosje', label: 'Digitalni dosje', path: '/teacher/student-dosje', icon: <FileText size={14} /> },
+      { id: 'matura', label: 'Matura', path: '/teacher/matura', icon: <GraduationCap size={14} /> },
       { id: 'postavke', label: 'Postavke', path: '/teacher/postavke', icon: <Settings size={14} /> },
     ] },
   ] : [
@@ -266,7 +258,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       {/* Main Teacher Nav (Global) */}
       {isStaff && effectiveClassId && (
         <div className="bg-white border-b border-[#dee2e6] h-14 hidden lg:flex items-center justify-between px-6 shadow-sm z-30">
-           <div className="flex items-center gap-1 h-full min-w-0">
+           <div className="flex items-center gap-1 h-full min-w-0 w-full">
              {teacherNavGroups.map(group => {
                const hasChildren = Boolean(group.children?.length);
                const isActive = isTeacherNavGroupActive(group);
@@ -279,21 +271,49 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                );
 
                return (
-                 <div key={group.id} className="relative h-full">
+                 <div key={group.id} className={cn("relative h-full", group.id === 'vise' && "ml-auto")}>
                    {hasChildren || group.id === 'vise' ? (
-                     <button
-                       type="button"
-                       onClick={() => setOpenDesktopNavId(open => open === group.id ? null : group.id)}
+                     <div
                        className={cn(
-                         "px-2 xl:px-3 h-full flex items-center gap-1.5 text-xs font-black uppercase tracking-wider transition-all border-b-4 whitespace-nowrap cursor-pointer",
+                         "h-full flex items-stretch border-b-4 transition-all",
                          isActive
                           ? "border-[#005c8d] text-[#005c8d] bg-sky-50"
                           : "text-gray-500 border-transparent hover:bg-slate-100 hover:text-slate-900"
                        )}
-                       aria-expanded={openDesktopNavId === group.id}
                      >
-                       {content}
-                     </button>
+                       {group.id === 'vise' ? (
+                         <button
+                           type="button"
+                           onClick={() => setOpenDesktopNavId(open => open === group.id ? null : group.id)}
+                           className="px-3 h-full flex items-center gap-1.5 text-xs font-black uppercase tracking-wider whitespace-nowrap cursor-pointer"
+                           aria-expanded={openDesktopNavId === group.id}
+                           aria-label="Dodatni izbornik"
+                         >
+                           {group.icon}
+                           <ChevronDown size={13} className={cn("transition-transform", openDesktopNavId === group.id && "rotate-180")} />
+                         </button>
+                       ) : (
+                         <>
+                           <Link
+                             to={group.path}
+                             onClick={() => setOpenDesktopNavId(null)}
+                             className="pl-2 xl:pl-3 pr-1 h-full flex items-center gap-1.5 text-xs font-black uppercase tracking-wider whitespace-nowrap cursor-pointer"
+                           >
+                             {group.icon}
+                             <span>{group.label}</span>
+                           </Link>
+                           <button
+                             type="button"
+                             onClick={() => setOpenDesktopNavId(open => open === group.id ? null : group.id)}
+                             className="px-2 h-full flex items-center cursor-pointer"
+                             aria-expanded={openDesktopNavId === group.id}
+                             aria-label={`${group.label} podizbornik`}
+                           >
+                             <ChevronDown size={13} className={cn("transition-transform", openDesktopNavId === group.id && "rotate-180")} />
+                           </button>
+                         </>
+                       )}
+                     </div>
                    ) : (
                      <Link
                        to={group.path}

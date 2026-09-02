@@ -266,6 +266,7 @@ export default function App() {
                         <ClassDashboardLayout>
                           <Routes>
                             <Route path="pretrazivanje" element={<PretrazivanjePage />} />
+                            <Route path="izvjestaji" element={<IzvjestajiPage />} />
                             <Route path="informativka" element={<InformativkaPage />} />
                             <Route path="svjedodzbe" element={<CertificateManagementPage />} />
                             <Route path="zavrsni-radovi" element={<FinalThesisTeacherPage />} />
