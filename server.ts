@@ -1860,7 +1860,7 @@ async function startServer() {
     }
   });
 
-  const MATURA_LEVELS = new Set(["A_RAZINA", "B_RAZINA"]);
+  const MATURA_LEVELS = new Set(["A_RAZINA", "B_RAZINA", "JEDNA_RAZINA"]);
 
   function normalizeMaturaSubject(value: any) {
     return String(value || '').trim();

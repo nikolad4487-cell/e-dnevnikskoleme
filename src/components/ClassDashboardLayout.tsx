@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Menu, LogOut, Search, Settings, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Clock, Calendar, Home, GraduationCap } from 'lucide-react';
+import { Menu, LogOut, Search, Settings, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Clock, Calendar, Home, GraduationCap, ChevronDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
@@ -15,6 +15,14 @@ interface NavItem {
   label: string;
   path: string;
   icon?: React.ReactNode;
+}
+
+interface NavGroup {
+  id: string;
+  label: string;
+  path: string;
+  icon: React.ReactNode;
+  children?: NavItem[];
 }
 
 // TEACHER_NAV is defined dynamically inside ClassDashboardLayout component below
@@ -48,6 +56,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const { canAccessClassAdmin } = useClassAdminAccess(effectiveClassId);
+  const [openDesktopNavId, setOpenDesktopNavId] = React.useState<string | null>(null);
 
   // isAdminPath is only for the specific /admin/* routes, not /admin-skole/*
   const isAdminPath = location.pathname.startsWith('/admin/') && !location.pathname.startsWith('/admin-skole');
@@ -127,32 +136,67 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
   );
   
   const classPathPrefix = effectiveClassId ? `/class/${effectiveClassId}` : '';
-  let teacherNavList: NavItem[] = effectiveClassId ? [
-    { id: 'imenik', label: 'Imenik', path: `${classPathPrefix}/imenik`, icon: <BookOpen size={14} /> },
+  const teacherNavGroups: NavGroup[] = effectiveClassId ? [
+    {
+      id: 'imenik',
+      label: 'Imenik',
+      path: `${classPathPrefix}/imenik`,
+      icon: <BookOpen size={14} />,
+      children: [
+        ...(canAccessThesis ? [{ id: 'zavrsni-rad', label: 'Završni radovi', path: '/teacher/zavrsni-radovi', icon: <FileSpreadsheet size={14} /> }] : []),
+      ],
+    },
     { id: 'pregled-rada', label: 'Pregled rada', path: `${classPathPrefix}/pregled-rada`, icon: <List size={14} /> },
-    { id: 'dnevnik-rada', label: 'Dnevnik rada', path: `${classPathPrefix}/dnevnik-rada`, icon: <ClipboardList size={14} /> },
-    { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/izostanci`, icon: <Clock size={14} /> },
+    {
+      id: 'dnevnik-rada',
+      label: 'Dnevnik rada',
+      path: `${classPathPrefix}/dnevnik-rada`,
+      icon: <ClipboardList size={14} />,
+      children: [
+        { id: 'pregled-tjedna', label: 'Pregled tjedna', path: `${classPathPrefix}/pregled-rada`, icon: <List size={14} /> },
+        { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/izostanci`, icon: <Clock size={14} /> },
+        { id: 'raspored', label: 'Raspored sati', path: `${classPathPrefix}/raspored`, icon: <Calendar size={14} /> },
+        { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: `${classPathPrefix}/pedagoska-dokumentacija`, icon: <FileText size={14} /> },
+      ],
+    },
     { id: 'zapisnici', label: 'Zapisnici', path: `${classPathPrefix}/zapisnici`, icon: <FileText size={14} /> },
-    { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: `${classPathPrefix}/pedagoska-dokumentacija`, icon: <FileText size={14} /> },
-    { id: 'student-dosje', label: 'Digitalni Dosje', path: '/teacher/student-dosje', icon: <FileText size={14} /> },
-    { id: 'zavrsni-rad', label: 'Završni radovi', path: '/teacher/zavrsni-radovi', icon: <FileSpreadsheet size={14} /> },
-    { id: 'kalendar-skole', label: 'Kalendar škole', path: '/teacher/kalendar', icon: <Calendar size={14} /> },
-    { id: 'dokumenti-skole', label: 'Dokumenti škole', path: '/teacher/dokumenti', icon: <FileText size={14} /> },
-    { id: 'raspored', label: 'Raspored', path: `${classPathPrefix}/raspored`, icon: <Calendar size={14} /> },
-    ...(canAccessClassAdmin ? [{ id: 'admin', label: 'Admin razreda', path: `${classPathPrefix}/admin`, icon: <Settings size={14} /> }] : []),
-    ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : [])
+    { id: 'izvjestaji', label: 'Izvještaji', path: '/teacher/izvjestaji', icon: <FileText size={14} /> },
+    { id: 'administracija', label: 'Administracija', path: canAccessClassAdmin ? `${classPathPrefix}/admin` : '/admin-skole', icon: <Settings size={14} /> },
+    { id: 'pretrazivanje', label: 'Pretraživanje', path: '/teacher/pretrazivanje', icon: <Search size={14} /> },
+    {
+      id: 'dokumenti-skole',
+      label: 'Dokumenti škole',
+      path: '/teacher/dokumenti',
+      icon: <FileText size={14} />,
+      children: [
+        { id: 'student-dosje', label: 'Digitalni dosje', path: '/teacher/student-dosje', icon: <FileText size={14} /> },
+        { id: 'matura', label: 'Matura', path: '/teacher/matura', icon: <GraduationCap size={14} /> },
+      ],
+    },
+    {
+      id: 'admin-razreda',
+      label: 'Admin razreda',
+      path: canAccessClassAdmin ? `${classPathPrefix}/admin` : '/admin-skole',
+      icon: <Settings size={14} />,
+      children: [
+        ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : []),
+      ],
+    },
+    { id: 'vise', label: '', path: '#', icon: <Menu size={16} />, children: [
+      { id: 'kalendar-skole', label: 'Kalendar škole', path: '/teacher/kalendar', icon: <Calendar size={14} /> },
+      { id: 'dokumenti-skole', label: 'Dokumenti škole', path: '/teacher/dokumenti', icon: <FileText size={14} /> },
+      { id: 'postavke', label: 'Postavke', path: '/teacher/postavke', icon: <Settings size={14} /> },
+    ] },
   ] : [
-    { label: 'Pretraživanje', path: '/teacher/pretrazivanje' },
-    { id: 'student-dosje', label: 'Digitalni Dosje', path: '/teacher/dosje', icon: <FileText size={14} /> },
-    { id: 'zavrsni-rad', label: 'Završni radovi', path: '/teacher/zavrsni-radovi', icon: <FileSpreadsheet size={14} /> },
+    { id: 'pretrazivanje', label: 'Pretraživanje', path: '/teacher/pretrazivanje', icon: <Search size={14} /> },
+    { id: 'dokumenti-skole', label: 'Dokumenti škole', path: '/teacher/dokumenti', icon: <FileText size={14} />, children: [
+      { id: 'student-dosje', label: 'Digitalni dosje', path: '/teacher/dosje', icon: <FileText size={14} /> },
+      { id: 'matura', label: 'Matura', path: '/teacher/matura', icon: <GraduationCap size={14} /> },
+    ] },
+    ...(canAccessThesis ? [{ id: 'zavrsni-rad', label: 'Završni radovi', path: '/teacher/zavrsni-radovi', icon: <FileSpreadsheet size={14} /> }] : []),
     { id: 'kalendar-skole', label: 'Kalendar škole', path: '/teacher/kalendar', icon: <Calendar size={14} /> },
-    { id: 'dokumenti-skole', label: 'Dokumenti škole', path: '/teacher/dokumenti', icon: <FileText size={14} /> },
-    ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : [])
+    ...(isSchoolAdmin ? [{ id: 'school-admin', label: 'Admin škole', path: '/admin-skole', icon: <Settings size={14} /> }] : []),
   ];
-
-  teacherNavList = teacherNavList.filter(item => 
-      item.id !== 'zavrsni-rad' || canAccessThesis
-  );
 
   const isTabActive = (tabId: string | undefined, itemPath: string) => {
     if (!tabId) return location.pathname.startsWith(itemPath);
@@ -190,21 +234,16 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     return path.startsWith(itemPath);
   };
 
-  let navItems = isStaff 
-    ? teacherNavList
-    : studentNavFiltered;
-
-  if (isAdminPath) {
-    navItems = ADMIN_NAV;
-  }
-
   const handleLogout = async () => {
     await signOut();
     clearSelection();
     navigate('/login');
   };
 
-  const [isBurgerOpen, setIsBurgerOpen] = React.useState(false);
+  const isTeacherNavGroupActive = (group: NavGroup) => {
+    if (isTabActive(group.id, group.path)) return true;
+    return (group.children || []).some(child => isTabActive(child.id, child.path));
+  };
 
   // (Will add burger menu logic later if needed in layout, but for now focus on the structure)
   const studentSidebarItems: NavItem[] = [
@@ -227,22 +266,72 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       {/* Main Teacher Nav (Global) */}
       {isStaff && effectiveClassId && (
         <div className="bg-white border-b border-[#dee2e6] h-14 hidden lg:flex items-center justify-between px-6 shadow-sm z-30">
-           <div className="flex items-center gap-1 h-full">
-             {teacherNavList.map(tab => (
-               <Link
-                 key={tab.label}
-                 to={tab.path}
-                 className={cn(
-                   "px-2 xl:px-3 h-full flex items-center gap-1 text-xs font-black uppercase tracking-wider transition-all border-b-4 whitespace-nowrap cursor-pointer",
-                   isTabActive(tab.id, tab.path)
-                    ? "border-[#005c8d] text-[#005c8d] bg-sky-50" 
-                    : "text-gray-500 border-transparent hover:bg-slate-100 hover:text-slate-900"
-                 )}
-               >
-                 {tab.icon || <div className="w-3.5" />}
-                 {tab.label}
-               </Link>
-             ))}
+           <div className="flex items-center gap-1 h-full min-w-0">
+             {teacherNavGroups.map(group => {
+               const hasChildren = Boolean(group.children?.length);
+               const isActive = isTeacherNavGroupActive(group);
+               const content = (
+                 <>
+                   {group.icon}
+                   {group.label && <span>{group.label}</span>}
+                   {hasChildren && <ChevronDown size={13} className={cn("transition-transform", openDesktopNavId === group.id && "rotate-180")} />}
+                 </>
+               );
+
+               return (
+                 <div key={group.id} className="relative h-full">
+                   {hasChildren || group.id === 'vise' ? (
+                     <button
+                       type="button"
+                       onClick={() => setOpenDesktopNavId(open => open === group.id ? null : group.id)}
+                       className={cn(
+                         "px-2 xl:px-3 h-full flex items-center gap-1.5 text-xs font-black uppercase tracking-wider transition-all border-b-4 whitespace-nowrap cursor-pointer",
+                         isActive
+                          ? "border-[#005c8d] text-[#005c8d] bg-sky-50"
+                          : "text-gray-500 border-transparent hover:bg-slate-100 hover:text-slate-900"
+                       )}
+                       aria-expanded={openDesktopNavId === group.id}
+                     >
+                       {content}
+                     </button>
+                   ) : (
+                     <Link
+                       to={group.path}
+                       onClick={() => setOpenDesktopNavId(null)}
+                       className={cn(
+                         "px-2 xl:px-3 h-full flex items-center gap-1.5 text-xs font-black uppercase tracking-wider transition-all border-b-4 whitespace-nowrap cursor-pointer",
+                         isActive
+                          ? "border-[#005c8d] text-[#005c8d] bg-sky-50"
+                          : "text-gray-500 border-transparent hover:bg-slate-100 hover:text-slate-900"
+                       )}
+                     >
+                       {content}
+                     </Link>
+                   )}
+
+                   {hasChildren && openDesktopNavId === group.id && (
+                     <div className="absolute left-0 top-full mt-0 w-64 bg-white border border-slate-200 shadow-xl rounded-sm py-1 z-50">
+                       {group.children!.map(child => (
+                         <Link
+                           key={child.path}
+                           to={child.path}
+                           onClick={() => setOpenDesktopNavId(null)}
+                           className={cn(
+                             "flex items-center gap-2 px-3 py-2.5 text-[11px] font-black uppercase tracking-wider transition-colors",
+                             isTabActive(child.id, child.path)
+                              ? "bg-sky-50 text-[#005c8d]"
+                              : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
+                           )}
+                         >
+                           {child.icon}
+                           {child.label}
+                         </Link>
+                       ))}
+                     </div>
+                   )}
+                 </div>
+               );
+             })}
            </div>
         </div>
       )}
@@ -310,6 +399,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                         { label: 'Digitalni Dosje učenika', path: '/teacher/student-dosje', icon: <FileText size={14} /> },
                         { label: 'Kalendar škole', path: '/teacher/kalendar', icon: <Calendar size={14} /> },
                         { label: 'Dokumenti škole', path: '/teacher/dokumenti', icon: <FileText size={14} /> },
+                        { label: 'Matura', path: '/teacher/matura', icon: <GraduationCap size={14} /> },
                         { label: 'Obavijesti / Informativka', path: effectiveClassId ? `/class/${effectiveClassId}/informativka` : '/teacher/informativka', icon: <ClipboardList size={14} /> },
                       ]
                     });

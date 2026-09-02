@@ -1,10 +1,11 @@
 import React from 'react';
 import { toast } from 'react-hot-toast';
 import { GraduationCap, RotateCcw } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 
-type MaturaLevel = 'A_RAZINA' | 'B_RAZINA';
+type MaturaLevel = 'A_RAZINA' | 'B_RAZINA' | 'JEDNA_RAZINA';
 type MaturaStatus = 'REGISTERED' | 'CANCELED';
 
 type MaturaRegistration = {
@@ -20,22 +21,40 @@ type MaturaRegistration = {
   updated_at?: string;
 };
 
-const DEFAULT_SUBJECTS = [
-  'Hrvatski jezik',
-  'Matematika',
-  'Engleski jezik',
-  'Njemački jezik',
-  'Fizika',
-  'Kemija',
-  'Biologija',
-  'Povijest',
-  'Geografija',
-  'Informatika',
-];
+const MATURA_SUBJECTS = [
+  { name: 'Hrvatski jezik', hasLevels: false },
+  { name: 'Matematika', hasLevels: true },
+  { name: 'Engleski jezik', hasLevels: true },
+  { name: 'Njemački jezik', hasLevels: true },
+  { name: 'Francuski jezik', hasLevels: true },
+  { name: 'Španjolski jezik', hasLevels: true },
+  { name: 'Talijanski jezik', hasLevels: true },
+  { name: 'Latinski jezik', hasLevels: true },
+  { name: 'Češki jezik', hasLevels: false },
+  { name: 'Mađarski jezik i književnost', hasLevels: false },
+  { name: 'Srpski jezik', hasLevels: false },
+  { name: 'Grčki jezik', hasLevels: false },
+  { name: 'Filozofija', hasLevels: false },
+  { name: 'Glazbena umjetnost', hasLevels: false },
+  { name: 'Kemija', hasLevels: false },
+  { name: 'Psihologija', hasLevels: false },
+  { name: 'Fizika', hasLevels: false },
+  { name: 'Likovna umjetnost', hasLevels: false },
+  { name: 'Logika', hasLevels: false },
+  { name: 'Sociologija', hasLevels: false },
+  { name: 'Biologija', hasLevels: false },
+  { name: 'Povijest', hasLevels: false },
+  { name: 'Informatika', hasLevels: false },
+  { name: 'Politika i gospodarstvo', hasLevels: false },
+  { name: 'Geografija', hasLevels: false },
+  { name: 'Vjeronauk', hasLevels: false },
+  { name: 'Etika', hasLevels: false },
+] as const;
 
 const levelLabels: Record<MaturaLevel, string> = {
-  A_RAZINA: 'A razina',
-  B_RAZINA: 'B razina',
+  A_RAZINA: 'Viša razina',
+  B_RAZINA: 'Osnovna razina',
+  JEDNA_RAZINA: 'Jedna razina',
 };
 
 const statusLabels: Record<MaturaStatus, string> = {
@@ -61,10 +80,46 @@ export default function MaturaPage() {
   const canEdit = Boolean(!isParent && targetStudentId);
 
   const [registrations, setRegistrations] = React.useState<MaturaRegistration[]>([]);
-  const [subject, setSubject] = React.useState(DEFAULT_SUBJECTS[0]);
+  const [subject, setSubject] = React.useState<string>(MATURA_SUBJECTS[0].name);
   const [level, setLevel] = React.useState<MaturaLevel>('A_RAZINA');
-  const [examLocation, setExamLocation] = React.useState('');
+  const [schoolInfo, setSchoolInfo] = React.useState<{ name: string; address?: string; city?: string } | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const selectedSubjectConfig = MATURA_SUBJECTS.find(item => item.name === subject) || MATURA_SUBJECTS[0];
+  const effectiveLevel: MaturaLevel = selectedSubjectConfig.hasLevels ? level : 'JEDNA_RAZINA';
+  const examLocation = schoolInfo
+    ? [schoolInfo.name, schoolInfo.address, schoolInfo.city].filter(Boolean).join(', ')
+    : '';
+
+  React.useEffect(() => {
+    if (!selectedSubjectConfig.hasLevels) {
+      setLevel('A_RAZINA');
+    }
+  }, [selectedSubjectConfig.hasLevels]);
+
+  React.useEffect(() => {
+    const fetchSchoolInfo = async () => {
+      if (!selectedSchoolId) {
+        setSchoolInfo(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from('schools')
+        .select('name, address, city')
+        .eq('id', selectedSchoolId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('MATURA SCHOOL LOAD ERROR', error);
+        setSchoolInfo(null);
+        return;
+      }
+
+      setSchoolInfo(data || null);
+    };
+
+    fetchSchoolInfo();
+  }, [selectedSchoolId]);
 
   const fetchRegistrations = React.useCallback(async () => {
     if (!targetStudentId) return;
@@ -97,14 +152,13 @@ export default function MaturaPage() {
           class_id: selectedClassId,
           school_id: selectedSchoolId,
           subject_name: subject,
-          level,
+          level: effectiveLevel,
           exam_location: examLocation,
         }),
       });
 
       if (!response.ok) throw new Error('Save failed');
       toast.success('Prijava mature je spremljena.');
-      setExamLocation('');
       await fetchRegistrations();
     } catch (error) {
       console.error(error);
@@ -168,34 +222,37 @@ export default function MaturaPage() {
                 disabled={!canEdit || saving}
                 className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#1780c2]/20 disabled:bg-slate-50"
               >
-                {DEFAULT_SUBJECTS.map(item => (
-                  <option key={item} value={item}>{item}</option>
+                {MATURA_SUBJECTS.map(item => (
+                  <option key={item.name} value={item.name}>{item.name}</option>
                 ))}
               </select>
             </div>
 
-            <div>
-              <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Razina</label>
-              <select
-                value={level}
-                onChange={(event) => setLevel(event.target.value as MaturaLevel)}
-                disabled={!canEdit || saving}
-                className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#1780c2]/20 disabled:bg-slate-50"
-              >
-                <option value="A_RAZINA">A razina</option>
-                <option value="B_RAZINA">B razina</option>
-              </select>
-            </div>
+            {selectedSubjectConfig.hasLevels && (
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Razina</label>
+                <select
+                  value={level}
+                  onChange={(event) => setLevel(event.target.value as MaturaLevel)}
+                  disabled={!canEdit || saving}
+                  className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-[#1780c2]/20 disabled:bg-slate-50"
+                >
+                  <option value="A_RAZINA">Viša razina</option>
+                  <option value="B_RAZINA">Osnovna razina</option>
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500 mb-1">Mjesto pisanja</label>
-              <input
-                value={examLocation}
-                onChange={(event) => setExamLocation(event.target.value)}
-                disabled={!canEdit || saving}
-                placeholder="Npr. Srednja škola Glina"
-                className="w-full border border-slate-300 rounded-sm px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#1780c2]/20 disabled:bg-slate-50"
-              />
+              <div className="border border-slate-200 bg-slate-50 rounded-sm px-3 py-2 text-sm text-slate-700 min-h-[42px]">
+                <div className="font-black text-slate-900">{schoolInfo?.name || 'Škola nije odabrana'}</div>
+                {(schoolInfo?.address || schoolInfo?.city) && (
+                  <div className="text-xs font-medium text-slate-500 mt-0.5">
+                    {[schoolInfo?.address, schoolInfo?.city].filter(Boolean).join(', ')}
+                  </div>
+                )}
+              </div>
             </div>
 
             <button
