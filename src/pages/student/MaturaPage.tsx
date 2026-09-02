@@ -4,6 +4,18 @@ import { Calendar, GraduationCap, RotateCcw, Save, Search, Send, X } from 'lucid
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
+import {
+  INSTITUTION_TYPES,
+  QUOTA_TYPES,
+  STUDY_AREAS,
+  STUDY_FIELDS,
+  STUDY_PROGRAM_CATALOG,
+  STUDY_PROGRAM_CITIES,
+  STUDY_PROGRAM_COMPONENTS,
+  STUDY_PROGRAM_INSTITUTIONS,
+  type StudyProgramOption,
+  type StudyProgramRequirements,
+} from '../../data/studyPrograms';
 
 type MaturaLevel = 'A_RAZINA' | 'B_RAZINA' | 'JEDNA_RAZINA';
 type MaturaStatus = 'REGISTERED' | 'CANCELED';
@@ -31,19 +43,6 @@ type StudyApplication = {
   institution?: string | null;
   requirements?: StudyProgramRequirements | null;
   is_currently_admitted?: boolean;
-};
-
-type StudyProgramRequirements = {
-  requiredLevels: Record<string, 'A' | 'B' | '-'>;
-  electiveRules: Record<string, '+' | '-' | '*'>;
-};
-
-type StudyProgramOption = {
-  name: string;
-  city: string;
-  institution: string;
-  info: string;
-  requirements: StudyProgramRequirements;
 };
 
 type MaturaResult = {
@@ -75,52 +74,32 @@ type MaturaSettings = {
   objection_closes_at?: string | null;
 };
 
+type StudySearchFilters = {
+  institutionType: string;
+  institution: string;
+  component: string;
+  quotaType: string;
+  city: string;
+  area: string;
+  field: string;
+  programName: string;
+  institutionName: string;
+};
+
 const FOREIGN_LANGUAGE_NAMES = ['Engleski jezik', 'Njemački jezik', 'Francuski jezik', 'Talijanski jezik', 'Španjolski jezik'];
 const ELECTIVE_SUBJECTS = ['Biologija', 'Povijest', 'Geografija', 'Politika i gospodarstvo', 'Fizika', 'Logika', 'Filozofija', 'Likovna umjetnost', 'Psihologija', 'Informatika', 'Kemija', 'Sociologija', 'Vjeronauk', 'Glazbena umjetnost', 'Etika'];
 const MAX_ELECTIVE_REGISTRATIONS = 6;
-
-const STUDY_PROGRAM_CATALOG: StudyProgramOption[] = [
-  {
-    name: 'Sveučilište u Zadru - Pomorski odjel Sveučilišta u Zadru - Nautika i tehnologija pomorskog prometa - Zadar (Redovni preddiplomski sveučilišni studij)',
-    city: 'Zadar',
-    institution: 'Sveučilište u Zadru',
-    info: '180 bodova, 3 godine, redovni preddiplomski sveučilišni studij',
-    requirements: {
-      requiredLevels: { 'Hrvatski jezik': 'B', 'Matematika': 'B', 'Engleski jezik': 'B', 'Njemački jezik': 'B' },
-      electiveRules: { 'Politika i gospodarstvo': '+', 'Likovna umjetnost': '-', Informatika: '*', Fizika: '*', Geografija: '-' },
-    },
-  },
-  {
-    name: 'Sveučilište u Zadru - Pomorski odjel Sveučilišta u Zadru - Brodostrojarstvo i tehnologija pomorskog prometa - Zadar (Redovni preddiplomski sveučilišni studij)',
-    city: 'Zadar',
-    institution: 'Sveučilište u Zadru',
-    info: '180 bodova, 3 godine, redovni preddiplomski sveučilišni studij',
-    requirements: {
-      requiredLevels: { 'Hrvatski jezik': 'B', 'Matematika': 'B', 'Engleski jezik': 'B', 'Njemački jezik': 'B' },
-      electiveRules: { 'Politika i gospodarstvo': '+', Informatika: '*', Fizika: '*', Kemija: '-' },
-    },
-  },
-  {
-    name: 'Sveučilište u Zagrebu - Arhitektonski fakultet Sveučilišta u Zagrebu - Arhitektura i urbanizam - Zagreb (Redovni preddiplomski sveučilišni studij)',
-    city: 'Zagreb',
-    institution: 'Sveučilište u Zagrebu',
-    info: '180 bodova, 3 godine, redovni preddiplomski sveučilišni studij',
-    requirements: {
-      requiredLevels: { 'Hrvatski jezik': 'A', 'Matematika': 'B', 'Engleski jezik': 'A', 'Njemački jezik': 'A' },
-      electiveRules: { 'Likovna umjetnost': '+', Fizika: '-', Informatika: '-', Povijest: '*' },
-    },
-  },
-  {
-    name: 'Veleučilište u Rijeci - Informatika - Rijeka (Redovni prijediplomski stručni studij)',
-    city: 'Rijeka',
-    institution: 'Veleučilište u Rijeci',
-    info: '180 bodova, 3 godine, redovni prijediplomski stručni studij',
-    requirements: {
-      requiredLevels: { 'Hrvatski jezik': 'B', 'Matematika': 'B', 'Engleski jezik': 'B', 'Njemački jezik': 'B' },
-      electiveRules: { Informatika: '+', Logika: '-', Fizika: '*', Matematika: '*' },
-    },
-  },
-];
+const DEFAULT_STUDY_SEARCH_FILTERS: StudySearchFilters = {
+  institutionType: '',
+  institution: '',
+  component: '',
+  quotaType: 'Bez posebne kvote',
+  city: '',
+  area: '',
+  field: '',
+  programName: '',
+  institutionName: '',
+};
 
 const levelLabels: Record<MaturaLevel, string> = {
   A_RAZINA: 'A',
@@ -187,7 +166,7 @@ export default function MaturaPage() {
   const [objectionSubject, setObjectionSubject] = React.useState('');
   const [objectionText, setObjectionText] = React.useState('');
   const [isStudySearchOpen, setIsStudySearchOpen] = React.useState(false);
-  const [studySearch, setStudySearch] = React.useState('');
+  const [studySearchFilters, setStudySearchFilters] = React.useState<StudySearchFilters>(DEFAULT_STUDY_SEARCH_FILTERS);
   const [saving, setSaving] = React.useState(false);
 
   const requiredSubjects = React.useMemo(() => ['Hrvatski jezik', 'Matematika', foreignLanguage], [foreignLanguage]);
@@ -351,7 +330,7 @@ export default function MaturaPage() {
       return;
     }
     setIsStudySearchOpen(false);
-    setStudySearch('');
+    setStudySearchFilters(DEFAULT_STUDY_SEARCH_FILTERS);
     await fetchAll();
   };
 
@@ -392,9 +371,25 @@ export default function MaturaPage() {
   const registeredElectiveSubjects = ELECTIVE_SUBJECTS.filter(subject => registeredBySubject.has(subject));
   const passedRequiredSubjects = requiredSubjects.filter(subject => passedBySubject.has(subject));
   const passedElectiveSubjects = ELECTIVE_SUBJECTS.filter(subject => passedBySubject.has(subject));
-  const filteredStudyPrograms = STUDY_PROGRAM_CATALOG.filter(program =>
-    `${program.name} ${program.city} ${program.institution}`.toLowerCase().includes(studySearch.trim().toLowerCase())
-  );
+  const updateStudyFilter = (key: keyof StudySearchFilters, value: string) => {
+    setStudySearchFilters(current => ({ ...current, [key]: value }));
+  };
+  const applyStudyFilters = () => setStudySearchFilters(current => ({ ...current }));
+  const resetStudyFilters = () => setStudySearchFilters(DEFAULT_STUDY_SEARCH_FILTERS);
+  const filteredStudyPrograms = STUDY_PROGRAM_CATALOG.filter(program => {
+    const programName = studySearchFilters.programName.trim().toLowerCase();
+    const institutionName = studySearchFilters.institutionName.trim().toLowerCase();
+    if (studySearchFilters.institutionType && program.institutionType !== studySearchFilters.institutionType) return false;
+    if (studySearchFilters.institution && program.institution !== studySearchFilters.institution) return false;
+    if (studySearchFilters.component && program.component !== studySearchFilters.component) return false;
+    if (studySearchFilters.quotaType && program.quotaType !== studySearchFilters.quotaType) return false;
+    if (studySearchFilters.city && program.city !== studySearchFilters.city) return false;
+    if (studySearchFilters.area && program.area !== studySearchFilters.area) return false;
+    if (studySearchFilters.field && program.field !== studySearchFilters.field) return false;
+    if (programName && !program.name.toLowerCase().includes(programName)) return false;
+    if (institutionName && !`${program.institution} ${program.component}`.toLowerCase().includes(institutionName)) return false;
+    return true;
+  });
 
   return (
     <div className="p-4 md:p-6 w-full min-h-full bg-white font-sans">
@@ -563,24 +558,73 @@ export default function MaturaPage() {
 
       {isStudySearchOpen && (
         <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-300 shadow-2xl w-full max-w-5xl max-h-[88vh] overflow-hidden flex flex-col">
+          <div className="bg-white border border-slate-300 shadow-2xl w-full max-w-6xl max-h-[88vh] overflow-hidden flex flex-col">
             <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
               <div>
-                <h2 className="text-xl font-black text-slate-700">Pretraživanje studijskih programa</h2>
-                <p className="text-xs text-slate-500 font-medium mt-1">Klikom na “Odaberi” program se dodaje na listu prioriteta.</p>
+                <h2 className="text-xl font-black italic text-[#005c8d]">Pretraživanje studijskih programa</h2>
+                <p className="text-xs text-slate-500 font-medium mt-1">Nakon što postaviš uvjete pretraživanja, klikom na “Odaberi” program se dodaje na listu prioriteta.</p>
               </div>
               <button onClick={() => setIsStudySearchOpen(false)} className="p-2 text-slate-500 hover:text-slate-900">
                 <X size={20} />
               </button>
             </div>
-            <div className="p-4 border-b bg-white">
-              <div className="relative max-w-md">
-                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                <input value={studySearch} onChange={(event) => setStudySearch(event.target.value)} placeholder="Dio naziva studijskog programa ili visokog učilišta..." className="pl-9" />
+            <div className="p-4 border-b bg-[#f7fbfd]">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <select value={studySearchFilters.institutionType} onChange={(event) => updateStudyFilter('institutionType', event.target.value)}>
+                    <option value="">Sve vrste visokih učilišta</option>
+                    {INSTITUTION_TYPES.map(item => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                  <select value={studySearchFilters.institution} onChange={(event) => updateStudyFilter('institution', event.target.value)}>
+                    <option value="">Sva visoka učilišta</option>
+                    {STUDY_PROGRAM_INSTITUTIONS.map(item => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                  <select value={studySearchFilters.component} onChange={(event) => updateStudyFilter('component', event.target.value)}>
+                    <option value="">Sve sastavnice</option>
+                    {STUDY_PROGRAM_COMPONENTS.map(item => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                  <select value={studySearchFilters.quotaType} onChange={(event) => updateStudyFilter('quotaType', event.target.value)}>
+                    {QUOTA_TYPES.map(item => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <select value={studySearchFilters.city} onChange={(event) => updateStudyFilter('city', event.target.value)}>
+                    <option value="">Sva mjesta</option>
+                    {STUDY_PROGRAM_CITIES.map(item => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <select value={studySearchFilters.area} onChange={(event) => updateStudyFilter('area', event.target.value)}>
+                      <option value="">Sva područja</option>
+                      {STUDY_AREAS.map(item => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                    <select value={studySearchFilters.field} onChange={(event) => updateStudyFilter('field', event.target.value)}>
+                      <option value="">Sva polja</option>
+                      {STUDY_FIELDS.map(item => <option key={item} value={item}>{item}</option>)}
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-[170px_1fr] gap-2 items-center">
+                    <span className="text-[11px] font-bold text-[#005c8d]">Dio naziva studijskoga programa:</span>
+                    <input value={studySearchFilters.programName} onChange={(event) => updateStudyFilter('programName', event.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-[170px_1fr] gap-2 items-center">
+                    <span className="text-[11px] font-bold text-[#005c8d]">Dio naziva visokoga učilišta:</span>
+                    <input value={studySearchFilters.institutionName} onChange={(event) => updateStudyFilter('institutionName', event.target.value)} />
+                  </div>
+                </div>
+              </div>
+              <div className="pt-4 flex flex-wrap justify-center gap-5 text-sm">
+                <button type="button" className="text-[#005c8d] underline font-black inline-flex items-center gap-2" onClick={applyStudyFilters}>
+                  <Search size={14} /> Traži
+                </button>
+                <button type="button" className="text-[#005c8d] underline font-black" onClick={() => setIsStudySearchOpen(false)}>Odustani</button>
+                <button type="button" className="text-[#005c8d] underline font-black" onClick={resetStudyFilters}>Obriši uvjete pretraživanja</button>
               </div>
             </div>
+            <div className="px-4 py-2 border-b bg-white text-xs font-bold text-slate-500">
+              Prikazano {filteredStudyPrograms.length} od {STUDY_PROGRAM_CATALOG.length} studijskih programa.
+            </div>
             <div className="overflow-auto">
-              <table className="min-w-[860px] text-sm">
+              <table className="min-w-[980px] text-sm">
                 <thead><tr><th>Naziv studija</th><th>Mjesto izvođenja</th><th>Osnovne informacije</th><th>Odabir</th></tr></thead>
                 <tbody>
                   {filteredStudyPrograms.map(program => (
