@@ -556,6 +556,34 @@ export default function ClassSelectionPage() {
 
   const selectedYear = schoolYears.find(y => y.id === selectedYearId);
 
+  const formatFullSchoolYear = (yearName: string) => {
+    if (!yearName) return '';
+
+    const match = yearName.match(/(\d{4})\.?\s*\/\s*(\d{4})\.?/);
+    if (match) {
+      return `${match[1]}./${match[2]}.`;
+    }
+
+    return yearName;
+  };
+
+  const getSchoolYearStart = (yearName: string) => {
+    const match = yearName?.match(/(\d{4})/);
+    return match ? Number(match[1]) : 0;
+  };
+
+  const studentVisibleClasses = React.useMemo(() => {
+    return [...classes].sort((a, b) => {
+      const byYear = getSchoolYearStart(b.yearName) - getSchoolYearStart(a.yearName);
+      if (byYear !== 0) return byYear;
+
+      const byGrade = Number(b.gradeLevel || 0) - Number(a.gradeLevel || 0);
+      if (byGrade !== 0) return byGrade;
+
+      return String(b.name || '').localeCompare(String(a.name || ''), 'hr', { numeric: true });
+    });
+  }, [classes]);
+
   const handleSwitchSchool = async (school: SchoolOption) => {
     if (!school?.id || school.id === selectedSchoolId) {
       setSchoolMenuOpen(false);
@@ -639,17 +667,6 @@ export default function ClassSelectionPage() {
     setSelectedSchoolId(cls.schoolId);
     setIsArchived(cls.status !== 'ACTIVE' || selectedYear?.status === 'ARCHIVED');
     navigate(`/student/${path}`);
-  };
-
-  const getShortenedYear = (yearName: string) => {
-    if (!yearName) return '';
-    const parts = yearName.split('/');
-    if (parts.length === 2) {
-      const p1 = parts[0].trim().slice(-2);
-      const p2 = parts[1].trim().slice(-2);
-      return `${p1}/${p2}`;
-    }
-    return yearName;
   };
 
   const menuItems = [
@@ -808,45 +825,46 @@ export default function ClassSelectionPage() {
         ) : (
           <>
             {/* School Year Selector */}
-            <div className="mb-6 flex flex-col items-center">
-              <label className="text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider">Školska godina:</label>
-              <div className="relative inline-block">
-                <select
-                  value={selectedYearId}
-                  onChange={(e) => setSelectedYearId(e.target.value)}
-                  className="appearance-none bg-white border-2 border-[#005c8d] text-[#005c8d] font-black px-10 py-2 rounded-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#005c8d]/20 transition-all hover:bg-slate-50 min-w-[180px]"
-                >
-                  {schoolYears.map(y => (
-                    <option key={y.id} value={y.id}>{y.name}</option>
-                  ))}
-                </select>
-                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-[#005c8d]" size={16} />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#005c8d]">
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
-                    <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
-                  </svg>
+            {isStaff && (
+              <div className="mb-6 flex flex-col items-center">
+                <label className="text-[10px] font-black uppercase text-slate-500 mb-1 tracking-wider">Školska godina:</label>
+                <div className="relative inline-block">
+                  <select
+                    value={selectedYearId}
+                    onChange={(e) => setSelectedYearId(e.target.value)}
+                    className="appearance-none bg-white border-2 border-[#005c8d] text-[#005c8d] font-black px-10 py-2 rounded-sm cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#005c8d]/20 transition-all hover:bg-slate-50 min-w-[180px]"
+                  >
+                    {schoolYears.map(y => (
+                      <option key={y.id} value={y.id}>{y.name}</option>
+                    ))}
+                  </select>
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-[#005c8d]" size={16} />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#005c8d]">
+                    <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+                      <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" />
+                    </svg>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
         {!isStaff ? (
           /* Student horizontal class cards */
-          filteredClasses.length === 0 ? (
+          studentVisibleClasses.length === 0 ? (
             <div className="bg-white border border-[#dee2e6] rounded-sm shadow-sm overflow-hidden px-6 py-16 text-center">
               <div className="w-16 h-16 bg-slate-50 text-slate-200 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Calendar size={32} />
               </div>
-              <p className="text-slate-400 italic">Nema pronađenih razreda za odabranu školsku godinu.</p>
+              <p className="text-slate-400 italic">Nema pronađenih razreda.</p>
             </div>
           ) : (
             <div className="-mx-6 px-6 overflow-x-auto pb-4">
               <div className="flex gap-1 min-w-max">
-              {filteredClasses
-                .sort((a, b) => (String(a.name || "")).localeCompare(String(b.name || ""), 'hr', { numeric: true }))
+              {studentVisibleClasses
                 .map((cls) => {
                   const summary = summaries.find(s => 
                     s.class_id === cls.id && 
-                    (s.school_year_id === selectedYearId || (!s.school_year_id && s.school_year === cls.yearName))
+                    (s.school_year_id === cls.yearId || (!s.school_year_id && s.school_year === cls.yearName))
                   );
                   const isFinalized = summary && summary.status === 'FINALIZED';
                   const overall_average = isFinalized ? (summary.average ?? summary.overallAverage) : null;
@@ -869,7 +887,7 @@ export default function ClassSelectionPage() {
                           <div>
                             <div className="text-xl font-black text-slate-900 leading-none">{cls.name}</div>
                             <div className="text-sm text-slate-700 font-medium mt-1">
-                              {getShortenedYear(cls.yearName || selectedYear?.name || '')}
+                              {formatFullSchoolYear(cls.yearName || selectedYear?.name || '')}
                             </div>
                           </div>
                           <div className="text-sm text-slate-900 font-black leading-tight">
