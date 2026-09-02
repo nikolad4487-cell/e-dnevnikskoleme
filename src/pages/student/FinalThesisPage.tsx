@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { Ban } from 'lucide-react';
 import { ThesisApplication } from '../../types';
+import { isClassEligibleForFinalThesis } from '../../lib/thesisHelper';
 
 type ThesisFormState = {
   title: string;
@@ -59,14 +60,13 @@ export default function FinalThesisPage() {
     const checkAccess = async () => {
       const { data: enrollment } = await supabase
         .from('student_class_enrollments')
-        .select('classes:class_id(grade_level, programs:program_id(duration_years))')
+        .select('classes:class_id(name, grade_level, programs:program_id(duration_years))')
         .eq('student_id', studentId)
         .eq('status', 'ACTIVE')
         .maybeSingle();
 
       const clazz = enrollment?.classes as any;
-      const program = clazz?.programs as any;
-      setIsAccessible(Boolean(clazz?.grade_level && program?.duration_years && clazz.grade_level === program.duration_years));
+      setIsAccessible(isClassEligibleForFinalThesis(clazz));
     };
 
     checkAccess();

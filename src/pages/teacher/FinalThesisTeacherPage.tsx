@@ -11,6 +11,7 @@ import {
 import { Role, ThesisApplication } from '../../types';
 import ThesisGradingModal from '../../components/ThesisGradingModal';
 import FinalExamDefenseScheduleModal from '../../components/FinalExamDefenseScheduleModal';
+import { isClassEligibleForFinalThesis } from '../../lib/thesisHelper';
 
 export default function FinalThesisTeacherPage() {
   const { user, userSchoolRoles, isMainAdmin } = useAuth();
@@ -137,16 +138,11 @@ export default function FinalThesisTeacherPage() {
         const check = async () => {
              const { data: clazz } = await supabase
                 .from('classes')
-                .select('grade_level, program_id, programs:program_id(duration_years)')
+                .select('name, grade_level, program_id, programs:program_id(duration_years)')
                 .eq('id', selectedClassId)
                 .maybeSingle();
             if (clazz) {
-                const program = clazz.programs as any;
-                if (program && clazz.grade_level) {
-                    setCanAccessClass(clazz.grade_level === program.duration_years);
-                } else {
-                    setCanAccessClass(false);
-                }
+                setCanAccessClass(isClassEligibleForFinalThesis(clazz));
             } else {
                 setCanAccessClass(false);
             }

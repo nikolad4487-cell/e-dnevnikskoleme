@@ -9,6 +9,7 @@ import { Grade, Subject, User, ClassSubjectTeacher, specialExamTypes, specialExa
 import { cn, formatPersonName, finalGradeLabels, formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
 import { BookOpen, GraduationCap, ChevronRight, ArrowLeft } from 'lucide-react';
 import { mappers, mapList } from '../../lib/mappers';
+import { isClassEligibleForFinalThesis } from '../../lib/thesisHelper';
 
 export default function OcjenePage() {
   const navigate = useNavigate();
@@ -277,7 +278,7 @@ export default function OcjenePage() {
   };
 
   const formatGradeDate = (date?: string) => date ? new Date(date).toLocaleDateString('hr-HR', { day: 'numeric', month: 'numeric' }) + '.' : '—';
-  const canAccessFinalThesis = Boolean(currentClass?.grade_level && currentClass?.programs?.duration_years && currentClass.grade_level === currentClass.programs.duration_years);
+  const canAccessFinalThesis = isClassEligibleForFinalThesis(currentClass);
 
   const downloadAllGradesPdf = () => {
     const doc = new jsPDF('p', 'mm', 'a4');

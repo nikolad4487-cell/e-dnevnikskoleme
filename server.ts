@@ -1726,9 +1726,45 @@ async function startServer() {
     return clean;
   }
 
+  const normalizeFinalThesisClassName = (value: any) =>
+    String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+
+  async function assertFinalThesisClassAllowed(classId: any) {
+    if (!classId || classId === 'N/A' || !supabaseAdmin) return;
+
+    const { data: rawClazz, error } = await supabaseAdmin
+      .from('classes')
+      .select('name, grade_level, programs:program_id(duration_years)')
+      .eq('id', classId)
+      .maybeSingle();
+
+    if (error || !rawClazz) {
+      if (error) console.error("FINAL THESIS CLASS ACCESS CHECK ERROR:", error);
+      return;
+    }
+
+    const clazz = Array.isArray(rawClazz) ? rawClazz[0] : rawClazz;
+    const rawProgram = clazz?.programs;
+    const program = Array.isArray(rawProgram) ? rawProgram[0] : rawProgram;
+    const isFourthContinuationClass = normalizeFinalThesisClassName(clazz?.name) === '4.K';
+    const isFinalProgramYear = Boolean(
+      clazz?.grade_level &&
+      program?.duration_years &&
+      Number(clazz.grade_level) === Number(program.duration_years)
+    );
+
+    if (isFourthContinuationClass || !isFinalProgramYear) {
+      const forbiddenError: any = new Error('Završni radovi nisu dostupni za odabrani razred.');
+      forbiddenError.statusCode = 403;
+      throw forbiddenError;
+    }
+  }
+
   app.post("/api/final-thesis", async (req, res) => {
     try {
       const appData = req.body;
+      await assertFinalThesisClassAllowed(appData.class_id);
+
       if (!appData.id) {
         appData.id = crypto.randomUUID();
       }
@@ -1757,7 +1793,7 @@ async function startServer() {
 
       res.json({ success: true, data: appData, db_persisted: dbInserted });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
 
@@ -1765,6 +1801,8 @@ async function startServer() {
     try {
       const { id } = req.params;
       const updates = req.body;
+      await assertFinalThesisClassAllowed(updates.class_id);
+
       updates.updated_at = new Date().toISOString();
 
       let dbUpdated = false;
@@ -1793,7 +1831,7 @@ async function startServer() {
 
       res.json({ success: true, db_updated: dbUpdated });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(err.statusCode || 500).json({ error: err.message });
     }
   });
 

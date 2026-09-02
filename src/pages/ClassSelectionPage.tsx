@@ -859,7 +859,7 @@ export default function ClassSelectionPage() {
             </div>
           ) : (
             <div className="-mx-6 px-6 overflow-x-auto pb-4">
-              <div className="flex gap-1 min-w-max">
+              <div className="flex gap-4 min-w-max">
               {studentVisibleClasses
                 .map((cls) => {
                   const summary = summaries.find(s => 
@@ -876,24 +876,24 @@ export default function ClassSelectionPage() {
                   return (
                     <div
                       key={cls.id}
-                      className="w-[330px] bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden shrink-0"
+                      className="w-[360px] bg-white border border-slate-200 rounded-md shadow-sm overflow-hidden shrink-0"
                     >
                       <button
                         type="button"
                         onClick={() => handleSelect(cls)}
                         className="w-full text-left px-4 py-4 border-b border-slate-100 hover:bg-slate-50 transition-colors"
                       >
-                        <div className="grid grid-cols-[58px_1fr] gap-3 items-start">
-                          <div>
+                        <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-5 items-start">
+                          <div className="min-w-0">
                             <div className="text-xl font-black text-slate-900 leading-none">{cls.name}</div>
-                            <div className="text-sm text-slate-700 font-medium mt-1">
+                            <div className="text-sm text-slate-700 font-medium mt-2 whitespace-nowrap">
                               {formatFullSchoolYear(cls.yearName || selectedYear?.name || '')}
                             </div>
                           </div>
-                          <div className="text-sm text-slate-900 font-black leading-tight">
+                          <div className="min-w-0 text-sm text-slate-900 font-black leading-tight">
                             <div className="line-clamp-2">{selectedSchoolLabel}</div>
                             {cls.programName && (
-                              <div className="text-xs text-slate-500 font-bold mt-1 line-clamp-2">
+                              <div className="text-xs text-slate-500 font-bold mt-2 leading-snug line-clamp-2">
                                 {cls.programName}
                               </div>
                             )}

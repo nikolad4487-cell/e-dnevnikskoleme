@@ -8,6 +8,7 @@ import { Role } from '../types';
 import { cn, formatPersonName } from '../lib/utils';
 import { Header } from './Header';
 import { useClassAdminAccess } from '../hooks/useClassAdminAccess';
+import { isClassEligibleForFinalThesis } from '../lib/thesisHelper';
 
 interface NavItem {
   id?: string;
@@ -66,7 +67,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
             if (!isStaff) {
                 const { data: enrollment, error } = await supabase
                     .from('student_class_enrollments')
-                    .select('class_id, student_id, classes:class_id(grade_level, program_id, programs:program_id(duration_years))')
+                    .select('class_id, student_id, classes:class_id(name, grade_level, program_id, programs:program_id(duration_years))')
                     .eq('student_id', user.id)
                     .eq('status', 'ACTIVE')
                     .maybeSingle();
@@ -81,15 +82,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                     const rawClazz = enrollment.classes as any;
                     const clazz = Array.isArray(rawClazz) ? rawClazz[0] : rawClazz;
                     if (clazz) {
-                        const rawProgram = clazz.programs;
-                        const program = Array.isArray(rawProgram) ? rawProgram[0] : rawProgram;
-                        const gradeLevel = clazz.grade_level;
-                        const durationYears = program?.duration_years;
-                        if (gradeLevel && durationYears) {
-                           setCanAccessThesis(gradeLevel === durationYears);
-                        } else {
-                           setCanAccessThesis(false);
-                        }
+                        setCanAccessThesis(isClassEligibleForFinalThesis(clazz));
                     } else {
                         setCanAccessThesis(false);
                     }
@@ -100,7 +93,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                 if (effectiveClassId) {
                     const { data: rawClazz, error } = await supabase
                         .from('classes')
-                        .select('grade_level, program_id, programs:program_id(duration_years)')
+                        .select('name, grade_level, program_id, programs:program_id(duration_years)')
                         .eq('id', effectiveClassId)
                         .maybeSingle();
                     
@@ -112,15 +105,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
 
                     if (rawClazz) {
                         const clazz = Array.isArray(rawClazz) ? rawClazz[0] : rawClazz;
-                        const rawProgram = clazz.programs;
-                        const program = Array.isArray(rawProgram) ? rawProgram[0] : rawProgram;
-                        const gradeLevel = clazz.grade_level;
-                        const durationYears = program?.duration_years;
-                        if (gradeLevel && durationYears) {
-                            setCanAccessThesis(gradeLevel === durationYears);
-                        } else {
-                            setCanAccessThesis(false);
-                        }
+                        setCanAccessThesis(isClassEligibleForFinalThesis(clazz));
                     } else {
                         setCanAccessThesis(false);
                     }
