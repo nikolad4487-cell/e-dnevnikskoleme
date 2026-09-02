@@ -4,18 +4,6 @@ import { Calendar, GraduationCap, RotateCcw, Save, Search, Send, X } from 'lucid
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
-import {
-  INSTITUTION_TYPES,
-  QUOTA_TYPES,
-  STUDY_AREAS,
-  STUDY_FIELDS,
-  STUDY_PROGRAM_CATALOG,
-  STUDY_PROGRAM_CITIES,
-  STUDY_PROGRAM_COMPONENTS,
-  STUDY_PROGRAM_INSTITUTIONS,
-  type StudyProgramOption,
-  type StudyProgramRequirements,
-} from '../../data/studyPrograms';
 
 type MaturaLevel = 'A_RAZINA' | 'B_RAZINA' | 'JEDNA_RAZINA';
 type MaturaStatus = 'REGISTERED' | 'CANCELED';
@@ -37,12 +25,36 @@ type MaturaRegistration = {
 type StudyApplication = {
   id: string;
   student_id: string;
+  study_program_id?: string | null;
   priority_index: number;
   name: string;
   city?: string | null;
   institution?: string | null;
   requirements?: StudyProgramRequirements | null;
   is_currently_admitted?: boolean;
+};
+
+type StudyProgramRequirements = {
+  requiredLevels: Record<string, 'A' | 'B' | '-'>;
+  electiveRules: Record<string, '+' | '-' | '*'>;
+};
+
+type StudyProgramOption = {
+  id: string;
+  name: string;
+  city: string;
+  institution: string;
+  component?: string | null;
+  institution_type?: string | null;
+  area?: string | null;
+  field?: string | null;
+  quota_type?: string | null;
+  admission_round?: string | null;
+  is_active?: boolean;
+  citizen_quota?: number;
+  foreign_quota?: number;
+  info: string;
+  requirements: StudyProgramRequirements;
 };
 
 type MaturaResult = {
@@ -93,7 +105,7 @@ const DEFAULT_STUDY_SEARCH_FILTERS: StudySearchFilters = {
   institutionType: '',
   institution: '',
   component: '',
-  quotaType: 'Bez posebne kvote',
+  quotaType: '',
   city: '',
   area: '',
   field: '',
@@ -182,6 +194,7 @@ export default function MaturaPage() {
   const [activeTab, setActiveTab] = React.useState<MaturaTab>('prijava');
   const [registrations, setRegistrations] = React.useState<MaturaRegistration[]>([]);
   const [studyApplications, setStudyApplications] = React.useState<StudyApplication[]>([]);
+  const [availableStudyPrograms, setAvailableStudyPrograms] = React.useState<StudyProgramOption[]>([]);
   const [results, setResults] = React.useState<MaturaResult[]>([]);
   const [schedule, setSchedule] = React.useState<MaturaScheduleItem[]>([]);
   const [settings, setSettings] = React.useState<MaturaSettings | null>(null);
@@ -211,9 +224,10 @@ export default function MaturaPage() {
 
   const fetchAll = React.useCallback(async () => {
     if (!targetStudentId) return;
-    const [registrationRes, appRes, resultRes, scheduleRes, objectionRes, settingsRes] = await Promise.all([
+    const [registrationRes, appRes, programRes, resultRes, scheduleRes, objectionRes, settingsRes] = await Promise.all([
       fetch(`/api/matura-registrations?studentId=${targetStudentId}`),
       fetch(`/api/matura-study-applications?studentId=${targetStudentId}`),
+      fetch('/api/matura-study-programs?activeOnly=true'),
       fetch(`/api/matura-results?studentId=${targetStudentId}&schoolId=${selectedSchoolId || ''}`),
       fetch(`/api/matura-exam-schedule?schoolId=${selectedSchoolId || ''}`),
       fetch(`/api/matura-objections?studentId=${targetStudentId}&schoolId=${selectedSchoolId || ''}`),
@@ -228,6 +242,7 @@ export default function MaturaPage() {
       setRegistrations(readCachedRegistrations(targetStudentId));
     }
     if (appRes.ok) setStudyApplications(await appRes.json());
+    if (programRes.ok) setAvailableStudyPrograms(await programRes.json());
     if (resultRes.ok) setResults(await resultRes.json());
     if (scheduleRes.ok) setSchedule(await scheduleRes.json());
     if (objectionRes.ok) setObjections(await objectionRes.json());
@@ -366,6 +381,7 @@ export default function MaturaPage() {
       id: crypto.randomUUID(),
       student_id: targetStudentId,
       priority_index: studyApplications.length + 1,
+      study_program_id: program.id,
       name: program.name,
       city: program.city,
       institution: program.institution,
@@ -427,13 +443,20 @@ export default function MaturaPage() {
   };
   const applyStudyFilters = () => setStudySearchFilters(current => ({ ...current }));
   const resetStudyFilters = () => setStudySearchFilters(DEFAULT_STUDY_SEARCH_FILTERS);
-  const filteredStudyPrograms = STUDY_PROGRAM_CATALOG.filter(program => {
+  const institutionTypes = Array.from(new Set(availableStudyPrograms.map(program => program.institution_type).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'hr'));
+  const quotaTypes = Array.from(new Set(availableStudyPrograms.map(program => program.quota_type).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'hr'));
+  const studyAreas = Array.from(new Set(availableStudyPrograms.map(program => program.area).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'hr'));
+  const studyFields = Array.from(new Set(availableStudyPrograms.map(program => program.field).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'hr'));
+  const studyCities = Array.from(new Set(availableStudyPrograms.map(program => program.city).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'hr'));
+  const studyInstitutions = Array.from(new Set(availableStudyPrograms.map(program => program.institution).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'hr'));
+  const studyComponents = Array.from(new Set(availableStudyPrograms.map(program => program.component).filter(Boolean) as string[])).sort((a, b) => a.localeCompare(b, 'hr'));
+  const filteredStudyPrograms = availableStudyPrograms.filter(program => {
     const programName = studySearchFilters.programName.trim().toLowerCase();
     const institutionName = studySearchFilters.institutionName.trim().toLowerCase();
-    if (studySearchFilters.institutionType && program.institutionType !== studySearchFilters.institutionType) return false;
+    if (studySearchFilters.institutionType && program.institution_type !== studySearchFilters.institutionType) return false;
     if (studySearchFilters.institution && program.institution !== studySearchFilters.institution) return false;
     if (studySearchFilters.component && program.component !== studySearchFilters.component) return false;
-    if (studySearchFilters.quotaType && program.quotaType !== studySearchFilters.quotaType) return false;
+    if (studySearchFilters.quotaType && program.quota_type !== studySearchFilters.quotaType) return false;
     if (studySearchFilters.city && program.city !== studySearchFilters.city) return false;
     if (studySearchFilters.area && program.area !== studySearchFilters.area) return false;
     if (studySearchFilters.field && program.field !== studySearchFilters.field) return false;
@@ -624,33 +647,34 @@ export default function MaturaPage() {
                 <div className="space-y-2">
                   <select value={studySearchFilters.institutionType} onChange={(event) => updateStudyFilter('institutionType', event.target.value)}>
                     <option value="">Sve vrste visokih učilišta</option>
-                    {INSTITUTION_TYPES.map(item => <option key={item} value={item}>{item}</option>)}
+                    {institutionTypes.map(item => <option key={item} value={item}>{item}</option>)}
                   </select>
                   <select value={studySearchFilters.institution} onChange={(event) => updateStudyFilter('institution', event.target.value)}>
                     <option value="">Sva visoka učilišta</option>
-                    {STUDY_PROGRAM_INSTITUTIONS.map(item => <option key={item} value={item}>{item}</option>)}
+                    {studyInstitutions.map(item => <option key={item} value={item}>{item}</option>)}
                   </select>
                   <select value={studySearchFilters.component} onChange={(event) => updateStudyFilter('component', event.target.value)}>
                     <option value="">Sve sastavnice</option>
-                    {STUDY_PROGRAM_COMPONENTS.map(item => <option key={item} value={item}>{item}</option>)}
+                    {studyComponents.map(item => <option key={item} value={item}>{item}</option>)}
                   </select>
                   <select value={studySearchFilters.quotaType} onChange={(event) => updateStudyFilter('quotaType', event.target.value)}>
-                    {QUOTA_TYPES.map(item => <option key={item} value={item}>{item}</option>)}
+                    <option value="">Sve posebne kvote</option>
+                    {quotaTypes.map(item => <option key={item} value={item}>{item}</option>)}
                   </select>
                 </div>
                 <div className="space-y-2">
                   <select value={studySearchFilters.city} onChange={(event) => updateStudyFilter('city', event.target.value)}>
                     <option value="">Sva mjesta</option>
-                    {STUDY_PROGRAM_CITIES.map(item => <option key={item} value={item}>{item}</option>)}
+                    {studyCities.map(item => <option key={item} value={item}>{item}</option>)}
                   </select>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <select value={studySearchFilters.area} onChange={(event) => updateStudyFilter('area', event.target.value)}>
                       <option value="">Sva područja</option>
-                      {STUDY_AREAS.map(item => <option key={item} value={item}>{item}</option>)}
+                      {studyAreas.map(item => <option key={item} value={item}>{item}</option>)}
                     </select>
                     <select value={studySearchFilters.field} onChange={(event) => updateStudyFilter('field', event.target.value)}>
                       <option value="">Sva polja</option>
-                      {STUDY_FIELDS.map(item => <option key={item} value={item}>{item}</option>)}
+                      {studyFields.map(item => <option key={item} value={item}>{item}</option>)}
                     </select>
                   </div>
                   <div className="grid grid-cols-[170px_1fr] gap-2 items-center">
@@ -672,7 +696,7 @@ export default function MaturaPage() {
               </div>
             </div>
             <div className="px-4 py-2 border-b bg-white text-xs font-bold text-slate-500">
-              Prikazano {filteredStudyPrograms.length} od {STUDY_PROGRAM_CATALOG.length} studijskih programa.
+              Prikazano {filteredStudyPrograms.length} od {availableStudyPrograms.length} otvorenih studijskih programa.
             </div>
             <div className="overflow-auto">
               <table className="min-w-[980px] text-sm">

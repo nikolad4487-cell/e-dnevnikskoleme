@@ -62,6 +62,7 @@ initJsonFile("matura_exam_schedule.json");
 initJsonFile("matura_results.json");
 initJsonFile("matura_objections.json");
 initJsonFile("matura_study_applications.json");
+initJsonFile("matura_study_programs.json");
 
 function readJsonFile(filename: string): any[] {
   try {
@@ -2270,31 +2271,136 @@ async function startServer() {
     }
   });
 
-  const DEFAULT_STUDY_PROGRAMS = [
-    "Sveučilište u Zagrebu - Učiteljski fakultet Sveučilišta u Zagrebu - Učiteljski studij - Zagreb (Redovni integrirani prijediplomski i diplomski studij)",
-    "Sveučilište u Zagrebu - Učiteljski fakultet Sveučilišta u Zagrebu - Učiteljski studij - Petrinja (Redovni integrirani prijediplomski i diplomski studij)",
-    "Sveučilište u Slavonskom Brodu - Odjel društveno-humanističkih znanosti - Učiteljski studij - Slavonski Brod (Redovni integrirani prijediplomski i diplomski studij)",
-    "Veleučilište u Karlovcu - Poduzetništvo u turizmu i ugostiteljstvu - Karlovac (Redovni prijediplomski stručni studij)",
-    "Veleučilište u Rijeci - Informatika - Rijeka (Redovni prijediplomski stručni studij)",
-    "Veleučilište u Karlovcu - Sigurnost i zaštita - Karlovac (Redovni prijediplomski stručni studij)",
-    "Sveučilište Jurja Dobrile u Puli - Fakultet za odgojne i obrazovne znanosti - Učiteljski studij (na hrvatskom jeziku) - Pula (Redovni integrirani prijediplomski i diplomski studij)",
-    "Sveučilište Jurja Dobrile u Puli - Fakultet informatike u Puli - Informatika - Pula (Redovni prijediplomski sveučilišni studij)",
-    "Sveučilište Jurja Dobrile u Puli - Tehnički fakultet u Puli - Računarstvo - Pula (Redovni prijediplomski sveučilišni studij)",
-    "Veleučilište u Šibeniku - Računarstvo - Šibenik (Redovni prijediplomski stručni studij)"
-  ];
+  function normalizeStudyProgramRecord(item: any) {
+    const name = item.name || `${item.faculty || ''} - ${item.component || ''} - ${item.study_name || ''} - ${item.city || ''}`.replace(/\s+-\s+-\s+/g, ' - ');
+    const requiredExams = Array.isArray(item.required_exams) ? item.required_exams : [];
+    const electiveExams = Array.isArray(item.elective_exams) ? item.elective_exams : [];
+    return {
+      ...item,
+      name,
+      institution: item.institution || item.faculty || null,
+      info: item.info || `${Number(item.citizen_quota || 0)} mjesta za državljane RH, ${Number(item.foreign_quota || 0)} mjesta za strane državljane`,
+      requirements: item.requirements || {
+        requiredLevels: Object.fromEntries(requiredExams.map((exam: any) => [exam.subject_name, exam.level || '-'])),
+        electiveRules: Object.fromEntries(electiveExams.map((exam: any) => [exam.subject_name, exam.is_required ? '+' : '-'])),
+      },
+    };
+  }
+
+  app.get("/api/matura-study-programs", async (req, res) => {
+    try {
+      const { schoolId, activeOnly } = req.query;
+      if (supabaseAdmin) {
+        try {
+          let query = supabaseAdmin.from("matura_study_programs").select("*");
+          if (schoolId) query = query.eq("school_id", schoolId);
+          if (activeOnly !== "false") query = query.eq("is_active", true);
+          const { data, error } = await query.order("faculty", { ascending: true }).order("study_name", { ascending: true });
+          if (!error) return res.json((data || []).map(normalizeStudyProgramRecord));
+          if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura study programs read error:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura study programs read connection error:", dbErr);
+        }
+      }
+
+      let items = readJsonFile("matura_study_programs.json");
+      if (schoolId) items = items.filter(item => item.school_id === schoolId);
+      if (activeOnly !== "false") items = items.filter(item => item.is_active !== false);
+      items.sort((a, b) => String(a.faculty || '').localeCompare(String(b.faculty || ''), 'hr') || String(a.study_name || '').localeCompare(String(b.study_name || ''), 'hr'));
+      res.json(items.map(normalizeStudyProgramRecord));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/matura-study-programs", async (req, res) => {
+    try {
+      const payload = req.body || {};
+      const now = new Date().toISOString();
+      const faculty = String(payload.faculty || '').trim();
+      const studyName = String(payload.study_name || '').trim();
+      const city = String(payload.city || '').trim();
+      if (!faculty || !studyName || !city) {
+        return res.status(400).json({ error: "Fakultet, studij i mjesto izvođenja su obavezni." });
+      }
+
+      const record = {
+        id: payload.id || crypto.randomUUID(),
+        school_id: payload.school_id || null,
+        faculty,
+        component: String(payload.component || '').trim() || null,
+        study_name: studyName,
+        city,
+        institution_type: String(payload.institution_type || 'Javna sveučilišta').trim(),
+        area: String(payload.area || '').trim() || null,
+        field: String(payload.field || '').trim() || null,
+        quota_type: String(payload.quota_type || 'Bez posebne kvote').trim(),
+        admission_round: String(payload.admission_round || 'LJETNI').trim(),
+        is_active: payload.is_active !== false,
+        citizen_quota: Number(payload.citizen_quota || 0),
+        foreign_quota: Number(payload.foreign_quota || 0),
+        school_gpa_weight: Number(payload.school_gpa_weight || 0),
+        required_exams: Array.isArray(payload.required_exams) ? payload.required_exams : [],
+        elective_exams: Array.isArray(payload.elective_exams) ? payload.elective_exams : [],
+        special_achievements: Array.isArray(payload.special_achievements) ? payload.special_achievements : [],
+        health_considerations: Array.isArray(payload.health_considerations) ? payload.health_considerations : [],
+        created_by: payload.created_by || null,
+        updated_by: payload.updated_by || payload.created_by || null,
+        created_at: payload.created_at || now,
+        updated_at: now,
+      };
+
+      if (supabaseAdmin) {
+        try {
+          const { data, error } = await supabaseAdmin
+            .from("matura_study_programs")
+            .upsert(record, { onConflict: "id" })
+            .select()
+            .single();
+          if (!error) return res.json({ success: true, data: normalizeStudyProgramRecord(data) });
+          if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura study programs write error:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura study programs write connection error:", dbErr);
+        }
+      }
+
+      const all = readJsonFile("matura_study_programs.json").filter(item => item.id !== record.id);
+      writeJsonFile("matura_study_programs.json", [...all, record]);
+      res.json({ success: true, data: normalizeStudyProgramRecord(record) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/matura-study-programs/:id", async (req, res) => {
+    try {
+      const { id } = req.params;
+      if (supabaseAdmin) {
+        try {
+          const { error } = await supabaseAdmin.from("matura_study_programs").delete().eq("id", id);
+          if (!error) return res.json({ success: true });
+          if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura study programs delete error:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura study programs delete connection error:", dbErr);
+        }
+      }
+      const items = readJsonFile("matura_study_programs.json").filter(item => item.id !== id);
+      writeJsonFile("matura_study_programs.json", items);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   app.get("/api/matura-study-applications", (req, res) => {
     try {
       const { studentId } = req.query;
       let items = readJsonFile("matura_study_applications.json");
       if (studentId) items = items.filter(item => item.student_id === studentId);
-      const defaultProgramNames = new Set(DEFAULT_STUDY_PROGRAMS);
-      const hasOnlySeededDefaults = items.length > 0 && items.every(item => defaultProgramNames.has(item.name));
-      if (studentId && hasOnlySeededDefaults) {
-        const all = readJsonFile("matura_study_applications.json")
-          .filter(item => item.student_id !== studentId || !defaultProgramNames.has(item.name));
+      if (studentId && items.some(item => !item.study_program_id)) {
+        const all = readJsonFile("matura_study_applications.json").filter(item => item.student_id !== studentId || item.study_program_id);
         writeJsonFile("matura_study_applications.json", all);
-        items = [];
+        items = items.filter(item => item.study_program_id);
       }
       items.sort((a, b) => Number(a.priority_index || 0) - Number(b.priority_index || 0));
       res.json(items);
@@ -2317,6 +2423,7 @@ async function startServer() {
         id: program.id || crypto.randomUUID(),
         student_id: studentId,
         priority_index: index + 1,
+        study_program_id: program.study_program_id || program.id || null,
         name: String(program.name || '').trim(),
         city: String(program.city || '').trim() || null,
         institution: String(program.institution || '').trim() || null,
@@ -2324,7 +2431,7 @@ async function startServer() {
         is_currently_admitted: index === 0,
         created_at: program.created_at || now,
         updated_at: now,
-      })).filter((program: any) => program.name);
+      })).filter((program: any) => program.name && program.study_program_id);
       writeJsonFile("matura_study_applications.json", [...all, ...next]);
       res.json({ success: true, data: next });
     } catch (err: any) {
