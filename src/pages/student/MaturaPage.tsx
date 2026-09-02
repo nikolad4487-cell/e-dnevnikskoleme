@@ -145,6 +145,34 @@ const hasOpenDeadline = (settings: MaturaSettings | null) => {
   return true;
 };
 
+const registrationCacheKey = (studentId: string) => `matura.registrations.${studentId}`;
+
+const readCachedRegistrations = (studentId: string): MaturaRegistration[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    return JSON.parse(window.localStorage.getItem(registrationCacheKey(studentId)) || '[]');
+  } catch {
+    return [];
+  }
+};
+
+const writeCachedRegistrations = (studentId: string, items: MaturaRegistration[]) => {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(registrationCacheKey(studentId), JSON.stringify(items));
+};
+
+const mergeRegistrations = (remoteItems: MaturaRegistration[], cachedItems: MaturaRegistration[]) => {
+  const merged = new Map<string, MaturaRegistration>();
+  [...cachedItems, ...remoteItems].forEach(item => {
+    const key = `${item.student_id}:${item.subject_name.toLowerCase()}`;
+    const previous = merged.get(key);
+    if (!previous || new Date(item.updated_at || item.created_at || 0) >= new Date(previous.updated_at || previous.created_at || 0)) {
+      merged.set(key, item);
+    }
+  });
+  return Array.from(merged.values());
+};
+
 export default function MaturaPage() {
   const { user, isParent } = useAuth();
   const { selectedChildId, selectedClassId, selectedSchoolId } = useSelection();
@@ -191,7 +219,14 @@ export default function MaturaPage() {
       fetch(`/api/matura-objections?studentId=${targetStudentId}&schoolId=${selectedSchoolId || ''}`),
       fetch(`/api/matura-settings?schoolId=${selectedSchoolId || ''}`),
     ]);
-    if (registrationRes.ok) setRegistrations(await registrationRes.json());
+    if (registrationRes.ok) {
+      const remoteRegistrations = await registrationRes.json();
+      const mergedRegistrations = mergeRegistrations(remoteRegistrations, readCachedRegistrations(targetStudentId));
+      writeCachedRegistrations(targetStudentId, mergedRegistrations);
+      setRegistrations(mergedRegistrations);
+    } else {
+      setRegistrations(readCachedRegistrations(targetStudentId));
+    }
     if (appRes.ok) setStudyApplications(await appRes.json());
     if (resultRes.ok) setResults(await resultRes.json());
     if (scheduleRes.ok) setSchedule(await scheduleRes.json());
@@ -249,7 +284,15 @@ export default function MaturaPage() {
           exam_location: examLocation,
         }),
       });
-      if (!response.ok) throw new Error(await response.text());
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Spremanje prijave mature nije uspjelo.');
+      const savedRegistration = body.data as MaturaRegistration | undefined;
+      if (savedRegistration) {
+        const cached = readCachedRegistrations(targetStudentId);
+        const nextCached = mergeRegistrations([savedRegistration], cached);
+        writeCachedRegistrations(targetStudentId, nextCached);
+        setRegistrations(nextCached);
+      }
       toast.success('Prijava mature je spremljena.');
       await fetchAll();
     } catch (error) {
@@ -269,7 +312,15 @@ export default function MaturaPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ student_id: targetStudentId }),
       });
-      if (!response.ok) throw new Error(await response.text());
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.error || 'Odjava mature nije uspjela.');
+      const canceledRegistration = body.data as MaturaRegistration | undefined;
+      if (canceledRegistration) {
+        const cached = readCachedRegistrations(targetStudentId);
+        const nextCached = mergeRegistrations([canceledRegistration], cached);
+        writeCachedRegistrations(targetStudentId, nextCached);
+        setRegistrations(nextCached);
+      }
       await fetchAll();
     } finally {
       setSaving(false);

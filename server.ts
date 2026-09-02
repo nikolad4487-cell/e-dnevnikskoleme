@@ -1875,6 +1875,20 @@ async function startServer() {
   app.get("/api/matura-registrations", async (req, res) => {
     try {
       const { studentId, classId, schoolId } = req.query;
+      if (supabaseAdmin) {
+        try {
+          let query = supabaseAdmin.from("matura_registrations").select("*");
+          if (studentId) query = query.eq("student_id", studentId);
+          if (classId) query = query.eq("class_id", classId);
+          if (schoolId) query = query.eq("school_id", schoolId);
+          const { data, error } = await query.order("status", { ascending: true }).order("subject_name", { ascending: true });
+          if (!error) return res.json(data || []);
+          if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura registrations read error:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura registrations read connection error:", dbErr);
+        }
+      }
+
       let registrations = readJsonFile("matura_registrations.json");
 
       if (studentId) registrations = registrations.filter(item => item.student_id === studentId);
@@ -1906,6 +1920,69 @@ async function startServer() {
 
       const registrations = readJsonFile("matura_registrations.json");
       const now = new Date().toISOString();
+
+      if (supabaseAdmin) {
+        try {
+          const { data: existingRows, error: existingError } = await supabaseAdmin
+            .from("matura_registrations")
+            .select("*")
+            .eq("student_id", studentId)
+            .ilike("subject_name", subjectName)
+            .limit(1);
+
+          if (existingError) {
+            if (existingError.code !== "PGRST205" && existingError.code !== "42P01") console.error("DB matura registration lookup error:", existingError);
+          } else {
+            const existing = Array.isArray(existingRows) ? existingRows[0] : null;
+            if (!existing) {
+              const { data: activeRows, error: activeError } = await supabaseAdmin
+                .from("matura_registrations")
+                .select("subject_name")
+                .eq("student_id", studentId)
+                .eq("status", "REGISTERED");
+
+              if (activeError) {
+                if (activeError.code !== "PGRST205" && activeError.code !== "42P01") console.error("DB matura active count error:", activeError);
+              } else {
+                const activeStudentRegistrations = activeRows || [];
+                const electiveCount = activeStudentRegistrations.filter((item: any) => MATURA_ELECTIVE_SUBJECTS.has(normalizeMaturaSubject(item.subject_name))).length;
+                const requiredCount = activeStudentRegistrations.length - electiveCount;
+                if (MATURA_ELECTIVE_SUBJECTS.has(subjectName) && electiveCount >= 6) {
+                  return res.status(400).json({ error: "Možete prijaviti najviše 6 izbornih ispita državne mature." });
+                }
+                if (!MATURA_ELECTIVE_SUBJECTS.has(subjectName) && requiredCount >= 3) {
+                  return res.status(400).json({ error: "Možete prijaviti najviše 3 obavezna ispita državne mature." });
+                }
+              }
+            }
+
+            const dbPayload = {
+              student_id: studentId,
+              class_id: payload.class_id || null,
+              school_id: payload.school_id || null,
+              subject_name: subjectName,
+              level,
+              status: "REGISTERED",
+              exam_location: String(payload.exam_location || '').trim() || null,
+              created_by: studentId,
+              updated_by: studentId,
+              updated_at: now,
+            };
+
+            const dbQuery = existing
+              ? supabaseAdmin.from("matura_registrations").update(dbPayload).eq("id", existing.id).select().single()
+              : supabaseAdmin.from("matura_registrations").insert({ ...dbPayload, created_at: now }).select().single();
+            const { data, error } = await dbQuery;
+            if (!error) {
+              return res.json({ success: true, data });
+            }
+            if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura registration write error:", error);
+          }
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura registration write connection error:", dbErr);
+        }
+      }
+
       const existingIndex = registrations.findIndex(item =>
         item.student_id === studentId &&
         normalizeMaturaSubject(item.subject_name).toLowerCase() === subjectName.toLowerCase()
@@ -1954,6 +2031,32 @@ async function startServer() {
     try {
       const { id } = req.params;
       const { student_id } = req.body || {};
+      if (supabaseAdmin) {
+        try {
+          let query = supabaseAdmin.from("matura_registrations").select("*").eq("id", id).limit(1);
+          const { data: existingRows, error: readError } = await query;
+          if (!readError) {
+            const existing = Array.isArray(existingRows) ? existingRows[0] : null;
+            if (!existing) return res.status(404).json({ error: "Prijava mature nije pronađena." });
+            if (student_id && existing.student_id !== student_id) {
+              return res.status(403).json({ error: "Možete odjaviti samo vlastitu prijavu mature." });
+            }
+            const { data, error } = await supabaseAdmin
+              .from("matura_registrations")
+              .update({ status: "CANCELED", updated_by: student_id || existing.student_id, updated_at: new Date().toISOString() })
+              .eq("id", id)
+              .select()
+              .single();
+            if (!error) return res.json({ success: true, data });
+            if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura registration cancel error:", error);
+          } else if (readError.code !== "PGRST205" && readError.code !== "42P01") {
+            console.error("DB matura registration cancel lookup error:", readError);
+          }
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura registration cancel connection error:", dbErr);
+        }
+      }
+
       const registrations = readJsonFile("matura_registrations.json");
       const index = registrations.findIndex(item => item.id === id);
 
