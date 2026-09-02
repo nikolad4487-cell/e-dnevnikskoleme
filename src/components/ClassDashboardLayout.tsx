@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Menu, LogOut, Search, Settings, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Clock, Calendar, Home } from 'lucide-react';
+import { Menu, LogOut, Search, Settings, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Clock, Calendar, Home, GraduationCap } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
@@ -23,6 +23,7 @@ const STUDENT_NAV: NavItem[] = [
   { label: 'Ocjene', path: '/student/ocjene' },
   { label: 'Bilješke', path: '/student/biljeske' },
   { label: 'Ispiti', path: '/student/ispiti' },
+  { label: 'Matura', path: '/student/matura' },
   { label: 'Izostanci', path: '/student/izostanci' },
   { label: 'Raspored', path: '/student/raspored' },
   { label: 'Kalendar škole', path: '/student/kalendar' },
@@ -210,6 +211,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     { label: 'Ocjene', path: '/student/ocjene', icon: <BookOpen size={18} /> },
     { label: 'Bilješke', path: '/student/biljeske', icon: <FileText size={18} /> },
     { label: 'Ispiti', path: '/student/ispiti', icon: <ClipboardList size={18} /> },
+    { label: 'Matura', path: '/student/matura', icon: <GraduationCap size={18} /> },
     { label: 'Izostanci', path: '/student/izostanci', icon: <Clock size={18} /> },
     { label: 'Raspored', path: '/student/raspored', icon: <Calendar size={18} /> },
     { label: 'Informativka', path: '/student/informativka', icon: <List size={18} /> },
@@ -335,6 +337,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                         { label: 'Ocjene', path: '/student/ocjene', icon: <BookOpen size={14} /> },
                         { label: 'Bilješke', path: '/student/biljeske', icon: <FileText size={14} /> },
                         { label: 'Ispiti', path: '/student/ispiti', icon: <FileText size={14} /> },
+                        { label: 'Matura', path: '/student/matura', icon: <GraduationCap size={14} /> },
                         { label: 'Izostanci', path: '/student/izostanci', icon: <Clock size={14} /> },
                       ]
                     });

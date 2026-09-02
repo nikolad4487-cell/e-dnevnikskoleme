@@ -56,6 +56,7 @@ initJsonFile("competitions.json");
 initJsonFile("payments.json");
 initJsonFile("final_exam_defense_schedule.json");
 initJsonFile("final_exam_defense_commission_members.json");
+initJsonFile("matura_registrations.json");
 
 function readJsonFile(filename: string): any[] {
   try {
@@ -1854,6 +1855,106 @@ async function startServer() {
       writeJsonFile("final_thesis.json", filtered);
 
       res.json({ success: true, db_deleted: dbDeleted });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  const MATURA_LEVELS = new Set(["A_RAZINA", "B_RAZINA"]);
+
+  function normalizeMaturaSubject(value: any) {
+    return String(value || '').trim();
+  }
+
+  app.get("/api/matura-registrations", async (req, res) => {
+    try {
+      const { studentId, classId, schoolId } = req.query;
+      let registrations = readJsonFile("matura_registrations.json");
+
+      if (studentId) registrations = registrations.filter(item => item.student_id === studentId);
+      if (classId) registrations = registrations.filter(item => item.class_id === classId);
+      if (schoolId) registrations = registrations.filter(item => item.school_id === schoolId);
+
+      registrations.sort((a, b) => {
+        const byStatus = String(a.status || '').localeCompare(String(b.status || ''));
+        if (byStatus !== 0) return byStatus;
+        return String(a.subject_name || '').localeCompare(String(b.subject_name || ''), 'hr');
+      });
+
+      res.json(registrations);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/matura-registrations", async (req, res) => {
+    try {
+      const payload = req.body || {};
+      const studentId = String(payload.student_id || '').trim();
+      const subjectName = normalizeMaturaSubject(payload.subject_name);
+      const level = String(payload.level || '').trim();
+
+      if (!studentId || !subjectName || !MATURA_LEVELS.has(level)) {
+        return res.status(400).json({ error: "Učenik, predmet i razina mature su obavezni." });
+      }
+
+      const registrations = readJsonFile("matura_registrations.json");
+      const now = new Date().toISOString();
+      const existingIndex = registrations.findIndex(item =>
+        item.student_id === studentId &&
+        normalizeMaturaSubject(item.subject_name).toLowerCase() === subjectName.toLowerCase()
+      );
+
+      const nextRecord = {
+        ...(existingIndex >= 0 ? registrations[existingIndex] : {}),
+        id: existingIndex >= 0 ? registrations[existingIndex].id : crypto.randomUUID(),
+        student_id: studentId,
+        class_id: payload.class_id || null,
+        school_id: payload.school_id || null,
+        subject_name: subjectName,
+        level,
+        status: "REGISTERED",
+        exam_location: String(payload.exam_location || '').trim() || null,
+        created_at: existingIndex >= 0 ? registrations[existingIndex].created_at : now,
+        updated_at: now,
+      };
+
+      if (existingIndex >= 0) {
+        registrations[existingIndex] = nextRecord;
+      } else {
+        registrations.push(nextRecord);
+      }
+
+      writeJsonFile("matura_registrations.json", registrations);
+      res.json({ success: true, data: nextRecord });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put("/api/matura-registrations/:id/cancel", async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { student_id } = req.body || {};
+      const registrations = readJsonFile("matura_registrations.json");
+      const index = registrations.findIndex(item => item.id === id);
+
+      if (index === -1) {
+        return res.status(404).json({ error: "Prijava mature nije pronađena." });
+      }
+
+      if (student_id && registrations[index].student_id !== student_id) {
+        return res.status(403).json({ error: "Možete odjaviti samo vlastitu prijavu mature." });
+      }
+
+      registrations[index] = {
+        ...registrations[index],
+        status: "CANCELED",
+        updated_at: new Date().toISOString(),
+      };
+
+      writeJsonFile("matura_registrations.json", registrations);
+      res.json({ success: true, data: registrations[index] });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

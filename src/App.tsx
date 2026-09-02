@@ -35,6 +35,7 @@ const BiljeskePage = lazy(() => import('./pages/student/BiljeskePage'));
 const IzostanciPage = lazy(() => import('./pages/student/IzostanciPage'));
 const RasporedPage = lazy(() => import('./pages/student/RasporedPage'));
 const StudentIspitiPage = lazy(() => import('./pages/student/StudentIspitiPage'));
+const MaturaPage = lazy(() => import('./pages/student/MaturaPage'));
 const OsobniPodaciPage = lazy(() => import('./pages/student/OsobniPodaciPage'));
 const FinalThesisPage = lazy(() => import('./pages/student/FinalThesisPage'));
 const PotvrdePage = lazy(() => import('./pages/student/PotvrdePage'));
@@ -118,6 +119,7 @@ function TitleManager() {
       { match: "/dnevnik-rada", title: "e-Dnevnik - Dnevnik rada" },
       { match: "/kalendar-skole", title: "e-Dnevnik - Kalendar škole" },
       { match: "/raspored", title: "e-Dnevnik - Raspored" },
+      { match: "/matura", title: "e-Dnevnik - Matura" },
     ];
     
     const current = pageTitles.find((item) =>
@@ -310,6 +312,7 @@ export default function App() {
                           <Route path="ocjene" element={<OcjenePage />} />
                           <Route path="biljeske" element={<BiljeskePage />} />
                           <Route path="ispiti" element={<StudentIspitiPage />} />
+                          <Route path="matura" element={<MaturaPage />} />
                           <Route path="izostanci" element={<IzostanciPage />} />
                           <Route path="raspored" element={<RasporedPage />} />
                           <Route path="osobni-podaci" element={<OsobniPodaciPage />} />

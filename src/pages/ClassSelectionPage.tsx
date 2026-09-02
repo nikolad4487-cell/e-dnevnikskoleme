@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
 import { Role, SchoolYear, isSuperAdminUser, hasAnyRole } from '../types';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Calendar, Plus, Award, FileText, UserX, Clock, Building2, Shield, ChevronDown } from 'lucide-react';
+import { ArrowRight, Calendar, Plus, Award, FileText, UserX, Clock, Building2, Shield, ChevronDown, GraduationCap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { cn, getProgramDisplayName, getRoleLabel } from '../lib/utils';
 import { Header } from '../components/Header';
@@ -673,6 +673,7 @@ export default function ClassSelectionPage() {
     { label: 'Ocjene', path: 'ocjene', icon: Award, color: 'text-blue-600 bg-blue-50 border-blue-200 hover:bg-blue-100/70' },
     { label: 'Bilješke', path: 'biljeske', icon: FileText, color: 'text-amber-600 bg-amber-50 border-amber-200 hover:bg-amber-100/70' },
     { label: 'Ispiti', path: 'ispiti', icon: Calendar, color: 'text-purple-600 bg-purple-50 border-purple-200 hover:bg-purple-100/70' },
+    { label: 'Matura', path: 'matura', icon: GraduationCap, color: 'text-sky-600 bg-sky-50 border-sky-200 hover:bg-sky-100/70' },
     { label: 'Izostanci', path: 'izostanci', icon: UserX, color: 'text-rose-600 bg-rose-50 border-rose-200 hover:bg-rose-100/70' },
     { label: 'Raspored', path: 'raspored', icon: Clock, color: 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100/70' },
   ];
