@@ -235,6 +235,7 @@ export default function App() {
                           <Route path="system-health" element={<SystemHealthPage />} />
                           <Route path="raspored" element={<ScheduleManagementPage />} />
                           <Route path="informativka" element={<InformativkaAdminPage />} />
+                          <Route path="matura" element={<MaturaTeacherPage />} />
                           <Route path="ravnatelj-dashboard" element={<RavnateljDashboardPage />} />
                           <Route path="maticna-knjiga" element={<MaticnaKnjigaPage />} />
                           <Route path="arhiva" element={<ArhivaPage />} />

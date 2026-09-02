@@ -57,6 +57,11 @@ initJsonFile("payments.json");
 initJsonFile("final_exam_defense_schedule.json");
 initJsonFile("final_exam_defense_commission_members.json");
 initJsonFile("matura_registrations.json");
+initJsonFile("matura_settings.json");
+initJsonFile("matura_exam_schedule.json");
+initJsonFile("matura_results.json");
+initJsonFile("matura_objections.json");
+initJsonFile("matura_study_applications.json");
 
 function readJsonFile(filename: string): any[] {
   try {
@@ -1955,6 +1960,259 @@ async function startServer() {
 
       writeJsonFile("matura_registrations.json", registrations);
       res.json({ success: true, data: registrations[index] });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/matura-settings", (req, res) => {
+    try {
+      const { schoolId } = req.query;
+      const settings = readJsonFile("matura_settings.json");
+      const record = settings.find(item => !schoolId || item.school_id === schoolId) || null;
+      res.json(record);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/matura-settings", (req, res) => {
+    try {
+      const payload = req.body || {};
+      const schoolId = String(payload.school_id || '').trim();
+      if (!schoolId) return res.status(400).json({ error: "Škola je obavezna." });
+
+      const settings = readJsonFile("matura_settings.json");
+      const now = new Date().toISOString();
+      const index = settings.findIndex(item => item.school_id === schoolId);
+      const record = {
+        ...(index >= 0 ? settings[index] : {}),
+        id: index >= 0 ? settings[index].id : crypto.randomUUID(),
+        school_id: schoolId,
+        registration_opens_at: payload.registration_opens_at || null,
+        registration_closes_at: payload.registration_closes_at || null,
+        cancellation_closes_at: payload.cancellation_closes_at || null,
+        study_program_changes_close_at: payload.study_program_changes_close_at || null,
+        objection_opens_at: payload.objection_opens_at || null,
+        objection_closes_at: payload.objection_closes_at || null,
+        updated_at: now,
+        created_at: index >= 0 ? settings[index].created_at : now,
+      };
+      if (index >= 0) settings[index] = record;
+      else settings.push(record);
+      writeJsonFile("matura_settings.json", settings);
+      res.json({ success: true, data: record });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/matura-exam-schedule", (req, res) => {
+    try {
+      const { schoolId } = req.query;
+      let items = readJsonFile("matura_exam_schedule.json");
+      if (schoolId) items = items.filter(item => item.school_id === schoolId || !item.school_id);
+      items.sort((a, b) => String(a.exam_at || '').localeCompare(String(b.exam_at || '')));
+      res.json(items);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/matura-exam-schedule", (req, res) => {
+    try {
+      const payload = req.body || {};
+      if (!payload.subject_name || !payload.exam_at) {
+        return res.status(400).json({ error: "Predmet i vrijeme ispita su obavezni." });
+      }
+      const items = readJsonFile("matura_exam_schedule.json");
+      const now = new Date().toISOString();
+      const record = {
+        id: crypto.randomUUID(),
+        school_id: payload.school_id || null,
+        subject_name: normalizeMaturaSubject(payload.subject_name),
+        level: payload.level || "JEDNA_RAZINA",
+        exam_at: payload.exam_at,
+        room: String(payload.room || '').trim() || null,
+        note: String(payload.note || '').trim() || null,
+        created_at: now,
+        updated_at: now,
+      };
+      items.push(record);
+      writeJsonFile("matura_exam_schedule.json", items);
+      res.json({ success: true, data: record });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/matura-exam-schedule/:id", (req, res) => {
+    try {
+      const items = readJsonFile("matura_exam_schedule.json");
+      writeJsonFile("matura_exam_schedule.json", items.filter(item => item.id !== req.params.id));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/matura-results", (req, res) => {
+    try {
+      const { studentId, schoolId } = req.query;
+      let items = readJsonFile("matura_results.json");
+      if (studentId) items = items.filter(item => item.student_id === studentId);
+      if (schoolId) items = items.filter(item => item.school_id === schoolId || !item.school_id);
+      res.json(items);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/matura-results", (req, res) => {
+    try {
+      const payload = req.body || {};
+      if (!payload.student_id || !payload.subject_name) {
+        return res.status(400).json({ error: "Učenik i predmet su obavezni." });
+      }
+      const items = readJsonFile("matura_results.json");
+      const now = new Date().toISOString();
+      const index = items.findIndex(item =>
+        item.student_id === payload.student_id &&
+        normalizeMaturaSubject(item.subject_name).toLowerCase() === normalizeMaturaSubject(payload.subject_name).toLowerCase() &&
+        String(item.level || "JEDNA_RAZINA") === String(payload.level || "JEDNA_RAZINA")
+      );
+      const record = {
+        ...(index >= 0 ? items[index] : {}),
+        id: index >= 0 ? items[index].id : crypto.randomUUID(),
+        student_id: payload.student_id,
+        school_id: payload.school_id || null,
+        subject_name: normalizeMaturaSubject(payload.subject_name),
+        level: payload.level || "JEDNA_RAZINA",
+        status: payload.status || "Uredno pristupanje",
+        points: Number(payload.points || 0),
+        max_points: Number(payload.max_points || 100),
+        percentage: Number(payload.percentage || 0),
+        grade: String(payload.grade || '').trim() || null,
+        rank: payload.rank ? Number(payload.rank) : null,
+        participants_count: payload.participants_count ? Number(payload.participants_count) : null,
+        percentile: payload.percentile ? Number(payload.percentile) : null,
+        updated_at: now,
+        created_at: index >= 0 ? items[index].created_at : now,
+      };
+      if (index >= 0) items[index] = record;
+      else items.push(record);
+      writeJsonFile("matura_results.json", items);
+      res.json({ success: true, data: record });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/matura-objections", (req, res) => {
+    try {
+      const { studentId, schoolId } = req.query;
+      let items = readJsonFile("matura_objections.json");
+      if (studentId) items = items.filter(item => item.student_id === studentId);
+      if (schoolId) items = items.filter(item => item.school_id === schoolId || !item.school_id);
+      res.json(items);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/matura-objections", (req, res) => {
+    try {
+      const payload = req.body || {};
+      const settings = readJsonFile("matura_settings.json").find(item => !payload.school_id || item.school_id === payload.school_id);
+      const nowDate = new Date();
+      if (settings?.objection_opens_at && nowDate < new Date(settings.objection_opens_at)) {
+        return res.status(400).json({ error: "Rok za unos prigovora još nije započeo." });
+      }
+      if (settings?.objection_closes_at && nowDate > new Date(settings.objection_closes_at)) {
+        return res.status(400).json({ error: "Rok za unos prigovora je istekao." });
+      }
+      if (!payload.student_id || !payload.subject_name || !String(payload.text || '').trim()) {
+        return res.status(400).json({ error: "Predmet i tekst prigovora su obavezni." });
+      }
+      const items = readJsonFile("matura_objections.json");
+      const now = new Date().toISOString();
+      const record = {
+        id: crypto.randomUUID(),
+        student_id: payload.student_id,
+        school_id: payload.school_id || null,
+        subject_name: normalizeMaturaSubject(payload.subject_name),
+        text: String(payload.text).trim(),
+        status: "ZAPRIMLJENO",
+        created_at: now,
+        updated_at: now,
+      };
+      items.push(record);
+      writeJsonFile("matura_objections.json", items);
+      res.json({ success: true, data: record });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  const DEFAULT_STUDY_PROGRAMS = [
+    "Sveučilište u Zagrebu - Učiteljski fakultet Sveučilišta u Zagrebu - Učiteljski studij - Zagreb (Redovni integrirani prijediplomski i diplomski studij)",
+    "Sveučilište u Zagrebu - Učiteljski fakultet Sveučilišta u Zagrebu - Učiteljski studij - Petrinja (Redovni integrirani prijediplomski i diplomski studij)",
+    "Sveučilište u Slavonskom Brodu - Odjel društveno-humanističkih znanosti - Učiteljski studij - Slavonski Brod (Redovni integrirani prijediplomski i diplomski studij)",
+    "Veleučilište u Karlovcu - Poduzetništvo u turizmu i ugostiteljstvu - Karlovac (Redovni prijediplomski stručni studij)",
+    "Veleučilište u Rijeci - Informatika - Rijeka (Redovni prijediplomski stručni studij)",
+    "Veleučilište u Karlovcu - Sigurnost i zaštita - Karlovac (Redovni prijediplomski stručni studij)",
+    "Sveučilište Jurja Dobrile u Puli - Fakultet za odgojne i obrazovne znanosti - Učiteljski studij (na hrvatskom jeziku) - Pula (Redovni integrirani prijediplomski i diplomski studij)",
+    "Sveučilište Jurja Dobrile u Puli - Fakultet informatike u Puli - Informatika - Pula (Redovni prijediplomski sveučilišni studij)",
+    "Sveučilište Jurja Dobrile u Puli - Tehnički fakultet u Puli - Računarstvo - Pula (Redovni prijediplomski sveučilišni studij)",
+    "Veleučilište u Šibeniku - Računarstvo - Šibenik (Redovni prijediplomski stručni studij)"
+  ];
+
+  app.get("/api/matura-study-applications", (req, res) => {
+    try {
+      const { studentId } = req.query;
+      let items = readJsonFile("matura_study_applications.json");
+      if (studentId) items = items.filter(item => item.student_id === studentId);
+      if (studentId && items.length === 0) {
+        items = DEFAULT_STUDY_PROGRAMS.map((name, index) => ({
+          id: crypto.randomUUID(),
+          student_id: studentId,
+          priority_index: index + 1,
+          name,
+          is_currently_admitted: index === 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }));
+        const all = readJsonFile("matura_study_applications.json");
+        writeJsonFile("matura_study_applications.json", [...all, ...items]);
+      }
+      items.sort((a, b) => Number(a.priority_index || 0) - Number(b.priority_index || 0));
+      res.json(items);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/matura-study-applications", (req, res) => {
+    try {
+      const payload = req.body || {};
+      const studentId = String(payload.student_id || '').trim();
+      const programs = Array.isArray(payload.programs) ? payload.programs : [];
+      if (!studentId) return res.status(400).json({ error: "Učenik je obavezan." });
+      if (programs.length > 10) return res.status(400).json({ error: "Moguće je odabrati najviše 10 studijskih programa." });
+
+      const all = readJsonFile("matura_study_applications.json").filter(item => item.student_id !== studentId);
+      const now = new Date().toISOString();
+      const next = programs.map((program: any, index: number) => ({
+        id: program.id || crypto.randomUUID(),
+        student_id: studentId,
+        priority_index: index + 1,
+        name: String(program.name || '').trim(),
+        is_currently_admitted: index === 0,
+        created_at: program.created_at || now,
+        updated_at: now,
+      })).filter((program: any) => program.name);
+      writeJsonFile("matura_study_applications.json", [...all, ...next]);
+      res.json({ success: true, data: next });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
