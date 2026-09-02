@@ -1,6 +1,6 @@
 import React from 'react';
 import { toast } from 'react-hot-toast';
-import { Calendar, GraduationCap, RotateCcw, Save, Send, Trash2 } from 'lucide-react';
+import { Calendar, GraduationCap, RotateCcw, Save, Search, Send, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -27,7 +27,23 @@ type StudyApplication = {
   student_id: string;
   priority_index: number;
   name: string;
+  city?: string | null;
+  institution?: string | null;
+  requirements?: StudyProgramRequirements | null;
   is_currently_admitted?: boolean;
+};
+
+type StudyProgramRequirements = {
+  requiredLevels: Record<string, 'A' | 'B' | '-'>;
+  electiveRules: Record<string, '+' | '-' | '*'>;
+};
+
+type StudyProgramOption = {
+  name: string;
+  city: string;
+  institution: string;
+  info: string;
+  requirements: StudyProgramRequirements;
 };
 
 type MaturaResult = {
@@ -61,6 +77,50 @@ type MaturaSettings = {
 
 const FOREIGN_LANGUAGE_NAMES = ['Engleski jezik', 'Njemački jezik', 'Francuski jezik', 'Talijanski jezik', 'Španjolski jezik'];
 const ELECTIVE_SUBJECTS = ['Biologija', 'Povijest', 'Geografija', 'Politika i gospodarstvo', 'Fizika', 'Logika', 'Filozofija', 'Likovna umjetnost', 'Psihologija', 'Informatika', 'Kemija', 'Sociologija', 'Vjeronauk', 'Glazbena umjetnost', 'Etika'];
+const MAX_ELECTIVE_REGISTRATIONS = 6;
+
+const STUDY_PROGRAM_CATALOG: StudyProgramOption[] = [
+  {
+    name: 'Sveučilište u Zadru - Pomorski odjel Sveučilišta u Zadru - Nautika i tehnologija pomorskog prometa - Zadar (Redovni preddiplomski sveučilišni studij)',
+    city: 'Zadar',
+    institution: 'Sveučilište u Zadru',
+    info: '180 bodova, 3 godine, redovni preddiplomski sveučilišni studij',
+    requirements: {
+      requiredLevels: { 'Hrvatski jezik': 'B', 'Matematika': 'B', 'Engleski jezik': 'B', 'Njemački jezik': 'B' },
+      electiveRules: { 'Politika i gospodarstvo': '+', 'Likovna umjetnost': '-', Informatika: '*', Fizika: '*', Geografija: '-' },
+    },
+  },
+  {
+    name: 'Sveučilište u Zadru - Pomorski odjel Sveučilišta u Zadru - Brodostrojarstvo i tehnologija pomorskog prometa - Zadar (Redovni preddiplomski sveučilišni studij)',
+    city: 'Zadar',
+    institution: 'Sveučilište u Zadru',
+    info: '180 bodova, 3 godine, redovni preddiplomski sveučilišni studij',
+    requirements: {
+      requiredLevels: { 'Hrvatski jezik': 'B', 'Matematika': 'B', 'Engleski jezik': 'B', 'Njemački jezik': 'B' },
+      electiveRules: { 'Politika i gospodarstvo': '+', Informatika: '*', Fizika: '*', Kemija: '-' },
+    },
+  },
+  {
+    name: 'Sveučilište u Zagrebu - Arhitektonski fakultet Sveučilišta u Zagrebu - Arhitektura i urbanizam - Zagreb (Redovni preddiplomski sveučilišni studij)',
+    city: 'Zagreb',
+    institution: 'Sveučilište u Zagrebu',
+    info: '180 bodova, 3 godine, redovni preddiplomski sveučilišni studij',
+    requirements: {
+      requiredLevels: { 'Hrvatski jezik': 'A', 'Matematika': 'B', 'Engleski jezik': 'A', 'Njemački jezik': 'A' },
+      electiveRules: { 'Likovna umjetnost': '+', Fizika: '-', Informatika: '-', Povijest: '*' },
+    },
+  },
+  {
+    name: 'Veleučilište u Rijeci - Informatika - Rijeka (Redovni prijediplomski stručni studij)',
+    city: 'Rijeka',
+    institution: 'Veleučilište u Rijeci',
+    info: '180 bodova, 3 godine, redovni prijediplomski stručni studij',
+    requirements: {
+      requiredLevels: { 'Hrvatski jezik': 'B', 'Matematika': 'B', 'Engleski jezik': 'B', 'Njemački jezik': 'B' },
+      electiveRules: { Informatika: '+', Logika: '-', Fizika: '*', Matematika: '*' },
+    },
+  },
+];
 
 const levelLabels: Record<MaturaLevel, string> = {
   A_RAZINA: 'A',
@@ -126,6 +186,8 @@ export default function MaturaPage() {
   const [schoolInfo, setSchoolInfo] = React.useState<{ name: string; address?: string; city?: string } | null>(null);
   const [objectionSubject, setObjectionSubject] = React.useState('');
   const [objectionText, setObjectionText] = React.useState('');
+  const [isStudySearchOpen, setIsStudySearchOpen] = React.useState(false);
+  const [studySearch, setStudySearch] = React.useState('');
   const [saving, setSaving] = React.useState(false);
 
   const requiredSubjects = React.useMemo(() => ['Hrvatski jezik', 'Matematika', foreignLanguage], [foreignLanguage]);
@@ -134,6 +196,11 @@ export default function MaturaPage() {
   const schoolLocationLine = [parsedSchoolAddress.address, parsedSchoolAddress.city || schoolInfo?.city].filter(Boolean).join(', ');
   const examLocation = schoolInfo ? [schoolInfo.name, schoolLocationLine].filter(Boolean).join(', ') : '';
   const canSubmitObjection = canEdit && hasOpenDeadline(settings);
+  const isRequiredSubject = React.useCallback((subjectName: string) => requiredSubjects.includes(subjectName), [requiredSubjects]);
+  const isPassingResult = (result?: MaturaResult) => {
+    if (!result?.grade) return false;
+    return !/nedovoljan|\(1\)|^1$/i.test(result.grade);
+  };
 
   const fetchAll = React.useCallback(async () => {
     if (!targetStudentId) return;
@@ -182,6 +249,13 @@ export default function MaturaPage() {
 
   const saveRegistration = async (subjectName: string, selectedLevel: MaturaLevel) => {
     if (!targetStudentId || !canEdit) return;
+    const activeRegistrations = registrations.filter(item => item.status === 'REGISTERED');
+    const electiveCount = activeRegistrations.filter(item => !isRequiredSubject(item.subject_name)).length;
+    const existingRegistration = activeRegistrations.find(item => item.subject_name === subjectName);
+    if (!isRequiredSubject(subjectName) && !existingRegistration && electiveCount >= MAX_ELECTIVE_REGISTRATIONS) {
+      toast.error('Možete prijaviti najviše 6 izbornih ispita državne mature.');
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch('/api/matura-registrations', {
@@ -248,6 +322,39 @@ export default function MaturaPage() {
     await fetchAll();
   };
 
+  const addStudyApplication = async (program: StudyProgramOption) => {
+    if (!targetStudentId) return;
+    if (studyApplications.length >= 10) {
+      toast.error('Možete odabrati najviše 10 studijskih programa.');
+      return;
+    }
+    if (studyApplications.some(item => item.name === program.name)) {
+      toast.error('Ovaj studijski program je već odabran.');
+      return;
+    }
+    const next = [...studyApplications, {
+      id: crypto.randomUUID(),
+      student_id: targetStudentId,
+      priority_index: studyApplications.length + 1,
+      name: program.name,
+      city: program.city,
+      institution: program.institution,
+      requirements: program.requirements,
+    }];
+    const response = await fetch('/api/matura-study-applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: targetStudentId, programs: next }),
+    });
+    if (!response.ok) {
+      toast.error('Studijski program nije dodan.');
+      return;
+    }
+    setIsStudySearchOpen(false);
+    setStudySearch('');
+    await fetchAll();
+  };
+
   const submitObjection = async () => {
     if (!targetStudentId || !objectionSubject || !objectionText.trim()) {
       toast.error('Odaberite predmet i upišite prigovor.');
@@ -274,9 +381,20 @@ export default function MaturaPage() {
   };
 
   const activeRegistrations = registrations.filter(item => item.status === 'REGISTERED');
+  const requiredRegistrations = activeRegistrations.filter(item => isRequiredSubject(item.subject_name));
+  const electiveRegistrations = activeRegistrations.filter(item => !isRequiredSubject(item.subject_name));
   const registeredBySubject = new Map(activeRegistrations.map(item => [item.subject_name, item]));
   const resultBySubject = new Map(results.map(item => [item.subject_name, item]));
+  const passedResults = results.filter(item => isPassingResult(item));
+  const passedBySubject = new Map(passedResults.map(item => [item.subject_name, item]));
   const objectionSubjects = results.length ? results.map(item => item.subject_name) : activeRegistrations.map(item => item.subject_name);
+  const registeredRequiredSubjects = requiredSubjects.filter(subject => registeredBySubject.has(subject));
+  const registeredElectiveSubjects = ELECTIVE_SUBJECTS.filter(subject => registeredBySubject.has(subject));
+  const passedRequiredSubjects = requiredSubjects.filter(subject => passedBySubject.has(subject));
+  const passedElectiveSubjects = ELECTIVE_SUBJECTS.filter(subject => passedBySubject.has(subject));
+  const filteredStudyPrograms = STUDY_PROGRAM_CATALOG.filter(program =>
+    `${program.name} ${program.city} ${program.institution}`.toLowerCase().includes(studySearch.trim().toLowerCase())
+  );
 
   return (
     <div className="p-4 md:p-6 w-full min-h-full bg-white font-sans">
@@ -364,21 +482,8 @@ export default function MaturaPage() {
               <div className="px-4 py-12 text-center text-sm text-slate-400 italic">Nema prijavljenih ispita državne mature.</div>
             ) : (
               <div className="divide-y divide-slate-100">
-                {activeRegistrations.map(registration => (
-                  <div key={registration.id} className="px-4 py-4 grid grid-cols-1 lg:grid-cols-[1fr_110px_150px_90px] gap-3 lg:items-center">
-                    <div>
-                      <div className="text-sm font-black text-slate-950">{registration.subject_name}</div>
-                      <div className="text-xs text-slate-500 font-medium mt-1">{registration.exam_location || 'Mjesto pisanja nije uneseno'}</div>
-                    </div>
-                    <div className="text-sm font-black text-[#005c8d]">{fullLevelLabels[registration.level]}</div>
-                    <div className="text-xs text-slate-500 font-medium">{formatDateTime(registration.updated_at || registration.created_at)}</div>
-                    {canEdit && (
-                      <button type="button" onClick={() => cancelRegistration(registration)} disabled={saving} className="inline-flex items-center justify-center gap-2 border border-red-200 text-red-700 hover:bg-red-50 px-3 py-2 rounded-sm text-[10px] font-black uppercase tracking-widest">
-                        <RotateCcw size={13} /> Odjavi
-                      </button>
-                    )}
-                  </div>
-                ))}
+                <RegistrationGroup title={`Obavezni ispiti (${requiredRegistrations.length}/3)`} items={requiredRegistrations} canEdit={canEdit} saving={saving} onCancel={cancelRegistration} />
+                <RegistrationGroup title={`Izborni ispiti (${electiveRegistrations.length}/${MAX_ELECTIVE_REGISTRATIONS})`} items={electiveRegistrations} canEdit={canEdit} saving={saving} onCancel={cancelRegistration} />
               </div>
             )}
           </section>
@@ -395,6 +500,11 @@ export default function MaturaPage() {
               <table className="min-w-[460px] text-xs">
                 <thead><tr><th>Prioritet</th><th>Naziv</th><th>Brisanje</th></tr></thead>
                 <tbody>
+                  {studyApplications.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="text-slate-500">Nema odabranih studijskih programa</td>
+                    </tr>
+                  )}
                   {studyApplications.map((program, index) => (
                     <tr key={program.id}>
                       <td className="w-24 align-top">
@@ -409,11 +519,38 @@ export default function MaturaPage() {
                 </tbody>
               </table>
             </div>
+            <div className="px-4 py-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setIsStudySearchOpen(true)}
+                className="text-[#005c8d] underline font-bold text-sm disabled:text-slate-300"
+                disabled={!canEdit || studyApplications.length >= 10}
+              >
+                Odaberi novi studijski program
+              </button>
+            </div>
           </section>
 
           <section className="space-y-6">
-            <MaturaRequirementsTable title="Obavezni dio državne mature" subjects={requiredSubjects} registrations={registeredBySubject} results={resultBySubject} withLevel />
-            <MaturaRequirementsTable title="Izborni dio državne mature" subjects={ELECTIVE_SUBJECTS.filter(subject => registeredBySubject.has(subject) || resultBySubject.has(subject)).slice(0, 6)} registrations={registeredBySubject} results={resultBySubject} />
+            <MaturaRequirementsTable
+              title="Obavezni dio državne mature"
+              emptyText="Nema odabranih obaveznih predmeta državne mature"
+              registeredSubjects={registeredRequiredSubjects}
+              passedSubjects={passedRequiredSubjects}
+              registrations={registeredBySubject}
+              passedResults={passedBySubject}
+              studyApplications={studyApplications}
+              withLevel
+            />
+            <MaturaRequirementsTable
+              title="Izborni dio državne mature"
+              emptyText="Nema odabranih izbornih predmeta državne mature"
+              registeredSubjects={registeredElectiveSubjects}
+              passedSubjects={passedElectiveSubjects}
+              registrations={registeredBySubject}
+              passedResults={passedBySubject}
+              studyApplications={studyApplications}
+            />
             <div className="text-xs text-[#005c8d] leading-relaxed font-medium">
               <p className="font-black mb-2 text-slate-700">Legenda:</p>
               <p>'+' - predmet je obvezan za upis</p>
@@ -421,6 +558,48 @@ export default function MaturaPage() {
               <p>'*' - jedan ili više predmeta u grupi je obvezno za upis</p>
             </div>
           </section>
+        </div>
+      )}
+
+      {isStudySearchOpen && (
+        <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-300 shadow-2xl w-full max-w-5xl max-h-[88vh] overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+              <div>
+                <h2 className="text-xl font-black text-slate-700">Pretraživanje studijskih programa</h2>
+                <p className="text-xs text-slate-500 font-medium mt-1">Klikom na “Odaberi” program se dodaje na listu prioriteta.</p>
+              </div>
+              <button onClick={() => setIsStudySearchOpen(false)} className="p-2 text-slate-500 hover:text-slate-900">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-4 border-b bg-white">
+              <div className="relative max-w-md">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input value={studySearch} onChange={(event) => setStudySearch(event.target.value)} placeholder="Dio naziva studijskog programa ili visokog učilišta..." className="pl-9" />
+              </div>
+            </div>
+            <div className="overflow-auto">
+              <table className="min-w-[860px] text-sm">
+                <thead><tr><th>Naziv studija</th><th>Mjesto izvođenja</th><th>Osnovne informacije</th><th>Odabir</th></tr></thead>
+                <tbody>
+                  {filteredStudyPrograms.map(program => (
+                    <tr key={program.name}>
+                      <td className="text-[#005c8d] underline font-bold">{program.name}</td>
+                      <td>{program.city}</td>
+                      <td>{program.institution}: {program.info}</td>
+                      <td>
+                        <button className="text-[#005c8d] underline font-black" onClick={() => addStudyApplication(program)}>
+                          Odaberi
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {filteredStudyPrograms.length === 0 && <tr><td colSpan={4} className="text-center text-slate-400 italic">Nema pronađenih studijskih programa.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
 
@@ -498,15 +677,58 @@ export default function MaturaPage() {
   );
 }
 
-function MaturaRequirementsTable({ title, subjects, registrations, results, withLevel = false }: {
+function RegistrationGroup({ title, items, canEdit, saving, onCancel }: {
   title: string;
-  subjects: string[];
+  items: MaturaRegistration[];
+  canEdit: boolean;
+  saving: boolean;
+  onCancel: (registration: MaturaRegistration) => void;
+}) {
+  return (
+    <div>
+      <div className="px-4 py-2 bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-500 border-b border-slate-100">{title}</div>
+      {items.length === 0 ? (
+        <div className="px-4 py-5 text-sm text-slate-400 italic">Nema prijavljenih ispita u ovoj skupini.</div>
+      ) : items.map(registration => (
+        <div key={registration.id} className="px-4 py-4 grid grid-cols-1 lg:grid-cols-[1fr_110px_150px_90px] gap-3 lg:items-center border-b border-slate-100 last:border-b-0">
+          <div>
+            <div className="text-sm font-black text-slate-950">{registration.subject_name}</div>
+            <div className="text-xs text-slate-500 font-medium mt-1">{registration.exam_location || 'Mjesto pisanja nije uneseno'}</div>
+          </div>
+          <div className="text-sm font-black text-[#005c8d]">{fullLevelLabels[registration.level]}</div>
+          <div className="text-xs text-slate-500 font-medium">{formatDateTime(registration.updated_at || registration.created_at)}</div>
+          {canEdit && (
+            <button type="button" onClick={() => onCancel(registration)} disabled={saving} className="inline-flex items-center justify-center gap-2 border border-red-200 text-red-700 hover:bg-red-50 px-3 py-2 rounded-sm text-[10px] font-black uppercase tracking-widest">
+              <RotateCcw size={13} /> Odjavi
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MaturaRequirementsTable({ title, emptyText, registeredSubjects, passedSubjects, registrations, passedResults, studyApplications, withLevel = false }: {
+  title: string;
+  emptyText: string;
+  registeredSubjects: string[];
+  passedSubjects: string[];
   registrations: Map<string, MaturaRegistration>;
-  results: Map<string, MaturaResult>;
+  passedResults: Map<string, MaturaResult>;
+  studyApplications: StudyApplication[];
   withLevel?: boolean;
 }) {
   const columns = Array.from({ length: 10 }, (_, index) => index + 1);
-  const rowSubjects = subjects.length ? subjects : ['-'];
+  const registeredRows = registeredSubjects;
+  const passedRows = passedSubjects;
+  const getRequiredLevel = (subject: string, columnIndex: number) => {
+    const program = studyApplications[columnIndex];
+    return program?.requirements?.requiredLevels?.[subject] || '-';
+  };
+  const getElectiveRule = (subject: string, columnIndex: number) => {
+    const program = studyApplications[columnIndex];
+    return program?.requirements?.electiveRules?.[subject] || '-';
+  };
 
   return (
     <section>
@@ -526,31 +748,45 @@ function MaturaRequirementsTable({ title, subjects, registrations, results, with
               {withLevel && <td />}
               <td colSpan={10}>Zahtjev studijskih programa</td>
             </tr>
-            {rowSubjects.map(subject => {
+            {registeredRows.length === 0 && (
+              <tr>
+                <td colSpan={withLevel ? 12 : 11} className="text-slate-500">{emptyText}</td>
+              </tr>
+            )}
+            {registeredRows.map(subject => {
               const registration = registrations.get(subject);
-              const result = results.get(subject);
               return (
                 <tr key={subject}>
                   <td className="text-[#1f5fa8]">{subject}</td>
-                  {withLevel && <td>{registration ? levelLabels[registration.level] : result ? levelLabels[result.level] : ''}</td>}
-                  {columns.map(col => <td key={col} className="text-center">{registration || result ? (withLevel ? (registration ? levelLabels[registration.level] : '*') : '+') : '-'}</td>)}
+                  {withLevel && <td>{registration ? levelLabels[registration.level] : ''}</td>}
+                  {columns.map((col, index) => (
+                    <td key={col} className="text-center">
+                      {withLevel ? getRequiredLevel(subject, index) : getElectiveRule(subject, index)}
+                    </td>
+                  ))}
                 </tr>
               );
             })}
-            <tr>
-              <td>Položeni ispiti</td>
-              {withLevel && <td />}
-              <td colSpan={10}>Zahtjev studijskih programa</td>
-            </tr>
-            {rowSubjects.map(subject => {
-              const result = results.get(subject);
-              return (
-                <tr key={`${subject}-result`}>
+            {passedRows.length > 0 && (
+              <tr>
+                <td>Položeni ispiti</td>
+                {withLevel && <td />}
+                <td colSpan={10}>Zahtjev studijskih programa</td>
+              </tr>
+            )}
+            {passedRows.map(subject => {
+              const result = passedResults.get(subject);
+              return result ? (
+                <tr key={`${subject}-passed`}>
                   <td className="text-[#1f5fa8]">{subject}</td>
-                  {withLevel && <td>{result ? levelLabels[result.level] : ''}</td>}
-                  {columns.map(col => <td key={col} className="text-center">{result ? (withLevel ? `*${levelLabels[result.level]}` : '+') : '-'}</td>)}
+                  {withLevel && <td>{levelLabels[result.level]}</td>}
+                  {columns.map((col, index) => (
+                    <td key={col} className="text-center">
+                      {withLevel ? getRequiredLevel(subject, index) : getElectiveRule(subject, index)}
+                    </td>
+                  ))}
                 </tr>
-              );
+              ) : null;
             })}
           </tbody>
         </table>

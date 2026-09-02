@@ -1866,6 +1866,7 @@ async function startServer() {
   });
 
   const MATURA_LEVELS = new Set(["A_RAZINA", "B_RAZINA", "JEDNA_RAZINA"]);
+  const MATURA_ELECTIVE_SUBJECTS = new Set(["Biologija", "Povijest", "Geografija", "Politika i gospodarstvo", "Fizika", "Logika", "Filozofija", "Likovna umjetnost", "Psihologija", "Informatika", "Kemija", "Sociologija", "Vjeronauk", "Glazbena umjetnost", "Etika"]);
 
   function normalizeMaturaSubject(value: any) {
     return String(value || '').trim();
@@ -1909,6 +1910,18 @@ async function startServer() {
         item.student_id === studentId &&
         normalizeMaturaSubject(item.subject_name).toLowerCase() === subjectName.toLowerCase()
       );
+
+      if (existingIndex === -1) {
+        const activeStudentRegistrations = registrations.filter(item => item.student_id === studentId && item.status === "REGISTERED");
+        const electiveCount = activeStudentRegistrations.filter(item => MATURA_ELECTIVE_SUBJECTS.has(normalizeMaturaSubject(item.subject_name))).length;
+        const requiredCount = activeStudentRegistrations.length - electiveCount;
+        if (MATURA_ELECTIVE_SUBJECTS.has(subjectName) && electiveCount >= 6) {
+          return res.status(400).json({ error: "Možete prijaviti najviše 6 izbornih ispita državne mature." });
+        }
+        if (!MATURA_ELECTIVE_SUBJECTS.has(subjectName) && requiredCount >= 3) {
+          return res.status(400).json({ error: "Možete prijaviti najviše 3 obavezna ispita državne mature." });
+        }
+      }
 
       const nextRecord = {
         ...(existingIndex >= 0 ? registrations[existingIndex] : {}),
@@ -2172,18 +2185,13 @@ async function startServer() {
       const { studentId } = req.query;
       let items = readJsonFile("matura_study_applications.json");
       if (studentId) items = items.filter(item => item.student_id === studentId);
-      if (studentId && items.length === 0) {
-        items = DEFAULT_STUDY_PROGRAMS.map((name, index) => ({
-          id: crypto.randomUUID(),
-          student_id: studentId,
-          priority_index: index + 1,
-          name,
-          is_currently_admitted: index === 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }));
-        const all = readJsonFile("matura_study_applications.json");
-        writeJsonFile("matura_study_applications.json", [...all, ...items]);
+      const defaultProgramNames = new Set(DEFAULT_STUDY_PROGRAMS);
+      const hasOnlySeededDefaults = items.length > 0 && items.every(item => defaultProgramNames.has(item.name));
+      if (studentId && hasOnlySeededDefaults) {
+        const all = readJsonFile("matura_study_applications.json")
+          .filter(item => item.student_id !== studentId || !defaultProgramNames.has(item.name));
+        writeJsonFile("matura_study_applications.json", all);
+        items = [];
       }
       items.sort((a, b) => Number(a.priority_index || 0) - Number(b.priority_index || 0));
       res.json(items);
@@ -2207,6 +2215,9 @@ async function startServer() {
         student_id: studentId,
         priority_index: index + 1,
         name: String(program.name || '').trim(),
+        city: String(program.city || '').trim() || null,
+        institution: String(program.institution || '').trim() || null,
+        requirements: program.requirements || null,
         is_currently_admitted: index === 0,
         created_at: program.created_at || now,
         updated_at: now,
