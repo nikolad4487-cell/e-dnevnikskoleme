@@ -110,6 +110,15 @@ const formatDateTime = (value?: string) => {
   });
 };
 
+const isCroatianExamPart = (value?: string | null) => ['Test + sažetak', 'Esej'].includes(String(value || '').trim());
+
+const formatScheduleSubject = (item: MaturaScheduleItem) => {
+  const part = String(item.room || '').trim();
+  return item.subject_name === 'Hrvatski jezik' && isCroatianExamPart(part)
+    ? `${item.subject_name}: ${part}`
+    : item.subject_name;
+};
+
 export default function MaturaTeacherPage() {
   const { user } = useAuth();
   const { selectedClassId, selectedSchoolId } = useSelection();
@@ -395,8 +404,8 @@ export default function MaturaTeacherPage() {
             <div className="px-4 py-3 border-b bg-slate-50"><h2 className="text-[11px] font-black uppercase tracking-widest text-[#005c8d]">Objavljeni raspored</h2></div>
             {schedule.length === 0 ? <div className="p-8 text-slate-400 italic">Nema unesenih termina.</div> : schedule.map(item => (
               <div key={item.id} className="p-4 border-b grid grid-cols-1 md:grid-cols-[1fr_140px_170px_40px] gap-3 items-center">
-                <div className="font-black">{item.subject_name} <span className="text-[#005c8d]">{levelLabels[item.level]}</span></div>
-                <div>{item.room || '-'}</div>
+                <div className="font-black">{formatScheduleSubject(item)} <span className="text-[#005c8d]">{levelLabels[item.level]}</span></div>
+                <div>{isCroatianExamPart(item.room) ? '-' : item.room || '-'}</div>
                 <div><Calendar size={14} className="inline mr-1" />{formatDateTime(item.exam_at)}</div>
                 <button onClick={() => deleteSchedule(item.id)} className="text-red-600"><Trash2 size={16} /></button>
               </div>

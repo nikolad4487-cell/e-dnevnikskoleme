@@ -141,6 +141,15 @@ const formatDateTime = (value?: string) => {
   });
 };
 
+const isCroatianExamPart = (value?: string | null) => ['Test + sažetak', 'Esej'].includes(String(value || '').trim());
+
+const formatScheduleSubject = (item: MaturaScheduleItem) => {
+  const part = String(item.room || '').trim();
+  return item.subject_name === 'Hrvatski jezik' && isCroatianExamPart(part)
+    ? `${item.subject_name}: ${part}`
+    : item.subject_name;
+};
+
 const parseSchoolAddress = (value?: string) => {
   if (!value) return { address: '', city: '' };
   const trimmed = String(value).trim();
@@ -758,8 +767,8 @@ export default function MaturaPage() {
             <div className="divide-y">
               {visibleSchedule.map(item => (
                 <div key={item.id} className="p-4 grid grid-cols-1 md:grid-cols-[1fr_120px_170px] gap-3">
-                  <div className="font-black">{item.subject_name} <span className="text-[#005c8d]">{fullLevelLabels[item.level]}</span></div>
-                  <div>{item.room || '-'}</div>
+                  <div className="font-black">{formatScheduleSubject(item)} <span className="text-[#005c8d]">{fullLevelLabels[item.level]}</span></div>
+                  <div>{isCroatianExamPart(item.room) ? '-' : item.room || '-'}</div>
                   <div className="font-medium"><Calendar size={14} className="inline mr-1" />{formatDateTime(item.exam_at)}</div>
                 </div>
               ))}

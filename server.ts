@@ -2220,7 +2220,12 @@ async function startServer() {
   app.get("/api/matura-exam-schedule", async (req, res) => {
     try {
       const { schoolId } = req.query;
-      let localItems = readJsonFile("matura_exam_schedule.json");
+      const normalizeScheduleRow = (item: any) => ({
+        ...item,
+        subject_name: normalizeMaturaSubject(item.subject_name || item.subject),
+        subject: normalizeMaturaSubject(item.subject || item.subject_name),
+      });
+      let localItems = readJsonFile("matura_exam_schedule.json").map(normalizeScheduleRow);
       if (schoolId) localItems = localItems.filter(item => item.school_id === schoolId || !item.school_id);
       if (supabaseAdmin) {
         try {
@@ -2228,7 +2233,7 @@ async function startServer() {
           if (schoolId) query = query.or(`school_id.eq.${schoolId},school_id.is.null`);
           const { data, error } = await query.order("exam_at", { ascending: true });
           if (!error) {
-            const merged = mergeRowsById(data || [], localItems);
+            const merged = mergeRowsById((data || []).map(normalizeScheduleRow), localItems);
             merged.sort((a, b) => String(a.exam_at || '').localeCompare(String(b.exam_at || '')));
             return res.json(merged);
           }
@@ -2252,28 +2257,43 @@ async function startServer() {
       }
       const items = readJsonFile("matura_exam_schedule.json");
       const now = new Date().toISOString();
-      const record = {
+      const subjectName = normalizeMaturaSubject(payload.subject_name);
+      const makeScheduleRecord = (overrides: Partial<Record<string, any>> = {}) => ({
         id: crypto.randomUUID(),
         school_id: payload.school_id || null,
-        subject_name: normalizeMaturaSubject(payload.subject_name),
+        subject: subjectName,
+        subject_name: subjectName,
         level: payload.level || "JEDNA_RAZINA",
         exam_at: payload.exam_at,
         room: String(payload.room || '').trim() || null,
         note: String(payload.note || '').trim() || null,
         created_at: now,
         updated_at: now,
-      };
+        ...overrides,
+      });
+      const records = [makeScheduleRecord()];
+      if (subjectName === "Hrvatski jezik") {
+        const essayDate = new Date(payload.exam_at);
+        if (!Number.isNaN(essayDate.getTime())) {
+          essayDate.setDate(essayDate.getDate() + 1);
+          records[0].room = "Test + sažetak";
+          records.push(makeScheduleRecord({
+            id: crypto.randomUUID(),
+            exam_at: essayDate.toISOString(),
+            room: "Esej",
+          }));
+        }
+      }
       if (supabaseAdmin) {
         try {
           const { data, error } = await supabaseAdmin
             .from("matura_exam_schedule")
-            .insert(record)
-            .select()
-            .single();
+            .insert(records)
+            .select();
           if (!error) {
-            items.push(data);
+            items.push(...(data || records));
             writeJsonFile("matura_exam_schedule.json", items);
-            return res.json({ success: true, data });
+            return res.json({ success: true, data: data || records });
           }
           if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura schedule write error:", error);
           if (isVercel) return res.status(500).json({ error: `Termin nije spremljen u bazu: ${error.message}` });
@@ -2285,9 +2305,9 @@ async function startServer() {
       if (isVercel) {
         return res.status(500).json({ error: "Termin nije spremljen jer Supabase admin veza nije dostupna na Vercelu." });
       }
-      items.push(record);
+      items.push(...records);
       writeJsonFile("matura_exam_schedule.json", items);
-      res.json({ success: true, data: record });
+      res.json({ success: true, data: records });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
