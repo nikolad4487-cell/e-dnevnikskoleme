@@ -4,6 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, StudentNotes, ClassNotes, StudentYearSummary } from '../../types';
 import { formatPersonName } from '../../lib/utils';
+import { mappers } from '../../lib/mappers';
 
 const emailPattern = /([\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+)/g;
 
@@ -90,7 +91,7 @@ export default function BiljeskePage() {
             // Fetch Class Notes
             const { data: cnData } = await supabase.from('class_overall_notes').select('*').eq('class_id', selectedClassId).maybeSingle();
             if (cnData) {
-              setClassNotes(cnData as ClassNotes);
+              setClassNotes(mappers.classOverallNotes(cnData));
             } else {
               setClassNotes(null);
             }

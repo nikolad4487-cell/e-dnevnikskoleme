@@ -201,7 +201,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
               <button
                 onClick={() => {
                   setIsMenuOpen(false);
-                  navigate('/student/ocjene');
+                  navigate('/select-class');
                 }}
                 className="w-full flex items-center justify-between px-3 py-3 text-xs text-slate-800 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[38px]"
               >

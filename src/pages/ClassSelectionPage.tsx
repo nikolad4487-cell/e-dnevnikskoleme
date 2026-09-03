@@ -677,6 +677,7 @@ export default function ClassSelectionPage() {
     { label: 'Izostanci', path: 'izostanci', icon: UserX, color: 'text-rose-600 bg-rose-50 border-rose-200 hover:bg-rose-100/70' },
     { label: 'Raspored', path: 'raspored', icon: Clock, color: 'text-emerald-600 bg-emerald-50 border-emerald-200 hover:bg-emerald-100/70' },
   ];
+  const canShowMaturaForClass = (cls: ClassWithDetails) => cls.name.trim().startsWith('4.') && cls.name.trim().toUpperCase() !== '4.K';
 
   if (loading) {
     return null;
@@ -903,7 +904,9 @@ export default function ClassSelectionPage() {
                       </button>
 
                       <div className="divide-y divide-slate-100">
-                        {menuItems.map(item => {
+                        {menuItems
+                          .filter(item => item.label !== 'Matura' || canShowMaturaForClass(cls))
+                          .map(item => {
                           const ItemIcon = item.icon;
                           return (
                             <button
