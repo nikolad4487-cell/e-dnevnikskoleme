@@ -293,6 +293,35 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     );
   }, [allSubjects, effectiveClassId, isAdminUser, subjectAssignments, user?.id]);
 
+  const examSubjectOptions = useMemo(() => {
+    if (!effectiveClassId) return [];
+
+    const allowedSubjectIds = new Set<string>();
+
+    if (isAdminUser) {
+      classSubjects
+        .filter(cs => (cs.class_id || cs.classId) === effectiveClassId)
+        .forEach(cs => {
+          const subjectId = cs.subject_id || cs.subjectId;
+          if (subjectId) allowedSubjectIds.add(subjectId);
+        });
+
+      subjectAssignments
+        .filter(a => a.classId === effectiveClassId)
+        .forEach(a => allowedSubjectIds.add(a.subjectId));
+    } else {
+      subjectAssignments
+        .filter(a => a.classId === effectiveClassId && a.teacherId === user?.id)
+        .forEach(a => allowedSubjectIds.add(a.subjectId));
+    }
+
+    if (editingExam?.subjectId) {
+      allowedSubjectIds.add(editingExam.subjectId);
+    }
+
+    return allSubjects.filter(subject => allowedSubjectIds.has(subject.id));
+  }, [allSubjects, classSubjects, effectiveClassId, editingExam?.subjectId, isAdminUser, subjectAssignments, user?.id]);
+
   const canEditExam = useMemo(() => {
     return (exam: any) => {
       if (!user) return false;
@@ -1959,6 +1988,23 @@ setStudents(uniqueStudents);
 
   const saveExam = async () => {
     if (!effectiveClassId || !examForm.date || !examForm.subjectId) return;
+    if (!examSubjectOptions.some(subject => subject.id === examForm.subjectId)) {
+      toast.error(isAdminUser
+        ? 'Odabrani predmet nije dodijeljen ovom razredu.'
+        : 'Možete planirati provjeru samo za predmet koji predajete ovom razredu.'
+      );
+      return;
+    }
+
+    const examPayload = {
+      subject_id: examForm.subjectId,
+      exam_date: examForm.date,
+      exam_type: examForm.type || 'PISMENA',
+      description: examForm.description || '',
+      school_year_id: selectedYearId || (selectedClass as any)?.school_year_id || null,
+      updated_at: new Date().toISOString()
+    };
+
     try {
       if (editingExam) {
         if (!canEditExam(editingExam)) {
@@ -1968,12 +2014,7 @@ setStudents(uniqueStudents);
         const { data, error } = await supabase
           .from('exams')
           .update({
-            subject_id: examForm.subjectId,
-            exam_date: examForm.date,
-            exam_type: examForm.type,
-            description: examForm.description,
-            school_id: selectedSchoolId,
-            updated_at: new Date().toISOString()
+            ...examPayload
           })
           .eq('id', editingExam.id)
           .select()
@@ -1993,13 +2034,8 @@ setStudents(uniqueStudents);
         const { data, error } = await supabase
           .from('exams')
           .insert({
-            subject_id: examForm.subjectId,
-            text: examForm.description, // some schemas use description or text, we can specify what is used
-            exam_date: examForm.date,
-            exam_type: examForm.type,
-            description: examForm.description,
+            ...examPayload,
             class_id: effectiveClassId,
-            school_id: selectedSchoolId,
             created_by: user?.id,
             teacher_id: user?.id,
             created_at: new Date().toISOString()
@@ -2014,9 +2050,9 @@ setStudents(uniqueStudents);
         setExamForm({ subjectId: '', date: '', type: 'PISANA', description: '' });
         toast.success('Pisana provjera je uspješno planirana.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      toast.error('Greška pri spremanju ispita');
+      toast.error(`Greška pri spremanju ispita: ${err?.message || 'nepoznata greška'}`);
     }
   };
 
@@ -3850,13 +3886,14 @@ setStudents(uniqueStudents);
                   onChange={e => setExamForm({...examForm, subjectId: e.target.value})}
                 >
                   <option value="">-- Odaberi predmet --</option>
-                  {allSubjects
-                    .filter(s => {
-                      if (isAdminUser) return true;
-                      return subjectAssignments.some(a => a.classId === effectiveClassId && a.subjectId === s.id && a.teacherId === user?.id);
-                    })
+                  {examSubjectOptions
                     .map(s => <option key={s.id} value={s.id}>{formatSubjectName(s)}</option>)}
                 </select>
+                {examSubjectOptions.length === 0 && (
+                  <p className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-100 px-2 py-1.5">
+                    Nema predmeta dodijeljenih ovom razredu.
+                  </p>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4">
                  <div className="space-y-1">
