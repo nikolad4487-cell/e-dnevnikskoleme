@@ -181,8 +181,9 @@ export default function MaturaTeacherPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...settings, school_id: selectedSchoolId }),
     });
+    const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      toast.error('Rokovi nisu spremljeni.');
+      toast.error(body.error || 'Rokovi nisu spremljeni.');
       return;
     }
     toast.success('Rokovi mature su spremljeni.');
@@ -199,8 +200,9 @@ export default function MaturaTeacherPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...scheduleForm, school_id: selectedSchoolId }),
     });
+    const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      toast.error('Raspored nije spremljen.');
+      toast.error(body.error || 'Raspored nije spremljen.');
       return;
     }
     setScheduleForm({ subject_name: 'Hrvatski jezik', level: 'JEDNA_RAZINA', exam_at: '', room: '', note: '' });
@@ -224,8 +226,9 @@ export default function MaturaTeacherPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...resultForm, school_id: selectedSchoolId }),
     });
+    const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-      toast.error('Rezultat nije spremljen.');
+      toast.error(body.error || 'Rezultat nije spremljen.');
       return;
     }
     toast.success('Rezultat mature je spremljen.');

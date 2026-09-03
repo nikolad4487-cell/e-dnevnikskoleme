@@ -112,9 +112,9 @@ execute function public.update_updated_at_column();
 
 create table if not exists public.matura_study_applications (
   id uuid primary key default gen_random_uuid(),
-  student_id uuid not null references public.user_profiles(id) on delete cascade,
+  student_id uuid not null,
   priority_index integer not null check (priority_index between 1 and 10),
-  study_program_id uuid references public.matura_study_programs(id) on delete cascade,
+  study_program_id uuid,
   name text not null,
   city text,
   institution text,
@@ -126,6 +126,8 @@ create table if not exists public.matura_study_applications (
   constraint matura_study_applications_student_program_unique unique (student_id, study_program_id)
 );
 
+alter table public.matura_study_applications drop constraint if exists matura_study_applications_student_id_fkey;
+alter table public.matura_study_applications drop constraint if exists matura_study_applications_study_program_id_fkey;
 alter table public.matura_study_applications add column if not exists student_id uuid;
 alter table public.matura_study_applications add column if not exists priority_index integer;
 alter table public.matura_study_applications add column if not exists study_program_id uuid;
