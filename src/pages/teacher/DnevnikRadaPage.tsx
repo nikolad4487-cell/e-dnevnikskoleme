@@ -1999,7 +1999,7 @@ setStudents(uniqueStudents);
     const examPayload = {
       subject_id: examForm.subjectId,
       exam_date: examForm.date,
-      exam_type: examForm.type || 'PISMENA',
+      exam_type: 'PISANA',
       description: examForm.description || '',
       school_year_id: selectedYearId || (selectedClass as any)?.school_year_id || null,
       updated_at: new Date().toISOString()
@@ -2603,12 +2603,6 @@ setStudents(uniqueStudents);
                           <span className="text-[10px] font-black text-slate-500">
                             {new Date(exam.date).toLocaleDateString('hr-HR')}
                           </span>
-                          <span className={cn(
-                            "px-1.5 py-0.5 text-[8px] font-black uppercase border rounded-sm",
-                            exam.type === 'PISANA' ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-purple-50 text-purple-700 border-purple-200"
-                          )}>
-                            {exam.type}
-                          </span>
                         </div>
                         <div className="font-bold text-sm text-[#005c8d] uppercase">{formatSubjectName(subject)}</div>
                         <div className="text-xs text-slate-600 italic">Opis: {exam.description}</div>
@@ -2654,7 +2648,6 @@ setStudents(uniqueStudents);
                       <tr className="bg-gray-50 border-b border-gray-300">
                         <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500 border-r border-gray-300">Datum</th>
                         <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500 border-r border-gray-300">Predmet</th>
-                        <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500 border-r border-gray-300">Vrsta</th>
                         <th className="p-2 text-left text-[10px] font-bold uppercase text-gray-500">Opis</th>
                         <th className="p-2 text-center w-36 text-[10px] font-bold uppercase text-gray-500">Akcije</th>
                       </tr>
@@ -2666,14 +2659,6 @@ setStudents(uniqueStudents);
                            <tr key={exam.id} className="hover:bg-gray-50 transition-colors">
                              <td className="p-2 text-gray-700 font-bold border-r border-gray-200">{new Date(exam.date).toLocaleDateString('hr-HR')}</td>
                              <td className="p-2 font-bold text-[#005c8d] uppercase border-r border-gray-200">{formatSubjectName(subject)}</td>
-                             <td className="p-2 border-r border-gray-200">
-                               <span className={cn(
-                                 "px-2 py-0.5 text-[9px] font-bold uppercase border",
-                                 exam.type === 'PISANA' ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-purple-50 text-purple-700 border-purple-200"
-                               )}>
-                                 {exam.type}
-                               </span>
-                             </td>
                              <td className="p-2 text-gray-600 border-r border-gray-300">{exam.description}</td>
                              <td className="p-2 text-center h-full">
                                <div className="flex items-center justify-center gap-2">
@@ -3895,26 +3880,14 @@ setStudents(uniqueStudents);
                   </p>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-gray-400 uppercase tracking-tight block leading-none">Datum</label>
-                    <input 
-                      type="date"
-                      className="w-full border border-gray-300 p-1.5 focus:outline-none font-bold"
-                      value={examForm.date}
-                      onChange={e => setExamForm({...examForm, date: e.target.value})}
-                    />
-                 </div>
-                 <div className="space-y-1">
-                    <label className="text-[9px] font-bold text-gray-400 uppercase tracking-tight block leading-none">Tip provjere</label>
-                    <select 
-                      className="w-full border border-gray-300 p-1.5 focus:outline-none font-bold"
-                      value={examForm.type}
-                      onChange={e => setExamForm({...examForm, type: e.target.value as any})}
-                    >
-                      <option value="PISMENA">Pismena provjera</option>
-                    </select>
-                 </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-bold text-gray-400 uppercase tracking-tight block leading-none">Datum</label>
+                <input 
+                  type="date"
+                  className="w-full border border-gray-300 p-1.5 focus:outline-none font-bold"
+                  value={examForm.date}
+                  onChange={e => setExamForm({...examForm, date: e.target.value})}
+                />
               </div>
               <div className="space-y-1">
                 <label className="text-[9px] font-bold text-gray-400 uppercase tracking-tight block leading-none">Opis (nastavna jedinica)</label>

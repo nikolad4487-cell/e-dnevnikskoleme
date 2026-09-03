@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Subject, User, specialExamTypes } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
-import { formatPersonName, formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
+import { formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
 import { Calendar, ChevronDown, FileText } from 'lucide-react';
 
 interface ExamWithDetails {
@@ -268,9 +268,6 @@ export default function StudentIspitiPage() {
                 const dateLabel = Number.isNaN(date.getTime())
                   ? '-'
                   : date.toLocaleDateString('hr-HR', { day: 'numeric', month: 'numeric' });
-                const teacherNames = exam.teachers.length > 0
-                  ? exam.teachers.map(t => formatPersonName(t)).join(', ')
-                  : '';
                 const detail = exam.description || exam.note || exam.type || '';
 
                 return (
@@ -279,7 +276,6 @@ export default function StudentIspitiPage() {
                     <div className="min-w-0 leading-tight">
                       <div className="font-bold text-slate-950">{sName}</div>
                       {detail && <div className="text-slate-950">{detail}</div>}
-                      {teacherNames && <div className="text-xs text-slate-500 mt-1">{teacherNames}</div>}
                       {exam.value && <div className="text-xs font-bold text-[#005c8d] mt-1">Ocjena: {exam.value}</div>}
                     </div>
                   </div>
