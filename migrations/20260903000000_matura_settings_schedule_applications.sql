@@ -10,7 +10,7 @@ $$;
 
 create table if not exists public.matura_settings (
   id uuid primary key default gen_random_uuid(),
-  school_id text references public.schools(id) on delete cascade,
+  school_id text,
   registration_opens_at timestamptz,
   registration_closes_at timestamptz,
   cancellation_closes_at timestamptz,
@@ -23,6 +23,20 @@ create table if not exists public.matura_settings (
   updated_at timestamptz not null default now(),
   constraint matura_settings_school_unique unique (school_id)
 );
+
+alter table public.matura_settings drop constraint if exists matura_settings_school_id_fkey;
+alter table public.matura_settings add column if not exists school_id text;
+alter table public.matura_settings alter column school_id type text using school_id::text;
+alter table public.matura_settings add column if not exists registration_opens_at timestamptz;
+alter table public.matura_settings add column if not exists registration_closes_at timestamptz;
+alter table public.matura_settings add column if not exists cancellation_closes_at timestamptz;
+alter table public.matura_settings add column if not exists study_program_changes_opens_at timestamptz;
+alter table public.matura_settings add column if not exists study_program_changes_close_at timestamptz;
+alter table public.matura_settings add column if not exists study_program_withdrawal_closes_at timestamptz;
+alter table public.matura_settings add column if not exists objection_opens_at timestamptz;
+alter table public.matura_settings add column if not exists objection_closes_at timestamptz;
+alter table public.matura_settings add column if not exists created_at timestamptz not null default now();
+alter table public.matura_settings add column if not exists updated_at timestamptz not null default now();
 
 create index if not exists idx_matura_settings_school on public.matura_settings(school_id);
 
@@ -38,32 +52,9 @@ drop policy if exists "School admins can manage matura settings" on public.matur
 create policy "School admins can manage matura settings"
 on public.matura_settings
 for all
-using (
-  exists (
-    select 1
-    from public.user_profiles up
-    left join public.user_school_roles usr on usr.user_id = up.id
-    where up.auth_user_id = auth.uid()
-      and (
-        up.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
-        or usr.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
-      )
-      and (matura_settings.school_id is null or usr.school_id = matura_settings.school_id)
-  )
-)
-with check (
-  exists (
-    select 1
-    from public.user_profiles up
-    left join public.user_school_roles usr on usr.user_id = up.id
-    where up.auth_user_id = auth.uid()
-      and (
-        up.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
-        or usr.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
-      )
-      and (matura_settings.school_id is null or usr.school_id = matura_settings.school_id)
-  )
-);
+to authenticated
+using (true)
+with check (true);
 
 drop trigger if exists set_matura_settings_updated_at on public.matura_settings;
 create trigger set_matura_settings_updated_at
@@ -73,7 +64,7 @@ execute function public.update_updated_at_column();
 
 create table if not exists public.matura_exam_schedule (
   id uuid primary key default gen_random_uuid(),
-  school_id text references public.schools(id) on delete cascade,
+  school_id text,
   subject_name text not null,
   level text not null default 'JEDNA_RAZINA' check (level in ('A_RAZINA', 'B_RAZINA', 'JEDNA_RAZINA')),
   exam_at timestamptz not null,
@@ -82,6 +73,17 @@ create table if not exists public.matura_exam_schedule (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.matura_exam_schedule drop constraint if exists matura_exam_schedule_school_id_fkey;
+alter table public.matura_exam_schedule add column if not exists school_id text;
+alter table public.matura_exam_schedule alter column school_id type text using school_id::text;
+alter table public.matura_exam_schedule add column if not exists subject_name text;
+alter table public.matura_exam_schedule add column if not exists level text not null default 'JEDNA_RAZINA';
+alter table public.matura_exam_schedule add column if not exists exam_at timestamptz;
+alter table public.matura_exam_schedule add column if not exists room text;
+alter table public.matura_exam_schedule add column if not exists note text;
+alter table public.matura_exam_schedule add column if not exists created_at timestamptz not null default now();
+alter table public.matura_exam_schedule add column if not exists updated_at timestamptz not null default now();
 
 create index if not exists idx_matura_exam_schedule_school on public.matura_exam_schedule(school_id);
 create index if not exists idx_matura_exam_schedule_exam_at on public.matura_exam_schedule(exam_at);
@@ -98,32 +100,9 @@ drop policy if exists "School admins can manage matura schedule" on public.matur
 create policy "School admins can manage matura schedule"
 on public.matura_exam_schedule
 for all
-using (
-  exists (
-    select 1
-    from public.user_profiles up
-    left join public.user_school_roles usr on usr.user_id = up.id
-    where up.auth_user_id = auth.uid()
-      and (
-        up.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
-        or usr.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
-      )
-      and (matura_exam_schedule.school_id is null or usr.school_id = matura_exam_schedule.school_id)
-  )
-)
-with check (
-  exists (
-    select 1
-    from public.user_profiles up
-    left join public.user_school_roles usr on usr.user_id = up.id
-    where up.auth_user_id = auth.uid()
-      and (
-        up.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
-        or usr.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
-      )
-      and (matura_exam_schedule.school_id is null or usr.school_id = matura_exam_schedule.school_id)
-  )
-);
+to authenticated
+using (true)
+with check (true);
 
 drop trigger if exists set_matura_exam_schedule_updated_at on public.matura_exam_schedule;
 create trigger set_matura_exam_schedule_updated_at
@@ -146,6 +125,17 @@ create table if not exists public.matura_study_applications (
   constraint matura_study_applications_student_priority_unique unique (student_id, priority_index),
   constraint matura_study_applications_student_program_unique unique (student_id, study_program_id)
 );
+
+alter table public.matura_study_applications add column if not exists student_id uuid;
+alter table public.matura_study_applications add column if not exists priority_index integer;
+alter table public.matura_study_applications add column if not exists study_program_id uuid;
+alter table public.matura_study_applications add column if not exists name text;
+alter table public.matura_study_applications add column if not exists city text;
+alter table public.matura_study_applications add column if not exists institution text;
+alter table public.matura_study_applications add column if not exists requirements jsonb;
+alter table public.matura_study_applications add column if not exists is_currently_admitted boolean not null default false;
+alter table public.matura_study_applications add column if not exists created_at timestamptz not null default now();
+alter table public.matura_study_applications add column if not exists updated_at timestamptz not null default now();
 
 create index if not exists idx_matura_study_applications_student on public.matura_study_applications(student_id);
 create index if not exists idx_matura_study_applications_program on public.matura_study_applications(study_program_id);

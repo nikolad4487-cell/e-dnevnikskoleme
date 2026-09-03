@@ -25,6 +25,12 @@ create table if not exists public.matura_registrations (
 );
 
 create index if not exists idx_matura_registrations_student on public.matura_registrations(student_id);
+alter table public.matura_registrations drop constraint if exists matura_registrations_school_id_fkey;
+alter table public.matura_registrations drop constraint if exists matura_registrations_class_id_fkey;
+alter table public.matura_registrations add column if not exists class_id text;
+alter table public.matura_registrations add column if not exists school_id text;
+alter table public.matura_registrations alter column class_id type text using class_id::text;
+alter table public.matura_registrations alter column school_id type text using school_id::text;
 create index if not exists idx_matura_registrations_class on public.matura_registrations(class_id);
 create index if not exists idx_matura_registrations_school on public.matura_registrations(school_id);
 create index if not exists idx_matura_registrations_status on public.matura_registrations(status);
