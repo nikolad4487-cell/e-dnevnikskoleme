@@ -263,27 +263,31 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
         
         {/* Current Context Display */}
         {!hideContextLabels && (schoolLabel || classLabel) && (
-          <div className="flex flex-col lg:flex-row lg:items-center gap-0 lg:gap-2 bg-black/10 px-2 lg:px-3 py-0.5 lg:py-1.5 rounded transition-all min-w-0 max-w-[140px] sm:max-w-[260px] md:max-w-md lg:max-w-none">
-             {schoolLabel && (
-               <span className="text-[9px] lg:text-[11px] font-black uppercase tracking-wider lg:tracking-widest leading-tight lg:leading-normal truncate lg:overflow-visible block max-h-[22px] lg:max-h-none line-clamp-2" title={schoolLabel}>
-                 {schoolLabel}
-               </span>
-             )}
-             {yearLabel && <span className="text-white/30 hidden lg:inline">|</span>}
-             {yearLabel && <span className="text-white/80 text-[10px] hidden lg:inline">{yearLabel}</span>}
-             {!finalHideClass && classLabel && (
-               <div className="flex items-center gap-1 shrink-0">
-                 <span className="text-white/30 hidden lg:inline">|</span>
-                 <span className="bg-white text-[#005c8d] px-1 lg:px-2 py-0.5 rounded-sm font-black text-[8px] lg:text-[10px]">{classLabel}</span>
+          <div className="flex items-center gap-2 bg-black/10 px-2 lg:px-3 py-1 rounded transition-all min-w-0 max-w-[210px] sm:max-w-[360px] md:max-w-[560px] lg:max-w-[760px]">
+             <button
+               type="button"
+               onClick={() => !finalHideClass && navigate('/select-class')}
+               className={cn(
+                 "min-w-0 text-left",
+                 !finalHideClass && "cursor-pointer hover:opacity-90"
+               )}
+               title="Promijeni razred"
+             >
+               <div className="text-[10px] lg:text-[12px] font-black uppercase tracking-wider leading-tight truncate">
+                 {!finalHideClass && classLabel ? `${classLabel} ` : ''}{schoolLabel}
                </div>
-             )}
+               {(yearLabel || homeroomLabel) && (
+                 <div className="text-[9px] lg:text-[10px] text-white/70 leading-tight truncate normal-case">
+                   {[yearLabel, homeroomLabel ? `razrednik: ${homeroomLabel}` : ''].filter(Boolean).join(' ')}
+                 </div>
+               )}
+             </button>
              
              {!finalHideClass && showNav && (
-               <>
-                 <span className="text-white/30 hidden lg:inline">|</span>
+               <div className="hidden lg:flex items-center gap-1 shrink-0 border-l border-white/20 pl-2">
                  <button 
                    onClick={() => navigate('/select-class')} 
-                   className="hidden lg:flex items-center gap-1 hover:bg-white/20 p-1 px-2 rounded transition-colors text-[10px]"
+                   className="flex items-center gap-1 hover:bg-white/20 p-1 px-2 rounded transition-colors text-[10px]"
                    title="Promijeni razred"
                  >
                    <Repeat size={12} /> Promijeni
@@ -292,13 +296,13 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
                    <button
                      type="button"
                      onClick={() => navigate('/admin-skole')}
-                     className="hidden lg:flex items-center gap-1 bg-white/10 hover:bg-white/20 p-1 px-2 rounded transition-colors text-[10px] font-bold"
+                     className="flex items-center gap-1 bg-white/10 hover:bg-white/20 p-1 px-2 rounded transition-colors text-[10px] font-bold"
                      title="Administracija škole"
                    >
                      <Building2 size={12} /> Administracija škole
                    </button>
                  )}
-               </>
+               </div>
              )}
           </div>
         )}

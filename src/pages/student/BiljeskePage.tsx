@@ -3,8 +3,23 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, StudentNotes, ClassNotes, StudentYearSummary } from '../../types';
-import { ClipboardList, User as UserIcon } from 'lucide-react';
 import { formatPersonName } from '../../lib/utils';
+
+const emailPattern = /([\w.!#$%&'*+/=?^`{|}~-]+@[\w-]+(?:\.[\w-]+)+)/g;
+
+function renderTextWithMailLinks(text?: string) {
+  if (!text) return <span className="text-gray-300 italic">Nema unosa</span>;
+
+  return text.split(emailPattern).map((part, index) => {
+    if (!part.match(emailPattern)) return <React.Fragment key={index}>{part}</React.Fragment>;
+
+    return (
+      <a key={index} href={`mailto:${part}`} className="text-blue-600 hover:underline">
+        {part}
+      </a>
+    );
+  });
+}
 
 export default function BiljeskePage() {
   const { user } = useAuth();
@@ -104,7 +119,7 @@ export default function BiljeskePage() {
       <h3 className="text-[11px] font-black uppercase text-gray-500 tracking-tight">{title}</h3>
       <div className="bg-white border border-gray-300 p-3 text-[12px] min-h-[40px] shadow-sm">
         <div className="text-gray-700 whitespace-pre-wrap leading-relaxed">
-          {content || <span className="text-gray-300 italic">Nema unosa</span>}
+          {renderTextWithMailLinks(content)}
         </div>
       </div>
     </div>
@@ -126,12 +141,16 @@ export default function BiljeskePage() {
               <div className="space-y-2">
                 <h3 className="text-base font-bold text-slate-900">Razrednik</h3>
                 <div className="bg-white border border-gray-200 rounded-md p-3 shadow-sm">
-                 <div className="flex items-center gap-2 text-[13px]">
+                 <div className="flex flex-wrap items-baseline gap-2 text-[13px]">
                   <span className="font-bold text-[14px] text-gray-900">{homeroomTeacher.name}</span>
-                  <span className="text-gray-500 text-[12px]">{homeroomTeacher.email}</span>
+                  {homeroomTeacher.email && (
+                    <a href={`mailto:${homeroomTeacher.email}`} className="text-gray-500 text-[12px] no-underline hover:text-[#005c8d]">
+                      {homeroomTeacher.email}
+                    </a>
+                  )}
                 </div>
                 {classNotes?.homeroomInfo && (
-                    <div className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap mt-2 pt-2 border-t border-gray-100">{classNotes.homeroomInfo}</div>
+                    <div className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap mt-2 pt-2 border-t border-gray-100">{renderTextWithMailLinks(classNotes.homeroomInfo)}</div>
                 )}
                 </div>
               </div>
@@ -142,12 +161,16 @@ export default function BiljeskePage() {
               <div className="space-y-2">
                 <h3 className="text-base font-bold text-slate-900">Zamjenik razrednika</h3>
                 <div className="bg-white border border-gray-200 rounded-md p-3 shadow-sm">
-                <div className="flex items-center gap-2 text-[13px]">
+                <div className="flex flex-wrap items-baseline gap-2 text-[13px]">
                   <span className="font-bold text-[14px] text-gray-900">{deputyTeacher.name}</span>
-                  <span className="text-gray-500 text-[12px]">{deputyTeacher.email}</span>
+                  {deputyTeacher.email && (
+                    <a href={`mailto:${deputyTeacher.email}`} className="text-gray-500 text-[12px] no-underline hover:text-[#005c8d]">
+                      {deputyTeacher.email}
+                    </a>
+                  )}
                 </div>
                 {classNotes?.deputyInfo && (
-                  <div className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap mt-2 pt-2 border-t border-gray-100">{classNotes.deputyInfo}</div>
+                  <div className="text-[12px] text-gray-600 leading-relaxed whitespace-pre-wrap mt-2 pt-2 border-t border-gray-100">{renderTextWithMailLinks(classNotes.deputyInfo)}</div>
                 )}
                 </div>
               </div>

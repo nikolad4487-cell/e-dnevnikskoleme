@@ -95,6 +95,7 @@ export default function SchoolAdminDashboard() {
     { id: 'ucenici', name: 'Učenici u školi', icon: Users, color: 'bg-teal-500', link: '/admin-skole/ucenici' },
     { id: 'predmeti', name: 'Globalni predmeti', icon: BookOpen, color: 'bg-amber-500', link: '/admin-skole/predmeti' },
     { id: 'upisi-predmeta', name: 'Predmeti učenika (upis)', icon: BookOpen, color: 'bg-indigo-600', link: '/admin-skole/upisi-predmeta' },
+    { id: 'masovna-dodjela-nastavnika', name: 'Masovna dodjela nastavnika', icon: UserPlus, color: 'bg-cyan-600', link: '/admin-skole/masovna-dodjela-nastavnika' },
     { id: 'smjerovi', name: 'Smjerovi / programi', icon: BookOpen, color: 'bg-orange-500', link: '/admin-skole/programi' },
     { id: 'matura', name: 'Admin mature', icon: GraduationCap, color: 'bg-[#005c8d]', link: '/admin-skole/matura' },
     { id: 'ravnatelj-dashboard', name: 'Dashboard Ravnatelja', icon: BarChart3, color: 'bg-[#005c8d]', link: '/admin-skole/ravnatelj-dashboard' },

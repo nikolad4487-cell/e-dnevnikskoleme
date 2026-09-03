@@ -38,6 +38,16 @@ interface ClassDB {
   school_year: string;
 }
 
+interface RolloverKCandidate {
+  enrollment_id: string;
+  student_id: string;
+  class_id: string;
+  class_name: string;
+  program_id: string | null;
+  name: string;
+  email?: string | null;
+}
+
 export default function RolloverPage() {
   const { selectedSchoolId } = useSelection();
   const { user, userSchoolRoles } = useAuth();
@@ -68,6 +78,10 @@ export default function RolloverPage() {
   const [copyTeachers, setCopyTeachers] = useState(true);
   const [copyPrograms, setCopyPrograms] = useState(true);
   const [createFirstGrades, setCreateFirstGrades] = useState(true);
+  const [firstGradeCount, setFirstGradeCount] = useState(3);
+  const [kCandidates, setKCandidates] = useState<RolloverKCandidate[]>([]);
+  const [selectedKStudentIds, setSelectedKStudentIds] = useState<string[]>([]);
+  const [loadingKCandidates, setLoadingKCandidates] = useState(false);
 
   // Summary / Result logs screen
   const [rolloverResult, setRolloverResult] = useState<{
@@ -122,6 +136,15 @@ export default function RolloverPage() {
     }
   }, [fromYearId]);
 
+  useEffect(() => {
+    if (fromYearId && toYearId && schoolId) {
+      fetchKCandidates();
+    } else {
+      setKCandidates([]);
+      setSelectedKStudentIds([]);
+    }
+  }, [fromYearId, toYearId, schoolId]);
+
   const fetchSourceClasses = async () => {
     try {
       const { data, error } = await supabase
@@ -148,7 +171,8 @@ export default function RolloverPage() {
 
     if (name === '1.A') toClassName = '2.A';
     else if (name === '2.A') toClassName = '3.A';
-    else if (name === '3.A') finishes = true;
+    else if (name === '3.A' || name === '3.B') finishes = true;
+    else if (name === '3.C') toClassName = '4.C';
     else if (name === '3.D') toClassName = '4.D';
     else if (name === '4.K') toClassName = '4.I';
     else if (cls.grade_level >= 4) {
@@ -162,6 +186,135 @@ export default function RolloverPage() {
       finishes,
       nextGradeLevel
     };
+  };
+
+  const ensureTargetClass = async (
+    existingClassesMap: Map<string, ClassDB>,
+    toYearName: string,
+    name: string,
+    gradeLevel: number,
+    section: string,
+    extra: Partial<ClassDB> = {}
+  ) => {
+    const targetName = name.trim().toUpperCase();
+    const existing = existingClassesMap.get(targetName);
+    if (existing) return { classRow: existing, created: false };
+
+    const { data, error } = await supabase
+      .from('classes')
+      .insert({
+        school_id: schoolId,
+        school_year_id: toYearId,
+        school_year: toYearName,
+        name,
+        grade_level: gradeLevel,
+        section,
+        homeroom_teacher_id: extra.homeroom_teacher_id ?? null,
+        deputy_teacher_id: extra.deputy_teacher_id ?? null,
+        program_id: extra.program_id ?? null,
+        status: 'ACTIVE'
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    existingClassesMap.set(targetName, data);
+    return { classRow: data as ClassDB, created: true };
+  };
+
+  const fetchKCandidates = async () => {
+    if (!schoolId || !fromYearId) return;
+    try {
+      setLoadingKCandidates(true);
+      const { data: sourceClasses, error: classError } = await supabase
+        .from('classes')
+        .select('id, name')
+        .eq('school_id', schoolId)
+        .eq('school_year_id', fromYearId)
+        .in('name', ['3.A', '3.B']);
+      if (classError) throw classError;
+
+      const classRows = sourceClasses || [];
+      const classIds = classRows.map((cls: any) => cls.id);
+      if (classIds.length === 0) {
+        setKCandidates([]);
+        setSelectedKStudentIds([]);
+        return;
+      }
+
+      const { data: enrollments, error: enrollmentError } = await supabase
+        .from('student_class_enrollments')
+        .select('id, student_id, class_id, program_id')
+        .in('class_id', classIds)
+        .eq('status', 'ACTIVE');
+      if (enrollmentError) throw enrollmentError;
+
+      const studentIds = Array.from(new Set((enrollments || []).map((item: any) => item.student_id).filter(Boolean)));
+      const { data: profiles, error: profileError } = studentIds.length > 0
+        ? await supabase.from('user_profiles').select('id, name, email').in('id', studentIds)
+        : { data: [], error: null };
+      if (profileError) throw profileError;
+
+      const classNameById = new Map(classRows.map((cls: any) => [cls.id, cls.name]));
+      const profileById = new Map((profiles || []).map((profile: any) => [profile.id, profile]));
+      setKCandidates((enrollments || []).map((enrollment: any) => {
+        const profile = profileById.get(enrollment.student_id) as any;
+        return {
+          enrollment_id: enrollment.id,
+          student_id: enrollment.student_id,
+          class_id: enrollment.class_id,
+          class_name: String(classNameById.get(enrollment.class_id) || ''),
+          program_id: enrollment.program_id || null,
+          name: profile?.name || enrollment.student_id,
+          email: profile?.email || null,
+        };
+      }));
+      setSelectedKStudentIds([]);
+    } catch (err: any) {
+      console.error('fetchKCandidates error', err);
+      toast.error('Nije moguće učitati učenike za 4.K.');
+    } finally {
+      setLoadingKCandidates(false);
+    }
+  };
+
+  const handleEnrollSelectedIn4K = async () => {
+    if (!schoolId || !fromYearId || !toYearId || selectedKStudentIds.length === 0) return;
+    const toYearName = schoolYears.find(y => y.id === toYearId)?.name || '';
+    try {
+      setProcessing(true);
+      const { data: targetClasses, error: targetError } = await supabase
+        .from('classes')
+        .select('*')
+        .eq('school_id', schoolId)
+        .eq('school_year_id', toYearId);
+      if (targetError) throw targetError;
+
+      const existingClassesMap = new Map<string, ClassDB>();
+      (targetClasses || []).forEach((cls: ClassDB) => existingClassesMap.set(cls.name.trim().toUpperCase(), cls));
+      const { classRow: class4K } = await ensureTargetClass(existingClassesMap, toYearName, '4.K', 4, 'K');
+      const selectedCandidates = kCandidates.filter(candidate => selectedKStudentIds.includes(candidate.student_id));
+
+      const { error } = await supabase
+        .from('student_class_enrollments')
+        .upsert(selectedCandidates.map(candidate => ({
+          student_id: candidate.student_id,
+          class_id: class4K.id,
+          school_year_id: toYearId,
+          school_year: toYearName,
+          program_id: candidate.program_id,
+          status: 'ACTIVE'
+        })), { onConflict: 'student_id,class_id,school_year' });
+      if (error) throw error;
+
+      toast.success(`U 4.K upisano učenika: ${selectedCandidates.length}`);
+      setSelectedKStudentIds([]);
+      await fetchKCandidates();
+    } catch (err: any) {
+      toast.error('Upis u 4.K nije uspio: ' + err.message);
+    } finally {
+      setProcessing(false);
+    }
   };
 
   const handleRunRollover = async () => {
@@ -203,9 +356,22 @@ export default function RolloverPage() {
         existingClassesMap.set(tc.name.trim().toUpperCase(), tc);
       });
 
+      try {
+        const ensured4K = await ensureTargetClass(existingClassesMap, toYearName, '4.K', 4, 'K');
+        if (ensured4K.created) {
+          classesCreatedCount++;
+          executionLogs.push('Kreiran prazan razlikovni razred: 4.K');
+        } else {
+          executionLogs.push('Razlikovni razred 4.K već postoji, preskačem kreiranje.');
+        }
+      } catch (ce: any) {
+        executionLogs.push(`Upozorenje: nije moguće stvoriti 4.K: ${ce.message}`);
+      }
+
       // 2. Auto-generate Grade 1 classes if requested
       if (createFirstGrades) {
-        const defaultFirsts = ['1.A', '1.B', '1.C', '1.D'];
+        const count = Math.max(0, Math.min(26, Math.floor(firstGradeCount || 0)));
+        const defaultFirsts = Array.from({ length: count }, (_, index) => `1.${String.fromCharCode(65 + index)}`);
         for (const first of defaultFirsts) {
           if (!existingClassesMap.has(first)) {
             const { data: nc, error: ce } = await supabase
@@ -526,10 +692,26 @@ export default function RolloverPage() {
                     className="rounded-sm text-[#005c8d] focus:ring-[#005c8d] w-4 h-4 accent-[#005c8d]"
                   />
                   <div>
-                    <span className="block text-xs font-extrabold text-slate-800 uppercase tracking-tight">Automatski stvori prve razrede (1.A, 1.B, 1.C, 1.D)</span>
+                    <span className="block text-xs font-extrabold text-slate-800 uppercase tracking-tight">Automatski stvori prve razrede</span>
                     <span className="block text-[10px] text-slate-400">Kreirat će prazne odjele prvih razreda spremne za nove prvašiće.</span>
                   </div>
                 </label>
+                {createFirstGrades && (
+                  <div className="pl-7 max-w-xs">
+                    <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-2">Broj novih prvih razreda</label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={26}
+                      value={firstGradeCount}
+                      onChange={e => setFirstGradeCount(Number(e.target.value))}
+                      className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-sm p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none"
+                    />
+                    <div className="text-[10px] text-slate-400 mt-1">
+                      Primjer: 3 automatski stvara 1.A, 1.B i 1.C.
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Preview target simulation cards */}
@@ -555,6 +737,79 @@ export default function RolloverPage() {
                   </div>
                 </div>
               )}
+
+              <div className="pt-6 border-t space-y-3">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <h4 className="text-[10px] font-black text-slate-600 uppercase tracking-wider">Ručno upisivanje učenika u 4.K</h4>
+                    <p className="text-[10px] text-slate-400 mt-1">Prikazani su učenici iz 3.A i 3.B iz izvorne godine. Odabrane učenike možete upisati u razlikovni 4.K nove godine.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={fetchKCandidates}
+                    className="text-[10px] font-black uppercase tracking-wider text-[#005c8d] hover:underline"
+                  >
+                    Osvježi popis
+                  </button>
+                </div>
+
+                <div className="border border-slate-200 rounded-sm max-h-60 overflow-auto bg-white">
+                  {loadingKCandidates ? (
+                    <div className="p-6 text-center text-xs text-slate-400 italic">Učitavanje učenika...</div>
+                  ) : kCandidates.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-slate-400 italic">Nema aktivnih učenika u 3.A i 3.B za odabranu izvornu godinu.</div>
+                  ) : (
+                    <table className="w-full text-xs">
+                      <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] tracking-wider sticky top-0">
+                        <tr>
+                          <th className="p-2 text-left w-10">
+                            <input
+                              type="checkbox"
+                              checked={selectedKStudentIds.length === kCandidates.length}
+                              onChange={e => setSelectedKStudentIds(e.target.checked ? kCandidates.map(candidate => candidate.student_id) : [])}
+                              className="accent-[#005c8d]"
+                            />
+                          </th>
+                          <th className="p-2 text-left">Učenik</th>
+                          <th className="p-2 text-left">Izvorni razred</th>
+                          <th className="p-2 text-left">E-mail</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {kCandidates.map(candidate => (
+                          <tr key={candidate.enrollment_id} className="border-t border-slate-100">
+                            <td className="p-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedKStudentIds.includes(candidate.student_id)}
+                                onChange={e => {
+                                  setSelectedKStudentIds(current => e.target.checked
+                                    ? [...current, candidate.student_id]
+                                    : current.filter(id => id !== candidate.student_id)
+                                  );
+                                }}
+                                className="accent-[#005c8d]"
+                              />
+                            </td>
+                            <td className="p-2 font-bold text-slate-800">{candidate.name}</td>
+                            <td className="p-2 text-slate-600">{candidate.class_name}</td>
+                            <td className="p-2 text-slate-500">{candidate.email || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  disabled={processing || selectedKStudentIds.length === 0}
+                  onClick={handleEnrollSelectedIn4K}
+                  className={`px-4 py-3 rounded-sm text-[10px] font-black uppercase tracking-wider text-white ${processing || selectedKStudentIds.length === 0 ? 'bg-slate-300 cursor-not-allowed' : 'bg-[#005c8d] hover:bg-[#004a71]'}`}
+                >
+                  Upiši odabrane u 4.K
+                </button>
+              </div>
 
               <div className="pt-6 border-t border-[#dee2e6]">
                 <button

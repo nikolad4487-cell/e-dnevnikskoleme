@@ -64,6 +64,7 @@ const SubjectManagementPage = lazy(() => import('./pages/admin/SubjectManagement
 const ClassSubjectsPage = lazy(() => import('./pages/admin/ClassSubjectsPage'));
 const ClassStudentsPage = lazy(() => import('./pages/admin/ClassStudentsPage'));
 const StudentSubjectEnrollmentPage = lazy(() => import('./pages/admin/StudentSubjectEnrollmentPage'));
+const SubjectTeacherBulkPage = lazy(() => import('./pages/admin/SubjectTeacherBulkPage'));
 const ScheduleManagementPage = lazy(() => import('./pages/admin/ScheduleManagementPage'));
 const SchoolYearsPage = lazy(() => import('./pages/admin/SchoolYearsPage'));
 const StudentsPage = lazy(() => import('./pages/admin/StudentsPage'));
@@ -224,6 +225,7 @@ export default function App() {
                           <Route path="kalendar" element={<SkolskiKalendarPage readOnly={false} />} />
                           <Route path="razredi" element={<ClassManagementPage />} />
                           <Route path="upisi-predmeta" element={<StudentSubjectEnrollmentPage />} />
+                          <Route path="masovna-dodjela-nastavnika" element={<SubjectTeacherBulkPage />} />
                           <Route path="zamjene" element={<ZamjenePage />} />
                           <Route path="korisnici" element={<UserManagementPage />} />
                           <Route path="ucenici" element={<StudentsPage />} />

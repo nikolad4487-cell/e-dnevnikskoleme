@@ -45,6 +45,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: 'Razredi', path: '/admin-skole/razredi' },
   { label: 'Korisnici', path: '/admin-skole/korisnici' },
   { label: 'Predmeti', path: '/admin-skole/predmeti' },
+  { label: 'Dodjele nastavnika', path: '/admin-skole/masovna-dodjela-nastavnika' },
 ];
 
 export function ClassDashboardLayout({ children }: { children: React.ReactNode }) {
@@ -57,6 +58,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
   const { canAccessClassAdmin } = useClassAdminAccess(effectiveClassId);
   const [openDesktopNavId, setOpenDesktopNavId] = React.useState<string | null>(null);
+  const [studentClassName, setStudentClassName] = React.useState('');
 
   React.useEffect(() => {
     setOpenDesktopNavId(null);
@@ -96,11 +98,14 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                     const rawClazz = enrollment.classes as any;
                     const clazz = Array.isArray(rawClazz) ? rawClazz[0] : rawClazz;
                     if (clazz) {
+                        setStudentClassName(clazz.name || '');
                         setCanAccessThesis(isClassEligibleForFinalThesis(clazz));
                     } else {
+                        setStudentClassName('');
                         setCanAccessThesis(false);
                     }
                 } else {
+                   setStudentClassName('');
                    setCanAccessThesis(false);
                 }
             } else {
@@ -136,7 +141,8 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
   }, [isStaff, isAdminPath, user, effectiveClassId]);
 
   const studentNavFiltered = STUDENT_NAV.filter(item => 
-      item.label !== 'Završni rad' || canAccessThesis
+      (item.label !== 'Završni rad' || canAccessThesis) &&
+      (item.label !== 'Matura' || (studentClassName.trim().startsWith('4.') && studentClassName.trim().toUpperCase() !== '4.K'))
   );
   
   const classPathPrefix = effectiveClassId ? `/class/${effectiveClassId}` : '';
@@ -238,11 +244,12 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
   };
 
   // (Will add burger menu logic later if needed in layout, but for now focus on the structure)
+  const canAccessStudentMatura = studentClassName.trim().startsWith('4.') && studentClassName.trim().toUpperCase() !== '4.K';
   const studentSidebarItems: NavItem[] = [
     { label: 'Ocjene', path: '/student/ocjene', icon: <BookOpen size={18} /> },
     { label: 'Bilješke', path: '/student/biljeske', icon: <FileText size={18} /> },
     { label: 'Ispiti', path: '/student/ispiti', icon: <ClipboardList size={18} /> },
-    { label: 'Matura', path: '/student/matura', icon: <GraduationCap size={18} /> },
+    ...(canAccessStudentMatura ? [{ label: 'Matura', path: '/student/matura', icon: <GraduationCap size={18} /> }] : []),
     { label: 'Izostanci', path: '/student/izostanci', icon: <Clock size={18} /> },
     { label: 'Raspored', path: '/student/raspored', icon: <Calendar size={18} /> },
     { label: 'Informativka', path: '/student/informativka', icon: <List size={18} /> },
@@ -447,7 +454,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                         { label: 'Ocjene', path: '/student/ocjene', icon: <BookOpen size={14} /> },
                         { label: 'Bilješke', path: '/student/biljeske', icon: <FileText size={14} /> },
                         { label: 'Ispiti', path: '/student/ispiti', icon: <FileText size={14} /> },
-                        { label: 'Matura', path: '/student/matura', icon: <GraduationCap size={14} /> },
+                        ...(canAccessStudentMatura ? [{ label: 'Matura', path: '/student/matura', icon: <GraduationCap size={14} /> }] : []),
                         { label: 'Izostanci', path: '/student/izostanci', icon: <Clock size={14} /> },
                       ]
                     });

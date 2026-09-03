@@ -230,6 +230,7 @@ export default function MaturaPage() {
   const [isStudySearchOpen, setIsStudySearchOpen] = React.useState(false);
   const [studySearchFilters, setStudySearchFilters] = React.useState<StudySearchFilters>(DEFAULT_STUDY_SEARCH_FILTERS);
   const [saving, setSaving] = React.useState(false);
+  const [maturaAccessAllowed, setMaturaAccessAllowed] = React.useState<boolean | null>(null);
 
   const requiredSubjects = React.useMemo(() => ['Hrvatski jezik', 'Matematika', foreignLanguage], [foreignLanguage]);
   const selectedRequiredHasLevel = requiredSubject === 'Matematika' || requiredSubject === foreignLanguage;
@@ -275,6 +276,14 @@ export default function MaturaPage() {
 
   React.useEffect(() => {
     const loadContext = async () => {
+      if (selectedClassId) {
+        const { data: classRow } = await supabase.from('classes').select('name').eq('id', selectedClassId).maybeSingle();
+        const className = String(classRow?.name || '').trim();
+        setMaturaAccessAllowed(className.startsWith('4.') && className.toUpperCase() !== '4.K');
+      } else {
+        setMaturaAccessAllowed(false);
+      }
+
       if (selectedSchoolId) {
         const { data } = await supabase.from('schools').select('name, address, city').eq('id', selectedSchoolId).maybeSingle();
         setSchoolInfo(data || null);
@@ -294,11 +303,26 @@ export default function MaturaPage() {
   }, [selectedClassId, selectedSchoolId, targetStudentId]);
 
   React.useEffect(() => {
+    if (!maturaAccessAllowed) return;
     fetchAll().catch(error => {
       console.error(error);
       toast.error('Učitavanje podataka mature nije uspjelo.');
     });
-  }, [fetchAll]);
+  }, [fetchAll, maturaAccessAllowed]);
+
+  if (maturaAccessAllowed === null) {
+    return <div className="flex-1 flex items-center justify-center p-8 text-gray-400 font-bold uppercase text-xs tracking-widest">Provjera pristupa maturi...</div>;
+  }
+
+  if (!maturaAccessAllowed) {
+    return (
+      <div className="flex-1 overflow-auto bg-white p-6">
+        <div className="border border-amber-200 bg-amber-50 text-amber-800 p-5 rounded-sm text-sm font-semibold max-w-2xl">
+          Matura je dostupna samo učenicima redovnih četvrtih razreda. Učenici 4.K razreda nemaju pristup maturi dok ne prijeđu u redovni 4.I razred.
+        </div>
+      </div>
+    );
+  }
 
   const saveRegistration = async (subjectName: string, selectedLevel: MaturaLevel) => {
     if (!targetStudentId || !canEdit) return;
