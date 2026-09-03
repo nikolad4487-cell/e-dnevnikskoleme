@@ -1873,6 +1873,27 @@ async function startServer() {
     return String(value || '').trim();
   }
 
+  function normalizeMaturaLevel(value: any) {
+    const raw = String(value || '').trim().toUpperCase();
+    if (raw === 'A' || raw === 'A_RAZINA') return 'A_RAZINA';
+    if (raw === 'B' || raw === 'B_RAZINA') return 'B_RAZINA';
+    return 'JEDNA_RAZINA';
+  }
+
+  function toLegacyMaturaLevel(value: any) {
+    const normalized = normalizeMaturaLevel(value);
+    if (normalized === 'A_RAZINA') return 'A';
+    if (normalized === 'B_RAZINA') return 'B';
+    return '-';
+  }
+
+  function maturaLevelDbCandidates(value: any) {
+    const normalized = normalizeMaturaLevel(value);
+    if (normalized === 'A_RAZINA') return ['A', 'A_RAZINA'];
+    if (normalized === 'B_RAZINA') return ['B', 'B_RAZINA'];
+    return ['-', 'JEDNA_RAZINA', 'Jedna razina', 'JEDNA', 'ONE_LEVEL'];
+  }
+
   function getMaturaSettingsRecord(schoolId?: any) {
     const settings = readJsonFile("matura_settings.json");
     return settings.find(item => !schoolId || item.school_id === schoolId) || null;
@@ -2226,6 +2247,7 @@ async function startServer() {
         starts_at: item.starts_at || item.exam_at,
         subject_name: normalizeMaturaSubject(item.subject_name || item.subject),
         subject: normalizeMaturaSubject(item.subject || item.subject_name),
+        level: normalizeMaturaLevel(item.level),
       });
       let localItems = readJsonFile("matura_exam_schedule.json").map(normalizeScheduleRow);
       if (schoolId) localItems = localItems.filter(item => item.school_id === schoolId || !item.school_id);
@@ -2260,12 +2282,13 @@ async function startServer() {
       const items = readJsonFile("matura_exam_schedule.json");
       const now = new Date().toISOString();
       const subjectName = normalizeMaturaSubject(payload.subject_name);
+      const level = normalizeMaturaLevel(payload.level);
       const makeScheduleRecord = (overrides: Partial<Record<string, any>> = {}) => ({
         id: crypto.randomUUID(),
         school_id: payload.school_id || null,
         subject: subjectName,
         subject_name: subjectName,
-        level: payload.level || "JEDNA_RAZINA",
+        level: toLegacyMaturaLevel(level),
         exam_at: payload.exam_at,
         starts_at: payload.exam_at,
         room: String(payload.room || '').trim() || null,
@@ -2290,15 +2313,22 @@ async function startServer() {
       }
       if (supabaseAdmin) {
         try {
-          const { data, error } = await supabaseAdmin
-            .from("matura_exam_schedule")
-            .insert(records)
-            .select();
-          if (!error) {
-            items.push(...(data || records));
-            writeJsonFile("matura_exam_schedule.json", items);
-            return res.json({ success: true, data: data || records });
+          let lastError: any = null;
+          for (const dbLevel of maturaLevelDbCandidates(level)) {
+            const candidateRecords = records.map(item => ({ ...item, level: dbLevel }));
+            const { data, error } = await supabaseAdmin
+              .from("matura_exam_schedule")
+              .insert(candidateRecords)
+              .select();
+            if (!error) {
+              items.push(...(data || candidateRecords));
+              writeJsonFile("matura_exam_schedule.json", items);
+              return res.json({ success: true, data: data || candidateRecords });
+            }
+            lastError = error;
+            if (error.code !== "23514") break;
           }
+          const error = lastError;
           if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura schedule write error:", error);
           if (isVercel) return res.status(500).json({ error: `Termin nije spremljen u bazu: ${error.message}` });
         } catch (dbErr: any) {

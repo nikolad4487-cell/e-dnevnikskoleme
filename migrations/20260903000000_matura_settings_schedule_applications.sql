@@ -67,7 +67,7 @@ create table if not exists public.matura_exam_schedule (
   school_id text,
   subject text not null,
   subject_name text not null,
-  level text not null default 'JEDNA_RAZINA' check (level in ('A_RAZINA', 'B_RAZINA', 'JEDNA_RAZINA')),
+  level text not null default '-' check (level in ('A', 'B', '-', 'A_RAZINA', 'B_RAZINA', 'JEDNA_RAZINA')),
   exam_at timestamptz not null,
   starts_at timestamptz not null,
   room text,
@@ -94,6 +94,17 @@ alter table public.matura_exam_schedule alter column subject set not null;
 alter table public.matura_exam_schedule alter column subject_name set default 'Hrvatski jezik';
 alter table public.matura_exam_schedule alter column subject_name set not null;
 alter table public.matura_exam_schedule add column if not exists level text not null default 'JEDNA_RAZINA';
+update public.matura_exam_schedule
+set level = case
+  when level = 'A_RAZINA' then 'A'
+  when level = 'B_RAZINA' then 'B'
+  when level is null or level = 'JEDNA_RAZINA' then '-'
+  else level
+end;
+alter table public.matura_exam_schedule drop constraint if exists matura_exam_schedule_level_valid;
+alter table public.matura_exam_schedule drop constraint if exists matura_exam_schedule_level_check;
+alter table public.matura_exam_schedule alter column level set default '-';
+alter table public.matura_exam_schedule add constraint matura_exam_schedule_level_valid check (level in ('A', 'B', '-', 'A_RAZINA', 'B_RAZINA', 'JEDNA_RAZINA'));
 alter table public.matura_exam_schedule alter column exam_at set default now();
 alter table public.matura_exam_schedule alter column exam_at set not null;
 alter table public.matura_exam_schedule alter column starts_at set default now();
