@@ -165,20 +165,27 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
             <button
               type="button"
               onClick={() => navigate('/select-class')}
-              className="hidden md:grid grid-cols-[42px_1fr] gap-3 text-left hover:bg-slate-50 rounded-sm px-3 py-2 transition-colors"
+              className="hidden md:block min-w-0 max-w-[760px] text-left hover:bg-slate-50 rounded-sm px-3 py-2 transition-colors"
               title="Promijeni razred"
             >
-              <div>
-                <div className="text-lg font-black leading-none">{classLabel}</div>
-                <div className="text-xs font-medium mt-1">{yearLabel || ''}</div>
-              </div>
-              <div className="min-w-0">
-                <div className="font-black text-sm leading-tight truncate">{schoolLabel}</div>
-                {homeroomLabel && (
-                  <div className="text-xs text-slate-700 leading-tight">
-                    razrednik: {homeroomLabel}
-                  </div>
-                )}
+              <div className="min-w-0 space-y-0.5">
+                <div className="flex items-baseline gap-3 min-w-0">
+                  {classLabel && (
+                    <span className="text-xl font-black leading-none shrink-0">
+                      {classLabel}
+                    </span>
+                  )}
+                  {schoolLabel && (
+                    <span className="font-black text-sm leading-tight truncate">
+                      {schoolLabel}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-xs text-slate-600 leading-tight whitespace-nowrap">
+                  {yearLabel && <span className="font-medium">{yearLabel}</span>}
+                  {yearLabel && homeroomLabel && <span className="text-slate-300">|</span>}
+                  {homeroomLabel && <span>razrednik: {homeroomLabel}</span>}
+                </div>
               </div>
             </button>
           )}
