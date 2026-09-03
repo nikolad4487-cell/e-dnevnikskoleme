@@ -5,7 +5,7 @@ import { useSelection } from '../../contexts/SelectionContext';
 import { Subject, User, specialExamTypes } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
 import { formatPersonName, formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
-import { Calendar } from 'lucide-react';
+import { Calendar, ChevronDown, FileText } from 'lucide-react';
 
 interface ExamWithDetails {
   id: string;
@@ -25,6 +25,8 @@ export default function StudentIspitiPage() {
   const [exams, setExams] = useState<ExamWithDetails[]>([]);
   const [specialExams, setSpecialExams] = useState<ExamWithDetails[]>([]);
   const [studentClassName, setStudentClassName] = useState('');
+  const [selectedMonthKey, setSelectedMonthKey] = useState('');
+  const [isMonthMenuOpen, setIsMonthMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!user || !selectedClassId) return;
@@ -189,6 +191,18 @@ export default function StudentIspitiPage() {
     fetchExamsData();
   }, [user, selectedClassId, selectedChildId, isParent]);
 
+  useEffect(() => {
+    if (!selectedMonthKey) return;
+    const hasSelectedMonth = exams.some(exam => {
+      const date = new Date(exam.date);
+      const key = Number.isNaN(date.getTime())
+        ? 'bez-datuma'
+        : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      return key === selectedMonthKey;
+    });
+    if (!hasSelectedMonth) setSelectedMonthKey('');
+  }, [exams, selectedMonthKey]);
+
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center p-8 text-gray-400 font-bold uppercase text-xs tracking-widest">
@@ -200,7 +214,7 @@ export default function StudentIspitiPage() {
   const showSpecialExamSection = studentClassName.trim().toUpperCase() === '4.K';
 
   const groupExamsByMonth = (items: ExamWithDetails[]) => {
-    const sorted = [...items].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+    const sorted = [...items].sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')));
     return sorted.reduce<Array<{ key: string; label: string; items: ExamWithDetails[] }>>((groups, exam) => {
       const date = new Date(exam.date);
       const key = Number.isNaN(date.getTime())
@@ -208,7 +222,7 @@ export default function StudentIspitiPage() {
         : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       const label = Number.isNaN(date.getTime())
         ? 'Bez datuma'
-        : date.toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' });
+        : date.toLocaleDateString('hr-HR', { month: 'long' });
       const existing = groups.find(group => group.key === key);
       if (existing) {
         existing.items.push(exam);
@@ -219,79 +233,61 @@ export default function StudentIspitiPage() {
     }, []);
   };
 
-  const getBadgeStyle = (type: string) => {
-    const t = type.toLowerCase();
-    if (t.includes('pisan') || t.includes('test') || t.includes('kontrola')) {
-      return 'bg-blue-50 text-blue-700 border-blue-200';
-    }
-    if (t.includes('usmen') || t.includes('ispiti')) {
-      return 'bg-purple-50 text-purple-700 border-purple-200';
-    }
-    if (t.includes('inicijal')) {
-      return 'bg-amber-50 text-amber-700 border-amber-200';
-    }
-    return 'bg-gray-50 text-gray-700 border-gray-200';
-  };
+  const monthOptions = groupExamsByMonth(exams);
+  const displayedExams = selectedMonthKey ? exams.filter(exam => {
+    const date = new Date(exam.date);
+    const key = Number.isNaN(date.getTime())
+      ? 'bez-datuma'
+      : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    return key === selectedMonthKey;
+  }) : exams;
+  const selectedMonthLabel = monthOptions.find(option => option.key === selectedMonthKey)?.label;
 
-  const ExamsTable = ({ items, emptyText }: { items: ExamWithDetails[]; emptyText: string }) => {
+  const ExamsByMonth = ({ items, emptyText }: { items: ExamWithDetails[]; emptyText: string }) => {
     const groups = groupExamsByMonth(items);
 
-    return (
-      <div className="bg-white border border-gray-200 shadow-sm overflow-hidden">
-        <table className="w-full text-xs border-collapse">
-          <thead className="bg-[#f8f9fa] text-slate-600 uppercase text-[10px] tracking-wider">
-            <tr>
-              <th className="border border-gray-200 px-3 py-2 text-left w-[150px]">Datum</th>
-              <th className="border border-gray-200 px-3 py-2 text-left">Predmet</th>
-              <th className="border border-gray-200 px-3 py-2 text-left w-[150px]">Vrsta</th>
-              <th className="border border-gray-200 px-3 py-2 text-left">Nastavnik</th>
-              <th className="border border-gray-200 px-3 py-2 text-left">Opis / bilješka</th>
-              <th className="border border-gray-200 px-3 py-2 text-left w-[90px]">Ocjena</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="border border-gray-200 px-3 py-10 text-center text-gray-400 italic">
-                  {emptyText}
-                </td>
-              </tr>
-            ) : groups.map(group => (
-              <React.Fragment key={group.key}>
-                <tr>
-                  <td colSpan={6} className="bg-[#eef5fb] border border-gray-200 px-3 py-2 text-[11px] font-black uppercase tracking-widest text-[#005c8d]">
-                    {group.label}
-                  </td>
-                </tr>
-                {group.items.map(exam => {
-                  const sName = exam.subject ? formatSubjectName(exam.subject) : 'Nepoznat predmet';
-                  const teacherNames = exam.teachers.length > 0
-                    ? exam.teachers.map(t => formatPersonName(t)).join(', ')
-                    : 'Nije dodijeljen nastavnik';
-                  const date = new Date(exam.date);
-                  const dateLabel = Number.isNaN(date.getTime())
-                    ? '-'
-                    : date.toLocaleDateString('hr-HR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+    if (groups.length === 0) {
+      return (
+        <div className="bg-white border border-gray-200 rounded-md p-8 text-center text-gray-400 italic text-xs shadow-sm">
+          {emptyText}
+        </div>
+      );
+    }
 
-                  return (
-                    <tr key={exam.id} className="hover:bg-slate-50">
-                      <td className="border border-gray-200 px-3 py-2 font-bold text-slate-800">{dateLabel}</td>
-                      <td className="border border-gray-200 px-3 py-2 font-bold text-slate-900">{sName}</td>
-                      <td className="border border-gray-200 px-3 py-2">
-                        <span className={`inline-flex px-2 py-1 text-[9px] font-bold uppercase tracking-wider rounded border ${getBadgeStyle(exam.type)}`}>
-                          {exam.type || '-'}
-                        </span>
-                      </td>
-                      <td className="border border-gray-200 px-3 py-2 text-slate-700">{teacherNames}</td>
-                      <td className="border border-gray-200 px-3 py-2 text-slate-600 whitespace-pre-wrap">{exam.description || exam.note || '-'}</td>
-                      <td className="border border-gray-200 px-3 py-2 font-black text-[#005c8d]">{exam.value || '-'}</td>
-                    </tr>
-                  );
-                })}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
+    return (
+      <div className="space-y-5">
+        {groups.map(group => (
+          <section key={group.key} className="bg-white border border-gray-200 rounded-lg shadow-md overflow-hidden">
+            <div className="bg-[#1780c2] text-white text-center py-2 text-base font-bold">
+              {group.label.charAt(0).toUpperCase() + group.label.slice(1)}
+            </div>
+            <div className="divide-y divide-gray-100">
+              {group.items.map(exam => {
+                const sName = exam.subject ? formatSubjectName(exam.subject) : 'Nepoznat predmet';
+                const date = new Date(exam.date);
+                const dateLabel = Number.isNaN(date.getTime())
+                  ? '-'
+                  : date.toLocaleDateString('hr-HR', { day: 'numeric', month: 'numeric' });
+                const teacherNames = exam.teachers.length > 0
+                  ? exam.teachers.map(t => formatPersonName(t)).join(', ')
+                  : '';
+                const detail = exam.description || exam.note || exam.type || '';
+
+                return (
+                  <div key={exam.id} className="grid grid-cols-[110px_minmax(0,1fr)] gap-5 px-4 md:px-16 py-2.5 text-base hover:bg-slate-50">
+                    <div className="text-center text-slate-950 font-normal whitespace-nowrap">{dateLabel}</div>
+                    <div className="min-w-0 leading-tight">
+                      <div className="font-bold text-slate-950">{sName}</div>
+                      {detail && <div className="text-slate-950">{detail}</div>}
+                      {teacherNames && <div className="text-xs text-slate-500 mt-1">{teacherNames}</div>}
+                      {exam.value && <div className="text-xs font-bold text-[#005c8d] mt-1">Ocjena: {exam.value}</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ))}
       </div>
     );
   };
@@ -302,17 +298,45 @@ export default function StudentIspitiPage() {
         <div className="flex items-center justify-between gap-4">
           <h2 className="text-base font-normal text-slate-900">ISPITI</h2>
           <div className="hidden md:flex gap-3">
-            <button className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium">Kalendar</button>
-            <button className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium">PDF</button>
-            <button className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium min-w-[220px] text-left">Odaberite mjesec</button>
+            <button className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium flex items-center gap-1">
+              <Calendar size={14} />Kalendar
+            </button>
+            <button className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium flex items-center gap-1">
+              <FileText size={14} />PDF
+            </button>
+            <div className="relative">
+              <button
+                type="button"
+                disabled={monthOptions.length === 0}
+                onClick={() => setIsMonthMenuOpen(open => !open)}
+                className="bg-[#1780c2] disabled:bg-slate-300 text-white px-4 py-2 rounded-md text-sm font-medium min-w-[460px] text-left flex items-center justify-between"
+              >
+                <span>{selectedMonthLabel ? selectedMonthLabel.charAt(0).toUpperCase() + selectedMonthLabel.slice(1) : 'Odaberite mjesec'}</span>
+                <ChevronDown size={16} className={isMonthMenuOpen ? 'rotate-180 transition-transform' : 'transition-transform'} />
+              </button>
+              {isMonthMenuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-full bg-white border border-gray-200 rounded-md shadow-xl z-40 py-2 max-h-[400px] overflow-y-auto">
+                  {monthOptions.map(option => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => {
+                        setSelectedMonthKey(option.key);
+                        setIsMonthMenuOpen(false);
+                      }}
+                      className="w-full text-left px-4 py-3 text-sm hover:bg-slate-50"
+                    >
+                      {option.label.charAt(0).toUpperCase() + option.label.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         <div className="space-y-4">
-          <h3 className="text-xs font-black uppercase text-gray-600 tracking-wider flex items-center gap-2 border-b border-gray-300 pb-2">
-            <Calendar size={14} className="text-blue-500" /> Ispiti i provjere po mjesecu održavanja
-          </h3>
-          <ExamsTable items={exams} emptyText="Nema upisanih ispita ili provjera znanja." />
+          <ExamsByMonth items={displayedExams} emptyText="Nema upisanih ispita ili provjera znanja." />
         </div>
 
         {/* Special Exams (Dopunski / Razlikovni / Popravni) */}
@@ -320,7 +344,7 @@ export default function StudentIspitiPage() {
           <h3 className="text-xs font-black uppercase text-[#005c8d] tracking-wider border-b-2 border-[#005c8d]/20 pb-2 flex items-center gap-2">
             Dopunski / razlikovni / popravni ispiti
           </h3>
-          <ExamsTable items={specialExams} emptyText="Nema upisanih dopunskih, razlikovnih ili popravnih ispita za ovog učenika." />
+          <ExamsByMonth items={specialExams} emptyText="Nema upisanih dopunskih, razlikovnih ili popravnih ispita za ovog učenika." />
         </div>}
       </div>
     </div>
