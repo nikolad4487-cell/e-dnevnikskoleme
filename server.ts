@@ -1894,6 +1894,48 @@ async function startServer() {
     return ['ONE', '-', 'JEDNA_RAZINA', 'Jedna razina', 'JEDNA', 'ONE_LEVEL'];
   }
 
+  function getZagrebOffsetMinutes(date: Date) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Europe/Zagreb',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(date);
+    const value = (type: string) => Number(parts.find(part => part.type === type)?.value || 0);
+    const asUtc = Date.UTC(
+      value('year'),
+      value('month') - 1,
+      value('day'),
+      value('hour'),
+      value('minute'),
+      value('second')
+    );
+    return (asUtc - date.getTime()) / 60000;
+  }
+
+  function normalizeMaturaExamDateTime(value: any) {
+    const raw = String(value || '').trim();
+    const localMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (localMatch) {
+      const [, year, month, day, hour, minute, second = '00'] = localMatch;
+      const utcGuess = new Date(Date.UTC(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+        Number(hour),
+        Number(minute),
+        Number(second)
+      ));
+      const offsetMinutes = getZagrebOffsetMinutes(utcGuess);
+      return new Date(utcGuess.getTime() - offsetMinutes * 60000).toISOString();
+    }
+    return raw;
+  }
+
   function getMaturaSettingsRecord(schoolId?: any) {
     const settings = readJsonFile("matura_settings.json");
     return settings.find(item => !schoolId || item.school_id === schoolId) || null;
@@ -2283,14 +2325,15 @@ async function startServer() {
       const now = new Date().toISOString();
       const subjectName = normalizeMaturaSubject(payload.subject_name);
       const level = normalizeMaturaLevel(payload.level);
+      const examAt = normalizeMaturaExamDateTime(payload.exam_at);
       const makeScheduleRecord = (overrides: Partial<Record<string, any>> = {}) => ({
         id: crypto.randomUUID(),
         school_id: payload.school_id || null,
         subject: subjectName,
         subject_name: subjectName,
         level: toLegacyMaturaLevel(level),
-        exam_at: payload.exam_at,
-        starts_at: payload.exam_at,
+        exam_at: examAt,
+        starts_at: examAt,
         room: String(payload.room || '').trim() || null,
         note: String(payload.note || '').trim() || null,
         created_at: now,
@@ -2299,7 +2342,7 @@ async function startServer() {
       });
       const records = [makeScheduleRecord()];
       if (subjectName === "Hrvatski jezik") {
-        const essayDate = new Date(payload.exam_at);
+        const essayDate = new Date(examAt);
         if (!Number.isNaN(essayDate.getTime())) {
           essayDate.setDate(essayDate.getDate() + 1);
           records[0].room = "Test + sažetak";

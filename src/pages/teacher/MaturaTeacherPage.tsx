@@ -107,6 +107,7 @@ const defaultMaturaLevel = (subjectName: string): MaturaLevel => hasMaturaLevel(
 const formatDateTime = (value?: string) => {
   if (!value) return '-';
   return new Date(value).toLocaleString('hr-HR', {
+    timeZone: 'Europe/Zagreb',
     day: 'numeric',
     month: 'numeric',
     year: 'numeric',
