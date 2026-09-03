@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Absence, AbsenceStatus, Role, Subject } from '../../types';
 import { cn, formatPersonName, formatSubjectDisplayName } from '../../lib/utils';
-import { Calendar as CalendarIcon, UserX, Clock, CheckCircle2, XCircle, ChevronLeft, ChevronRight, HelpCircle } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 interface AbsenceWithDetails extends Absence {
   lessonTopic?: string;
@@ -28,6 +28,7 @@ export default function IzostanciPage() {
   // Calendar State
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDayStr, setSelectedDayStr] = useState<string | null>(null);
+  const [isMonthMenuOpen, setIsMonthMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!user || !selectedClassId) return;
@@ -165,16 +166,6 @@ export default function IzostanciPage() {
   // Adjust starting day to European format where index 0 = Monday, 6 = Sunday
   const euroFirstDayIndex = firstDayIndex === 0 ? 6 : firstDayIndex - 1;
 
-  const prevMonth = () => {
-    setCurrentDate(new Date(year, month - 1, 1));
-    setSelectedDayStr(null);
-  };
-
-  const nextMonth = () => {
-    setCurrentDate(new Date(year, month + 1, 1));
-    setSelectedDayStr(null);
-  };
-
   // Map of date string 'YYYY-MM-DD' of absences
   const absencesByDate: Record<string, AbsenceWithDetails[]> = {};
   absences.forEach(abs => {
@@ -209,32 +200,41 @@ export default function IzostanciPage() {
     return getOrder(mA, yA).localeCompare(getOrder(mB, yB));
   });
 
-  // Default to the first (earliest) sorted month with absences
+  // Default to the first sorted month with absences
   const [selectedMonthKey, setSelectedMonthKey] = useState<string | null>(sortedMonthKeys[0] || null);
   
-  // Initialize default selected month when data loads
+  // Keep calendar locked to months that actually contain absences.
   useEffect(() => {
-    if (sortedMonthKeys.length > 0 && !selectedMonthKey) {
-        setSelectedMonthKey(sortedMonthKeys[0]);                
+    if (sortedMonthKeys.length === 0) {
+      setSelectedMonthKey(null);
+      setSelectedDayStr(null);
+      return;
+    }
+
+    if (!selectedMonthKey || !sortedMonthKeys.includes(selectedMonthKey)) {
+      setSelectedMonthKey(sortedMonthKeys[0]);
+      setSelectedDayStr(null);
+      return;
     }
   }, [sortedMonthKeys, selectedMonthKey]);
 
-  const absencesForSelectedMonth = selectedMonthKey ? groupedAbsences[selectedMonthKey] : [];
+  useEffect(() => {
+    if (!selectedMonthKey) return;
+    const [selectedYear, selectedMonth] = selectedMonthKey.split('-').map(Number);
+    setCurrentDate(new Date(selectedYear, selectedMonth - 1, 1));
+  }, [selectedMonthKey]);
 
-  const getStatusBadgeStyles = (statusVal: string) => {
-    const norm = getStatusType(statusVal);
-    if (norm === 'OPRAVDANO') return 'bg-green-50 text-green-700 border-green-200';
-    if (norm === 'NEOPRAVDANO') return 'bg-red-50 text-red-700 border-red-200';
-    if (norm === 'CEKA_ODLUKU') return 'bg-black text-white border-black';
-    return 'bg-yellow-50 text-yellow-700 border-yellow-200';
-  };
+  const selectedMonthIndex = selectedMonthKey ? sortedMonthKeys.indexOf(selectedMonthKey) : -1;
+  const canGoPrevMonth = selectedMonthIndex > 0;
+  const canGoNextMonth = selectedMonthIndex >= 0 && selectedMonthIndex < sortedMonthKeys.length - 1;
+  const selectedMonthLabel = selectedMonthKey
+    ? `${CROATIAN_MONTHS[Number(selectedMonthKey.split('-')[1]) - 1]} ${selectedMonthKey.split('-')[0]}`
+    : 'Odaberite mjesec';
 
-  const getStatusDotColor = (absencesList: AbsenceWithDetails[]) => {
-    if (absencesList.some(a => getStatusType(a.status) === 'NEOPRAVDANO')) return 'bg-red-500';
-    if (absencesList.some(a => getStatusType(a.status) === 'CEKA_ODLUKU')) return 'bg-black';
-    if (absencesList.some(a => getStatusType(a.status) === 'OPRAVDANO')) return 'bg-green-500';
-    if (absencesList.some(a => getStatusType(a.status) === 'OSTALO')) return 'bg-yellow-500';
-    return 'bg-gray-400';
+  const selectMonth = (monthKey: string) => {
+    setSelectedMonthKey(monthKey);
+    setSelectedDayStr(null);
+    setIsMonthMenuOpen(false);
   };
 
   return (
@@ -244,7 +244,38 @@ export default function IzostanciPage() {
         <h2 className="text-base font-normal text-slate-900">IZOSTANCI</h2>
         <div className="hidden md:flex gap-3">
           <button className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium">Graf</button>
-          <button className="bg-[#1780c2] text-white px-4 py-2 rounded-md text-sm font-medium min-w-[220px] text-left">Odaberite mjesec</button>
+          <div className="relative">
+            <button
+              type="button"
+              disabled={sortedMonthKeys.length === 0}
+              onClick={() => setIsMonthMenuOpen(open => !open)}
+              className="bg-[#1780c2] disabled:bg-slate-300 text-white px-4 py-2 rounded-md text-sm font-medium min-w-[460px] text-left flex items-center justify-between"
+            >
+              <span>{selectedMonthLabel}</span>
+              <ChevronDown size={16} className={cn("transition-transform", isMonthMenuOpen && "rotate-180")} />
+            </button>
+            {isMonthMenuOpen && (
+              <div className="absolute right-0 top-full mt-1 w-full bg-white border border-gray-200 rounded-md shadow-xl z-40 py-2 max-h-[400px] overflow-y-auto">
+                {sortedMonthKeys.map(key => {
+                  const [y, m] = key.split('-');
+                  const label = `${CROATIAN_MONTHS[parseInt(m) - 1]} ${y}`;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => selectMonth(key)}
+                      className={cn(
+                        "w-full text-left px-4 py-3 text-sm hover:bg-slate-50",
+                        selectedMonthKey === key && "font-bold text-[#005c8d]"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -280,12 +311,19 @@ export default function IzostanciPage() {
           </div>
         ) : (
           <>
+            {sortedMonthKeys.length === 0 ? (
+              <div className="bg-white border border-gray-300 p-8 shadow-sm flex-1 text-center text-slate-400 italic text-xs">
+                Nema evidentiranih izostanaka.
+              </div>
+            ) : (
+            <>
             {/* Left Box: Monthly Calendar */}
             <div className="bg-white border border-gray-300 p-4 shadow-sm flex-1 lg:max-w-md h-fit">
               <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-3">
                 <button
-                  onClick={prevMonth}
-                  className="p-1.5 hover:bg-slate-100 text-gray-600 transition-colors cursor-pointer border border-slate-200"
+                  onClick={() => canGoPrevMonth && selectMonth(sortedMonthKeys[selectedMonthIndex - 1])}
+                  disabled={!canGoPrevMonth}
+                  className="p-1.5 hover:bg-slate-100 text-gray-600 transition-colors cursor-pointer border border-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <ChevronLeft size={16} />
                 </button>
@@ -293,8 +331,9 @@ export default function IzostanciPage() {
                   {CROATIAN_MONTHS[month]} {year}.
                 </h3>
                 <button
-                  onClick={nextMonth}
-                  className="p-1.5 hover:bg-slate-100 text-gray-600 transition-colors cursor-pointer border border-slate-200"
+                  onClick={() => canGoNextMonth && selectMonth(sortedMonthKeys[selectedMonthIndex + 1])}
+                  disabled={!canGoNextMonth}
+                  className="p-1.5 hover:bg-slate-100 text-gray-600 transition-colors cursor-pointer border border-slate-200 disabled:opacity-30 disabled:cursor-not-allowed"
                 >
                   <ChevronRight size={16} />
                 </button>
@@ -406,7 +445,7 @@ export default function IzostanciPage() {
                              return (
                                <button 
                                 key={key} 
-                                onClick={() => setSelectedMonthKey(key)}
+                                onClick={() => selectMonth(key)}
                                 className={cn(
                                     "px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border rounded-full transition-colors",
                                     selectedMonthKey === key 
@@ -437,7 +476,7 @@ export default function IzostanciPage() {
                                const normStatus = getStatusType(abs.status);
                                const statusColor = normStatus === 'OPRAVDANO' ? 'bg-green-500' : normStatus === 'NEOPRAVDANO' ? 'bg-red-500' : normStatus === 'CEKA_ODLUKU' ? 'bg-black' : 'bg-yellow-500';
                                const statusText = normStatus === 'OPRAVDANO' ? 'Opravdano' : normStatus === 'NEOPRAVDANO' ? 'Neopravdano' : normStatus === 'CEKA_ODLUKU' ? 'Čeka odluku' : 'Ostalo';
-                               const statusTextColor = normStatus === 'OPRAVDANO' ? 'text-green-600' : normStatus === 'NEOPRAVDANO' ? 'text-red-600' : normStatus === 'CEKA_ODLUKU' ? 'text-black' : 'text-yellow-600';
+                              const statusTextColor = normStatus === 'OPRAVDANO' ? 'text-green-600' : normStatus === 'NEOPRAVDANO' ? 'text-red-600' : normStatus === 'CEKA_ODLUKU' ? 'text-black' : 'text-yellow-600';
                                const reason = normStatus === 'OPRAVDANO' ? (abs.absenceType || '—') : (abs.note || '—');
 
                                return (
@@ -479,6 +518,8 @@ export default function IzostanciPage() {
                 )}
               </div>
             </div>
+            </>
+            )}
           </>
         )}
       </div>
