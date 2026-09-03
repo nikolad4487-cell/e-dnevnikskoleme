@@ -387,8 +387,21 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     if (classHrAssignments.length > 0) {
       return classHrAssignments[0].subjectId;
     }
+
+    const classHrSubject = classSubjects.find(cs => {
+      const subjectId = cs.subject_id || cs.subjectId;
+      const subject = allSubjects.find(s => s.id === subjectId);
+      return subject?.name?.toLowerCase().includes('hrvatski');
+    });
+
+    if (classHrSubject) {
+      return classHrSubject.subject_id || classHrSubject.subjectId || '';
+    }
     
-    const hrSub = allSubjects.find(s => s.name.toLowerCase().includes('hrvatski'));
+    const hrSub = allSubjects.find(s => {
+      if (!s.name.toLowerCase().includes('hrvatski')) return false;
+      return classSubjects.some(cs => (cs.subject_id || cs.subjectId) === s.id);
+    });
     return hrSub ? hrSub.id : '';
   };
   const [reloadScheduleTrigger, setReloadScheduleTrigger] = useState(0);
@@ -519,28 +532,10 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const fetchLektire = async () => {
     if (!effectiveClassId) return;
     try {
-      const url = new URL('/api/lektire', window.location.origin);
-      url.searchParams.append('classId', effectiveClassId);
-      
-      let schoolId = selectedSchoolId || selectedClass?.schoolId || null;
-      let yrId = selectedYearId || selectedClass?.school_year_id || null;
-
-      if (!schoolId || !yrId) {
-        const { data: clsData } = await supabase
-          .from('classes')
-          .select('school_id, school_year_id')
-          .eq('id', effectiveClassId)
-          .maybeSingle();
-        if (clsData) {
-          schoolId = schoolId || clsData.school_id || null;
-          yrId = yrId || clsData.school_year_id || null;
-        }
-      }
-
       let hrSubjectId = getHrvatskiJezikSubjectId();
-      if (!hrSubjectId && schoolId) {
+      if (!hrSubjectId) {
         const { data: classSubjs } = await supabase
-          .from('class_subject_teachers')
+          .from('class_subjects')
           .select('subject_id')
           .eq('class_id', effectiveClassId);
         const subIds = (classSubjs || []).map(cs => cs.subject_id);
@@ -554,51 +549,22 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
             hrSubjectId = hrSub.id;
           }
         }
-        if (!hrSubjectId) {
-          const { data: globalSubjs } = await supabase
-            .from('subjects')
-            .select('id, name')
-            .eq('school_id', schoolId);
-          const hrSub = (globalSubjs || []).find(s => s.name?.toLowerCase().includes('hrvatski'));
-          if (hrSub) {
-            hrSubjectId = hrSub.id;
-          }
-        }
       }
 
-      if (hrSubjectId) {
-        url.searchParams.append('subjectId', hrSubjectId);
+      if (!hrSubjectId) {
+        setLektire([]);
+        return;
       }
-      if (schoolId) {
-        url.searchParams.append('schoolId', schoolId);
-      }
-      if (yrId) {
-        url.searchParams.append('schoolYearId', yrId);
-      }
-      // Add cache-busting timestamp parameter
-      url.searchParams.append('_t', Date.now().toString());
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token || '';
-      const res = await fetch(url.toString(), {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        console.log("LOAD READINGS FILTERS", {
-          school_id: schoolId,
-          school_year_id: yrId,
-          class_id: effectiveClassId,
-          subject_id: hrSubjectId
-        });
-        console.log("LOAD READINGS RESULT", { data, error: !res.ok ? data : null });
-        console.log("FETCH AFTER DELETE RESULT", data);
-        console.log("STATE BEFORE SET", lektire);
-        console.log("FETCH RESULT", data);
-        setLektire(data || []);
-      }
+
+      const { data, error } = await supabase
+        .from('reading_assignments')
+        .select('*')
+        .eq('class_id', effectiveClassId)
+        .eq('subject_id', hrSubjectId)
+        .order('processed_at', { ascending: false });
+
+      if (error) throw error;
+      setLektire(data || []);
     } catch (e) {
       console.error("Error loading lektire:", e);
     }
@@ -607,6 +573,10 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const handleCreateOrUpdateLektira = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSavingLektira) return;
+    if (!canAccessLektira) {
+      toast.error('Lektiru može uređivati samo admin ili nastavnik Hrvatskog jezika.');
+      return;
+    }
 
     let schoolId = selectedSchoolId || selectedClass?.schoolId || null;
     let schoolYearId = selectedYearId || selectedClass?.school_year_id || null;
@@ -996,8 +966,25 @@ setStudents(uniqueStudents);
       }
     };
     fetchAssignments();
-    fetchLektire();
   }, [effectiveClassId]);
+
+  useEffect(() => {
+    if (view === 'LEKTIRA' && !canAccessLektira && allSubjects.length > 0) {
+      setView('WEEKS');
+    }
+  }, [view, canAccessLektira, allSubjects.length]);
+
+  useEffect(() => {
+    if (
+      view === 'LEKTIRA' &&
+      effectiveClassId &&
+      canAccessLektira &&
+      allSubjects.length > 0 &&
+      (classSubjects.length > 0 || subjectAssignments.length > 0)
+    ) {
+      fetchLektire();
+    }
+  }, [view, effectiveClassId, canAccessLektira, allSubjects.length, classSubjects.length, subjectAssignments.length]);
 
   useEffect(() => {
     if (view === 'ABSENCES' && effectiveClassId && selectedWeek) {
@@ -2821,12 +2808,8 @@ setStudents(uniqueStudents);
         )}
 
         {/* LEKTIRA VIEW */}
-        {view === 'LEKTIRA' && selectedClass && (
+        {view === 'LEKTIRA' && selectedClass && canAccessLektira && (
           <div className="w-full space-y-4">
-            {(() => {
-              console.log("RENDER LEKTIRE", lektire);
-              return null;
-            })()}
             <div className="flex justify-between items-center bg-white p-3 border border-gray-300 shadow-sm">
               <span className="text-xs font-bold text-gray-500 uppercase">
                 Evidencija lektira ({lektire.length})
@@ -3023,14 +3006,14 @@ setStudents(uniqueStudents);
           </div>
         )}
 
-          {view === 'LEKTIRA' && !selectedClass && (
+          {view === 'LEKTIRA' && !selectedClass && canAccessLektira && (
              <div className="w-full bg-white border border-gray-300 p-8 text-center text-gray-500 font-bold uppercase text-xs">
                Molimo odaberite razred za prikaz lektire.
              </div>
           )}
 
         {/* LEKTIRA MODAL */}
-        {showLektiraModal && (
+        {showLektiraModal && canAccessLektira && (
           <div className="fixed inset-0 bg-black/45 z-55 flex items-center justify-center p-4 backdrop-blur-sm">
             <div className="bg-white border border-gray-300 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200">
               <div className="bg-[#005c8d] p-3 text-white flex items-center justify-between shrink-0">
