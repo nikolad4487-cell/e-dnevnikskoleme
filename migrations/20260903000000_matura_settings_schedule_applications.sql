@@ -1,0 +1,193 @@
+create or replace function public.update_updated_at_column()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+create table if not exists public.matura_settings (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid references public.schools(id) on delete cascade,
+  registration_opens_at timestamptz,
+  registration_closes_at timestamptz,
+  cancellation_closes_at timestamptz,
+  study_program_changes_opens_at timestamptz,
+  study_program_changes_close_at timestamptz,
+  study_program_withdrawal_closes_at timestamptz,
+  objection_opens_at timestamptz,
+  objection_closes_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint matura_settings_school_unique unique (school_id)
+);
+
+create index if not exists idx_matura_settings_school on public.matura_settings(school_id);
+
+alter table public.matura_settings enable row level security;
+
+drop policy if exists "Matura settings are readable" on public.matura_settings;
+create policy "Matura settings are readable"
+on public.matura_settings
+for select
+using (true);
+
+drop policy if exists "School admins can manage matura settings" on public.matura_settings;
+create policy "School admins can manage matura settings"
+on public.matura_settings
+for all
+using (
+  exists (
+    select 1
+    from public.user_profiles up
+    left join public.user_school_roles usr on usr.user_id = up.id
+    where up.auth_user_id = auth.uid()
+      and (
+        up.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
+        or usr.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
+      )
+      and (matura_settings.school_id is null or usr.school_id = matura_settings.school_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.user_profiles up
+    left join public.user_school_roles usr on usr.user_id = up.id
+    where up.auth_user_id = auth.uid()
+      and (
+        up.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
+        or usr.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
+      )
+      and (matura_settings.school_id is null or usr.school_id = matura_settings.school_id)
+  )
+);
+
+drop trigger if exists set_matura_settings_updated_at on public.matura_settings;
+create trigger set_matura_settings_updated_at
+before update on public.matura_settings
+for each row
+execute function public.update_updated_at_column();
+
+create table if not exists public.matura_exam_schedule (
+  id uuid primary key default gen_random_uuid(),
+  school_id uuid references public.schools(id) on delete cascade,
+  subject_name text not null,
+  level text not null default 'JEDNA_RAZINA' check (level in ('A_RAZINA', 'B_RAZINA', 'JEDNA_RAZINA')),
+  exam_at timestamptz not null,
+  room text,
+  note text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_matura_exam_schedule_school on public.matura_exam_schedule(school_id);
+create index if not exists idx_matura_exam_schedule_exam_at on public.matura_exam_schedule(exam_at);
+
+alter table public.matura_exam_schedule enable row level security;
+
+drop policy if exists "Matura schedule is readable" on public.matura_exam_schedule;
+create policy "Matura schedule is readable"
+on public.matura_exam_schedule
+for select
+using (true);
+
+drop policy if exists "School admins can manage matura schedule" on public.matura_exam_schedule;
+create policy "School admins can manage matura schedule"
+on public.matura_exam_schedule
+for all
+using (
+  exists (
+    select 1
+    from public.user_profiles up
+    left join public.user_school_roles usr on usr.user_id = up.id
+    where up.auth_user_id = auth.uid()
+      and (
+        up.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
+        or usr.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
+      )
+      and (matura_exam_schedule.school_id is null or usr.school_id = matura_exam_schedule.school_id)
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.user_profiles up
+    left join public.user_school_roles usr on usr.user_id = up.id
+    where up.auth_user_id = auth.uid()
+      and (
+        up.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
+        or usr.role in ('ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN')
+      )
+      and (matura_exam_schedule.school_id is null or usr.school_id = matura_exam_schedule.school_id)
+  )
+);
+
+drop trigger if exists set_matura_exam_schedule_updated_at on public.matura_exam_schedule;
+create trigger set_matura_exam_schedule_updated_at
+before update on public.matura_exam_schedule
+for each row
+execute function public.update_updated_at_column();
+
+create table if not exists public.matura_study_applications (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references public.user_profiles(id) on delete cascade,
+  priority_index integer not null check (priority_index between 1 and 10),
+  study_program_id uuid references public.matura_study_programs(id) on delete cascade,
+  name text not null,
+  city text,
+  institution text,
+  requirements jsonb,
+  is_currently_admitted boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint matura_study_applications_student_priority_unique unique (student_id, priority_index),
+  constraint matura_study_applications_student_program_unique unique (student_id, study_program_id)
+);
+
+create index if not exists idx_matura_study_applications_student on public.matura_study_applications(student_id);
+create index if not exists idx_matura_study_applications_program on public.matura_study_applications(study_program_id);
+
+alter table public.matura_study_applications enable row level security;
+
+drop policy if exists "Students can read own matura study applications" on public.matura_study_applications;
+create policy "Students can read own matura study applications"
+on public.matura_study_applications
+for select
+using (
+  exists (
+    select 1
+    from public.user_profiles up
+    where up.id = matura_study_applications.student_id
+      and up.auth_user_id = auth.uid()
+  )
+);
+
+drop policy if exists "Students can manage own matura study applications" on public.matura_study_applications;
+create policy "Students can manage own matura study applications"
+on public.matura_study_applications
+for all
+using (
+  exists (
+    select 1
+    from public.user_profiles up
+    where up.id = matura_study_applications.student_id
+      and up.auth_user_id = auth.uid()
+  )
+)
+with check (
+  exists (
+    select 1
+    from public.user_profiles up
+    where up.id = matura_study_applications.student_id
+      and up.auth_user_id = auth.uid()
+  )
+);
+
+drop trigger if exists set_matura_study_applications_updated_at on public.matura_study_applications;
+create trigger set_matura_study_applications_updated_at
+before update on public.matura_study_applications
+for each row
+execute function public.update_updated_at_column();

@@ -1873,6 +1873,37 @@ async function startServer() {
     return String(value || '').trim();
   }
 
+  function getMaturaSettingsRecord(schoolId?: any) {
+    const settings = readJsonFile("matura_settings.json");
+    return settings.find(item => !schoolId || item.school_id === schoolId) || null;
+  }
+
+  async function loadMaturaSettingsRecord(schoolId?: any) {
+    if (supabaseAdmin) {
+      try {
+        let query = supabaseAdmin.from("matura_settings").select("*");
+        if (schoolId) query = query.eq("school_id", schoolId);
+        const { data, error } = await query.order("updated_at", { ascending: false }).limit(1);
+        if (!error) return (Array.isArray(data) ? data[0] : null) || null;
+        if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura settings window read error:", error);
+      } catch (dbErr: any) {
+        if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura settings window read connection error:", dbErr);
+      }
+    }
+    return getMaturaSettingsRecord(schoolId);
+  }
+
+  function ensureDateWindow(settings: any, startsKey: string | null, endsKey: string | null, notStartedMessage: string, expiredMessage: string) {
+    const now = new Date();
+    if (startsKey && settings?.[startsKey] && now < new Date(settings[startsKey])) {
+      return notStartedMessage;
+    }
+    if (endsKey && settings?.[endsKey] && now > new Date(settings[endsKey])) {
+      return expiredMessage;
+    }
+    return "";
+  }
+
   app.get("/api/matura-registrations", async (req, res) => {
     try {
       const { studentId, classId, schoolId } = req.query;
@@ -1918,6 +1949,15 @@ async function startServer() {
       if (!studentId || !subjectName || !MATURA_LEVELS.has(level)) {
         return res.status(400).json({ error: "Učenik, predmet i razina mature su obavezni." });
       }
+
+      const windowError = ensureDateWindow(
+        await loadMaturaSettingsRecord(payload.school_id),
+        "registration_opens_at",
+        "registration_closes_at",
+        "Rok za prijavu ispita državne mature još nije započeo.",
+        "Rok za prijavu ispita državne mature je istekao."
+      );
+      if (windowError) return res.status(400).json({ error: windowError });
 
       const registrations = readJsonFile("matura_registrations.json");
       const now = new Date().toISOString();
@@ -2031,7 +2071,15 @@ async function startServer() {
   app.put("/api/matura-registrations/:id/cancel", async (req, res) => {
     try {
       const { id } = req.params;
-      const { student_id } = req.body || {};
+      const { student_id, school_id } = req.body || {};
+      const windowError = ensureDateWindow(
+        await loadMaturaSettingsRecord(school_id),
+        null,
+        "cancellation_closes_at",
+        "",
+        "Rok za odjavu ispita državne mature je istekao."
+      );
+      if (windowError) return res.status(400).json({ error: windowError });
       if (supabaseAdmin) {
         try {
           let query = supabaseAdmin.from("matura_registrations").select("*").eq("id", id).limit(1);
@@ -2082,9 +2130,20 @@ async function startServer() {
     }
   });
 
-  app.get("/api/matura-settings", (req, res) => {
+  app.get("/api/matura-settings", async (req, res) => {
     try {
       const { schoolId } = req.query;
+      if (supabaseAdmin) {
+        try {
+          let query = supabaseAdmin.from("matura_settings").select("*");
+          if (schoolId) query = query.eq("school_id", schoolId);
+          const { data, error } = await query.order("updated_at", { ascending: false }).limit(1);
+          if (!error) return res.json((Array.isArray(data) ? data[0] : null) || null);
+          if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura settings read error:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura settings read connection error:", dbErr);
+        }
+      }
       const settings = readJsonFile("matura_settings.json");
       const record = settings.find(item => !schoolId || item.school_id === schoolId) || null;
       res.json(record);
@@ -2093,7 +2152,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/matura-settings", (req, res) => {
+  app.post("/api/matura-settings", async (req, res) => {
     try {
       const payload = req.body || {};
       const schoolId = String(payload.school_id || '').trim();
@@ -2109,12 +2168,32 @@ async function startServer() {
         registration_opens_at: payload.registration_opens_at || null,
         registration_closes_at: payload.registration_closes_at || null,
         cancellation_closes_at: payload.cancellation_closes_at || null,
+        study_program_changes_opens_at: payload.study_program_changes_opens_at || null,
         study_program_changes_close_at: payload.study_program_changes_close_at || null,
+        study_program_withdrawal_closes_at: payload.study_program_withdrawal_closes_at || null,
         objection_opens_at: payload.objection_opens_at || null,
         objection_closes_at: payload.objection_closes_at || null,
         updated_at: now,
         created_at: index >= 0 ? settings[index].created_at : now,
       };
+      if (supabaseAdmin) {
+        try {
+          const { data, error } = await supabaseAdmin
+            .from("matura_settings")
+            .upsert(record, { onConflict: "school_id" })
+            .select()
+            .single();
+          if (!error) {
+            if (index >= 0) settings[index] = data;
+            else settings.push(data);
+            writeJsonFile("matura_settings.json", settings);
+            return res.json({ success: true, data });
+          }
+          if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura settings write error:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura settings write connection error:", dbErr);
+        }
+      }
       if (index >= 0) settings[index] = record;
       else settings.push(record);
       writeJsonFile("matura_settings.json", settings);
@@ -2124,9 +2203,20 @@ async function startServer() {
     }
   });
 
-  app.get("/api/matura-exam-schedule", (req, res) => {
+  app.get("/api/matura-exam-schedule", async (req, res) => {
     try {
       const { schoolId } = req.query;
+      if (supabaseAdmin) {
+        try {
+          let query = supabaseAdmin.from("matura_exam_schedule").select("*");
+          if (schoolId) query = query.or(`school_id.eq.${schoolId},school_id.is.null`);
+          const { data, error } = await query.order("exam_at", { ascending: true });
+          if (!error) return res.json(data || []);
+          if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura schedule read error:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura schedule read connection error:", dbErr);
+        }
+      }
       let items = readJsonFile("matura_exam_schedule.json");
       if (schoolId) items = items.filter(item => item.school_id === schoolId || !item.school_id);
       items.sort((a, b) => String(a.exam_at || '').localeCompare(String(b.exam_at || '')));
@@ -2136,7 +2226,7 @@ async function startServer() {
     }
   });
 
-  app.post("/api/matura-exam-schedule", (req, res) => {
+  app.post("/api/matura-exam-schedule", async (req, res) => {
     try {
       const payload = req.body || {};
       if (!payload.subject_name || !payload.exam_at) {
@@ -2155,6 +2245,23 @@ async function startServer() {
         created_at: now,
         updated_at: now,
       };
+      if (supabaseAdmin) {
+        try {
+          const { data, error } = await supabaseAdmin
+            .from("matura_exam_schedule")
+            .insert(record)
+            .select()
+            .single();
+          if (!error) {
+            items.push(data);
+            writeJsonFile("matura_exam_schedule.json", items);
+            return res.json({ success: true, data });
+          }
+          if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura schedule write error:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura schedule write connection error:", dbErr);
+        }
+      }
       items.push(record);
       writeJsonFile("matura_exam_schedule.json", items);
       res.json({ success: true, data: record });
@@ -2163,8 +2270,17 @@ async function startServer() {
     }
   });
 
-  app.delete("/api/matura-exam-schedule/:id", (req, res) => {
+  app.delete("/api/matura-exam-schedule/:id", async (req, res) => {
     try {
+      if (supabaseAdmin) {
+        try {
+          const { error } = await supabaseAdmin.from("matura_exam_schedule").delete().eq("id", req.params.id);
+          if (!error) return res.json({ success: true });
+          if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura schedule delete error:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura schedule delete connection error:", dbErr);
+        }
+      }
       const items = readJsonFile("matura_exam_schedule.json");
       writeJsonFile("matura_exam_schedule.json", items.filter(item => item.id !== req.params.id));
       res.json({ success: true });
@@ -2237,10 +2353,10 @@ async function startServer() {
     }
   });
 
-  app.post("/api/matura-objections", (req, res) => {
+  app.post("/api/matura-objections", async (req, res) => {
     try {
       const payload = req.body || {};
-      const settings = readJsonFile("matura_settings.json").find(item => !payload.school_id || item.school_id === payload.school_id);
+      const settings = await loadMaturaSettingsRecord(payload.school_id);
       const nowDate = new Date();
       if (settings?.objection_opens_at && nowDate < new Date(settings.objection_opens_at)) {
         return res.status(400).json({ error: "Rok za unos prigovora još nije započeo." });
@@ -2392,9 +2508,20 @@ async function startServer() {
     }
   });
 
-  app.get("/api/matura-study-applications", (req, res) => {
+  app.get("/api/matura-study-applications", async (req, res) => {
     try {
       const { studentId } = req.query;
+      if (supabaseAdmin) {
+        try {
+          let query = supabaseAdmin.from("matura_study_applications").select("*");
+          if (studentId) query = query.eq("student_id", studentId);
+          const { data, error } = await query.order("priority_index", { ascending: true });
+          if (!error) return res.json(data || []);
+          if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura study applications read error:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura study applications read connection error:", dbErr);
+        }
+      }
       let items = readJsonFile("matura_study_applications.json");
       if (studentId) items = items.filter(item => item.student_id === studentId);
       if (studentId && items.some(item => !item.study_program_id)) {
@@ -2409,13 +2536,22 @@ async function startServer() {
     }
   });
 
-  app.post("/api/matura-study-applications", (req, res) => {
+  app.post("/api/matura-study-applications", async (req, res) => {
     try {
       const payload = req.body || {};
       const studentId = String(payload.student_id || '').trim();
       const programs = Array.isArray(payload.programs) ? payload.programs : [];
       if (!studentId) return res.status(400).json({ error: "Učenik je obavezan." });
       if (programs.length > 10) return res.status(400).json({ error: "Moguće je odabrati najviše 10 studijskih programa." });
+
+      const windowError = ensureDateWindow(
+        await loadMaturaSettingsRecord(payload.school_id),
+        "study_program_changes_opens_at",
+        "study_program_changes_close_at",
+        "Rok za prijavu studijskih programa još nije započeo.",
+        "Rok za prijavu/brisanje studijskih programa je istekao."
+      );
+      if (windowError) return res.status(400).json({ error: windowError });
 
       const all = readJsonFile("matura_study_applications.json").filter(item => item.student_id !== studentId);
       const now = new Date().toISOString();
@@ -2432,6 +2568,33 @@ async function startServer() {
         created_at: program.created_at || now,
         updated_at: now,
       })).filter((program: any) => program.name && program.study_program_id);
+      if (supabaseAdmin) {
+        try {
+          const { error: deleteError } = await supabaseAdmin
+            .from("matura_study_applications")
+            .delete()
+            .eq("student_id", studentId);
+          if (deleteError) {
+            if (deleteError.code !== "PGRST205" && deleteError.code !== "42P01") console.error("DB matura study applications delete-before-write error:", deleteError);
+          } else if (next.length === 0) {
+            writeJsonFile("matura_study_applications.json", all);
+            return res.json({ success: true, data: [] });
+          } else {
+            const { data, error } = await supabaseAdmin
+              .from("matura_study_applications")
+              .insert(next)
+              .select()
+              .order("priority_index", { ascending: true });
+            if (!error) {
+              writeJsonFile("matura_study_applications.json", [...all, ...(data || [])]);
+              return res.json({ success: true, data: data || [] });
+            }
+            if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura study applications write error:", error);
+          }
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura study applications write connection error:", dbErr);
+        }
+      }
       writeJsonFile("matura_study_applications.json", [...all, ...next]);
       res.json({ success: true, data: next });
     } catch (err: any) {

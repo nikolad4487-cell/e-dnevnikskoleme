@@ -354,7 +354,9 @@ export default function MaturaTeacherPage() {
               ['registration_opens_at', 'Početak prijave ispita DM'],
               ['registration_closes_at', 'Rok prijave ispita DM'],
               ['cancellation_closes_at', 'Rok odjave ispita DM'],
+              ['study_program_changes_opens_at', 'Početak prijave studijskih programa'],
               ['study_program_changes_close_at', 'Rok prijave/brisanja studijskih programa'],
+              ['study_program_withdrawal_closes_at', 'Rok odjave studijskih programa'],
               ['objection_opens_at', 'Početak prigovora na rezultate'],
               ['objection_closes_at', 'Rok prigovora na rezultate'],
             ].map(([key, label]) => (

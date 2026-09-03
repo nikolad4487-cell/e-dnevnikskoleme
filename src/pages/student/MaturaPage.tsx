@@ -82,6 +82,11 @@ type MaturaScheduleItem = {
 };
 
 type MaturaSettings = {
+  registration_opens_at?: string | null;
+  registration_closes_at?: string | null;
+  cancellation_closes_at?: string | null;
+  study_program_changes_opens_at?: string | null;
+  study_program_changes_close_at?: string | null;
   objection_opens_at?: string | null;
   objection_closes_at?: string | null;
 };
@@ -157,6 +162,13 @@ const hasOpenDeadline = (settings: MaturaSettings | null) => {
   return true;
 };
 
+const isWindowOpen = (startsAt?: string | null, endsAt?: string | null) => {
+  const now = new Date();
+  if (startsAt && now < new Date(startsAt)) return false;
+  if (endsAt && now > new Date(endsAt)) return false;
+  return true;
+};
+
 const registrationCacheKey = (studentId: string) => `matura.registrations.${studentId}`;
 
 const readCachedRegistrations = (studentId: string): MaturaRegistration[] => {
@@ -216,6 +228,9 @@ export default function MaturaPage() {
   const schoolLocationLine = [parsedSchoolAddress.address, parsedSchoolAddress.city || schoolInfo?.city].filter(Boolean).join(', ');
   const examLocation = schoolInfo ? [schoolInfo.name, schoolLocationLine].filter(Boolean).join(', ') : '';
   const canSubmitObjection = canEdit && hasOpenDeadline(settings);
+  const canRegisterMatura = canEdit && isWindowOpen(settings?.registration_opens_at, settings?.registration_closes_at);
+  const canWithdrawMatura = canEdit && isWindowOpen(null, settings?.cancellation_closes_at);
+  const canChangeStudyPrograms = canEdit && isWindowOpen(settings?.study_program_changes_opens_at, settings?.study_program_changes_close_at);
   const isRequiredSubject = React.useCallback((subjectName: string) => requiredSubjects.includes(subjectName), [requiredSubjects]);
   const isPassingResult = (result?: MaturaResult) => {
     if (!result?.grade) return false;
@@ -325,7 +340,7 @@ export default function MaturaPage() {
       const response = await fetch(`/api/matura-registrations/${registration.id}/cancel`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ student_id: targetStudentId }),
+        body: JSON.stringify({ student_id: targetStudentId, school_id: selectedSchoolId }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || 'Odjava mature nije uspjela.');
@@ -343,6 +358,7 @@ export default function MaturaPage() {
   };
 
   const moveStudyApplication = async (id: string, direction: -1 | 1) => {
+    if (!canChangeStudyPrograms) return;
     const currentIndex = studyApplications.findIndex(item => item.id === id);
     const nextIndex = currentIndex + direction;
     if (currentIndex < 0 || nextIndex < 0 || nextIndex >= studyApplications.length || !targetStudentId) return;
@@ -351,24 +367,24 @@ export default function MaturaPage() {
     const response = await fetch('/api/matura-study-applications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ student_id: targetStudentId, programs: next.map(item => ({ ...item })) }),
+      body: JSON.stringify({ student_id: targetStudentId, school_id: selectedSchoolId, programs: next.map(item => ({ ...item })) }),
     });
     if (response.ok) setStudyApplications(await response.json().then(body => body.data));
   };
 
   const removeStudyApplication = async (id: string) => {
-    if (!targetStudentId || !confirm('Jeste li sigurni da želite obrisati studijski program iz odabira?')) return;
+    if (!canChangeStudyPrograms || !targetStudentId || !confirm('Jeste li sigurni da želite obrisati studijski program iz odabira?')) return;
     const next = studyApplications.filter(item => item.id !== id);
     await fetch('/api/matura-study-applications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ student_id: targetStudentId, programs: next }),
+      body: JSON.stringify({ student_id: targetStudentId, school_id: selectedSchoolId, programs: next }),
     });
     await fetchAll();
   };
 
   const addStudyApplication = async (program: StudyProgramOption) => {
-    if (!targetStudentId) return;
+    if (!targetStudentId || !canChangeStudyPrograms) return;
     if (studyApplications.length >= 10) {
       toast.error('Možete odabrati najviše 10 studijskih programa.');
       return;
@@ -390,7 +406,7 @@ export default function MaturaPage() {
     const response = await fetch('/api/matura-study-applications', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ student_id: targetStudentId, programs: next }),
+      body: JSON.stringify({ student_id: targetStudentId, school_id: selectedSchoolId, programs: next }),
     });
     if (!response.ok) {
       toast.error('Studijski program nije dodan.');
@@ -427,6 +443,13 @@ export default function MaturaPage() {
   };
 
   const activeRegistrations = registrations.filter(item => item.status === 'REGISTERED');
+  const visibleSchedule = schedule.filter(item => {
+    const registration = activeRegistrations.find(active =>
+      active.subject_name === item.subject_name &&
+      (item.level === 'JEDNA_RAZINA' || active.level === item.level)
+    );
+    return Boolean(registration);
+  });
   const requiredRegistrations = activeRegistrations.filter(item => isRequiredSubject(item.subject_name));
   const electiveRegistrations = activeRegistrations.filter(item => !isRequiredSubject(item.subject_name));
   const registeredBySubject = new Map(activeRegistrations.map(item => [item.subject_name, item]));
@@ -504,33 +527,37 @@ export default function MaturaPage() {
             <div className="p-4 space-y-4">
               <div>
                 <label>Obavezni predmeti državne mature</label>
-                <select value={requiredSubject} onChange={(event) => setRequiredSubject(event.target.value)} disabled={!canEdit || saving}>
+                <select value={requiredSubject} onChange={(event) => setRequiredSubject(event.target.value)} disabled={!canRegisterMatura || saving}>
                   {requiredSubjects.map(item => <option key={item} value={item}>{item}</option>)}
                 </select>
               </div>
               {selectedRequiredHasLevel && (
                 <div>
                   <label>Razina</label>
-                  <select value={level} onChange={(event) => setLevel(event.target.value as MaturaLevel)} disabled={!canEdit || saving}>
+                  <select value={level} onChange={(event) => setLevel(event.target.value as MaturaLevel)} disabled={!canRegisterMatura || saving}>
                     <option value="A_RAZINA">A razina</option>
                     <option value="B_RAZINA">B razina</option>
                   </select>
                 </div>
               )}
-              <button className="btn-primary w-full" disabled={!canEdit || saving} onClick={() => saveRegistration(requiredSubject, selectedRequiredHasLevel ? level : 'JEDNA_RAZINA')}>
-                <Save size={14} /> Spremi obavezni ispit
-              </button>
+              {canRegisterMatura && (
+                <button className="btn-primary w-full" disabled={saving} onClick={() => saveRegistration(requiredSubject, selectedRequiredHasLevel ? level : 'JEDNA_RAZINA')}>
+                  <Save size={14} /> Spremi obavezni ispit
+                </button>
+              )}
 
               <div className="border-t border-slate-100 pt-4">
                 <label>Izborni predmeti državne mature</label>
-                <select value={electiveSubject} onChange={(event) => setElectiveSubject(event.target.value)} disabled={!canEdit || saving}>
+                <select value={electiveSubject} onChange={(event) => setElectiveSubject(event.target.value)} disabled={!canRegisterMatura || saving}>
                   <option value="">-- odaberite izborni predmet --</option>
                   {ELECTIVE_SUBJECTS.map(item => <option key={item} value={item}>{item}</option>)}
                 </select>
               </div>
-              <button className="btn-primary w-full" disabled={!canEdit || saving || !electiveSubject} onClick={() => saveRegistration(electiveSubject, 'JEDNA_RAZINA')}>
-                <Save size={14} /> Spremi izborni ispit
-              </button>
+              {canRegisterMatura && (
+                <button className="btn-primary w-full" disabled={saving || !electiveSubject} onClick={() => saveRegistration(electiveSubject, 'JEDNA_RAZINA')}>
+                  <Save size={14} /> Spremi izborni ispit
+                </button>
+              )}
 
               <div>
                 <label>Mjesto pisanja</label>
@@ -551,8 +578,8 @@ export default function MaturaPage() {
               <div className="px-4 py-12 text-center text-sm text-slate-400 italic">Nema prijavljenih ispita državne mature.</div>
             ) : (
               <div className="divide-y divide-slate-100">
-                <RegistrationGroup title={`Obavezni ispiti (${requiredRegistrations.length}/3)`} items={requiredRegistrations} canEdit={canEdit} saving={saving} onCancel={cancelRegistration} />
-                <RegistrationGroup title={`Izborni ispiti (${electiveRegistrations.length}/${MAX_ELECTIVE_REGISTRATIONS})`} items={electiveRegistrations} canEdit={canEdit} saving={saving} onCancel={cancelRegistration} />
+                <RegistrationGroup title={`Obavezni ispiti (${requiredRegistrations.length}/3)`} items={requiredRegistrations} canEdit={canWithdrawMatura} saving={saving} onCancel={cancelRegistration} />
+                <RegistrationGroup title={`Izborni ispiti (${electiveRegistrations.length}/${MAX_ELECTIVE_REGISTRATIONS})`} items={electiveRegistrations} canEdit={canWithdrawMatura} saving={saving} onCancel={cancelRegistration} />
               </div>
             )}
           </section>
@@ -577,26 +604,28 @@ export default function MaturaPage() {
                   {studyApplications.map((program, index) => (
                     <tr key={program.id}>
                       <td className="w-24 align-top">
-                        <button className="text-[#005c8d] mr-1" onClick={() => moveStudyApplication(program.id, -1)}>▲</button>
-                        <button className="text-[#005c8d]" onClick={() => moveStudyApplication(program.id, 1)}>▼</button>
+                        {canChangeStudyPrograms && <button className="text-[#005c8d] mr-1" onClick={() => moveStudyApplication(program.id, -1)}>▲</button>}
+                        {canChangeStudyPrograms && <button className="text-[#005c8d]" onClick={() => moveStudyApplication(program.id, 1)}>▼</button>}
                         <span className="float-right">{program.priority_index}.</span>
                       </td>
                       <td className="text-[#1f5fa8] underline font-medium">{program.name}</td>
-                      <td><button className="text-[#1f5fa8] underline" onClick={() => removeStudyApplication(program.id)}>Obriši</button></td>
+                      <td>{canChangeStudyPrograms ? <button className="text-[#1f5fa8] underline" onClick={() => removeStudyApplication(program.id)}>Obriši</button> : '-'}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <div className="px-4 py-3 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => setIsStudySearchOpen(true)}
-                className="text-[#005c8d] underline font-bold text-sm disabled:text-slate-300"
-                disabled={!canEdit || studyApplications.length >= 10}
-              >
-                Odaberi novi studijski program
-              </button>
+              {canChangeStudyPrograms && (
+                <button
+                  type="button"
+                  onClick={() => setIsStudySearchOpen(true)}
+                  className="text-[#005c8d] underline font-bold text-sm disabled:text-slate-300"
+                  disabled={studyApplications.length >= 10}
+                >
+                  Odaberi novi studijski program
+                </button>
+              )}
             </div>
           </section>
 
@@ -725,9 +754,9 @@ export default function MaturaPage() {
       {activeTab === 'raspored' && (
         <section className="border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="px-4 py-3 border-b bg-slate-50"><h2 className="text-[11px] font-black uppercase tracking-widest text-[#005c8d]">Moj raspored ispita</h2></div>
-          {schedule.length === 0 ? <div className="p-8 text-center text-slate-400 italic">Raspored ispita još nije objavljen.</div> : (
+          {visibleSchedule.length === 0 ? <div className="p-8 text-center text-slate-400 italic">Raspored ispita još nije objavljen za prijavljene ispite.</div> : (
             <div className="divide-y">
-              {schedule.map(item => (
+              {visibleSchedule.map(item => (
                 <div key={item.id} className="p-4 grid grid-cols-1 md:grid-cols-[1fr_120px_170px] gap-3">
                   <div className="font-black">{item.subject_name} <span className="text-[#005c8d]">{fullLevelLabels[item.level]}</span></div>
                   <div>{item.room || '-'}</div>
