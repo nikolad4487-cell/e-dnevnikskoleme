@@ -2222,6 +2222,8 @@ async function startServer() {
       const { schoolId } = req.query;
       const normalizeScheduleRow = (item: any) => ({
         ...item,
+        exam_at: item.exam_at || item.starts_at,
+        starts_at: item.starts_at || item.exam_at,
         subject_name: normalizeMaturaSubject(item.subject_name || item.subject),
         subject: normalizeMaturaSubject(item.subject || item.subject_name),
       });
@@ -2231,7 +2233,7 @@ async function startServer() {
         try {
           let query = supabaseAdmin.from("matura_exam_schedule").select("*");
           if (schoolId) query = query.or(`school_id.eq.${schoolId},school_id.is.null`);
-          const { data, error } = await query.order("exam_at", { ascending: true });
+          const { data, error } = await query;
           if (!error) {
             const merged = mergeRowsById((data || []).map(normalizeScheduleRow), localItems);
             merged.sort((a, b) => String(a.exam_at || '').localeCompare(String(b.exam_at || '')));
@@ -2265,6 +2267,7 @@ async function startServer() {
         subject_name: subjectName,
         level: payload.level || "JEDNA_RAZINA",
         exam_at: payload.exam_at,
+        starts_at: payload.exam_at,
         room: String(payload.room || '').trim() || null,
         note: String(payload.note || '').trim() || null,
         created_at: now,
@@ -2280,6 +2283,7 @@ async function startServer() {
           records.push(makeScheduleRecord({
             id: crypto.randomUUID(),
             exam_at: essayDate.toISOString(),
+            starts_at: essayDate.toISOString(),
             room: "Esej",
           }));
         }

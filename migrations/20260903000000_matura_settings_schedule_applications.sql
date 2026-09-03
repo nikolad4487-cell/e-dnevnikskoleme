@@ -69,6 +69,7 @@ create table if not exists public.matura_exam_schedule (
   subject_name text not null,
   level text not null default 'JEDNA_RAZINA' check (level in ('A_RAZINA', 'B_RAZINA', 'JEDNA_RAZINA')),
   exam_at timestamptz not null,
+  starts_at timestamptz not null,
   room text,
   note text,
   created_at timestamptz not null default now(),
@@ -80,16 +81,23 @@ alter table public.matura_exam_schedule add column if not exists school_id text;
 alter table public.matura_exam_schedule alter column school_id type text using school_id::text;
 alter table public.matura_exam_schedule add column if not exists subject text;
 alter table public.matura_exam_schedule add column if not exists subject_name text;
+alter table public.matura_exam_schedule add column if not exists exam_at timestamptz;
+alter table public.matura_exam_schedule add column if not exists starts_at timestamptz;
 update public.matura_exam_schedule
 set subject = coalesce(subject, subject_name),
-    subject_name = coalesce(subject_name, subject)
-where subject is null or subject_name is null;
+    subject_name = coalesce(subject_name, subject),
+    exam_at = coalesce(exam_at, starts_at),
+    starts_at = coalesce(starts_at, exam_at)
+where subject is null or subject_name is null or exam_at is null or starts_at is null;
 alter table public.matura_exam_schedule alter column subject set default 'Hrvatski jezik';
 alter table public.matura_exam_schedule alter column subject set not null;
 alter table public.matura_exam_schedule alter column subject_name set default 'Hrvatski jezik';
 alter table public.matura_exam_schedule alter column subject_name set not null;
 alter table public.matura_exam_schedule add column if not exists level text not null default 'JEDNA_RAZINA';
-alter table public.matura_exam_schedule add column if not exists exam_at timestamptz;
+alter table public.matura_exam_schedule alter column exam_at set default now();
+alter table public.matura_exam_schedule alter column exam_at set not null;
+alter table public.matura_exam_schedule alter column starts_at set default now();
+alter table public.matura_exam_schedule alter column starts_at set not null;
 alter table public.matura_exam_schedule add column if not exists room text;
 alter table public.matura_exam_schedule add column if not exists note text;
 alter table public.matura_exam_schedule add column if not exists created_at timestamptz not null default now();
