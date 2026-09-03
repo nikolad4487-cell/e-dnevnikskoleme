@@ -1904,6 +1904,15 @@ async function startServer() {
     return "";
   }
 
+  function mergeRowsById(primary: any[] = [], fallback: any[] = []) {
+    const rows = new Map<string, any>();
+    [...fallback, ...primary].forEach((item) => {
+      if (!item) return;
+      rows.set(String(item.id || crypto.randomUUID()), item);
+    });
+    return Array.from(rows.values());
+  }
+
   app.get("/api/matura-registrations", async (req, res) => {
     try {
       const { studentId, classId, schoolId } = req.query;
@@ -2133,20 +2142,20 @@ async function startServer() {
   app.get("/api/matura-settings", async (req, res) => {
     try {
       const { schoolId } = req.query;
+      const localSettings = readJsonFile("matura_settings.json");
+      const localRecord = localSettings.find(item => !schoolId || item.school_id === schoolId) || null;
       if (supabaseAdmin) {
         try {
           let query = supabaseAdmin.from("matura_settings").select("*");
           if (schoolId) query = query.eq("school_id", schoolId);
           const { data, error } = await query.order("updated_at", { ascending: false }).limit(1);
-          if (!error) return res.json((Array.isArray(data) ? data[0] : null) || null);
+          if (!error) return res.json((Array.isArray(data) ? data[0] : null) || localRecord || null);
           if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura settings read error:", error);
         } catch (dbErr: any) {
           if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura settings read connection error:", dbErr);
         }
       }
-      const settings = readJsonFile("matura_settings.json");
-      const record = settings.find(item => !schoolId || item.school_id === schoolId) || null;
-      res.json(record);
+      res.json(localRecord);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2190,9 +2199,14 @@ async function startServer() {
             return res.json({ success: true, data });
           }
           if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura settings write error:", error);
+          if (isVercel) return res.status(500).json({ error: `Rokovi nisu spremljeni u bazu: ${error.message}` });
         } catch (dbErr: any) {
           if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura settings write connection error:", dbErr);
+          if (isVercel) return res.status(500).json({ error: `Rokovi nisu spremljeni u bazu: ${dbErr?.message || "greška baze"}` });
         }
+      }
+      if (isVercel) {
+        return res.status(500).json({ error: "Rokovi nisu spremljeni jer Supabase admin veza nije dostupna na Vercelu." });
       }
       if (index >= 0) settings[index] = record;
       else settings.push(record);
@@ -2206,21 +2220,25 @@ async function startServer() {
   app.get("/api/matura-exam-schedule", async (req, res) => {
     try {
       const { schoolId } = req.query;
+      let localItems = readJsonFile("matura_exam_schedule.json");
+      if (schoolId) localItems = localItems.filter(item => item.school_id === schoolId || !item.school_id);
       if (supabaseAdmin) {
         try {
           let query = supabaseAdmin.from("matura_exam_schedule").select("*");
           if (schoolId) query = query.or(`school_id.eq.${schoolId},school_id.is.null`);
           const { data, error } = await query.order("exam_at", { ascending: true });
-          if (!error) return res.json(data || []);
+          if (!error) {
+            const merged = mergeRowsById(data || [], localItems);
+            merged.sort((a, b) => String(a.exam_at || '').localeCompare(String(b.exam_at || '')));
+            return res.json(merged);
+          }
           if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura schedule read error:", error);
         } catch (dbErr: any) {
           if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura schedule read connection error:", dbErr);
         }
       }
-      let items = readJsonFile("matura_exam_schedule.json");
-      if (schoolId) items = items.filter(item => item.school_id === schoolId || !item.school_id);
-      items.sort((a, b) => String(a.exam_at || '').localeCompare(String(b.exam_at || '')));
-      res.json(items);
+      localItems.sort((a, b) => String(a.exam_at || '').localeCompare(String(b.exam_at || '')));
+      res.json(localItems);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2258,9 +2276,14 @@ async function startServer() {
             return res.json({ success: true, data });
           }
           if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura schedule write error:", error);
+          if (isVercel) return res.status(500).json({ error: `Termin nije spremljen u bazu: ${error.message}` });
         } catch (dbErr: any) {
           if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura schedule write connection error:", dbErr);
+          if (isVercel) return res.status(500).json({ error: `Termin nije spremljen u bazu: ${dbErr?.message || "greška baze"}` });
         }
+      }
+      if (isVercel) {
+        return res.status(500).json({ error: "Termin nije spremljen jer Supabase admin veza nije dostupna na Vercelu." });
       }
       items.push(record);
       writeJsonFile("matura_exam_schedule.json", items);
