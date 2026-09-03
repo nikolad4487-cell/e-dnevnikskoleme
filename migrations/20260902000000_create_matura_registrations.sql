@@ -11,8 +11,8 @@ $$;
 create table if not exists public.matura_registrations (
   id uuid primary key default gen_random_uuid(),
   student_id uuid not null references public.user_profiles(id) on delete cascade,
-  class_id uuid references public.classes(id) on delete set null,
-  school_id uuid references public.schools(id) on delete set null,
+  class_id text references public.classes(id) on delete set null,
+  school_id text references public.schools(id) on delete set null,
   subject_name text not null,
   level text not null check (level in ('A_RAZINA', 'B_RAZINA', 'JEDNA_RAZINA')),
   status text not null default 'REGISTERED' check (status in ('REGISTERED', 'CANCELED')),

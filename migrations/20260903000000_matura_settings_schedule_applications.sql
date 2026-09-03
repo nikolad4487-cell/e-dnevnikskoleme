@@ -10,7 +10,7 @@ $$;
 
 create table if not exists public.matura_settings (
   id uuid primary key default gen_random_uuid(),
-  school_id uuid references public.schools(id) on delete cascade,
+  school_id text references public.schools(id) on delete cascade,
   registration_opens_at timestamptz,
   registration_closes_at timestamptz,
   cancellation_closes_at timestamptz,
@@ -73,7 +73,7 @@ execute function public.update_updated_at_column();
 
 create table if not exists public.matura_exam_schedule (
   id uuid primary key default gen_random_uuid(),
-  school_id uuid references public.schools(id) on delete cascade,
+  school_id text references public.schools(id) on delete cascade,
   subject_name text not null,
   level text not null default 'JEDNA_RAZINA' check (level in ('A_RAZINA', 'B_RAZINA', 'JEDNA_RAZINA')),
   exam_at timestamptz not null,

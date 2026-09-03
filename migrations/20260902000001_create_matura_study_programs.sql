@@ -10,7 +10,7 @@ $$;
 
 create table if not exists public.matura_study_programs (
   id uuid primary key default gen_random_uuid(),
-  school_id uuid references public.schools(id) on delete set null,
+  school_id text references public.schools(id) on delete set null,
   faculty text not null,
   component text,
   study_name text not null,
