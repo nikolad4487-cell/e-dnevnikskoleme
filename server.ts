@@ -1891,7 +1891,7 @@ async function startServer() {
     const normalized = normalizeMaturaLevel(value);
     if (normalized === 'A_RAZINA') return ['A', 'A_RAZINA'];
     if (normalized === 'B_RAZINA') return ['B', 'B_RAZINA'];
-    return ['-', 'JEDNA_RAZINA', 'Jedna razina', 'JEDNA', 'ONE_LEVEL'];
+    return ['ONE', '-', 'JEDNA_RAZINA', 'Jedna razina', 'JEDNA', 'ONE_LEVEL'];
   }
 
   function getMaturaSettingsRecord(schoolId?: any) {
