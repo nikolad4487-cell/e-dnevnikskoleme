@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
-import { Grade, Subject, User, ClassSubjectTeacher, specialExamTypes } from '../../types';
+import { Subject, User, specialExamTypes } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
 import { formatPersonName, formatSubjectDisplayName, formatSubjectName } from '../../lib/utils';
-import { Calendar, FileText, User as UserIcon, BookOpen, Clock, AlertCircle } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 
 interface ExamWithDetails {
   id: string;
@@ -24,6 +24,7 @@ export default function StudentIspitiPage() {
   const [loading, setLoading] = useState(true);
   const [exams, setExams] = useState<ExamWithDetails[]>([]);
   const [specialExams, setSpecialExams] = useState<ExamWithDetails[]>([]);
+  const [studentClassName, setStudentClassName] = useState('');
 
   useEffect(() => {
     if (!user || !selectedClassId) return;
@@ -37,6 +38,13 @@ export default function StudentIspitiPage() {
           setLoading(false);
           return;
         }
+
+        const { data: classData } = await supabase
+          .from('classes')
+          .select('name')
+          .eq('id', selectedClassId)
+          .maybeSingle();
+        setStudentClassName(String(classData?.name || ''));
 
         // 1. Get student's enrollments for THIS class (ONLY ACTIVE)
         const { data: enrollData } = await supabase
@@ -189,10 +197,27 @@ export default function StudentIspitiPage() {
     );
   }
 
-  // Split exams into upcoming and past
-  const todayStr = new Date().toISOString().split('T')[0];
-  const upcomingExams = exams.filter(e => e.date >= todayStr);
-  const pastExams = exams.filter(e => e.date < todayStr).reverse(); // Order past exams descending
+  const showSpecialExamSection = studentClassName.trim().toUpperCase() === '4.K';
+
+  const groupExamsByMonth = (items: ExamWithDetails[]) => {
+    const sorted = [...items].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+    return sorted.reduce<Array<{ key: string; label: string; items: ExamWithDetails[] }>>((groups, exam) => {
+      const date = new Date(exam.date);
+      const key = Number.isNaN(date.getTime())
+        ? 'bez-datuma'
+        : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const label = Number.isNaN(date.getTime())
+        ? 'Bez datuma'
+        : date.toLocaleDateString('hr-HR', { month: 'long', year: 'numeric' });
+      const existing = groups.find(group => group.key === key);
+      if (existing) {
+        existing.items.push(exam);
+      } else {
+        groups.push({ key, label, items: [exam] });
+      }
+      return groups;
+    }, []);
+  };
 
   const getBadgeStyle = (type: string) => {
     const t = type.toLowerCase();
@@ -208,54 +233,65 @@ export default function StudentIspitiPage() {
     return 'bg-gray-50 text-gray-700 border-gray-200';
   };
 
-  const ExamCard = ({ exam }: { exam: ExamWithDetails }) => {
-    const sName = exam.subject ? formatSubjectName(exam.subject) : 'Nepoznat predmet';
-    const teacherNames = exam.teachers.length > 0
-      ? exam.teachers.map(t => formatPersonName(t)).join(', ')
-      : 'Nije dodijeljen nastavnik';
+  const ExamsTable = ({ items, emptyText }: { items: ExamWithDetails[]; emptyText: string }) => {
+    const groups = groupExamsByMonth(items);
 
     return (
-      <div className="bg-white border border-gray-300 p-5 shadow-sm hover:border-blue-500 hover:shadow transition-all relative">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-gray-100 pb-3 mb-3">
-          <div className="flex items-center gap-2.5">
-            <BookOpen className="text-[#005c8d] shrink-0" size={18} />
-            <h3 className="font-bold text-sm text-gray-900">{sName}</h3>
-          </div>
-          <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider rounded border ${getBadgeStyle(exam.type)}`}>
-            {exam.type}
-          </span>
-        </div>
+      <div className="bg-white border border-gray-200 shadow-sm overflow-hidden">
+        <table className="w-full text-xs border-collapse">
+          <thead className="bg-[#f8f9fa] text-slate-600 uppercase text-[10px] tracking-wider">
+            <tr>
+              <th className="border border-gray-200 px-3 py-2 text-left w-[150px]">Datum</th>
+              <th className="border border-gray-200 px-3 py-2 text-left">Predmet</th>
+              <th className="border border-gray-200 px-3 py-2 text-left w-[150px]">Vrsta</th>
+              <th className="border border-gray-200 px-3 py-2 text-left">Nastavnik</th>
+              <th className="border border-gray-200 px-3 py-2 text-left">Opis / bilješka</th>
+              <th className="border border-gray-200 px-3 py-2 text-left w-[90px]">Ocjena</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="border border-gray-200 px-3 py-10 text-center text-gray-400 italic">
+                  {emptyText}
+                </td>
+              </tr>
+            ) : groups.map(group => (
+              <React.Fragment key={group.key}>
+                <tr>
+                  <td colSpan={6} className="bg-[#eef5fb] border border-gray-200 px-3 py-2 text-[11px] font-black uppercase tracking-widest text-[#005c8d]">
+                    {group.label}
+                  </td>
+                </tr>
+                {group.items.map(exam => {
+                  const sName = exam.subject ? formatSubjectName(exam.subject) : 'Nepoznat predmet';
+                  const teacherNames = exam.teachers.length > 0
+                    ? exam.teachers.map(t => formatPersonName(t)).join(', ')
+                    : 'Nije dodijeljen nastavnik';
+                  const date = new Date(exam.date);
+                  const dateLabel = Number.isNaN(date.getTime())
+                    ? '-'
+                    : date.toLocaleDateString('hr-HR', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
 
-        <div className="space-y-2 text-xs text-gray-600">
-          <div className="flex items-center gap-2">
-            <Calendar className="text-gray-400 shrink-0" size={14} />
-            <span className="font-bold text-gray-800">
-              {new Date(exam.date).toLocaleDateString('hr-HR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-            </span>
-          </div>
-
-          <div className="flex items-start gap-2">
-            <UserIcon className="text-gray-400 shrink-0 mt-0.5" size={14} />
-            <div>
-              <span className="text-gray-400">Nastavnik: </span>
-              <span className="font-semibold text-gray-700">{teacherNames}</span>
-            </div>
-          </div>
-
-          {exam.value && (
-            <div className="flex items-start gap-2 pt-1 border-t border-gray-100">
-              <span className="text-gray-400">Ocjena: </span>
-              <span className="font-bold text-[#005c8d] text-sm">{exam.value}</span>
-            </div>
-          )}
-
-          {(exam.description || exam.note) && (
-            <div className="mt-3 bg-gray-50/50 border border-gray-200 p-3 rounded text-[11px] leading-relaxed text-gray-700 whitespace-pre-wrap">
-              <span className="block font-bold text-[9px] uppercase text-gray-400 tracking-wider mb-1">Opis / Bilješka</span>
-              {exam.description || exam.note}
-            </div>
-          )}
-        </div>
+                  return (
+                    <tr key={exam.id} className="hover:bg-slate-50">
+                      <td className="border border-gray-200 px-3 py-2 font-bold text-slate-800">{dateLabel}</td>
+                      <td className="border border-gray-200 px-3 py-2 font-bold text-slate-900">{sName}</td>
+                      <td className="border border-gray-200 px-3 py-2">
+                        <span className={`inline-flex px-2 py-1 text-[9px] font-bold uppercase tracking-wider rounded border ${getBadgeStyle(exam.type)}`}>
+                          {exam.type || '-'}
+                        </span>
+                      </td>
+                      <td className="border border-gray-200 px-3 py-2 text-slate-700">{teacherNames}</td>
+                      <td className="border border-gray-200 px-3 py-2 text-slate-600 whitespace-pre-wrap">{exam.description || exam.note || '-'}</td>
+                      <td className="border border-gray-200 px-3 py-2 font-black text-[#005c8d]">{exam.value || '-'}</td>
+                    </tr>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
       </div>
     );
   };
@@ -272,66 +308,20 @@ export default function StudentIspitiPage() {
           </div>
         </div>
 
-        {/* Upcoming Exams */}
         <div className="space-y-4">
           <h3 className="text-xs font-black uppercase text-gray-600 tracking-wider flex items-center gap-2 border-b border-gray-300 pb-2">
-            <Clock size={14} className="text-blue-500" /> Nadolazeći ispiti i provjere
+            <Calendar size={14} className="text-blue-500" /> Ispiti i provjere po mjesecu održavanja
           </h3>
-          {upcomingExams.length === 0 ? (
-            <div className="bg-white border border-gray-200 p-8 text-center text-gray-400 italic text-xs shadow-sm">
-              <AlertCircle size={28} className="mx-auto text-gray-300 mb-2" />
-              Nema planiranih nadolazećih ispita ili provjera znanja.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {upcomingExams.map(exam => (
-                <div key={exam.id}>
-                  <ExamCard exam={exam} />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Past Exams */}
-        <div className="space-y-4 pt-4">
-          <h3 className="text-xs font-black uppercase text-gray-600 tracking-wider border-b border-gray-300 pb-2">
-            Prošli ispiti i održane provjere
-          </h3>
-          {pastExams.length === 0 ? (
-            <div className="bg-white border border-gray-200 p-8 text-center text-gray-400 italic text-xs shadow-sm">
-              Nema prošlih ispita u sustavu.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 opacity-85">
-              {pastExams.map(exam => (
-                <div key={exam.id}>
-                  <ExamCard exam={exam} />
-                </div>
-              ))}
-            </div>
-          )}
+          <ExamsTable items={exams} emptyText="Nema upisanih ispita ili provjera znanja." />
         </div>
 
         {/* Special Exams (Dopunski / Razlikovni / Popravni) */}
-        <div className="space-y-4 pt-6">
+        {showSpecialExamSection && <div className="space-y-4 pt-6">
           <h3 className="text-xs font-black uppercase text-[#005c8d] tracking-wider border-b-2 border-[#005c8d]/20 pb-2 flex items-center gap-2">
-            <AlertCircle size={15} className="text-[#005c8d]" /> DOPUNSKI / RAZLIKOVNI / POPRAVNI ISPITI
+            Dopunski / razlikovni / popravni ispiti
           </h3>
-          {specialExams.length === 0 ? (
-            <div className="bg-white border border-gray-200 p-8 text-center text-gray-400 italic text-xs shadow-sm">
-              Nema upisanih dopunskih, razlikovnih ili popravnih ispita za ovog učenika.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {specialExams.map(exam => (
-                <div key={exam.id}>
-                  <ExamCard exam={exam} />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+          <ExamsTable items={specialExams} emptyText="Nema upisanih dopunskih, razlikovnih ili popravnih ispita za ovog učenika." />
+        </div>}
       </div>
     </div>
   );
