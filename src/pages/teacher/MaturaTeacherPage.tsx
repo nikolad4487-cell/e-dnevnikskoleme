@@ -64,6 +64,7 @@ type MaturaStudyProgram = {
 const SUBJECTS = ['Hrvatski jezik', 'Matematika', 'Engleski jezik', 'Njemački jezik', 'Biologija', 'Povijest', 'Geografija', 'Politika i gospodarstvo', 'Fizika', 'Logika', 'Filozofija', 'Likovna umjetnost', 'Psihologija', 'Informatika', 'Kemija', 'Sociologija', 'Vjeronauk', 'Glazbena umjetnost', 'Etika'];
 const REQUIRED_MATURA_SUBJECTS = ['Hrvatski jezik', 'Matematika', 'Strani jezik'];
 const ELECTIVE_MATURA_SUBJECTS = SUBJECTS.filter(subject => !['Hrvatski jezik', 'Matematika', 'Engleski jezik', 'Njemački jezik'].includes(subject));
+const LEVELLED_MATURA_SUBJECTS = new Set(['Matematika', 'Strani jezik', 'Engleski jezik', 'Njemački jezik']);
 const INSTITUTION_TYPES = ['Javna sveučilišta', 'Javna veleučilišta', 'Javne visoke škole', 'Privatna sveučilišta', 'Privatna veleučilišta', 'Privatne visoke škole'];
 const STUDY_AREAS = ['Arhitektura', 'Biomedicina i zdravstvo', 'Biotehničke znanosti', 'Dizajn', 'Društvene znanosti', 'Humanističke znanosti', 'Prirodne znanosti', 'Tehničke znanosti'];
 const STUDY_FIELDS = ['Arhitektura i urbanizam', 'Ekonomija', 'Elektrotehnika', 'Filologija', 'Građevinarstvo', 'Informacijske i komunikacijske znanosti', 'Medicina', 'Pedagogija', 'Pravo', 'Psihologija', 'Računarstvo', 'Strojarstvo', 'Tehnologija prometa i transport'];
@@ -99,6 +100,10 @@ const statusLabels: Record<MaturaStatus, string> = {
   CANCELED: 'Odjavljeno',
 };
 
+const hasMaturaLevel = (subjectName: string) => LEVELLED_MATURA_SUBJECTS.has(subjectName);
+
+const defaultMaturaLevel = (subjectName: string): MaturaLevel => hasMaturaLevel(subjectName) ? 'B_RAZINA' : 'JEDNA_RAZINA';
+
 const formatDateTime = (value?: string) => {
   if (!value) return '-';
   return new Date(value).toLocaleString('hr-HR', {
@@ -118,6 +123,8 @@ const formatScheduleSubject = (item: MaturaScheduleItem) => {
     ? `${item.subject_name}: ${part}`
     : item.subject_name;
 };
+
+const formatScheduleLevel = (item: MaturaScheduleItem) => hasMaturaLevel(item.subject_name) ? levelLabels[item.level] : '';
 
 export default function MaturaTeacherPage() {
   const { user } = useAuth();
@@ -287,7 +294,14 @@ export default function MaturaTeacherPage() {
   };
 
   const updateRequiredExam = (index: number, updates: Partial<StudyRequirement>) => {
-    setStudyForm(prev => ({ ...prev, required_exams: prev.required_exams.map((item, i) => i === index ? { ...item, ...updates } : item) }));
+    setStudyForm(prev => ({
+      ...prev,
+      required_exams: prev.required_exams.map((item, i) => {
+        if (i !== index) return item;
+        const nextSubjectName = updates.subject_name || item.subject_name;
+        return { ...item, ...updates, level: hasMaturaLevel(nextSubjectName) ? (updates.level || item.level || 'B') : '-' };
+      }),
+    }));
   };
 
   const updateElectiveExam = (index: number, updates: Partial<StudyRequirement>) => {
@@ -387,13 +401,19 @@ export default function MaturaTeacherPage() {
           <section className="border border-slate-200 bg-white shadow-sm p-4">
             <h2 className="text-[11px] font-black uppercase tracking-widest text-[#005c8d] mb-4">Dodaj termin ispita</h2>
             <label>Predmet</label>
-            <select value={scheduleForm.subject_name} onChange={(event) => setScheduleForm(prev => ({ ...prev, subject_name: event.target.value }))}>{SUBJECTS.map(item => <option key={item}>{item}</option>)}</select>
-            <label className="mt-3">Razina</label>
-            <select value={scheduleForm.level} onChange={(event) => setScheduleForm(prev => ({ ...prev, level: event.target.value as MaturaLevel }))}>
-              <option value="JEDNA_RAZINA">Jedna razina</option>
-              <option value="A_RAZINA">A razina</option>
-              <option value="B_RAZINA">B razina</option>
-            </select>
+            <select value={scheduleForm.subject_name} onChange={(event) => {
+              const subjectName = event.target.value;
+              setScheduleForm(prev => ({ ...prev, subject_name: subjectName, level: defaultMaturaLevel(subjectName) }));
+            }}>{SUBJECTS.map(item => <option key={item}>{item}</option>)}</select>
+            {hasMaturaLevel(scheduleForm.subject_name) && (
+              <>
+                <label className="mt-3">Razina</label>
+                <select value={scheduleForm.level} onChange={(event) => setScheduleForm(prev => ({ ...prev, level: event.target.value as MaturaLevel }))}>
+                  <option value="A_RAZINA">A razina</option>
+                  <option value="B_RAZINA">B razina</option>
+                </select>
+              </>
+            )}
             <label className="mt-3">Datum i vrijeme</label>
             <input type="datetime-local" value={scheduleForm.exam_at} onChange={(event) => setScheduleForm(prev => ({ ...prev, exam_at: event.target.value }))} />
             <label className="mt-3">Prostorija</label>
@@ -404,7 +424,7 @@ export default function MaturaTeacherPage() {
             <div className="px-4 py-3 border-b bg-slate-50"><h2 className="text-[11px] font-black uppercase tracking-widest text-[#005c8d]">Objavljeni raspored</h2></div>
             {schedule.length === 0 ? <div className="p-8 text-slate-400 italic">Nema unesenih termina.</div> : schedule.map(item => (
               <div key={item.id} className="p-4 border-b grid grid-cols-1 md:grid-cols-[1fr_140px_170px_40px] gap-3 items-center">
-                <div className="font-black">{formatScheduleSubject(item)} <span className="text-[#005c8d]">{levelLabels[item.level]}</span></div>
+                <div className="font-black">{formatScheduleSubject(item)} {formatScheduleLevel(item) && <span className="text-[#005c8d]">{formatScheduleLevel(item)}</span>}</div>
                 <div>{isCroatianExamPart(item.room) ? '-' : item.room || '-'}</div>
                 <div><Calendar size={14} className="inline mr-1" />{formatDateTime(item.exam_at)}</div>
                 <button onClick={() => deleteSchedule(item.id)} className="text-red-600"><Trash2 size={16} /></button>
@@ -418,8 +438,13 @@ export default function MaturaTeacherPage() {
         <section className="border border-slate-200 bg-white shadow-sm p-5 max-w-5xl">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div><label>Učenik</label><select value={resultForm.student_id} onChange={(event) => setResultForm(prev => ({ ...prev, student_id: event.target.value }))}>{Object.values(students).map(student => <option key={student.id} value={student.id}>{formatPersonName(student)}</option>)}</select></div>
-            <div><label>Ispit</label><select value={resultForm.subject_name} onChange={(event) => setResultForm(prev => ({ ...prev, subject_name: event.target.value }))}>{SUBJECTS.map(item => <option key={item}>{item}</option>)}</select></div>
-            <div><label>Razina</label><select value={resultForm.level} onChange={(event) => setResultForm(prev => ({ ...prev, level: event.target.value as MaturaLevel }))}><option value="JEDNA_RAZINA">Jedna razina</option><option value="A_RAZINA">A razina</option><option value="B_RAZINA">B razina</option></select></div>
+            <div><label>Ispit</label><select value={resultForm.subject_name} onChange={(event) => {
+              const subjectName = event.target.value;
+              setResultForm(prev => ({ ...prev, subject_name: subjectName, level: defaultMaturaLevel(subjectName) }));
+            }}>{SUBJECTS.map(item => <option key={item}>{item}</option>)}</select></div>
+            {hasMaturaLevel(resultForm.subject_name) && (
+              <div><label>Razina</label><select value={resultForm.level} onChange={(event) => setResultForm(prev => ({ ...prev, level: event.target.value as MaturaLevel }))}><option value="A_RAZINA">A razina</option><option value="B_RAZINA">B razina</option></select></div>
+            )}
             <div><label>Status pristupanja</label><input value={resultForm.status} onChange={(event) => setResultForm(prev => ({ ...prev, status: event.target.value }))} /></div>
             <div><label>Broj bodova</label><input type="number" value={resultForm.points} onChange={(event) => setResultForm(prev => ({ ...prev, points: event.target.value }))} /></div>
             <div><label>Najveći mogući broj bodova</label><input type="number" value={resultForm.max_points} onChange={(event) => setResultForm(prev => ({ ...prev, max_points: event.target.value }))} /></div>
@@ -465,9 +490,11 @@ export default function MaturaTeacherPage() {
             <h3 className="mt-6 mb-2 text-[11px] font-black uppercase tracking-widest text-[#005c8d]">Obavezni ispiti mature</h3>
             <div className="space-y-2">
               {studyForm.required_exams.map((exam, index) => (
-                <div key={exam.subject_name} className="grid grid-cols-[1fr_76px_76px] gap-2">
+                <div key={exam.subject_name} className={`grid ${hasMaturaLevel(exam.subject_name) ? 'grid-cols-[1fr_76px_76px]' : 'grid-cols-[1fr_76px]'} gap-2`}>
                   <input value={exam.subject_name} onChange={(event) => updateRequiredExam(index, { subject_name: event.target.value })} />
-                  <select value={exam.level || '-'} onChange={(event) => updateRequiredExam(index, { level: event.target.value as 'A' | 'B' | '-' })}><option value="-">Nema</option><option value="A">A</option><option value="B">B</option></select>
+                  {hasMaturaLevel(exam.subject_name) && (
+                    <select value={exam.level || 'B'} onChange={(event) => updateRequiredExam(index, { level: event.target.value as 'A' | 'B' | '-' })}><option value="A">A</option><option value="B">B</option></select>
+                  )}
                   <input type="number" value={exam.weight || ''} onChange={(event) => updateRequiredExam(index, { weight: event.target.value })} placeholder="%" />
                 </div>
               ))}
