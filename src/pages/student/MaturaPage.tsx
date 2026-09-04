@@ -531,7 +531,7 @@ export default function MaturaPage() {
   const passedRequiredSubjects = requiredSubjects.filter(subject => passedBySubject.has(subject));
   const passedElectiveSubjects = ELECTIVE_SUBJECTS.filter(subject => passedBySubject.has(subject));
 
-  const getProgramRequiredExams = React.useCallback((program: StudyProgramOption): StudyRequirement[] => (
+  const getProgramRequiredExams = (program: StudyProgramOption): StudyRequirement[] => (
     program.required_exams?.length
       ? program.required_exams
       : Object.entries(program.requirements?.requiredLevels || {}).map(([subject_name, level]) => ({
@@ -539,22 +539,22 @@ export default function MaturaPage() {
         level,
         is_required: true,
       }))
-  ), []);
+  );
 
-  const getProgramElectiveExams = React.useCallback((program: StudyProgramOption): StudyRequirement[] => (
+  const getProgramElectiveExams = (program: StudyProgramOption): StudyRequirement[] => (
     program.elective_exams?.length
       ? program.elective_exams
       : Object.entries(program.requirements?.electiveRules || {}).map(([subject_name, rule]) => ({
         subject_name,
         is_required: rule === '+',
       }))
-  ), []);
+  );
 
-  const resolveRequirementSubject = React.useCallback((subjectName: string) => (
+  const resolveRequirementSubject = (subjectName: string) => (
     subjectName === 'Strani jezik' ? foreignLanguage : subjectName
-  ), [foreignLanguage]);
+  );
 
-  const getStudyProgramBlockingReason = React.useCallback((program: StudyProgramOption) => {
+  const getStudyProgramBlockingReason = (program: StudyProgramOption) => {
     if (!canChangeStudyPrograms) return 'Rok za prijavu studijskih programa je zatvoren.';
     const requiredExams = getProgramRequiredExams(program);
     const electiveExams = getProgramElectiveExams(program).filter(exam => exam.is_required);
@@ -574,7 +574,7 @@ export default function MaturaPage() {
       }
     }
     return '';
-  }, [canChangeStudyPrograms, canRegisterMatura, getProgramElectiveExams, getProgramRequiredExams, registeredBySubject, resolveRequirementSubject]);
+  };
 
   const openStudyProgramApplication = (program: StudyProgramOption) => {
     const blockingReason = getStudyProgramBlockingReason(program);
