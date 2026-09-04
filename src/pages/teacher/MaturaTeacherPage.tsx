@@ -199,7 +199,9 @@ export default function MaturaTeacherPage() {
       setSettings(settingsResponse.ok ? ((await settingsResponse.json()) || {}) : {});
       setStudyPrograms(studyProgramsResponse.ok ? await studyProgramsResponse.json() : []);
 
-      const studentIds = [...new Set(items.map(item => item.student_id).filter(Boolean))];
+      const activeStudentIds = [...new Set(items.filter(item => item.status === 'REGISTERED').map(item => item.student_id).filter(Boolean))];
+      const allStudentIds = [...new Set(items.map(item => item.student_id).filter(Boolean))];
+      const studentIds = activeStudentIds.length > 0 ? activeStudentIds : allStudentIds;
       if (studentIds.length > 0) {
         const { data } = await supabase.from('user_profiles').select('*').in('id', studentIds);
         const map: Record<string, User> = {};
@@ -208,7 +210,15 @@ export default function MaturaTeacherPage() {
           map[user.id] = user;
         });
         setStudents(map);
-        setResultForm(prev => ({ ...prev, student_id: studentIds.includes(prev.student_id) ? prev.student_id : studentIds[0] }));
+        setResultForm(prev => {
+          const nextStudentId = activeStudentIds.includes(prev.student_id) ? prev.student_id : (activeStudentIds[0] || '');
+          return {
+            ...prev,
+            student_id: nextStudentId,
+            subject_name: nextStudentId ? prev.subject_name : '',
+            level: nextStudentId ? prev.level : 'JEDNA_RAZINA',
+          };
+        });
       } else {
         setStudents({});
         setResultForm(prev => ({ ...prev, student_id: '' }));
@@ -225,20 +235,24 @@ export default function MaturaTeacherPage() {
     fetchData();
   }, [fetchData]);
 
-  const filtered = registrations.filter(item => {
+  const activeRegistrations = React.useMemo(() => (
+    registrations.filter(item => item.status === 'REGISTERED')
+  ), [registrations]);
+
+  const filtered = activeRegistrations.filter(item => {
     const studentName = formatPersonName(students[item.student_id]);
     return `${studentName} ${item.subject_name} ${item.exam_location || ''}`.toLowerCase().includes(search.trim().toLowerCase());
   });
 
   const studentOptions = React.useMemo(() => {
-    const ids = [...new Set(registrations.map(item => item.student_id).filter(Boolean))];
+    const ids = [...new Set(activeRegistrations.map(item => item.student_id).filter(Boolean))];
     return ids
       .map(id => ({
         id,
         name: formatPersonName(students[id]) || id,
       }))
       .sort((a, b) => a.name.localeCompare(b.name, 'hr'));
-  }, [registrations, students]);
+  }, [activeRegistrations, students]);
 
   const getRegistrationGroup = React.useCallback((registration: MaturaRegistration) => {
     const subjectName = registration.subject_name;
@@ -249,14 +263,14 @@ export default function MaturaTeacherPage() {
   }, []);
 
   const selectedStudentRegistrations = React.useMemo(() => (
-    registrations
-      .filter(item => item.student_id === resultForm.student_id && item.status === 'REGISTERED')
+    activeRegistrations
+      .filter(item => item.student_id === resultForm.student_id)
       .sort((a, b) => {
         const byGroup = getRegistrationGroup(a).localeCompare(getRegistrationGroup(b));
         if (byGroup !== 0) return byGroup;
         return a.subject_name.localeCompare(b.subject_name, 'hr');
       })
-  ), [getRegistrationGroup, registrations, resultForm.student_id]);
+  ), [activeRegistrations, getRegistrationGroup, resultForm.student_id]);
 
   const selectedRequiredResultSubjects = selectedStudentRegistrations.filter(item => getRegistrationGroup(item) === 'required');
   const selectedElectiveResultSubjects = selectedStudentRegistrations.filter(item => getRegistrationGroup(item) === 'elective');
