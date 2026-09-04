@@ -20,6 +20,7 @@ const isVercel = process.env.VERCEL === "1";
 const DATA_DIR = isVercel 
   ? path.join("/tmp", "data")
   : path.join(__dirname, "data");
+const SOURCE_DATA_DIR = path.join(process.cwd(), "data");
 
 try {
   if (!fs.existsSync(DATA_DIR)) {
@@ -90,6 +91,18 @@ function normalizeSupabaseUrl(value: string | undefined): string {
   if (/^https?:\/\//i.test(cleaned)) return cleaned.replace(/\/+$/, "");
   if (/^[a-z0-9-]+\.supabase\.co$/i.test(cleaned)) return `https://${cleaned}`;
   return cleaned.replace(/\/+$/, "");
+}
+
+function readBundledJsonFile(filename: string): any[] {
+  try {
+    const filePath = path.join(SOURCE_DATA_DIR, filename);
+    if (!fs.existsSync(filePath)) return [];
+    const content = fs.readFileSync(filePath, "utf-8").replace(/^\uFEFF/, "");
+    return JSON.parse(content);
+  } catch (error) {
+    console.error(`Error reading bundled JSON file ${filename}:`, error);
+    return [];
+  }
 }
 
 const FALLBACK_SUPABASE_URL = "https://hkqlbeetlvrplaeubncc.supabase.co";
@@ -2608,13 +2621,20 @@ async function startServer() {
   app.get("/api/matura-study-programs", async (req, res) => {
     try {
       const { schoolId, activeOnly } = req.query;
+      let seedItems = readBundledJsonFile("matura_study_programs.json");
+      if (schoolId) seedItems = seedItems.filter(item => item.school_id === schoolId || !item.school_id);
+      if (activeOnly !== "false") seedItems = seedItems.filter(item => item.is_active !== false);
       if (supabaseAdmin) {
         try {
           let query = supabaseAdmin.from("matura_study_programs").select("*");
-          if (schoolId) query = query.eq("school_id", schoolId);
+          if (schoolId) query = query.or(`school_id.eq.${schoolId},school_id.is.null`);
           if (activeOnly !== "false") query = query.eq("is_active", true);
           const { data, error } = await query.order("faculty", { ascending: true }).order("study_name", { ascending: true });
-          if (!error) return res.json((data || []).map(normalizeStudyProgramRecord));
+          if (!error) {
+            const merged = mergeRowsById(data || [], seedItems);
+            merged.sort((a, b) => String(a.faculty || '').localeCompare(String(b.faculty || ''), 'hr') || String(a.study_name || '').localeCompare(String(b.study_name || ''), 'hr'));
+            return res.json(merged.map(normalizeStudyProgramRecord));
+          }
           if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura study programs read error:", error);
         } catch (dbErr: any) {
           if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura study programs read connection error:", dbErr);
@@ -2622,7 +2642,8 @@ async function startServer() {
       }
 
       let items = readJsonFile("matura_study_programs.json");
-      if (schoolId) items = items.filter(item => item.school_id === schoolId);
+      items = mergeRowsById(items, seedItems);
+      if (schoolId) items = items.filter(item => item.school_id === schoolId || !item.school_id);
       if (activeOnly !== "false") items = items.filter(item => item.is_active !== false);
       items.sort((a, b) => String(a.faculty || '').localeCompare(String(b.faculty || ''), 'hr') || String(a.study_name || '').localeCompare(String(b.study_name || ''), 'hr'));
       res.json(items.map(normalizeStudyProgramRecord));
@@ -2648,6 +2669,7 @@ async function startServer() {
         faculty,
         component: String(payload.component || '').trim() || null,
         study_name: studyName,
+        study_type: String(payload.study_type || '').trim() || null,
         city,
         institution_type: String(payload.institution_type || 'Javna sveučilišta').trim(),
         area: String(payload.area || '').trim() || null,

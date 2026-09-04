@@ -39,9 +39,18 @@ type StudyProgramRequirements = {
   electiveRules: Record<string, '+' | '-' | '*'>;
 };
 
+type StudyRequirement = {
+  subject_name: string;
+  level?: 'A' | 'B' | '-';
+  threshold?: string;
+  weight?: string;
+  is_required?: boolean;
+};
+
 type StudyProgramOption = {
   id: string;
   name: string;
+  study_name?: string | null;
   city: string;
   institution: string;
   component?: string | null;
@@ -53,6 +62,12 @@ type StudyProgramOption = {
   is_active?: boolean;
   citizen_quota?: number;
   foreign_quota?: number;
+  school_gpa_weight?: number;
+  study_type?: string | null;
+  required_exams?: StudyRequirement[];
+  elective_exams?: StudyRequirement[];
+  special_achievements?: Array<{ description: string; value?: string; direct_admission?: boolean }>;
+  health_considerations?: Array<{ description: string; value?: string; direct_admission?: boolean }>;
   info: string;
   requirements: StudyProgramRequirements;
 };
@@ -179,6 +194,22 @@ const isWindowOpen = (startsAt?: string | null, endsAt?: string | null) => {
   return true;
 };
 
+const requirementLevelToMaturaLevel = (level?: string | null): MaturaLevel => {
+  if (level === 'A') return 'A_RAZINA';
+  if (level === 'B') return 'B_RAZINA';
+  return 'JEDNA_RAZINA';
+};
+
+const getMinimumLevelRank = (level: MaturaLevel) => {
+  if (level === 'A_RAZINA') return 2;
+  if (level === 'B_RAZINA') return 1;
+  return 0;
+};
+
+const getRequirementLevelRank = (level?: string | null) => getMinimumLevelRank(requirementLevelToMaturaLevel(level));
+
+const hasMaturaLevel = (subjectName: string) => subjectName === 'Matematika' || FOREIGN_LANGUAGE_NAMES.includes(subjectName) || subjectName === 'Strani jezik';
+
 const registrationCacheKey = (studentId: string) => `matura.registrations.${studentId}`;
 
 const readCachedRegistrations = (studentId: string): MaturaRegistration[] => {
@@ -229,6 +260,10 @@ export default function MaturaPage() {
   const [objectionSubject, setObjectionSubject] = React.useState('');
   const [objectionText, setObjectionText] = React.useState('');
   const [isStudySearchOpen, setIsStudySearchOpen] = React.useState(false);
+  const [selectedStudyProgram, setSelectedStudyProgram] = React.useState<StudyProgramOption | null>(null);
+  const [studyProgramToApply, setStudyProgramToApply] = React.useState<StudyProgramOption | null>(null);
+  const [studyLevelChoices, setStudyLevelChoices] = React.useState<Record<string, MaturaLevel>>({});
+  const [studyElectiveChoices, setStudyElectiveChoices] = React.useState<Record<string, boolean>>({});
   const [studySearchFilters, setStudySearchFilters] = React.useState<StudySearchFilters>(DEFAULT_STUDY_SEARCH_FILTERS);
   const [saving, setSaving] = React.useState(false);
   const [maturaAccessAllowed, setMaturaAccessAllowed] = React.useState<boolean | null>(null);
@@ -495,6 +530,193 @@ export default function MaturaPage() {
   const registeredElectiveSubjects = ELECTIVE_SUBJECTS.filter(subject => registeredBySubject.has(subject));
   const passedRequiredSubjects = requiredSubjects.filter(subject => passedBySubject.has(subject));
   const passedElectiveSubjects = ELECTIVE_SUBJECTS.filter(subject => passedBySubject.has(subject));
+
+  const getProgramRequiredExams = React.useCallback((program: StudyProgramOption): StudyRequirement[] => (
+    program.required_exams?.length
+      ? program.required_exams
+      : Object.entries(program.requirements?.requiredLevels || {}).map(([subject_name, level]) => ({
+        subject_name,
+        level,
+        is_required: true,
+      }))
+  ), []);
+
+  const getProgramElectiveExams = React.useCallback((program: StudyProgramOption): StudyRequirement[] => (
+    program.elective_exams?.length
+      ? program.elective_exams
+      : Object.entries(program.requirements?.electiveRules || {}).map(([subject_name, rule]) => ({
+        subject_name,
+        is_required: rule === '+',
+      }))
+  ), []);
+
+  const resolveRequirementSubject = React.useCallback((subjectName: string) => (
+    subjectName === 'Strani jezik' ? foreignLanguage : subjectName
+  ), [foreignLanguage]);
+
+  const getStudyProgramBlockingReason = React.useCallback((program: StudyProgramOption) => {
+    if (!canChangeStudyPrograms) return 'Rok za prijavu studijskih programa je zatvoren.';
+    const requiredExams = getProgramRequiredExams(program);
+    const electiveExams = getProgramElectiveExams(program).filter(exam => exam.is_required);
+    const allRequired = [...requiredExams, ...electiveExams];
+
+    for (const exam of allRequired) {
+      const subjectName = resolveRequirementSubject(exam.subject_name);
+      const requestedLevel = requirementLevelToMaturaLevel(exam.level);
+      const existing = registeredBySubject.get(subjectName);
+      const mustChangeLevel = existing && getMinimumLevelRank(existing.level) < getRequirementLevelRank(exam.level);
+      const mustRegister = !existing;
+      if ((mustRegister || mustChangeLevel) && !canRegisterMatura) {
+        return `${subjectName} nije moguće uskladiti s uvjetima studija jer je rok prijave ispita mature zatvoren.`;
+      }
+      if (requestedLevel !== 'JEDNA_RAZINA' && existing && getMinimumLevelRank(existing.level) < getMinimumLevelRank(requestedLevel) && !canRegisterMatura) {
+        return `${subjectName} traži višu razinu od prijavljene.`;
+      }
+    }
+    return '';
+  }, [canChangeStudyPrograms, canRegisterMatura, getProgramElectiveExams, getProgramRequiredExams, registeredBySubject, resolveRequirementSubject]);
+
+  const openStudyProgramApplication = (program: StudyProgramOption) => {
+    const blockingReason = getStudyProgramBlockingReason(program);
+    if (blockingReason) {
+      toast.error(blockingReason);
+      return;
+    }
+
+    const nextLevels: Record<string, MaturaLevel> = {};
+    getProgramRequiredExams(program).forEach(exam => {
+      const subjectName = resolveRequirementSubject(exam.subject_name);
+      const existing = registeredBySubject.get(subjectName);
+      const requiredLevel = requirementLevelToMaturaLevel(exam.level);
+      nextLevels[subjectName] = existing && getMinimumLevelRank(existing.level) >= getMinimumLevelRank(requiredLevel)
+        ? existing.level
+        : requiredLevel;
+    });
+
+    const nextElectives: Record<string, boolean> = {};
+    getProgramElectiveExams(program).forEach(exam => {
+      nextElectives[exam.subject_name] = Boolean(exam.is_required || registeredBySubject.has(exam.subject_name));
+    });
+
+    setStudyLevelChoices(nextLevels);
+    setStudyElectiveChoices(nextElectives);
+    setStudyProgramToApply(program);
+  };
+
+  const persistStudyProgramChoice = async (program: StudyProgramOption, requirements: StudyProgramRequirements) => {
+    if (!targetStudentId) return false;
+    const next = [...studyApplications, {
+      id: crypto.randomUUID(),
+      student_id: targetStudentId,
+      priority_index: studyApplications.length + 1,
+      study_program_id: program.id,
+      name: program.name,
+      city: program.city,
+      institution: program.institution,
+      requirements,
+    }];
+    const response = await fetch('/api/matura-study-applications', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ student_id: targetStudentId, school_id: selectedSchoolId, programs: next }),
+    });
+    if (!response.ok) {
+      toast.error('Studijski program nije dodan.');
+      return false;
+    }
+    return true;
+  };
+
+  const confirmStudyProgramApplication = async () => {
+    const program = studyProgramToApply;
+    if (!program || !targetStudentId || !canChangeStudyPrograms) return;
+    if (studyApplications.length >= 10) {
+      toast.error('Možete odabrati najviše 10 studijskih programa.');
+      return;
+    }
+    if (studyApplications.some(item => item.study_program_id === program.id || item.name === program.name)) {
+      toast.error('Ovaj studijski program je već odabran.');
+      return;
+    }
+
+    const requiredExams = getProgramRequiredExams(program);
+    const electiveExams = getProgramElectiveExams(program);
+    const changes: string[] = [];
+    const registrationsToSave: Array<{ subjectName: string; level: MaturaLevel }> = [];
+    const requiredLevels: Record<string, 'A' | 'B' | '-'> = {};
+    const electiveRules: Record<string, '+' | '-' | '*'> = {};
+
+    for (const exam of requiredExams) {
+      const subjectName = resolveRequirementSubject(exam.subject_name);
+      const chosenLevel = studyLevelChoices[subjectName] || requirementLevelToMaturaLevel(exam.level);
+      const existing = registeredBySubject.get(subjectName);
+      requiredLevels[subjectName] = chosenLevel === 'A_RAZINA' ? 'A' : chosenLevel === 'B_RAZINA' ? 'B' : '-';
+      if (!existing || existing.level !== chosenLevel) {
+        if (!canRegisterMatura) {
+          toast.error(`${subjectName} nije moguće promijeniti jer je rok prijave ispita mature zatvoren.`);
+          return;
+        }
+        registrationsToSave.push({ subjectName, level: chosenLevel });
+        changes.push(existing ? `${subjectName}: ${fullLevelLabels[existing.level]} → ${fullLevelLabels[chosenLevel]}` : `${subjectName}: nova prijava`);
+      }
+    }
+
+    for (const exam of electiveExams) {
+      const shouldRegister = studyElectiveChoices[exam.subject_name] || Boolean(exam.is_required);
+      electiveRules[exam.subject_name] = exam.is_required ? '+' : shouldRegister ? '*' : '-';
+      if (shouldRegister && !registeredBySubject.has(exam.subject_name)) {
+        if (!canRegisterMatura) {
+          toast.error(`${exam.subject_name} nije moguće prijaviti jer je rok prijave ispita mature zatvoren.`);
+          return;
+        }
+        registrationsToSave.push({ subjectName: exam.subject_name, level: 'JEDNA_RAZINA' });
+        changes.push(`${exam.subject_name}: nova prijava`);
+      }
+    }
+
+    if (changes.length > 0 && !confirm(`Za prijavu ovog studija treba uskladiti ispite mature:\n\n${changes.join('\n')}\n\nŽelite li nastaviti?`)) {
+      return;
+    }
+
+    setSaving(true);
+    try {
+      for (const item of registrationsToSave) {
+        const response = await fetch('/api/matura-registrations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            student_id: targetStudentId,
+            class_id: selectedClassId,
+            school_id: selectedSchoolId,
+            subject_name: item.subjectName,
+            level: item.level,
+            exam_location: examLocation,
+          }),
+        });
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          toast.error(body.error || `${item.subjectName} nije prijavljen.`);
+          return;
+        }
+      }
+      const saved = await persistStudyProgramChoice(program, { requiredLevels, electiveRules });
+      if (!saved) return;
+      setStudyProgramToApply(null);
+      setSelectedStudyProgram(null);
+      setIsStudySearchOpen(false);
+      setStudySearchFilters(DEFAULT_STUDY_SEARCH_FILTERS);
+      toast.success('Studijski program je dodan u Moj odabir.');
+      await fetchAll();
+    } catch (error: any) {
+      if (error?.message !== 'closed-registration-window') {
+        console.error(error);
+        toast.error('Prijava studijskog programa nije uspjela.');
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const updateStudyFilter = (key: keyof StudySearchFilters, value: string) => {
     setStudySearchFilters(current => ({ ...current, [key]: value }));
   };
@@ -766,14 +988,20 @@ export default function MaturaPage() {
                 <thead><tr><th>Naziv studija</th><th>Mjesto izvođenja</th><th>Osnovne informacije</th><th>Odabir</th></tr></thead>
                 <tbody>
                   {filteredStudyPrograms.map(program => (
-                    <tr key={program.name}>
-                      <td className="text-[#005c8d] underline font-bold">{program.name}</td>
+                    <tr key={program.id}>
+                      <td>
+                        <button type="button" className="text-[#005c8d] underline font-bold text-left" onClick={() => setSelectedStudyProgram(program)}>
+                          {program.name}
+                        </button>
+                      </td>
                       <td>{program.city}</td>
                       <td>{program.institution}: {program.info}</td>
                       <td>
-                        <button className="text-[#005c8d] underline font-black" onClick={() => addStudyApplication(program)}>
-                          Odaberi
-                        </button>
+                        {!getStudyProgramBlockingReason(program) && (
+                          <button className="text-[#005c8d] underline font-black" onClick={() => openStudyProgramApplication(program)}>
+                            Odaberi
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -783,6 +1011,32 @@ export default function MaturaPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {selectedStudyProgram && (
+        <StudyProgramDetailsModal
+          program={selectedStudyProgram}
+          onClose={() => setSelectedStudyProgram(null)}
+          onSelect={() => openStudyProgramApplication(selectedStudyProgram)}
+          canSelect={!getStudyProgramBlockingReason(selectedStudyProgram)}
+        />
+      )}
+
+      {studyProgramToApply && (
+        <StudyProgramApplicationModal
+          program={studyProgramToApply}
+          foreignLanguage={foreignLanguage}
+          requiredExams={getProgramRequiredExams(studyProgramToApply)}
+          electiveExams={getProgramElectiveExams(studyProgramToApply)}
+          registeredBySubject={registeredBySubject}
+          levelChoices={studyLevelChoices}
+          electiveChoices={studyElectiveChoices}
+          saving={saving}
+          onLevelChange={(subjectName, level) => setStudyLevelChoices(current => ({ ...current, [subjectName]: level }))}
+          onElectiveChange={(subjectName, checked) => setStudyElectiveChoices(current => ({ ...current, [subjectName]: checked }))}
+          onConfirm={confirmStudyProgramApplication}
+          onClose={() => setStudyProgramToApply(null)}
+        />
       )}
 
       {activeTab === 'raspored' && (
@@ -855,6 +1109,215 @@ export default function MaturaPage() {
           </section>
         </div>
       )}
+    </div>
+  );
+}
+
+function StudyProgramDetailsModal({ program, canSelect, onClose, onSelect }: {
+  program: StudyProgramOption;
+  canSelect: boolean;
+  onClose: () => void;
+  onSelect: () => void;
+}) {
+  const requiredExams = program.required_exams?.length
+    ? program.required_exams
+    : Object.entries(program.requirements?.requiredLevels || {}).map(([subject_name, level]) => ({ subject_name, level, is_required: true }));
+  const electiveExams = program.elective_exams || [];
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
+      <div className="w-full max-w-4xl bg-white border border-slate-300 shadow-2xl">
+        <div className="px-5 py-4 border-b flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-black text-slate-950">{program.institution}</h2>
+            <p className="text-sm text-slate-600 mt-1">{program.component || program.institution}</p>
+            <p className="text-xs text-slate-500">{program.city}</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 text-slate-600 hover:text-slate-950"><X size={20} /></button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          <section>
+            <h3 className="text-xl font-medium text-slate-950">{program.study_name || program.name}</h3>
+            <ul className="mt-3 text-sm space-y-1 list-disc list-inside">
+              <li>Upisna kvota za državljane RH: {Number(program.citizen_quota || 0)}</li>
+              <li>Upisna kvota za strane državljane: {Number(program.foreign_quota || 0)}</li>
+              {program.study_type && <li>Tip studija: {program.study_type}</li>}
+              {program.institution_type && <li>Vrsta: {program.institution_type}</li>}
+            </ul>
+          </section>
+
+          <section>
+            <h4 className="text-sm font-black text-slate-700 mb-2">Ocjene iz srednje škole</h4>
+            <table className="w-full text-xs border border-slate-200">
+              <tbody>
+                <tr>
+                  <td className="font-bold bg-slate-50">Prosjek svih ocjena</td>
+                  <td>{Number(program.school_gpa_weight || 0).toFixed(2)} %</td>
+                  <td className="font-bold bg-slate-50">Vrednovanje</td>
+                  <td>-</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+
+          <section>
+            <h4 className="text-sm font-black text-slate-700 mb-2">Obvezni dio državne mature</h4>
+            <table className="w-full text-xs border border-slate-200">
+              <thead><tr><th>Naziv</th><th>Razina</th><th>Prag</th><th>Vrednovanje</th></tr></thead>
+              <tbody>
+                {requiredExams.map(exam => (
+                  <tr key={exam.subject_name}>
+                    <td>{exam.subject_name}</td>
+                    <td>{exam.level || '-'}</td>
+                    <td>{exam.threshold || '-'}</td>
+                    <td>{exam.weight || '-'}</td>
+                  </tr>
+                ))}
+                {requiredExams.length === 0 && <tr><td colSpan={4} className="text-center text-slate-400 italic">Nema unesenih uvjeta mature.</td></tr>}
+              </tbody>
+            </table>
+          </section>
+
+          <section>
+            <h4 className="text-sm font-black text-slate-700 mb-2">Izborni dio državne mature</h4>
+            <table className="w-full text-xs border border-slate-200">
+              <thead><tr><th>Naziv</th><th>Obvezan</th><th>Prag</th><th>Vrednovanje</th></tr></thead>
+              <tbody>
+                {electiveExams.map(exam => (
+                  <tr key={exam.subject_name}>
+                    <td>{exam.subject_name}</td>
+                    <td>{exam.is_required ? 'DA' : 'NE'}</td>
+                    <td>{exam.threshold || '-'}</td>
+                    <td>{exam.weight || '-'}</td>
+                  </tr>
+                ))}
+                {electiveExams.length === 0 && <tr><td colSpan={4} className="text-center text-slate-400 italic">Nema izbornih uvjeta.</td></tr>}
+              </tbody>
+            </table>
+          </section>
+        </div>
+
+        <div className="px-5 py-4 border-t bg-slate-50 flex justify-end gap-4">
+          {canSelect && <button type="button" className="text-[#005c8d] underline font-black" onClick={onSelect}>Odaberi</button>}
+          <button type="button" className="text-[#005c8d] underline font-black" onClick={onClose}>U redu</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StudyProgramApplicationModal({ program, foreignLanguage, requiredExams, electiveExams, registeredBySubject, levelChoices, electiveChoices, saving, onLevelChange, onElectiveChange, onConfirm, onClose }: {
+  program: StudyProgramOption;
+  foreignLanguage: string;
+  requiredExams: StudyRequirement[];
+  electiveExams: StudyRequirement[];
+  registeredBySubject: Map<string, MaturaRegistration>;
+  levelChoices: Record<string, MaturaLevel>;
+  electiveChoices: Record<string, boolean>;
+  saving: boolean;
+  onLevelChange: (subjectName: string, level: MaturaLevel) => void;
+  onElectiveChange: (subjectName: string, checked: boolean) => void;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const resolveSubject = (subjectName: string) => subjectName === 'Strani jezik' ? foreignLanguage : subjectName;
+  const isLevelSubject = (subjectName: string) => subjectName === 'Matematika' || subjectName === 'Strani jezik' || FOREIGN_LANGUAGE_NAMES.includes(subjectName);
+
+  return (
+    <div className="fixed inset-0 z-[60] bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
+      <div className="w-full max-w-2xl bg-white border border-slate-300 shadow-2xl">
+        <div className="px-5 py-4 border-b flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black text-slate-950">Prijava ispita obveznog i izbornog dijela državne mature</h2>
+            <p className="text-sm text-slate-500 mt-2">Ovi ispiti zahtjev su studijskog programa</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1 text-slate-600 hover:text-slate-950"><X size={20} /></button>
+        </div>
+
+        <div className="p-5 space-y-6">
+          <div className="text-sm font-bold text-slate-800">
+            {program.institution} - {program.component || program.institution} - {program.study_name || program.name}
+            {program.study_type ? ` (${program.study_type})` : ''}
+          </div>
+
+          <p className="text-sm text-slate-600">Prema pravilniku o polaganju državne mature i zahtjevima studijskog programa prijavit će se sljedeći ispiti:</p>
+
+          <section>
+            <h3 className="text-sm font-black text-slate-700 mb-2">Obvezni dio</h3>
+            <table className="w-full text-sm border border-slate-200">
+              <thead><tr><th>Predmet</th><th className="w-36 text-center">Razina</th></tr></thead>
+              <tbody>
+                {requiredExams.map(exam => {
+                  const subjectName = resolveSubject(exam.subject_name);
+                  const existing = registeredBySubject.get(subjectName);
+                  const selected = levelChoices[subjectName] || requirementLevelToMaturaLevel(exam.level);
+                  return (
+                    <tr key={exam.subject_name}>
+                      <td>
+                        <span>{existing ? '* ' : ''}{subjectName}</span>
+                        {exam.subject_name === 'Strani jezik' && <span className="text-xs text-slate-500 ml-2">(odabrani strani jezik)</span>}
+                      </td>
+                      <td className="text-center">
+                        {isLevelSubject(exam.subject_name) ? (
+                          <div className="inline-flex gap-4">
+                            <label className="inline-flex items-center gap-1 text-xs">
+                              <input type="radio" checked={selected === 'A_RAZINA'} onChange={() => onLevelChange(subjectName, 'A_RAZINA')} />
+                              A
+                            </label>
+                            <label className="inline-flex items-center gap-1 text-xs">
+                              <input type="radio" checked={selected === 'B_RAZINA'} onChange={() => onLevelChange(subjectName, 'B_RAZINA')} />
+                              B
+                            </label>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-500">Jedna razina</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {requiredExams.length === 0 && <tr><td colSpan={2} className="text-center text-slate-400 italic">Nema obveznih uvjeta.</td></tr>}
+              </tbody>
+            </table>
+          </section>
+
+          <section>
+            <h3 className="text-sm font-black text-slate-700 mb-2">Izborni dio</h3>
+            <table className="w-full text-sm border border-slate-200">
+              <thead><tr><th>Predmet</th><th>Obvezan uvjet</th><th className="text-center">Dodavanje</th></tr></thead>
+              <tbody>
+                {electiveExams.map(exam => {
+                  const isRegistered = registeredBySubject.has(exam.subject_name);
+                  const isChecked = Boolean(exam.is_required || electiveChoices[exam.subject_name] || isRegistered);
+                  return (
+                    <tr key={exam.subject_name}>
+                      <td>{isRegistered ? '* ' : ''}{exam.subject_name}</td>
+                      <td>{exam.is_required ? 'DA' : 'NE'}</td>
+                      <td className="text-center">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          disabled={Boolean(exam.is_required || isRegistered)}
+                          onChange={(event) => onElectiveChange(exam.subject_name, event.target.checked)}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+                {electiveExams.length === 0 && <tr><td colSpan={3} className="text-center text-slate-400 italic">Nema izbornih uvjeta.</td></tr>}
+              </tbody>
+            </table>
+          </section>
+
+          <p className="text-sm text-slate-500">Ispiti označeni sa * već su prijavljeni.</p>
+        </div>
+
+        <div className="px-5 py-4 border-t bg-slate-50 flex justify-end gap-5">
+          <button type="button" disabled={saving} className="text-[#005c8d] underline font-black disabled:text-slate-400" onClick={onConfirm}>Prihvati</button>
+          <button type="button" disabled={saving} className="text-[#005c8d] underline font-black disabled:text-slate-400" onClick={onClose}>Odustani</button>
+        </div>
+      </div>
     </div>
   );
 }
