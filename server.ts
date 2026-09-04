@@ -2421,13 +2421,86 @@ async function startServer() {
     }
   });
 
-  app.post("/api/matura-results", (req, res) => {
+  const getMaturaGradeNumber = (grade: any) => {
+    const match = String(grade || "").match(/\((\d)\)|^(\d)$/);
+    return Number(match?.[1] || match?.[2] || 0);
+  };
+
+  const isPassingMaturaResult = (result: any) => (
+    String(result?.status || "Uredno pristupanje") === "Uredno pristupanje" &&
+    getMaturaGradeNumber(result?.grade) > 1
+  );
+
+  const getMaturaResultScore = (result: any) => (
+    getMaturaGradeNumber(result?.grade) * 100000 +
+    Number(result?.percentage || 0) * 100 +
+    Number(result?.points || 0)
+  );
+
+  const calculateMaturaResultStats = (record: any, registrations: any[], results: any[]) => {
+    const subjectName = normalizeMaturaSubject(record.subject_name);
+    const level = normalizeMaturaLevel(record.level);
+    const sameExamRegistrations = registrations.filter(item =>
+      item?.status === "REGISTERED" &&
+      normalizeMaturaSubject(item?.subject_name).toLowerCase() === subjectName.toLowerCase() &&
+      normalizeMaturaLevel(item?.level) === level &&
+      (!record.school_id || !item?.school_id || item.school_id === record.school_id)
+    );
+    const participantsCount = sameExamRegistrations.length;
+    const comparableResults = [
+      ...results.filter(item => !(
+        item.student_id === record.student_id &&
+        normalizeMaturaSubject(item.subject_name).toLowerCase() === subjectName.toLowerCase() &&
+        normalizeMaturaLevel(item.level) === level
+      )),
+      record,
+    ].filter(item =>
+      sameExamRegistrations.some(registration => registration.student_id === item.student_id) &&
+      normalizeMaturaSubject(item.subject_name).toLowerCase() === subjectName.toLowerCase() &&
+      normalizeMaturaLevel(item.level) === level &&
+      isPassingMaturaResult(item)
+    );
+
+    if (!isPassingMaturaResult(record)) {
+      return {
+        rank: null,
+        participants_count: participantsCount || null,
+        percentile: null,
+      };
+    }
+
+    comparableResults.sort((a, b) => getMaturaResultScore(b) - getMaturaResultScore(a));
+    const rank = comparableResults.findIndex(item => item.student_id === record.student_id) + 1;
+    const percentile = participantsCount > 0 && rank > 0
+      ? Math.max(1, Math.min(100, Math.round(((participantsCount - rank + 1) / participantsCount) * 100)))
+      : null;
+
+    return {
+      rank: rank > 0 ? rank : null,
+      participants_count: participantsCount || null,
+      percentile,
+    };
+  };
+
+  app.post("/api/matura-results", async (req, res) => {
     try {
       const payload = req.body || {};
       if (!payload.student_id || !payload.subject_name) {
         return res.status(400).json({ error: "Učenik i predmet su obavezni." });
       }
       const items = readJsonFile("matura_results.json");
+      let registrations = readJsonFile("matura_registrations.json");
+      if (supabaseAdmin) {
+        try {
+          let query = supabaseAdmin.from("matura_registrations").select("*");
+          if (payload.school_id) query = query.eq("school_id", payload.school_id);
+          const { data, error } = await query;
+          if (!error) registrations = data || registrations;
+          else if (error.code !== "PGRST205" && error.code !== "42P01") console.error("DB matura registrations stats read error:", error);
+        } catch (dbErr: any) {
+          if (dbErr?.code !== "PGRST205" && dbErr?.code !== "42P01") console.error("DB matura registrations stats connection error:", dbErr);
+        }
+      }
       const now = new Date().toISOString();
       const index = items.findIndex(item =>
         item.student_id === payload.student_id &&
@@ -2446,14 +2519,23 @@ async function startServer() {
         max_points: Number(payload.max_points || 100),
         percentage: Number(payload.percentage || 0),
         grade: String(payload.grade || '').trim() || null,
-        rank: payload.rank ? Number(payload.rank) : null,
-        participants_count: payload.participants_count ? Number(payload.participants_count) : null,
-        percentile: payload.percentile ? Number(payload.percentile) : null,
         updated_at: now,
         created_at: index >= 0 ? items[index].created_at : now,
       };
+      Object.assign(record, calculateMaturaResultStats(record, registrations, items));
       if (index >= 0) items[index] = record;
       else items.push(record);
+      const recordSubject = normalizeMaturaSubject(record.subject_name).toLowerCase();
+      const recordLevel = normalizeMaturaLevel(record.level);
+      items.forEach(item => {
+        if (
+          normalizeMaturaSubject(item.subject_name).toLowerCase() === recordSubject &&
+          normalizeMaturaLevel(item.level) === recordLevel &&
+          (!record.school_id || !item.school_id || item.school_id === record.school_id)
+        ) {
+          Object.assign(item, calculateMaturaResultStats(item, registrations, items));
+        }
+      });
       writeJsonFile("matura_results.json", items);
       res.json({ success: true, data: record });
     } catch (err: any) {

@@ -32,6 +32,22 @@ type MaturaScheduleItem = {
   note?: string | null;
 };
 
+type MaturaResult = {
+  id: string;
+  student_id: string;
+  school_id?: string | null;
+  subject_name: string;
+  level: MaturaLevel;
+  status?: string | null;
+  points?: number | null;
+  max_points?: number | null;
+  percentage?: number | null;
+  grade?: string | null;
+  rank?: number | null;
+  participants_count?: number | null;
+  percentile?: number | null;
+};
+
 type StudyRequirement = {
   subject_name: string;
   level?: 'A' | 'B' | '-';
@@ -67,6 +83,7 @@ const ELECTIVE_MATURA_SUBJECTS = SUBJECTS.filter(subject => !['Hrvatski jezik', 
 const FOREIGN_LANGUAGE_NAMES = ['Strani jezik', 'Engleski jezik', 'Njemački jezik', 'Francuski jezik', 'Talijanski jezik', 'Španjolski jezik'];
 const LEVELLED_MATURA_SUBJECTS = new Set(['Matematika', 'Strani jezik', 'Engleski jezik', 'Njemački jezik']);
 const MATURA_GRADE_OPTIONS = ['Nedovoljan (1)', 'Dovoljan (2)', 'Dobar (3)', 'Vrlo dobar (4)', 'Odličan (5)'];
+const MATURA_ATTENDANCE_OPTIONS = ['Uredno pristupanje', 'Nije pristupio', 'Opravdano nije pristupio', 'Diskvalificiran'];
 const INSTITUTION_TYPES = ['Javna sveučilišta', 'Javna veleučilišta', 'Javne visoke škole', 'Privatna sveučilišta', 'Privatna veleučilišta', 'Privatne visoke škole'];
 const STUDY_AREAS = ['Arhitektura', 'Biomedicina i zdravstvo', 'Biotehničke znanosti', 'Dizajn', 'Društvene znanosti', 'Humanističke znanosti', 'Prirodne znanosti', 'Tehničke znanosti'];
 const STUDY_FIELDS = ['Arhitektura i urbanizam', 'Ekonomija', 'Elektrotehnika', 'Filologija', 'Građevinarstvo', 'Informacijske i komunikacijske znanosti', 'Medicina', 'Pedagogija', 'Pravo', 'Psihologija', 'Računarstvo', 'Strojarstvo', 'Tehnologija prometa i transport'];
@@ -129,6 +146,22 @@ const formatScheduleSubject = (item: MaturaScheduleItem) => {
 
 const formatScheduleLevel = (item: MaturaScheduleItem) => hasMaturaLevel(item.subject_name) ? levelLabels[item.level] : '';
 
+const getMaturaGradeNumber = (grade?: string | null) => {
+  const match = String(grade || '').match(/\((\d)\)|^(\d)$/);
+  return Number(match?.[1] || match?.[2] || 0);
+};
+
+const isPassingMaturaResult = (result: Pick<MaturaResult, 'grade' | 'status'>) => (
+  String(result.status || 'Uredno pristupanje') === 'Uredno pristupanje' &&
+  getMaturaGradeNumber(result.grade) > 1
+);
+
+const getMaturaResultScore = (result: Pick<MaturaResult, 'grade' | 'percentage' | 'points'>) => (
+  getMaturaGradeNumber(result.grade) * 100000 +
+  Number(result.percentage || 0) * 100 +
+  Number(result.points || 0)
+);
+
 export default function MaturaTeacherPage() {
   const { user } = useAuth();
   const { selectedClassId, selectedSchoolId } = useSelection();
@@ -136,6 +169,7 @@ export default function MaturaTeacherPage() {
   const [registrations, setRegistrations] = React.useState<MaturaRegistration[]>([]);
   const [students, setStudents] = React.useState<Record<string, User>>({});
   const [schedule, setSchedule] = React.useState<MaturaScheduleItem[]>([]);
+  const [results, setResults] = React.useState<MaturaResult[]>([]);
   const [studyPrograms, setStudyPrograms] = React.useState<MaturaStudyProgram[]>([]);
   const [settings, setSettings] = React.useState<any>({});
   const [loading, setLoading] = React.useState(true);
@@ -149,10 +183,10 @@ export default function MaturaTeacherPage() {
     try {
       const params = new URLSearchParams();
       if (selectedSchoolId) params.set('schoolId', selectedSchoolId);
-      if (selectedClassId) params.set('classId', selectedClassId);
 
-      const [registrationsResponse, scheduleResponse, settingsResponse, studyProgramsResponse] = await Promise.all([
+      const [registrationsResponse, resultsResponse, scheduleResponse, settingsResponse, studyProgramsResponse] = await Promise.all([
         fetch(`/api/matura-registrations?${params.toString()}`),
+        fetch(`/api/matura-results?schoolId=${selectedSchoolId || ''}`),
         fetch(`/api/matura-exam-schedule?schoolId=${selectedSchoolId || ''}`),
         fetch(`/api/matura-settings?schoolId=${selectedSchoolId || ''}`),
         fetch(`/api/matura-study-programs?activeOnly=false${selectedSchoolId ? `&schoolId=${selectedSchoolId}` : ''}`),
@@ -160,6 +194,7 @@ export default function MaturaTeacherPage() {
 
       const items: MaturaRegistration[] = registrationsResponse.ok ? await registrationsResponse.json() : [];
       setRegistrations(items);
+      setResults(resultsResponse.ok ? await resultsResponse.json() : []);
       setSchedule(scheduleResponse.ok ? await scheduleResponse.json() : []);
       setSettings(settingsResponse.ok ? ((await settingsResponse.json()) || {}) : {});
       setStudyPrograms(studyProgramsResponse.ok ? await studyProgramsResponse.json() : []);
@@ -173,9 +208,10 @@ export default function MaturaTeacherPage() {
           map[user.id] = user;
         });
         setStudents(map);
-        setResultForm(prev => ({ ...prev, student_id: prev.student_id || studentIds[0] }));
+        setResultForm(prev => ({ ...prev, student_id: studentIds.includes(prev.student_id) ? prev.student_id : studentIds[0] }));
       } else {
         setStudents({});
+        setResultForm(prev => ({ ...prev, student_id: '' }));
       }
     } catch (error) {
       console.error('MATURA TEACHER LOAD ERROR', error);
@@ -183,7 +219,7 @@ export default function MaturaTeacherPage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedClassId, selectedSchoolId]);
+  }, [selectedSchoolId]);
 
   React.useEffect(() => {
     fetchData();
@@ -193,6 +229,16 @@ export default function MaturaTeacherPage() {
     const studentName = formatPersonName(students[item.student_id]);
     return `${studentName} ${item.subject_name} ${item.exam_location || ''}`.toLowerCase().includes(search.trim().toLowerCase());
   });
+
+  const studentOptions = React.useMemo(() => {
+    const ids = [...new Set(registrations.map(item => item.student_id).filter(Boolean))];
+    return ids
+      .map(id => ({
+        id,
+        name: formatPersonName(students[id]) || id,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name, 'hr'));
+  }, [registrations, students]);
 
   const getRegistrationGroup = React.useCallback((registration: MaturaRegistration) => {
     const subjectName = registration.subject_name;
@@ -219,6 +265,60 @@ export default function MaturaTeacherPage() {
     item.level === resultForm.level
   );
 
+  const calculatedResultStats = React.useMemo(() => {
+    if (!selectedResultRegistration) {
+      return { rank: '', participants_count: '', percentile: '' };
+    }
+
+    const sameExamRegistrations = registrations.filter(item =>
+      item.status === 'REGISTERED' &&
+      item.subject_name === selectedResultRegistration.subject_name &&
+      item.level === selectedResultRegistration.level
+    );
+    const participantsCount = sameExamRegistrations.length;
+    const currentResult: MaturaResult = {
+      id: 'current',
+      student_id: resultForm.student_id,
+      school_id: selectedSchoolId,
+      subject_name: selectedResultRegistration.subject_name,
+      level: selectedResultRegistration.level,
+      status: resultForm.status,
+      points: Number(resultForm.points || 0),
+      max_points: Number(resultForm.max_points || 100),
+      percentage: Number(resultForm.percentage || 0),
+      grade: resultForm.grade,
+    };
+    const comparableResults = [
+      ...results.filter(item => !(
+        item.student_id === resultForm.student_id &&
+        item.subject_name === selectedResultRegistration.subject_name &&
+        item.level === selectedResultRegistration.level
+      )),
+      currentResult,
+    ].filter(item =>
+      sameExamRegistrations.some(registration => registration.student_id === item.student_id) &&
+      item.subject_name === selectedResultRegistration.subject_name &&
+      item.level === selectedResultRegistration.level &&
+      isPassingMaturaResult(item)
+    );
+
+    if (!isPassingMaturaResult(currentResult)) {
+      return { rank: '', participants_count: String(participantsCount || ''), percentile: '' };
+    }
+
+    comparableResults.sort((a, b) => getMaturaResultScore(b) - getMaturaResultScore(a));
+    const rank = comparableResults.findIndex(item => item.student_id === resultForm.student_id) + 1;
+    const percentile = participantsCount > 0 && rank > 0
+      ? Math.max(1, Math.min(100, Math.round(((participantsCount - rank + 1) / participantsCount) * 100)))
+      : '';
+
+    return {
+      rank: rank > 0 ? String(rank) : '',
+      participants_count: String(participantsCount || ''),
+      percentile: percentile ? String(percentile) : '',
+    };
+  }, [registrations, resultForm.grade, resultForm.level, resultForm.max_points, resultForm.percentage, resultForm.points, resultForm.status, resultForm.student_id, results, selectedResultRegistration, selectedSchoolId]);
+
   React.useEffect(() => {
     if (!resultForm.student_id || selectedStudentRegistrations.length === 0) return;
     const stillSelected = selectedStudentRegistrations.some(item =>
@@ -229,6 +329,24 @@ export default function MaturaTeacherPage() {
     const first = selectedStudentRegistrations[0];
     setResultForm(prev => ({ ...prev, subject_name: first.subject_name, level: first.level }));
   }, [resultForm.level, resultForm.student_id, resultForm.subject_name, selectedStudentRegistrations]);
+
+  React.useEffect(() => {
+    setResultForm(prev => {
+      if (
+        prev.rank === calculatedResultStats.rank &&
+        prev.participants_count === calculatedResultStats.participants_count &&
+        prev.percentile === calculatedResultStats.percentile
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        rank: calculatedResultStats.rank,
+        participants_count: calculatedResultStats.participants_count,
+        percentile: calculatedResultStats.percentile,
+      };
+    });
+  }, [calculatedResultStats]);
 
   const saveSettings = async () => {
     const response = await fetch('/api/matura-settings', {
@@ -295,6 +413,7 @@ export default function MaturaTeacherPage() {
       return;
     }
     toast.success('Rezultat mature je spremljen.');
+    await fetchData();
   };
 
   const saveStudyProgram = async () => {
@@ -484,7 +603,10 @@ export default function MaturaTeacherPage() {
       {activeTab === 'rezultati' && (
         <section className="border border-slate-200 bg-white shadow-sm p-5 max-w-5xl">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div><label>Učenik</label><select value={resultForm.student_id} onChange={(event) => setResultForm(prev => ({ ...prev, student_id: event.target.value }))}>{Object.values(students).map(student => <option key={student.id} value={student.id}>{formatPersonName(student)}</option>)}</select></div>
+            <div><label>Učenik</label><select value={resultForm.student_id} onChange={(event) => setResultForm(prev => ({ ...prev, student_id: event.target.value }))}>
+              {studentOptions.length === 0 && <option value="">Nema učenika s prijavama mature</option>}
+              {studentOptions.map(student => <option key={student.id} value={student.id}>{student.name}</option>)}
+            </select></div>
             <div><label>Ispit</label><select value={selectedStudentRegistrations.length ? resultForm.subject_name : ''} onChange={(event) => {
               const subjectName = event.target.value;
               const registration = selectedStudentRegistrations.find(item => item.subject_name === subjectName);
@@ -513,14 +635,14 @@ export default function MaturaTeacherPage() {
             {hasMaturaLevel(resultForm.subject_name) && (
               <div><label>Razina</label><select value={resultForm.level} disabled><option value="A_RAZINA">A razina</option><option value="B_RAZINA">B razina</option></select></div>
             )}
-            <div><label>Status pristupanja</label><input value={resultForm.status} onChange={(event) => setResultForm(prev => ({ ...prev, status: event.target.value }))} /></div>
+            <div><label>Status pristupanja</label><select value={resultForm.status} onChange={(event) => setResultForm(prev => ({ ...prev, status: event.target.value }))}>{MATURA_ATTENDANCE_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}</select></div>
             <div><label>Broj bodova</label><input type="number" value={resultForm.points} onChange={(event) => setResultForm(prev => ({ ...prev, points: event.target.value }))} /></div>
             <div><label>Najveći mogući broj bodova</label><input type="number" value={resultForm.max_points} onChange={(event) => setResultForm(prev => ({ ...prev, max_points: event.target.value }))} /></div>
             <div><label>Postotak riješenosti</label><input type="number" value={resultForm.percentage} onChange={(event) => setResultForm(prev => ({ ...prev, percentage: event.target.value }))} /></div>
             <div><label>Ocjena</label><select value={resultForm.grade} onChange={(event) => setResultForm(prev => ({ ...prev, grade: event.target.value }))}><option value="">-- odaberite ocjenu --</option>{MATURA_GRADE_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}</select></div>
-            <div><label>Rang u generaciji</label><input type="number" value={resultForm.rank} onChange={(event) => setResultForm(prev => ({ ...prev, rank: event.target.value }))} /></div>
-            <div><label>Ukupni broj pristupnika</label><input type="number" value={resultForm.participants_count} onChange={(event) => setResultForm(prev => ({ ...prev, participants_count: event.target.value }))} /></div>
-            <div><label>Centil</label><input type="number" value={resultForm.percentile} onChange={(event) => setResultForm(prev => ({ ...prev, percentile: event.target.value }))} /></div>
+            <div><label>Rang u generaciji</label><input type="number" value={resultForm.rank} readOnly /></div>
+            <div><label>Ukupni broj pristupnika</label><input type="number" value={resultForm.participants_count} readOnly /></div>
+            <div><label>Centil</label><input type="number" value={resultForm.percentile} readOnly /></div>
           </div>
           <button className="btn-primary mt-5" onClick={saveResult}><Save size={14} /> Spremi rezultat</button>
         </section>
