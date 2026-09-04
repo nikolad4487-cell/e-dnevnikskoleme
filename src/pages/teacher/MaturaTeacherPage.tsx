@@ -64,7 +64,9 @@ type MaturaStudyProgram = {
 const SUBJECTS = ['Hrvatski jezik', 'Matematika', 'Engleski jezik', 'Njemački jezik', 'Biologija', 'Povijest', 'Geografija', 'Politika i gospodarstvo', 'Fizika', 'Logika', 'Filozofija', 'Likovna umjetnost', 'Psihologija', 'Informatika', 'Kemija', 'Sociologija', 'Vjeronauk', 'Glazbena umjetnost', 'Etika'];
 const REQUIRED_MATURA_SUBJECTS = ['Hrvatski jezik', 'Matematika', 'Strani jezik'];
 const ELECTIVE_MATURA_SUBJECTS = SUBJECTS.filter(subject => !['Hrvatski jezik', 'Matematika', 'Engleski jezik', 'Njemački jezik'].includes(subject));
+const FOREIGN_LANGUAGE_NAMES = ['Strani jezik', 'Engleski jezik', 'Njemački jezik', 'Francuski jezik', 'Talijanski jezik', 'Španjolski jezik'];
 const LEVELLED_MATURA_SUBJECTS = new Set(['Matematika', 'Strani jezik', 'Engleski jezik', 'Njemački jezik']);
+const MATURA_GRADE_OPTIONS = ['Nedovoljan (1)', 'Dovoljan (2)', 'Dobar (3)', 'Vrlo dobar (4)', 'Odličan (5)'];
 const INSTITUTION_TYPES = ['Javna sveučilišta', 'Javna veleučilišta', 'Javne visoke škole', 'Privatna sveučilišta', 'Privatna veleučilišta', 'Privatne visoke škole'];
 const STUDY_AREAS = ['Arhitektura', 'Biomedicina i zdravstvo', 'Biotehničke znanosti', 'Dizajn', 'Društvene znanosti', 'Humanističke znanosti', 'Prirodne znanosti', 'Tehničke znanosti'];
 const STUDY_FIELDS = ['Arhitektura i urbanizam', 'Ekonomija', 'Elektrotehnika', 'Filologija', 'Građevinarstvo', 'Informacijske i komunikacijske znanosti', 'Medicina', 'Pedagogija', 'Pravo', 'Psihologija', 'Računarstvo', 'Strojarstvo', 'Tehnologija prometa i transport'];
@@ -192,6 +194,42 @@ export default function MaturaTeacherPage() {
     return `${studentName} ${item.subject_name} ${item.exam_location || ''}`.toLowerCase().includes(search.trim().toLowerCase());
   });
 
+  const getRegistrationGroup = React.useCallback((registration: MaturaRegistration) => {
+    const subjectName = registration.subject_name;
+    if (subjectName === 'Hrvatski jezik' || subjectName === 'Matematika' || FOREIGN_LANGUAGE_NAMES.includes(subjectName)) {
+      return 'required';
+    }
+    return 'elective';
+  }, []);
+
+  const selectedStudentRegistrations = React.useMemo(() => (
+    registrations
+      .filter(item => item.student_id === resultForm.student_id && item.status === 'REGISTERED')
+      .sort((a, b) => {
+        const byGroup = getRegistrationGroup(a).localeCompare(getRegistrationGroup(b));
+        if (byGroup !== 0) return byGroup;
+        return a.subject_name.localeCompare(b.subject_name, 'hr');
+      })
+  ), [getRegistrationGroup, registrations, resultForm.student_id]);
+
+  const selectedRequiredResultSubjects = selectedStudentRegistrations.filter(item => getRegistrationGroup(item) === 'required');
+  const selectedElectiveResultSubjects = selectedStudentRegistrations.filter(item => getRegistrationGroup(item) === 'elective');
+  const selectedResultRegistration = selectedStudentRegistrations.find(item =>
+    item.subject_name === resultForm.subject_name &&
+    item.level === resultForm.level
+  );
+
+  React.useEffect(() => {
+    if (!resultForm.student_id || selectedStudentRegistrations.length === 0) return;
+    const stillSelected = selectedStudentRegistrations.some(item =>
+      item.subject_name === resultForm.subject_name &&
+      item.level === resultForm.level
+    );
+    if (stillSelected) return;
+    const first = selectedStudentRegistrations[0];
+    setResultForm(prev => ({ ...prev, subject_name: first.subject_name, level: first.level }));
+  }, [resultForm.level, resultForm.student_id, resultForm.subject_name, selectedStudentRegistrations]);
+
   const saveSettings = async () => {
     const response = await fetch('/api/matura-settings', {
       method: 'POST',
@@ -236,6 +274,14 @@ export default function MaturaTeacherPage() {
   const saveResult = async () => {
     if (!resultForm.student_id) {
       toast.error('Odaberite učenika.');
+      return;
+    }
+    if (!selectedResultRegistration) {
+      toast.error('Odaberite ispit koji je učenik prijavio na maturi.');
+      return;
+    }
+    if (!resultForm.grade) {
+      toast.error('Odaberite ocjenu.');
       return;
     }
     const response = await fetch('/api/matura-results', {
@@ -439,18 +485,39 @@ export default function MaturaTeacherPage() {
         <section className="border border-slate-200 bg-white shadow-sm p-5 max-w-5xl">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div><label>Učenik</label><select value={resultForm.student_id} onChange={(event) => setResultForm(prev => ({ ...prev, student_id: event.target.value }))}>{Object.values(students).map(student => <option key={student.id} value={student.id}>{formatPersonName(student)}</option>)}</select></div>
-            <div><label>Ispit</label><select value={resultForm.subject_name} onChange={(event) => {
+            <div><label>Ispit</label><select value={selectedStudentRegistrations.length ? resultForm.subject_name : ''} onChange={(event) => {
               const subjectName = event.target.value;
-              setResultForm(prev => ({ ...prev, subject_name: subjectName, level: defaultMaturaLevel(subjectName) }));
-            }}>{SUBJECTS.map(item => <option key={item}>{item}</option>)}</select></div>
+              const registration = selectedStudentRegistrations.find(item => item.subject_name === subjectName);
+              setResultForm(prev => ({ ...prev, subject_name: subjectName, level: registration?.level || defaultMaturaLevel(subjectName) }));
+            }} disabled={!resultForm.student_id || selectedStudentRegistrations.length === 0}>
+              {selectedRequiredResultSubjects.length > 0 && (
+                <optgroup label="OBAVEZNI PREDMETI">
+                  {selectedRequiredResultSubjects.map(item => (
+                    <option key={item.id} value={item.subject_name}>
+                      {item.subject_name}{item.level !== 'JEDNA_RAZINA' ? ` - ${levelLabels[item.level]}` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {selectedElectiveResultSubjects.length > 0 && (
+                <optgroup label="IZBORNI PREDMETI">
+                  {selectedElectiveResultSubjects.map(item => (
+                    <option key={item.id} value={item.subject_name}>
+                      {item.subject_name}{item.level !== 'JEDNA_RAZINA' ? ` - ${levelLabels[item.level]}` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {selectedStudentRegistrations.length === 0 && <option value="">Učenik nema prijavljenih ispita</option>}
+            </select></div>
             {hasMaturaLevel(resultForm.subject_name) && (
-              <div><label>Razina</label><select value={resultForm.level} onChange={(event) => setResultForm(prev => ({ ...prev, level: event.target.value as MaturaLevel }))}><option value="A_RAZINA">A razina</option><option value="B_RAZINA">B razina</option></select></div>
+              <div><label>Razina</label><select value={resultForm.level} disabled><option value="A_RAZINA">A razina</option><option value="B_RAZINA">B razina</option></select></div>
             )}
             <div><label>Status pristupanja</label><input value={resultForm.status} onChange={(event) => setResultForm(prev => ({ ...prev, status: event.target.value }))} /></div>
             <div><label>Broj bodova</label><input type="number" value={resultForm.points} onChange={(event) => setResultForm(prev => ({ ...prev, points: event.target.value }))} /></div>
             <div><label>Najveći mogući broj bodova</label><input type="number" value={resultForm.max_points} onChange={(event) => setResultForm(prev => ({ ...prev, max_points: event.target.value }))} /></div>
             <div><label>Postotak riješenosti</label><input type="number" value={resultForm.percentage} onChange={(event) => setResultForm(prev => ({ ...prev, percentage: event.target.value }))} /></div>
-            <div><label>Ocjena</label><input value={resultForm.grade} onChange={(event) => setResultForm(prev => ({ ...prev, grade: event.target.value }))} placeholder="npr. Dovoljan (2)" /></div>
+            <div><label>Ocjena</label><select value={resultForm.grade} onChange={(event) => setResultForm(prev => ({ ...prev, grade: event.target.value }))}><option value="">-- odaberite ocjenu --</option>{MATURA_GRADE_OPTIONS.map(item => <option key={item} value={item}>{item}</option>)}</select></div>
             <div><label>Rang u generaciji</label><input type="number" value={resultForm.rank} onChange={(event) => setResultForm(prev => ({ ...prev, rank: event.target.value }))} /></div>
             <div><label>Ukupni broj pristupnika</label><input type="number" value={resultForm.participants_count} onChange={(event) => setResultForm(prev => ({ ...prev, participants_count: event.target.value }))} /></div>
             <div><label>Centil</label><input type="number" value={resultForm.percentile} onChange={(event) => setResultForm(prev => ({ ...prev, percentile: event.target.value }))} /></div>
