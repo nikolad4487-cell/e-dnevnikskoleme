@@ -1125,7 +1125,7 @@ function StudyProgramDetailsModal({ program, canSelect, onClose, onSelect }: {
   const electiveExams = program.elective_exams || [];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[130] bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
       <div className="w-full max-w-4xl bg-white border border-slate-300 shadow-2xl">
         <div className="px-5 py-4 border-b flex items-start justify-between gap-4">
           <div>
@@ -1225,7 +1225,7 @@ function StudyProgramApplicationModal({ program, foreignLanguage, requiredExams,
   const isLevelSubject = (subjectName: string) => subjectName === 'Matematika' || subjectName === 'Strani jezik' || FOREIGN_LANGUAGE_NAMES.includes(subjectName);
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[140] bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
       <div className="w-full max-w-2xl bg-white border border-slate-300 shadow-2xl">
         <div className="px-5 py-4 border-b flex items-start justify-between gap-4">
           <div>
