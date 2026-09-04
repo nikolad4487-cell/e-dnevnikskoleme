@@ -337,14 +337,17 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                    )}
 
                    {hasChildren && openDesktopNavId === group.id && (
-                     <div className="absolute left-0 top-full mt-0 w-64 bg-white border border-slate-200 shadow-xl rounded-sm py-1 z-50">
+                     <div className={cn(
+                       "absolute top-full mt-0 w-64 max-w-[calc(100vw-24px)] bg-white border border-slate-200 shadow-xl rounded-sm py-1 z-50",
+                       group.id === 'vise' ? "right-0" : "left-0"
+                     )}>
                        {group.children!.map(child => (
                          <Link
                            key={child.path}
                            to={child.path}
                            onClick={() => setOpenDesktopNavId(null)}
                            className={cn(
-                             "flex items-center gap-2 px-3 py-2.5 text-[11px] font-black uppercase tracking-wider transition-colors",
+                             "flex items-center gap-2 px-3 py-2.5 text-[11px] font-black uppercase tracking-wider transition-colors whitespace-normal",
                              isTabActive(child.id, child.path)
                               ? "bg-sky-50 text-[#005c8d]"
                               : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"
