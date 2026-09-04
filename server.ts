@@ -2606,11 +2606,14 @@ async function startServer() {
     const name = item.name || `${item.faculty || ''} - ${item.component || ''} - ${item.study_name || ''} - ${item.city || ''}`.replace(/\s+-\s+-\s+/g, ' - ');
     const requiredExams = Array.isArray(item.required_exams) ? item.required_exams : [];
     const electiveExams = Array.isArray(item.elective_exams) ? item.elective_exams : [];
+    const participationFee = String(item.participation_fee || '').trim();
+    const quotaInfo = `${Number(item.citizen_quota || 0)} mjesta za državljane RH, ${Number(item.foreign_quota || 0)} mjesta za strane državljane`;
     return {
       ...item,
       name,
       institution: item.institution || item.faculty || null,
-      info: item.info || `${Number(item.citizen_quota || 0)} mjesta za državljane RH, ${Number(item.foreign_quota || 0)} mjesta za strane državljane`,
+      participation_fee: participationFee || null,
+      info: item.info || (participationFee ? `${quotaInfo}, participacija: ${participationFee}` : quotaInfo),
       requirements: item.requirements || {
         requiredLevels: Object.fromEntries(requiredExams.map((exam: any) => [exam.subject_name, exam.level || '-'])),
         electiveRules: Object.fromEntries(electiveExams.map((exam: any) => [exam.subject_name, exam.is_required ? '+' : '-'])),
@@ -2671,6 +2674,7 @@ async function startServer() {
         study_name: studyName,
         study_type: String(payload.study_type || '').trim() || null,
         city,
+        participation_fee: String(payload.participation_fee || '').trim() || null,
         institution_type: String(payload.institution_type || 'Javna sveučilišta').trim(),
         area: String(payload.area || '').trim() || null,
         field: String(payload.field || '').trim() || null,

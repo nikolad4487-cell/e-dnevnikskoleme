@@ -15,6 +15,7 @@ create table if not exists public.matura_study_programs (
   component text,
   study_name text not null,
   city text not null,
+  participation_fee text,
   institution_type text not null,
   area text,
   field text,
@@ -41,6 +42,7 @@ alter table public.matura_study_programs add column if not exists faculty text;
 alter table public.matura_study_programs add column if not exists component text;
 alter table public.matura_study_programs add column if not exists study_name text;
 alter table public.matura_study_programs add column if not exists city text;
+alter table public.matura_study_programs add column if not exists participation_fee text;
 alter table public.matura_study_programs add column if not exists institution_type text;
 alter table public.matura_study_programs add column if not exists area text;
 alter table public.matura_study_programs add column if not exists field text;

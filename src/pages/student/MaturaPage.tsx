@@ -53,6 +53,7 @@ type StudyProgramOption = {
   study_name?: string | null;
   city: string;
   institution: string;
+  participation_fee?: string | null;
   component?: string | null;
   institution_type?: string | null;
   area?: string | null;
@@ -1024,7 +1025,12 @@ export default function MaturaPage() {
                         </button>
                       </td>
                       <td>{program.city}</td>
-                      <td>{program.institution}: {program.info}</td>
+                      <td>
+                        {program.institution}: {program.info}
+                        {program.participation_fee && !program.info.includes(program.participation_fee) && (
+                          <div className="mt-1 font-bold text-slate-700">Participacija: {program.participation_fee}</div>
+                        )}
+                      </td>
                       <td>
                         {!getStudyProgramBlockingReason(program) && (
                           <button className="text-[#005c8d] underline font-black" onClick={() => openStudyProgramApplication(program)}>
@@ -1171,6 +1177,7 @@ function StudyProgramDetailsModal({ program, canSelect, onClose, onSelect }: {
             <ul className="mt-3 text-sm space-y-1 list-disc list-inside">
               <li>Upisna kvota za državljane RH: {Number(program.citizen_quota || 0)}</li>
               <li>Upisna kvota za strane državljane: {Number(program.foreign_quota || 0)}</li>
+              {program.participation_fee && <li>Participacija / školarina: {program.participation_fee}</li>}
               {program.study_type && <li>Tip studija: {program.study_type}</li>}
               {program.institution_type && <li>Vrsta: {program.institution_type}</li>}
             </ul>

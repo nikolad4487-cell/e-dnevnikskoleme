@@ -62,6 +62,7 @@ type MaturaStudyProgram = {
   component?: string | null;
   study_name: string;
   city: string;
+  participation_fee?: string | null;
   institution_type: string;
   area?: string | null;
   field?: string | null;
@@ -93,6 +94,7 @@ const emptyStudyProgramForm = (): Omit<MaturaStudyProgram, 'id'> & { id?: string
   component: '',
   study_name: '',
   city: '',
+  participation_fee: '',
   institution_type: 'Javna sveučilišta',
   area: 'Društvene znanosti',
   field: 'Pedagogija',
@@ -680,6 +682,7 @@ export default function MaturaTeacherPage() {
                 <div><label>Polje</label><select value={studyForm.field || ''} onChange={(event) => setStudyForm(prev => ({ ...prev, field: event.target.value }))}>{STUDY_FIELDS.map(item => <option key={item}>{item}</option>)}</select></div>
               </div>
               <div><label>Posebna kvota</label><input value={studyForm.quota_type} onChange={(event) => setStudyForm(prev => ({ ...prev, quota_type: event.target.value }))} /></div>
+              <div><label>Participacija / školarina</label><input value={studyForm.participation_fee || ''} onChange={(event) => setStudyForm(prev => ({ ...prev, participation_fee: event.target.value }))} placeholder="npr. 1.800,00 EUR" /></div>
               <div className="grid grid-cols-3 gap-3">
                 <div><label>Mjesta RH</label><input type="number" value={studyForm.citizen_quota} onChange={(event) => setStudyForm(prev => ({ ...prev, citizen_quota: Number(event.target.value) }))} /></div>
                 <div><label>Mjesta stranci</label><input type="number" value={studyForm.foreign_quota} onChange={(event) => setStudyForm(prev => ({ ...prev, foreign_quota: Number(event.target.value) }))} /></div>
@@ -741,7 +744,7 @@ export default function MaturaTeacherPage() {
                       <td><div className="font-black">{program.faculty}</div><div className="text-slate-500">{program.component}</div></td>
                       <td><div className="font-bold text-[#005c8d]">{program.study_name}</div><div>{program.city} · {program.institution_type}</div></td>
                       <td>{program.admission_round}<br />{program.is_active ? 'Otvoren' : 'Zatvoren'}</td>
-                      <td>RH {program.citizen_quota}<br />Stranci {program.foreign_quota}</td>
+                      <td>RH {program.citizen_quota}<br />Stranci {program.foreign_quota}{program.participation_fee && <><br />Participacija: {program.participation_fee}</>}</td>
                       <td>{(program.required_exams || []).map(exam => `${exam.subject_name} ${exam.level || '-'}`).join(', ') || '-'}</td>
                       <td>{(program.elective_exams || []).map(exam => `${exam.subject_name} ${exam.is_required ? '+' : '-'} ${exam.weight || 0}%`).join(', ') || 'Nije zahtjev studija'}</td>
                       <td>

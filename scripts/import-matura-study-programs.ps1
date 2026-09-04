@@ -69,6 +69,8 @@ try {
   $reader.Close()
 
   $programs = @()
+  $headerByColumn = @{}
+  $participationColumn = $null
 
   foreach ($row in $sheetXml.worksheet.sheetData.row) {
     $values = @{}
@@ -78,6 +80,13 @@ try {
     }
 
     if ([int]$row.r -eq 1) {
+      foreach ($key in $values.Keys) {
+        $headerByColumn[$key] = $values[$key]
+        $normalizedHeader = ([string]$values[$key]).ToLowerInvariant()
+        if ($normalizedHeader -match 'particip|školar|skolar') {
+          $participationColumn = $key
+        }
+      }
       continue
     }
 
@@ -88,6 +97,7 @@ try {
     $studyName = $values[5]
     $city = $values[6]
     $quota = Convert-Number $values[7]
+    $participationFee = if ($participationColumn) { $values[$participationColumn] } else { $null }
 
     if ([string]::IsNullOrWhiteSpace($faculty) -or [string]::IsNullOrWhiteSpace($studyName) -or [string]::IsNullOrWhiteSpace($city)) {
       continue
@@ -105,6 +115,7 @@ try {
       study_name = $studyName
       city = $city
       study_type = $studyType
+      participation_fee = if ([string]::IsNullOrWhiteSpace($participationFee)) { $null } else { $participationFee }
       institution_type = $institutionType
       area = $null
       field = $null
