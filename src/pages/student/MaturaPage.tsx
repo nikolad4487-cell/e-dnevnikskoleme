@@ -437,6 +437,24 @@ export default function MaturaPage() {
     }
   };
 
+  const changeRegistrationLevel = async (registration: MaturaRegistration) => {
+    if (!targetStudentId || !canRegisterMatura || !hasMaturaLevel(registration.subject_name) || registration.level === 'JEDNA_RAZINA') return;
+    const nextLevel: MaturaLevel = registration.level === 'B_RAZINA' ? 'A_RAZINA' : 'B_RAZINA';
+    const blockingPrograms = studyApplications.filter(program => {
+      const requiredLevels = program.requirements?.requiredLevels || {};
+      const directRequirement = requiredLevels[registration.subject_name];
+      const foreignRequirement = FOREIGN_LANGUAGE_NAMES.includes(registration.subject_name) ? requiredLevels['Strani jezik'] : undefined;
+      return nextLevel === 'B_RAZINA' && (directRequirement === 'A' || foreignRequirement === 'A');
+    });
+    if (blockingPrograms.length > 0) {
+      const programNames = blockingPrograms.map(program => program.name).join(', ');
+      toast.error(`Ne možete promijeniti ${registration.subject_name} na B razinu jer odabrani studijski program traži A razinu: ${programNames}`);
+      return;
+    }
+    if (!confirm(`Želite li promijeniti razinu ispita ${registration.subject_name} iz ${fullLevelLabels[registration.level]} u ${fullLevelLabels[nextLevel]}?`)) return;
+    await saveRegistration(registration.subject_name, nextLevel);
+  };
+
   const moveStudyApplication = async (id: string, direction: -1 | 1) => {
     if (!canChangeStudyPrograms) return;
     const currentIndex = studyApplications.findIndex(item => item.id === id);
@@ -845,8 +863,8 @@ export default function MaturaPage() {
               <div className="px-4 py-12 text-center text-sm text-slate-400 italic">Nema prijavljenih ispita državne mature.</div>
             ) : (
               <div className="divide-y divide-slate-100">
-                <RegistrationGroup title={`Obavezni ispiti (${requiredRegistrations.length}/3)`} items={requiredRegistrations} canEdit={canWithdrawMatura} saving={saving} onCancel={cancelRegistration} />
-                <RegistrationGroup title={`Izborni ispiti (${electiveRegistrations.length}/${MAX_ELECTIVE_REGISTRATIONS})`} items={electiveRegistrations} canEdit={canWithdrawMatura} saving={saving} onCancel={cancelRegistration} />
+                <RegistrationGroup title={`Obavezni ispiti (${requiredRegistrations.length}/3)`} items={requiredRegistrations} canEdit={canWithdrawMatura} canChangeLevel={canRegisterMatura} saving={saving} onCancel={cancelRegistration} onChangeLevel={changeRegistrationLevel} />
+                <RegistrationGroup title={`Izborni ispiti (${electiveRegistrations.length}/${MAX_ELECTIVE_REGISTRATIONS})`} items={electiveRegistrations} canEdit={canWithdrawMatura} canChangeLevel={canRegisterMatura} saving={saving} onCancel={cancelRegistration} onChangeLevel={changeRegistrationLevel} />
               </div>
             )}
           </section>
@@ -1333,12 +1351,14 @@ function StudyProgramApplicationModal({ program, foreignLanguage, requiredExams,
   );
 }
 
-function RegistrationGroup({ title, items, canEdit, saving, onCancel }: {
+function RegistrationGroup({ title, items, canEdit, canChangeLevel, saving, onCancel, onChangeLevel }: {
   title: string;
   items: MaturaRegistration[];
   canEdit: boolean;
+  canChangeLevel: boolean;
   saving: boolean;
   onCancel: (registration: MaturaRegistration) => void;
+  onChangeLevel: (registration: MaturaRegistration) => void;
 }) {
   return (
     <div>
@@ -1351,7 +1371,21 @@ function RegistrationGroup({ title, items, canEdit, saving, onCancel }: {
             <div className="text-sm font-black text-slate-950">{registration.subject_name}</div>
             <div className="text-xs text-slate-500 font-medium mt-1">{registration.exam_location || 'Mjesto pisanja nije uneseno'}</div>
           </div>
-          <div className="text-sm font-black text-[#005c8d]">{fullLevelLabels[registration.level]}</div>
+          <div className="text-sm font-black text-[#005c8d]">
+            {canChangeLevel && hasMaturaLevel(registration.subject_name) && registration.level !== 'JEDNA_RAZINA' ? (
+              <button
+                type="button"
+                onClick={() => onChangeLevel(registration)}
+                disabled={saving}
+                className="text-[#005c8d] underline font-black disabled:text-slate-400"
+                title="Promijeni razinu ispita"
+              >
+                {fullLevelLabels[registration.level]}
+              </button>
+            ) : (
+              fullLevelLabels[registration.level]
+            )}
+          </div>
           <div className="text-xs text-slate-500 font-medium">{formatDateTime(registration.updated_at || registration.created_at)}</div>
           {canEdit && (
             <button type="button" onClick={() => onCancel(registration)} disabled={saving} className="inline-flex items-center justify-center gap-2 border border-red-200 text-red-700 hover:bg-red-50 px-3 py-2 rounded-sm text-[10px] font-black uppercase tracking-widest">
