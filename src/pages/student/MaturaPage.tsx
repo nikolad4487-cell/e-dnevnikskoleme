@@ -404,6 +404,17 @@ export default function MaturaPage() {
 
   const cancelRegistration = async (registration: MaturaRegistration) => {
     if (!targetStudentId || !canEdit) return;
+    const blockingPrograms = studyApplications.filter(program => {
+      const requiredLevels = program.requirements?.requiredLevels || {};
+      const electiveRules = program.requirements?.electiveRules || {};
+      return Object.prototype.hasOwnProperty.call(requiredLevels, registration.subject_name) ||
+        (Object.prototype.hasOwnProperty.call(electiveRules, registration.subject_name) && electiveRules[registration.subject_name] !== '-');
+    });
+    if (blockingPrograms.length > 0) {
+      const programNames = blockingPrograms.map(program => program.name).join(', ');
+      toast.error(`Ne možete odjaviti ${registration.subject_name} dok je potreban za odabrani studijski program: ${programNames}`);
+      return;
+    }
     setSaving(true);
     try {
       const response = await fetch(`/api/matura-registrations/${registration.id}/cancel`, {
