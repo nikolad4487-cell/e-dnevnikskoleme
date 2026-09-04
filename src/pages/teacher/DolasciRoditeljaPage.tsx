@@ -60,13 +60,17 @@ export default function DolasciRoditeljaPage() {
       // 2. Fetch Parent Arrivals
       const { data, error } = await supabase
         .from('parent_arrivals')
-        .select('*, student:user_profiles(*)')
+        .select('*')
         .eq('school_id', selectedSchoolId)
         .eq('class_id', effectiveClassId)
         .order('date', { ascending: false });
 
       if (error) throw error;
-      setArrivals(data || []);
+      const studentsById = new Map(sortedStudents.map(student => [student.id, student]));
+      setArrivals((data || []).map(arrival => ({
+        ...arrival,
+        student: studentsById.get(arrival.student_id) || null,
+      })));
     } catch (error) {
       console.error('Error fetching parent arrivals:', error);
       toast.error('Greška pri dohvaćanju dolazaka roditelja');

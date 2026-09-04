@@ -59,13 +59,17 @@ export default function IndividualniRazgovoriPage() {
       // 2. Fetch Individual discussions
       const { data, error } = await supabase
         .from('individual_discussions')
-        .select('*, student:user_profiles(*)')
+        .select('*')
         .eq('school_id', selectedSchoolId)
         .eq('class_id', effectiveClassId)
         .order('date', { ascending: false });
 
       if (error) throw error;
-      setDiscussions(data || []);
+      const studentsById = new Map(sortedStudents.map(student => [student.id, student]));
+      setDiscussions((data || []).map(discussion => ({
+        ...discussion,
+        student: studentsById.get(discussion.student_id) || null,
+      })));
     } catch (error) {
       console.error('Error fetching individual discussions data:', error);
       toast.error('Greška pri dohvaćanju individualnih razgovora');
