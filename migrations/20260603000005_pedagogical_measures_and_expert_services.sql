@@ -46,8 +46,8 @@ CREATE POLICY "Authenticated manage expert_service_activities" ON public.expert_
 -- 3. Parent Meetings Table (Roditeljski sastanci)
 CREATE TABLE IF NOT EXISTS public.parent_meetings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    school_id TEXT NOT NULL REFERENCES public.schools(id) ON DELETE CASCADE,
-    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    school_id TEXT NOT NULL,
+    class_id TEXT NOT NULL,
     date DATE NOT NULL,
     time TEXT NOT NULL,
     topic TEXT NOT NULL,
@@ -64,8 +64,8 @@ CREATE POLICY "Authenticated manage parent_meetings" ON public.parent_meetings F
 -- 4. Individual Discussions Table (Individualni razgovori)
 CREATE TABLE IF NOT EXISTS public.individual_discussions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    school_id TEXT NOT NULL REFERENCES public.schools(id) ON DELETE CASCADE,
-    class_id TEXT NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
+    school_id TEXT NOT NULL,
+    class_id TEXT NOT NULL,
     student_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
     parent_name TEXT NOT NULL,
     counselor_id UUID REFERENCES public.user_profiles(id) ON DELETE SET NULL,
@@ -82,8 +82,8 @@ CREATE POLICY "Authenticated manage individual_discussions" ON public.individual
 -- 5. Parent Arrivals Table (Evidencija dolaska roditelja)
 CREATE TABLE IF NOT EXISTS public.parent_arrivals (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    school_id TEXT NOT NULL REFERENCES public.schools(id) ON DELETE CASCADE,
-    class_id TEXT REFERENCES public.classes(id) ON DELETE CASCADE,
+    school_id TEXT NOT NULL,
+    class_id TEXT,
     student_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
     parent_name TEXT NOT NULL,
     date DATE NOT NULL,
