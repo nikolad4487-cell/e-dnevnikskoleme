@@ -8,6 +8,7 @@ import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, T
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
 import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortStudentsBySurname, getForcedSubjectType, getProgramDisplayName } from '../../lib/utils';
+import { ensureDefaultGradingElementsForAssignment } from '../../lib/gradingElementTemplates';
 import { mappers, mapList } from '../../lib/mappers';
 import CertificateManagementPage from './certificates/CertificateManagementPage';
 import InformativkaAdminPage from '../admin/InformativkaAdminPage';
@@ -423,6 +424,14 @@ export default function AdministrationPage() {
              teacher_id: teacherId,
              school_id: selectedSchoolId
            }], { onConflict: 'class_id,subject_id,teacher_id' });
+
+           await ensureDefaultGradingElementsForAssignment(supabase, {
+             schoolId: selectedSchoolId,
+             classId: selectedClassId,
+             subjectId: row.subjectId,
+             teacherId,
+             subjectName
+           });
         }
       }
       

@@ -18,6 +18,7 @@ import { toast } from 'react-hot-toast';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { formatSubjectDisplayName, sanitizeSubjectType, getForcedSubjectType, formatSubjectName } from '../../lib/utils';
+import { ensureDefaultGradingElementsForAssignment } from '../../lib/gradingElementTemplates';
 
 export default function ClassSubjectsPage() {
   const { selectedSchoolId, selectedClassId } = useSelection();
@@ -245,6 +246,14 @@ export default function ClassSubjectsPage() {
         if (error.code === '23505') throw new Error('Ovaj predmet je već dodijeljen ovom razredu.');
         throw error;
       }
+
+      await ensureDefaultGradingElementsForAssignment(supabase, {
+        schoolId: selectedSchoolId,
+        classId,
+        subjectId: selectedSubjectId,
+        teacherId: selectedTeacherId,
+        subjectName
+      });
 
       toast.success('Predmet dodijeljen razredu');
       setSelectedSubjectId('');

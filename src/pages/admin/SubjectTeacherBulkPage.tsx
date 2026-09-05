@@ -6,6 +6,7 @@ import { useSelection } from '../../contexts/SelectionContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Class, Role, Subject, User } from '../../types';
 import { formatPersonName, formatSubjectDisplayName } from '../../lib/utils';
+import { ensureDefaultGradingElementsForAssignments } from '../../lib/gradingElementTemplates';
 
 type Assignment = {
   id: string;
@@ -211,6 +212,20 @@ export default function SubjectTeacherBulkPage() {
           .from('class_subject_teachers')
           .upsert(assignmentsToInsert, { onConflict: 'class_id,subject_id,teacher_id' });
         if (error) throw error;
+
+        await ensureDefaultGradingElementsForAssignments(
+          supabase,
+          rowsToSave.flatMap(row => {
+            const change = pending[row.key] || emptyChange;
+            return change.addedTeacherIds.map(teacherId => ({
+              schoolId: selectedSchoolId,
+              classId: row.classId,
+              subjectId: row.subjectId,
+              teacherId,
+              subjectName: row.subjectName
+            }));
+          })
+        );
       }
 
       toast.success('Dodjele nastavnika su spremljene.');
