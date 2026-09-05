@@ -202,6 +202,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [showAbsenceEntryModal, setShowAbsenceEntryModal] = useState(false);
   const [absenceEntryLesson, setAbsenceEntryLesson] = useState<Lesson | null>(null);
   const [absenceEntrySelectedStudents, setAbsenceEntrySelectedStudents] = useState<string[]>([]);
+  const [quickAbsenceTarget, setQuickAbsenceTarget] = useState<{ student: User; lesson: Lesson } | null>(null);
   const [absenceEditModal, setAbsenceEditModal] = useState<{
     isOpen: boolean;
     studentId: string;
@@ -2017,6 +2018,54 @@ setStudents(uniqueStudents);
     }
   };
 
+  const handleSaveQuickAbsence = async () => {
+    if (!user || !quickAbsenceTarget || !effectiveClassId) return;
+    const { student, lesson } = quickAbsenceTarget;
+
+    if (!canManageAbsencesForClass && (lesson.teacherId !== user.id || isRecordOlderThan48Hours(lesson as any))) {
+      toast.error('Izostanak možete unijeti samo za svoj sat unutar 48 sati od unosa. Nakon toga ga može unijeti samo razrednik ili admin.');
+      return;
+    }
+
+    try {
+      const { data: existingAbsence, error: fetchError } = await supabase
+        .from('absences')
+        .select('id')
+        .eq('lesson_id', lesson.id)
+        .eq('student_id', student.id)
+        .maybeSingle();
+
+      if (fetchError) throw fetchError;
+      if (existingAbsence) {
+        toast.error('Učenik već ima upisan izostanak za taj sat.');
+        setQuickAbsenceTarget(null);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('absences')
+        .insert({
+          student_id: student.id,
+          lesson_id: lesson.id,
+          class_id: effectiveClassId,
+          date: lesson.date,
+          hour: lesson.hour,
+          status: 'PENDING',
+          note: null,
+          teacher_id: user.id
+        });
+
+      if (error) throw error;
+
+      toast.success('Izostanak je unesen.');
+      setQuickAbsenceTarget(null);
+      await fetchAbsencesForDay();
+      await refreshCurrentWeekAbsences();
+    } catch (err: any) {
+      toast.error('Greška pri unosu izostanka: ' + err.message);
+    }
+  };
+
   const handleSaveAbsenceEdit = async () => {
     if (!user || absenceEditModal.selectedIds.length === 0) return;
     if (!canManageAbsencesForClass) {
@@ -2664,6 +2713,13 @@ setStudents(uniqueStudents);
                           </td>
                           {absencePeriods.map(hour => {
                             const absence = studentAbsences.find(abs => Number(abs.hour) === hour);
+                            const lessonForHour = dailyLessons.find(lesson =>
+                              lesson.date === absenceDate && Number(lesson.hour) === hour
+                            );
+                            const canAddAbsenceForHour = Boolean(
+                              lessonForHour &&
+                              (canManageAbsencesForClass || (lessonForHour.teacherId === user?.id && !isRecordOlderThan48Hours(lessonForHour as any)))
+                            );
                             return (
                               <td key={`absence-cell-${s.id}-${hour}`} className="p-1 text-center border-r border-gray-200">
                                 {absence ? (
@@ -2687,6 +2743,15 @@ setStudents(uniqueStudents);
                                       </button>
                                     )}
                                   </div>
+                                ) : canAddAbsenceForHour && lessonForHour ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setQuickAbsenceTarget({ student: s, lesson: lessonForHour })}
+                                    className="w-8 h-8 text-gray-400 hover:text-[#005c8d] hover:bg-blue-50 hover:border hover:border-[#005c8d]/40"
+                                    title={`Unesi izostanak za ${hour}. sat`}
+                                  >
+                                    /
+                                  </button>
                                 ) : (
                                   <span className="text-gray-400">/</span>
                                 )}
@@ -3733,6 +3798,49 @@ setStudents(uniqueStudents);
                 className="px-4 py-2 bg-[#06476b] text-white border border-[#06476b] font-semibold text-[13px] hover:bg-[#043a58]"
               >
                 {lessonForm.id ? 'Spremi promjene' : 'Unesi novi radni sat'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {quickAbsenceTarget && (
+        <div className="fixed inset-0 bg-black/35 z-[70] flex items-center justify-center p-4">
+          <div className="bg-white border border-gray-300 w-full max-w-sm shadow-lg animate-fadeIn">
+            <div className="bg-[#06476b] text-white px-4 py-2 flex items-center justify-between">
+              <h3 className="text-[15px] font-semibold">Unos izostanka</h3>
+              <button
+                type="button"
+                onClick={() => setQuickAbsenceTarget(null)}
+                className="text-white/80 hover:text-white"
+                title="Zatvori"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4 text-[13px]">
+              <div>
+                <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wide">Učenik</div>
+                <div className="font-semibold text-gray-900">{formatPersonName(quickAbsenceTarget.student)}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wide">Predmet</div>
+                <div className="font-semibold text-gray-900">
+                  {formatSubjectName(allSubjects.find(subject => subject.id === quickAbsenceTarget.lesson.subjectId) || { name: 'Predmet' })}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase font-bold text-gray-500 tracking-wide">Sat</div>
+                <div className="font-semibold text-gray-900">{quickAbsenceTarget.lesson.hour}. sat</div>
+              </div>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-200 flex justify-end">
+              <button
+                type="button"
+                onClick={handleSaveQuickAbsence}
+                className="px-4 py-2 bg-[#005c8d] text-white text-[11px] font-bold uppercase hover:bg-[#004a70]"
+              >
+                Unesi
               </button>
             </div>
           </div>
