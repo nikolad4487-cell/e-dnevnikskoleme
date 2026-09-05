@@ -6,7 +6,7 @@ import { useSelection } from '../../contexts/SelectionContext';
 import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, AbsenceStatus } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
 import { cn, getSurname, formatPersonName, sortStudentsBySurname, formatSubjectDisplayName, formatSubjectName, getLocalDateISO } from '../../lib/utils';
-import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, UserX, AlertTriangle } from 'lucide-react';
+import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, AlertTriangle } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { ScheduleGrid as SharedScheduleGrid } from '../../components/ScheduleGrid';
 import { toast } from 'react-hot-toast';
@@ -3275,9 +3275,6 @@ setStudents(uniqueStudents);
                   <tr className="bg-gray-50 border-b border-gray-300 text-gray-500 text-[10px] uppercase font-bold tracking-tight">
                     <th className="w-12 border-r border-gray-300 p-2 text-center">Sat</th>
                     <th className="border-r border-gray-300 p-2 text-center">Sadržaj nastavnog sata</th>
-                    <th className="w-10 border-r border-gray-300 p-2 text-center">
-                      <UserX size={13} className="mx-auto text-slate-800" />
-                    </th>
                     <th className="border-r border-gray-300 p-2 text-left w-64">Napomena</th>
                   </tr>
                 </thead>
@@ -3387,37 +3384,6 @@ setStudents(uniqueStudents);
                               </button>
                             )}
                           </div>
-                        </td>
-                        <td className="border-r border-gray-200 p-2 align-middle text-center">
-                          {lessons.length > 0 ? (
-                            <div className="flex flex-col items-center gap-1">
-                              {lessons.map(lesson => {
-                                const lessonAbsences = dailyAbsences.filter(a => a.lessonId === lesson.id);
-                                const canEdit = isAdminUser || lesson.teacherId === user?.id;
-                                return (
-                                  <button
-                                    key={`absence-action-${lesson.id}`}
-                                    type="button"
-                                    onClick={() => canEdit && openAbsenceEntryForLesson(lesson)}
-                                    disabled={!canEdit}
-                                    className={cn(
-                                      "relative w-6 h-6 inline-flex items-center justify-center border text-slate-500",
-                                      canEdit ? "hover:border-[#005c8d] hover:text-[#005c8d] bg-white" : "opacity-40 cursor-not-allowed",
-                                      lessonAbsences.length > 0 && "border-red-300 text-red-700 bg-red-50"
-                                    )}
-                                    title="Unesi izostanak"
-                                  >
-                                    <UserX size={13} />
-                                    {lessonAbsences.length > 0 && (
-                                      <span className="absolute -right-1 -top-1 min-w-3 h-3 px-0.5 rounded-full bg-red-600 text-white text-[7px] leading-3 font-bold">
-                                        {lessonAbsences.length}
-                                      </span>
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          ) : null}
                         </td>
                         <td className="border-r border-gray-200 p-2 align-middle text-[10px] text-gray-400 italic leading-tight">
                           {isOccupied ? (
