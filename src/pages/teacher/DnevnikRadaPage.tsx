@@ -2379,32 +2379,41 @@ setStudents(uniqueStudents);
                </div>
                <table className="w-full text-left border-collapse text-[12px] ed-table-dense">
                  <tbody className="divide-y divide-gray-200">
-                   {(selectedWeek.teachingDays || []).map(dateStr => (
-                     <tr 
+                   {(selectedWeek.teachingDays || []).map(dateStr => {
+                     const isToday = dateStr === getLocalDateISO();
+                     return (
+                     <tr
                        key={dateStr}
                        onClick={() => { setSelectedDate(dateStr); setView('DAY_DETAIL'); }}
-                       className="group hover:bg-[#eff6ff] cursor-pointer"
+                       className={cn(
+                         "group cursor-pointer",
+                         isToday ? "bg-red-50 hover:bg-red-100" : "hover:bg-[#eff6ff]"
+                       )}
                      >
-                       <td className="px-4 py-2 w-20 align-middle border-r border-gray-200 bg-gray-100/30">
+                       <td className={cn(
+                         "px-4 py-2 w-20 align-middle border-r border-gray-200",
+                         isToday ? "bg-red-100/80 border-red-200" : "bg-gray-100/30"
+                       )}>
                           <div className="flex flex-col items-center">
-                             <div className="text-[9px] font-bold uppercase text-[#005c8d] leading-none mb-1">{new Date(dateStr).toLocaleDateString('hr-HR', { month: 'short' })}</div>
-                             <div className="text-xl font-bold text-gray-700 leading-none">{new Date(dateStr).getDate()}.</div>
+                             <div className={cn("text-[9px] font-bold uppercase leading-none mb-1", isToday ? "text-red-700" : "text-[#005c8d]")}>{new Date(dateStr).toLocaleDateString('hr-HR', { month: 'short' })}</div>
+                             <div className={cn("text-xl font-bold leading-none", isToday ? "text-red-700" : "text-gray-700")}>{new Date(dateStr).getDate()}.</div>
                           </div>
                        </td>
                        <td className="px-4 py-2">
-                          <div className="text-[13px] font-bold text-[#005c8d] uppercase tracking-tight group-hover:underline">{getDayName(dateStr)}</div>
-                          <div className="text-[10px] text-gray-400 font-bold uppercase">{dateStr}</div>
+                          <div className={cn("text-[13px] font-bold uppercase tracking-tight group-hover:underline", isToday ? "text-red-700" : "text-[#005c8d]")}>{getDayName(dateStr)}</div>
+                          <div className={cn("text-[10px] font-bold uppercase", isToday ? "text-red-500" : "text-gray-400")}>{dateStr}</div>
                        </td>
                        <td className="px-4 py-2 text-right">
-                          <div className="text-[10px] font-bold text-gray-500">
+                          <div className={cn("text-[10px] font-bold", isToday ? "text-red-700" : "text-gray-500")}>
                              {dailyLessons.filter(l => l.date === dateStr).length} sati upisano
                           </div>
                        </td>
                        <td className="px-4 py-2 text-center w-10 border-l border-gray-200">
-                          <ChevronRight size={14} className="text-gray-300 group-hover:text-[#005c8d]" />
+                          <ChevronRight size={14} className={cn("text-gray-300", isToday ? "group-hover:text-red-700" : "group-hover:text-[#005c8d]")} />
                        </td>
                      </tr>
-                   ))}
+                     );
+                   })}
                  </tbody>
                </table>
             </div>
