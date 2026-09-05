@@ -5952,7 +5952,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       const { data: profiles, error: profilesError } = await supabaseAdmin
         .from('user_profiles')
-        .select('id, name, surname, email, role, authenticator_secret, requires_authenticator_setup')
+        .select('id, name, email, role, authenticator_secret, requires_authenticator_setup')
         .in('id', ids);
 
       if (profilesError) throw profilesError;
@@ -5971,7 +5971,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       const authenticators = [];
       for (const profile of profilesNeedingAuthenticator) {
         const secret = authenticator.generateSecret();
-        const labelValue = profile.email || [profile.name, profile.surname].filter(Boolean).join(' ') || profile.id;
+        const labelValue = profile.email || profile.name || profile.id;
         const otpauthUrl = `otpauth://totp/${encodeURIComponent(`e-Dnevnik:${labelValue}`)}?secret=${secret}&issuer=${encodeURIComponent('e-Dnevnik')}`;
         const qrCode = await QRCode.toDataURL(otpauthUrl);
 
@@ -5988,7 +5988,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
         authenticators.push({
           id: profile.id,
-          name: [profile.name, profile.surname].filter(Boolean).join(' ') || profile.email || profile.id,
+          name: profile.name || profile.email || profile.id,
           email: profile.email || '',
           secret,
           otpauthUrl,
