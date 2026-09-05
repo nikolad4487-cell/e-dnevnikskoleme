@@ -1252,9 +1252,8 @@ setStudents(uniqueStudents);
   };
 
   const openAbsenceEntryForLesson = (lesson: Lesson) => {
-    const lessonAbsences = dailyAbsences.filter(absence => absence.lessonId === lesson.id);
     setAbsenceEntryLesson(lesson);
-    setAbsenceEntrySelectedStudents(lessonAbsences.map(absence => absence.studentId));
+    setAbsenceEntrySelectedStudents([]);
     setShowAbsenceEntryModal(true);
   };
 
@@ -1277,6 +1276,20 @@ setStudents(uniqueStudents);
   const closeAbsenceEditModal = () => {
     setAbsenceEditModal({ isOpen: false, studentId: '', absenceIds: [], selectedIds: [] });
     setAbsenceEditForm({ status: '', absenceType: '', note: '' });
+  };
+
+  const refreshCurrentWeekAbsences = async () => {
+    if (!selectedWeek || !effectiveClassId) return;
+    const { data: absData, error: absErr } = await supabase
+      .from('absences')
+      .select('*')
+      .eq('class_id', effectiveClassId)
+      .gte('date', selectedWeek.startDate)
+      .lte('date', selectedWeek.endDate);
+
+    if (!absErr) {
+      setCurrentWeekAbsences(mapList(absData || [], mappers.absence));
+    }
   };
 
   const isRecordOlderThan = (record: { createdAt?: string; created_at?: string; updatedAt?: string; updated_at?: string } | null | undefined, limitMs: number) => {
@@ -1882,6 +1895,11 @@ setStudents(uniqueStudents);
     const lesson = absenceEntryLesson;
     const selectedStudents = absenceEntrySelectedStudents;
 
+    if (selectedStudents.length === 0) {
+      toast.error('Odaberite barem jednog učenika.');
+      return;
+    }
+
     if (!canManageAbsencesForClass && (lesson.teacherId !== user.id || isRecordOlderThan48Hours(lesson as any))) {
       toast.error('Izostanke možete mijenjati samo za svoj sat unutar 48 sati od unosa. Nakon toga ih može mijenjati samo razrednik ili admin.');
       return;
@@ -1901,18 +1919,7 @@ setStudents(uniqueStudents);
       
       const existingStudentIds = (existingAbs || []).map(a => a.student_id);
 
-      // 2. Identify student IDs to delete (were absent before, but are active/present now - i.e., unchecked)
-      const idsToDelete = existingStudentIds.filter(id => !selectedStudents.includes(id));
-      if (idsToDelete.length > 0) {
-        const { error: delErr } = await supabase
-          .from('absences')
-          .delete()
-          .eq('lesson_id', lesson.id)
-          .in('student_id', idsToDelete);
-        if (delErr) throw delErr;
-      }
-
-      // 3. Identify newly selected student IDs to insert (were unchecked before, but are checked now)
+      // Existing absences are hidden in this modal; this action only adds newly selected students.
       const idsToInsert = selectedStudents.filter(id => !existingStudentIds.includes(id));
       let insertData = null;
       let insertError = null;
@@ -1953,25 +1960,40 @@ setStudents(uniqueStudents);
 
       toast.success("Izostanci su uspješno uneseni.");
       
-      // 4. Refetch daily and weekly absences
       await fetchAbsencesForDay();
-      if (view === 'ABSENCES' && selectedWeek) {
-        const { data: absData, error: absErr } = await supabase
-          .from('absences')
-          .select('*')
-          .eq('class_id', effectiveClassId)
-          .gte('date', selectedWeek.startDate)
-          .lte('date', selectedWeek.endDate);
-        if (!absErr) {
-          setCurrentWeekAbsences(mapList(absData || [], mappers.absence));
-        }
-      }
+      await refreshCurrentWeekAbsences();
     } catch (err: any) {
       console.error(err);
       toast.error("Greška pri spremanju izostanaka: " + err.message);
     } finally {
       setShowAbsenceEntryModal(false);
       setAbsenceEntryLesson(null);
+    }
+  };
+
+  const handleDeleteAbsence = async (absence: any) => {
+    if (!user || !absence?.id) return;
+
+    if (!canManageAbsencesForClass && (absence.teacherId !== user.id || isRecordOlderThan48Hours(absence))) {
+      toast.error('Izostanak možete obrisati samo za svoj sat unutar 48 sati od unosa. Nakon toga ga može obrisati samo razrednik ili admin.');
+      return;
+    }
+
+    if (!window.confirm('Želite li obrisati ovaj izostanak?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('absences')
+        .delete()
+        .eq('id', absence.id);
+
+      if (error) throw error;
+
+      toast.success('Izostanak je obrisan.');
+      await fetchAbsencesForDay();
+      await refreshCurrentWeekAbsences();
+    } catch (err: any) {
+      toast.error('Greška pri brisanju izostanka: ' + err.message);
     }
   };
 
@@ -2625,14 +2647,26 @@ setStudents(uniqueStudents);
                             return (
                               <td key={`absence-cell-${s.id}-${hour}`} className="p-1 text-center border-r border-gray-200">
                                 {absence ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => openAbsenceEditModal(s.id, [absence])}
-                                    className={cn("w-8 h-8 border text-sm font-bold leading-none hover:ring-2 hover:ring-[#005c8d]/30", getAbsenceStatusCellClass(absence.status))}
-                                    title={`${hour}. sat - ${getAbsenceStatusShortLabel(absence.status)}`}
-                                  >
-                                    {hour}
-                                  </button>
+                                  <div className="flex flex-col items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => openAbsenceEditModal(s.id, [absence])}
+                                      className={cn("w-8 h-8 border text-sm font-bold leading-none hover:ring-2 hover:ring-[#005c8d]/30", getAbsenceStatusCellClass(absence.status))}
+                                      title={`${hour}. sat - ${getAbsenceStatusShortLabel(absence.status)}`}
+                                    >
+                                      {hour}
+                                    </button>
+                                    {(canManageAbsencesForClass || (absence.teacherId === user?.id && !isRecordOlderThan48Hours(absence))) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteAbsence(absence)}
+                                        className="px-1.5 py-0.5 bg-red-600 text-white text-[8px] font-bold hover:bg-red-700 uppercase"
+                                        title="Obriši izostanak"
+                                      >
+                                        Obriši
+                                      </button>
+                                    )}
+                                  </div>
                                 ) : (
                                   <span className="text-gray-400">/</span>
                                 )}
@@ -3783,7 +3817,25 @@ setStudents(uniqueStudents);
 
             <div className="flex-1 overflow-y-auto px-6 pb-6">
               <div className="border-t border-gray-200">
-                {sortStudentsBySurname(students).map((student, idx) => {
+                {(() => {
+                  const existingLessonAbsenceStudentIds = new Set(
+                    dailyAbsences
+                      .filter(absence => absence.lessonId === absenceEntryLesson.id)
+                      .map(absence => absence.studentId)
+                  );
+                  const availableStudents = sortStudentsBySurname(students).filter(student =>
+                    !existingLessonAbsenceStudentIds.has(student.id) || absenceEntrySelectedStudents.includes(student.id)
+                  );
+
+                  if (availableStudents.length === 0) {
+                    return (
+                      <div className="px-2 py-8 text-center text-[13px] text-gray-400 italic">
+                        Svi učenici koji imaju izostanak za ovaj sat već su uneseni.
+                      </div>
+                    );
+                  }
+
+                  return availableStudents.map((student, idx) => {
                   const isSelected = absenceEntrySelectedStudents.includes(student.id);
                   return (
                     <button
@@ -3809,7 +3861,8 @@ setStudents(uniqueStudents);
                       )}
                     </button>
                   );
-                })}
+                  });
+                })()}
               </div>
             </div>
           </div>
