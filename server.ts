@@ -5910,6 +5910,99 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     }
   });
 
+  app.post("/api/auth/bulk-generate-staff-authenticators", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+
+      const { schoolId } = req.body || {};
+      const staffRoles = ['TEACHER', 'HOMEROOM', 'DEPUTY', 'SCHOOL_ADMIN', 'ADMIN', 'MAIN_ADMIN'];
+      const profileIds = new Set<string>();
+
+      if (schoolId) {
+        const { data: roleRows, error: rolesError } = await supabaseAdmin
+          .from('user_school_roles')
+          .select('user_id, role, status')
+          .eq('school_id', schoolId)
+          .in('role', staffRoles);
+
+        if (rolesError) throw rolesError;
+
+        (roleRows || []).forEach((row: any) => {
+          const status = String(row.status || 'ACTIVE').toUpperCase();
+          if (row.user_id && status !== 'INACTIVE') {
+            profileIds.add(row.user_id);
+          }
+        });
+      } else {
+        const { data: profileRows, error: profilesError } = await supabaseAdmin
+          .from('user_profiles')
+          .select('id')
+          .in('role', staffRoles);
+
+        if (profilesError) throw profilesError;
+        (profileRows || []).forEach((row: any) => {
+          if (row.id) profileIds.add(row.id);
+        });
+      }
+
+      const ids = Array.from(profileIds);
+      if (ids.length === 0) {
+        return res.status(200).json({ success: true, authenticators: [], updatedCount: 0 });
+      }
+
+      const { data: profiles, error: profilesError } = await supabaseAdmin
+        .from('user_profiles')
+        .select('id, name, surname, email, role')
+        .in('id', ids);
+
+      if (profilesError) throw profilesError;
+
+      const activeProfiles = (profiles || []).filter((profile: any) => {
+        const role = String(profile.role || '').toUpperCase();
+        return staffRoles.includes(role) || ids.includes(profile.id);
+      });
+
+      const authenticators = [];
+      for (const profile of activeProfiles) {
+        const secret = authenticator.generateSecret();
+        const labelValue = profile.email || [profile.name, profile.surname].filter(Boolean).join(' ') || profile.id;
+        const otpauthUrl = `otpauth://totp/${encodeURIComponent(`e-Dnevnik:${labelValue}`)}?secret=${secret}&issuer=${encodeURIComponent('e-Dnevnik')}`;
+        const qrCode = await QRCode.toDataURL(otpauthUrl);
+
+        const { error: updateError } = await supabaseAdmin
+          .from('user_profiles')
+          .update({
+            authenticator_secret: secret,
+            requires_authenticator_setup: false,
+            password_type: 'staff_with_authenticator'
+          })
+          .eq('id', profile.id);
+
+        if (updateError) throw updateError;
+
+        authenticators.push({
+          id: profile.id,
+          name: [profile.name, profile.surname].filter(Boolean).join(' ') || profile.email || profile.id,
+          email: profile.email || '',
+          secret,
+          otpauthUrl,
+          qrCode
+        });
+      }
+
+      authenticators.sort((a, b) => a.name.localeCompare(b.name, 'hr', { sensitivity: 'base' }));
+
+      res.status(200).json({
+        success: true,
+        authenticators,
+        updatedCount: authenticators.length
+      });
+    } catch (err: any) {
+      console.error("[BULK_GENERATE_TOTP] Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Reset student password endpoint
   app.post("/api/admin/reset-student-password", async (req, res) => {
     try {

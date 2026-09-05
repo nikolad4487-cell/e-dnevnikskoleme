@@ -384,6 +384,14 @@ export default function AdministrationPage() {
     qrCode: string;
     tempPassword?: string;
   } | null>(null);
+  const [bulkStaffTotp, setBulkStaffTotp] = useState<{
+    id: string;
+    email: string;
+    name: string;
+    secret: string;
+    qrCode: string;
+    otpauthUrl: string;
+  }[]>([]);
 
   const isSchoolAdmin = allUserSchoolRolesState.some(r => r.role === Role.SCHOOL_ADMIN && r.schoolId === selectedSchoolId);
   const canManageUsers = isMainAdmin || isSchoolAdmin;
@@ -474,6 +482,32 @@ export default function AdministrationPage() {
     } catch (err: any) {
       console.error(err);
       toast.error(err.message || 'Greška pri resetiranju');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGenerateAuthenticatorsForAllStaff = async () => {
+    const scopeText = selectedSchoolId ? 'sve nastavnike i admin korisnike ove škole' : 'sve nastavnike i admin korisnike u sustavu';
+    if (!confirm(`Generirati Microsoft Authenticator QR kodove za ${scopeText}? Postojeći Authenticator kodovi bit će zamijenjeni novima.`)) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/auth/bulk-generate-staff-authenticators', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schoolId: selectedSchoolId || null })
+      });
+
+      const result = await safeReadJson(response);
+      if (!response.ok) throw new Error(result.error || 'Greška pri generiranju Authenticator kodova');
+
+      setBulkStaffTotp(result.authenticators || []);
+      toast.success(`Generirano Authenticator kodova: ${result.updatedCount || 0}`);
+      await fetchData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Greška pri generiranju Authenticator kodova');
     } finally {
       setLoading(false);
     }
@@ -6528,6 +6562,15 @@ setAllSubjects(uniqueSub2);
                   <div className="bg-white border border-gray-300">
                     <div className="p-3 bg-gray-50 border-b border-gray-300 flex justify-between items-center">
                       <span className="text-[10px] font-black text-gray-500 uppercase">Popis korisnika</span>
+                      <button
+                        type="button"
+                        onClick={handleGenerateAuthenticatorsForAllStaff}
+                        disabled={loading}
+                        className="px-3 py-2 bg-[#005c8d] text-white text-[9px] font-black uppercase tracking-tight flex items-center gap-1 hover:bg-[#004a70] disabled:opacity-50"
+                        title="Generiraj Microsoft Authenticator QR kodove za sve nastavnike"
+                      >
+                        <Shield size={12} /> Aktiviraj MFA svima
+                      </button>
                     </div>
                     <div className="max-h-[500px] overflow-auto">
                       <table className="w-full text-left text-[11px] border-collapse">
@@ -6841,6 +6884,116 @@ setAllSubjects(uniqueSub2);
                 className="w-full py-4 bg-[#005c8d] text-white text-[11px] font-black uppercase tracking-[0.2em] hover:bg-[#004a70] transition-all"
               >
                 Zatvori
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Staff TOTP Setup Modal */}
+      {bulkStaffTotp.length > 0 && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[220] flex items-center justify-center p-4">
+          <div className="bg-white max-w-6xl w-full max-h-[92vh] overflow-hidden shadow-2xl relative ring-1 ring-black/10 flex flex-col">
+            <div className="p-5 bg-[#005c8d] text-white flex justify-between items-center">
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-widest">Microsoft Authenticator kodovi</h3>
+                <p className="text-[10px] font-bold text-blue-100 uppercase mt-1">
+                  Skenirajte QR kodove redom iz Microsoft Authenticator aplikacije.
+                </p>
+              </div>
+              <button 
+                onClick={() => setBulkStaffTotp([])} 
+                className="p-2 bg-white/10 hover:bg-white/20 transition-colors"
+                aria-label="Zatvori"
+              >
+                <X size={18}/>
+              </button>
+            </div>
+
+            <div className="p-4 bg-amber-50 border-b border-amber-200 text-[11px] font-bold text-amber-800 leading-relaxed">
+              Generirani su novi Authenticator ključevi za prikazane korisnike. Ako korisnik već ima dodan stari račun u aplikaciji, treba ga obrisati i skenirati novi QR kod.
+            </div>
+
+            <div className="p-5 overflow-auto">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {bulkStaffTotp.map(item => (
+                  <div key={item.id} className="border border-gray-200 bg-white shadow-sm p-4 space-y-3">
+                    <div className="border-b border-gray-100 pb-2">
+                      <div className="text-sm font-black text-gray-900 uppercase leading-tight">{item.name}</div>
+                      <div className="text-[10px] font-bold text-gray-400 break-all">{item.email || 'Bez e-mail adrese'}</div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <img src={item.qrCode} alt={`Microsoft Authenticator QR kod za ${item.name}`} className="w-32 h-32 border border-gray-200 bg-white p-1" />
+                      <div className="min-w-0 space-y-2">
+                        <div>
+                          <div className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Ručni ključ</div>
+                          <code className="block text-[11px] font-black tracking-widest break-all bg-gray-50 border border-gray-200 p-2 text-[#005c8d]">{item.secret}</code>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(item.secret);
+                            toast.success('Ključ kopiran');
+                          }}
+                          className="text-[9px] font-black uppercase text-[#005c8d] hover:underline"
+                        >
+                          Kopiraj ključ
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-200 bg-gray-50 flex flex-col sm:flex-row justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const printWindow = window.open('', '_blank');
+                  if (!printWindow) return;
+                  const cards = bulkStaffTotp.map(item => `
+                    <section class="card">
+                      <h2>${item.name}</h2>
+                      <p>${item.email || ''}</p>
+                      <img src="${item.qrCode}" />
+                      <div class="secret">${item.secret}</div>
+                    </section>
+                  `).join('');
+                  printWindow.document.write(`
+                    <html>
+                      <head>
+                        <title>Microsoft Authenticator kodovi</title>
+                        <style>
+                          body { font-family: Arial, sans-serif; padding: 24px; color: #111827; }
+                          h1 { color: #005c8d; font-size: 22px; text-transform: uppercase; margin: 0 0 16px; }
+                          .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+                          .card { border: 1px solid #cbd5e1; padding: 16px; break-inside: avoid; }
+                          h2 { font-size: 15px; margin: 0 0 4px; text-transform: uppercase; }
+                          p { font-size: 11px; margin: 0 0 12px; color: #64748b; }
+                          img { width: 160px; height: 160px; display: block; margin-bottom: 10px; }
+                          .secret { font-family: monospace; font-size: 13px; font-weight: 700; letter-spacing: 2px; border: 1px dashed #005c8d; padding: 8px; color: #005c8d; word-break: break-all; }
+                          @media print { body { padding: 12px; } }
+                        </style>
+                      </head>
+                      <body onload="window.print()">
+                        <h1>Microsoft Authenticator kodovi</h1>
+                        <div class="grid">${cards}</div>
+                      </body>
+                    </html>
+                  `);
+                  printWindow.document.close();
+                }}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-gray-800 text-white text-[10px] font-black uppercase tracking-widest hover:bg-black"
+              >
+                <Printer size={14} /> Printaj sve kodove
+              </button>
+              <button
+                type="button"
+                onClick={() => setBulkStaffTotp([])}
+                className="px-4 py-3 bg-[#005c8d] text-white text-[10px] font-black uppercase tracking-widest hover:bg-[#004a70]"
+              >
+                Gotovo
               </button>
             </div>
           </div>
