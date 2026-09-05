@@ -269,7 +269,7 @@ export default function UserManagementPage() {
       return;
     }
 
-    if (!confirm('Generirati Microsoft Authenticator QR kodove za sve nastavnike i admin korisnike ove škole? Postojeći Authenticator kodovi bit će zamijenjeni novima.')) return;
+    if (!confirm('Generirati Microsoft Authenticator QR kodove za nastavnike i admin korisnike ove škole koji još nemaju postavljen Authenticator? Korisnici koji ga već imaju neće se mijenjati.')) return;
 
     try {
       setLoading(true);
@@ -292,7 +292,7 @@ export default function UserManagementPage() {
       }
 
       setBulkStaffTotp(result?.authenticators || []);
-      toast.success(`Generirano Authenticator kodova: ${result?.updatedCount || 0}`);
+      toast.success(`Generirano: ${result?.updatedCount || 0}. Već postavljeno: ${result?.skippedCount || 0}.`);
       await fetchUsers();
     } catch (err: any) {
       console.error('BULK STAFF AUTHENTICATOR FAILED:', err);

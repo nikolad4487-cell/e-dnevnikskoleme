@@ -5947,12 +5947,12 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       const ids = Array.from(profileIds);
       if (ids.length === 0) {
-        return res.status(200).json({ success: true, authenticators: [], updatedCount: 0 });
+        return res.status(200).json({ success: true, authenticators: [], updatedCount: 0, skippedCount: 0 });
       }
 
       const { data: profiles, error: profilesError } = await supabaseAdmin
         .from('user_profiles')
-        .select('id, name, surname, email, role')
+        .select('id, name, surname, email, role, authenticator_secret, requires_authenticator_setup')
         .in('id', ids);
 
       if (profilesError) throw profilesError;
@@ -5961,9 +5961,15 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         const role = String(profile.role || '').toUpperCase();
         return staffRoles.includes(role) || ids.includes(profile.id);
       });
+      const profilesNeedingAuthenticator = activeProfiles.filter((profile: any) => {
+        return !profile.authenticator_secret || profile.requires_authenticator_setup === true;
+      });
+      const skippedExistingAuthenticators = activeProfiles.filter((profile: any) => {
+        return profile.authenticator_secret && profile.requires_authenticator_setup !== true;
+      });
 
       const authenticators = [];
-      for (const profile of activeProfiles) {
+      for (const profile of profilesNeedingAuthenticator) {
         const secret = authenticator.generateSecret();
         const labelValue = profile.email || [profile.name, profile.surname].filter(Boolean).join(' ') || profile.id;
         const otpauthUrl = `otpauth://totp/${encodeURIComponent(`e-Dnevnik:${labelValue}`)}?secret=${secret}&issuer=${encodeURIComponent('e-Dnevnik')}`;
@@ -5995,7 +6001,8 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       res.status(200).json({
         success: true,
         authenticators,
-        updatedCount: authenticators.length
+        updatedCount: authenticators.length,
+        skippedCount: skippedExistingAuthenticators.length
       });
     } catch (err: any) {
       console.error("[BULK_GENERATE_TOTP] Error:", err);

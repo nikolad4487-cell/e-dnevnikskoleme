@@ -489,7 +489,7 @@ export default function AdministrationPage() {
 
   const handleGenerateAuthenticatorsForAllStaff = async () => {
     const scopeText = selectedSchoolId ? 'sve nastavnike i admin korisnike ove škole' : 'sve nastavnike i admin korisnike u sustavu';
-    if (!confirm(`Generirati Microsoft Authenticator QR kodove za ${scopeText}? Postojeći Authenticator kodovi bit će zamijenjeni novima.`)) return;
+    if (!confirm(`Generirati Microsoft Authenticator QR kodove za ${scopeText} koji još nemaju postavljen Authenticator? Korisnici koji ga već imaju neće se mijenjati.`)) return;
 
     setLoading(true);
     try {
@@ -503,7 +503,7 @@ export default function AdministrationPage() {
       if (!response.ok) throw new Error(result.error || 'Greška pri generiranju Authenticator kodova');
 
       setBulkStaffTotp(result.authenticators || []);
-      toast.success(`Generirano Authenticator kodova: ${result.updatedCount || 0}`);
+      toast.success(`Generirano: ${result.updatedCount || 0}. Već postavljeno: ${result.skippedCount || 0}.`);
       await fetchData();
     } catch (err: any) {
       console.error(err);
