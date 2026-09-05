@@ -6,7 +6,7 @@ import { useSelection } from '../../contexts/SelectionContext';
 import { Lesson, Class, WorkWeek, User, Role, Exam, ClassSubjectTeacher as SubjectTeachingAssignment, CurriculumPlan, AbsenceStatus } from '../../types';
 import { mappers, mapList } from '../../lib/mappers';
 import { cn, getSurname, formatPersonName, sortStudentsBySurname, formatSubjectDisplayName, formatSubjectName, getLocalDateISO } from '../../lib/utils';
-import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, User as UserIcon, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, UserX, AlertTriangle } from 'lucide-react';
+import { Calendar, Clock, Book, Plus, ArrowLeft, ArrowRight, X, ChevronRight, List, Trash2, LayoutGrid, Monitor, MapPin, CheckCircle, XCircle, Edit2, UserX, AlertTriangle } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { ScheduleGrid as SharedScheduleGrid } from '../../components/ScheduleGrid';
 import { toast } from 'react-hot-toast';
@@ -3542,54 +3542,54 @@ setStudents(uniqueStudents);
 
       {/* LESSON ENTRY MODAL */}
       {showLessonModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-gray-300 w-full max-w-4xl flex flex-col max-h-[95vh] shadow-[10px_10px_0px_rgba(0,0,0,0.05)]">
-            <div className="bg-[#005c8d] p-2 text-white flex items-center justify-between shrink-0">
-              <h3 className="text-[13px] font-bold">Unos sadržaja za {editingHour}. sat</h3>
-              <button onClick={() => setShowLessonModal(false)} className="hover:text-red-200"><X size={16} /></button>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center p-10">
+          <div className="bg-white border border-gray-300 w-full max-w-[760px] flex flex-col max-h-[90vh] shadow-lg">
+            <div className="bg-[#06476b] px-3 py-1.5 text-white flex items-center justify-between shrink-0">
+              <h3 className="text-[16px] font-semibold">Unos sadržaja za {editingHour}. sat</h3>
+              <button onClick={() => setShowLessonModal(false)} className="hover:text-red-200"><X size={22} strokeWidth={1.5} /></button>
             </div>
             
-            <div className="flex border-b border-gray-300 shrink-0 bg-gray-50 text-[10px] font-bold uppercase">
+            <div className="flex border-b border-gray-300 shrink-0 bg-white text-[12px]">
               <button 
                 onClick={() => setActiveLessonTab('SADRZAJ')}
-                className={cn("px-6 py-2 border-r border-gray-200", activeLessonTab === 'SADRZAJ' ? "bg-white text-[#005c8d] border-b-2 border-b-[#005c8d]" : "text-gray-500 hover:bg-gray-100")}
+                className={cn("px-4 py-2 border-r border-gray-300", activeLessonTab === 'SADRZAJ' ? "bg-white text-gray-900 font-bold border-t-2 border-t-[#06476b]" : "bg-gray-50 text-gray-700 hover:bg-gray-100")}
               >
                 Sadržaj radnog sata
               </button>
               <button 
                 onClick={() => setActiveLessonTab('IZOSTANCI')}
-                className={cn("px-6 py-2 border-r border-gray-200", activeLessonTab === 'IZOSTANCI' ? "bg-white text-[#005c8d] border-b-2 border-b-[#005c8d]" : "text-gray-500 hover:bg-gray-100")}
+                className={cn("px-4 py-2 border-r border-gray-300", activeLessonTab === 'IZOSTANCI' ? "bg-white text-gray-900 font-bold border-t-2 border-t-[#06476b]" : "bg-gray-50 text-gray-700 hover:bg-gray-100")}
               >
                 Izostanci
               </button>
               <button 
                 onClick={() => setActiveLessonTab('MATERIJALI')}
-                className={cn("px-6 py-2 border-r border-gray-200", activeLessonTab === 'MATERIJALI' ? "bg-white text-[#005c8d] border-b-2 border-b-[#005c8d]" : "text-gray-500 hover:bg-gray-100")}
+                className={cn("px-4 py-2 border-r border-gray-300", activeLessonTab === 'MATERIJALI' ? "bg-white text-gray-900 font-bold border-t-2 border-t-[#06476b]" : "bg-gray-50 text-gray-700 hover:bg-gray-100")}
               >
                 Nastavni materijali
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-3">
               {activeLessonTab === 'SADRZAJ' && (
-                <div className="text-[13px] max-w-3xl">
-                  <div className="grid grid-cols-[90px_1fr] items-center gap-x-2 gap-y-2">
+                <div className="text-[16px] border border-gray-300 p-2">
+                  <div className="grid grid-cols-[115px_1fr] items-center gap-x-2 gap-y-2">
                     <label className="text-gray-700">Sat održan:</label>
                     <button
                       type="button"
                       onClick={() => setLessonForm({...lessonForm, isHeld: !lessonForm.isHeld})}
                       className={cn(
-                        "w-28 border border-gray-300 px-2 py-1 text-left font-bold",
-                        lessonForm.isHeld ? "bg-[#005c8d] text-white" : "bg-white text-gray-600"
+                        "w-[90px] border px-2 py-1 text-left text-[14px] font-semibold",
+                        lessonForm.isHeld ? "bg-[#06476b] text-white border-[#06476b]" : "bg-white text-gray-700 border-gray-300"
                       )}
                     >
-                      <span className={cn("inline-block h-4 w-4 mr-2 align-middle border", lessonForm.isHeld ? "bg-white border-white" : "bg-gray-100 border-gray-400")} />
+                      <span className={cn("inline-block h-5 w-5 mr-2 align-middle border", lessonForm.isHeld ? "bg-white border-white" : "bg-gray-100 border-gray-400")} />
                       Da
                     </button>
 
                     <label className="text-gray-700">Predmet:</label>
                     <select
-                      className="w-full border border-gray-300 px-2 py-1 focus:border-[#005c8d] outline-none"
+                      className="w-full h-7 border border-gray-300 px-2 py-0.5 text-[14px] focus:border-[#005c8d] outline-none"
                       value={lessonForm.subjectId}
                       onChange={e => setLessonForm({...lessonForm, subjectId: e.target.value})}
                     >
@@ -3603,7 +3603,7 @@ setStudents(uniqueStudents);
 
                     <label className="text-gray-700">Grupa:</label>
                     <select
-                      className="w-full border border-gray-300 px-2 py-1 focus:border-[#005c8d] outline-none"
+                      className="w-full h-7 border border-gray-300 px-2 py-0.5 text-[14px] focus:border-[#005c8d] outline-none"
                       value={lessonForm.groupName || 'FULL_CLASS'}
                       onChange={e => setLessonForm({...lessonForm, groupName: e.target.value})}
                     >
@@ -3614,7 +3614,7 @@ setStudents(uniqueStudents);
 
                     <label className="text-gray-700">Blok sat:</label>
                     <select
-                      className="w-full border border-gray-300 px-2 py-1 focus:border-[#005c8d] outline-none"
+                      className="w-full h-7 border border-gray-300 px-2 py-0.5 text-[14px] focus:border-[#005c8d] outline-none"
                       value={lessonForm.blockCount || 1}
                       onChange={e => {
                         const val = parseInt(e.target.value);
@@ -3636,7 +3636,7 @@ setStudents(uniqueStudents);
                     </select>
                   </div>
 
-                  <div className="mt-3 text-gray-500">
+                  <div className="mt-3 text-[15px] text-gray-500">
                     <div>Prethodno upisani sat:</div>
                     <div className="text-gray-400">
                       {dailyLessons
@@ -3650,8 +3650,8 @@ setStudents(uniqueStudents);
                   <div className="mt-3">
                     <label className="block mb-1 text-gray-700">Nastavna jedinica: <span className="font-bold">*</span></label>
                     <textarea
-                      rows={5}
-                      className="w-full border border-gray-300 p-2 focus:border-[#005c8d] outline-none"
+                      rows={3}
+                      className="w-full border border-gray-300 p-2 text-[14px] focus:border-[#005c8d] outline-none"
                       value={lessonForm.topic}
                       onChange={e => setLessonForm({...lessonForm, topic: e.target.value})}
                     />
@@ -3661,7 +3661,7 @@ setStudents(uniqueStudents);
                     <label className="block mb-1 text-gray-700">Napomena:</label>
                     <textarea
                       rows={2}
-                      className="w-full border border-gray-300 p-2 focus:border-[#005c8d] outline-none"
+                      className="w-full border border-gray-300 p-2 text-[14px] focus:border-[#005c8d] outline-none"
                       value={lessonForm.notes}
                       onChange={e => setLessonForm({...lessonForm, notes: e.target.value})}
                     />
@@ -3670,36 +3670,35 @@ setStudents(uniqueStudents);
               )}
 
               {activeLessonTab === 'IZOSTANCI' && (
-                <div className="space-y-4">
-                   <div className="bg-red-50 p-4 border border-red-100">
-                      <h4 className="text-[10px] font-bold text-red-800 uppercase mb-3 flex items-center gap-2">
-                        <UserIcon size={14} /> Odaberi učenike koji nisu prisutni
+                <div className="border border-red-200 bg-red-50 p-2">
+                      <h4 className="text-[15px] font-bold text-gray-900 mb-2">
+                        Izostanci
                       </h4>
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1 text-[13px]">
                         {sortStudentsBySurname(students).map(s => {
                           const isSelected = selectedAbsentees.includes(s.id);
                           return (
-                            <button 
+                            <label
                               key={`absentee-btn-${s.id}`}
-                              onClick={() => {
-                                if (isSelected) setSelectedAbsentees(prev => prev.filter(id => id !== s.id));
-                                else setSelectedAbsentees(prev => [...prev, s.id]);
-                              }}
-                              className={cn(
-                                "flex items-center gap-2 p-2 border transition-all text-left",
-                                isSelected ? "bg-red-600 border-red-700 text-white" : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
-                              )}
+                              className={cn("flex items-center gap-1 border-b border-gray-300 py-1", isSelected ? "text-red-700" : "text-gray-400")}
                             >
-                              <div className={cn("w-2 h-2 border", isSelected ? "bg-white border-white" : "bg-gray-100 border-gray-300")} />
-                              <span className="text-[10px] font-bold truncate">{s.name}</span>
-                            </button>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {
+                                  if (isSelected) setSelectedAbsentees(prev => prev.filter(id => id !== s.id));
+                                  else setSelectedAbsentees(prev => [...prev, s.id]);
+                                }}
+                                className="h-3 w-3 accent-red-600"
+                              />
+                              <span className={cn("truncate", isSelected && "font-semibold")}>{formatPersonName(s)}</span>
+                            </label>
                           );
                         })}
                       </div>
-                      <div className="mt-3 text-[9px] text-gray-400 font-bold uppercase italic">
+                      <div className="mt-3 text-[11px] text-gray-500 font-semibold italic">
                          Odabrano učenika: {selectedAbsentees.length}
                       </div>
-                   </div>
                 </div>
               )}
 
@@ -3729,16 +3728,16 @@ setStudents(uniqueStudents);
               )}
             </div>
 
-            <div className="bg-gray-50 p-3 border-t border-gray-300 flex justify-end gap-2 shrink-0">
+            <div className="bg-white p-3 border-t border-gray-300 flex justify-center gap-2 shrink-0">
               <button 
                 onClick={() => setShowLessonModal(false)}
-                className="px-4 py-1.5 border border-gray-300 text-gray-600 font-bold text-[10px] uppercase hover:bg-white"
+                className="px-4 py-1.5 border border-gray-300 text-gray-600 font-bold text-[11px] hover:bg-gray-50"
               >
                 Odustani
               </button>
               <button 
                 onClick={saveLessonDetailed}
-                className="px-6 py-1.5 bg-[#005c8d] text-white border border-[#004a70] font-bold text-[10px] uppercase hover:bg-[#004a70]"
+                className="px-4 py-2 bg-[#06476b] text-white border border-[#06476b] font-semibold text-[13px] hover:bg-[#043a58]"
               >
                 {lessonForm.id ? 'Spremi promjene' : 'Unesi novi radni sat'}
               </button>
