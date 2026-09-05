@@ -103,9 +103,11 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   useEffect(() => {
     if (effectiveClassId) {
       const savedView = sessionStorage.getItem(`dnevnik_view_${effectiveClassId}`) as any;
-      if (savedView) {
+      if (initialView) {
+        setView(initialView);
+      } else if (savedView) {
         setView(normalizeSavedDnevnikView(savedView) as any);
-      } else if (!initialView) {
+      } else {
         setView('WEEKS');
       }
 
@@ -160,6 +162,24 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [selectedDate, setSelectedDate] = useState<string | null>(() => {
     return sessionStorage.getItem(`dnevnik_selectedDate_${effectiveClassId || 'default'}`) || null;
   });
+
+  useEffect(() => {
+    if (view !== 'DAY_DETAIL' || weeks.length === 0) return;
+
+    const today = getLocalDateISO();
+    const activeWeek = weeks.find(w => today >= w.startDate && today <= w.endDate) || weeks[weeks.length - 1];
+    if (!activeWeek) return;
+
+    const teachingDays = activeWeek.teachingDays || [];
+    const nextDate = teachingDays.includes(today) ? today : (teachingDays[0] || activeWeek.startDate);
+
+    if (!selectedWeek || selectedWeek.id !== activeWeek.id) {
+      setSelectedWeek(activeWeek);
+    }
+    if (!selectedDate || !teachingDays.includes(selectedDate)) {
+      setSelectedDate(nextDate);
+    }
+  }, [view, weeks, selectedWeek, selectedDate]);
 
   // Persist selectedDate changes to sessionStorage
   useEffect(() => {
