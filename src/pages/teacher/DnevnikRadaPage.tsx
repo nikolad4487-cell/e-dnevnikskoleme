@@ -36,6 +36,11 @@ const getAbsenceStatusCellClass = (status?: string) => {
   return 'bg-red-100 text-red-700 border-red-300';
 };
 
+const normalizeSavedDnevnikView = (savedView: string | null | undefined) => {
+  if (savedView === 'WEEK_DETAIL' || savedView === 'DAY_DETAIL') return 'WEEKS';
+  return savedView || 'WEEKS';
+};
+
 export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA' }) {
   usePageTitle("Dnevnik rada");
   const { classId: routeClassId } = useParams<{ classId: string }>();
@@ -75,7 +80,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [view, setView] = useState<'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA'>(() => {
     if (initialView) return initialView;
     const saved = sessionStorage.getItem(`dnevnik_view_${effectiveClassId || 'default'}`);
-    return (saved as any) || 'WEEKS';
+    return normalizeSavedDnevnikView(saved) as any;
   });
   const [selectedWeek, setSelectedWeek] = useState<WorkWeek | null>(null);
   
@@ -99,7 +104,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     if (effectiveClassId) {
       const savedView = sessionStorage.getItem(`dnevnik_view_${effectiveClassId}`) as any;
       if (savedView) {
-        setView(savedView);
+        setView(normalizeSavedDnevnikView(savedView) as any);
       } else if (!initialView) {
         setView('WEEKS');
       }
