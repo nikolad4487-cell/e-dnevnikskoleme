@@ -167,6 +167,8 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     }
   }, [selectedDate, effectiveClassId]);
   const [dailyLessons, setDailyLessons] = useState<Lesson[]>([]);
+  const [weekOverviewLessons, setWeekOverviewLessons] = useState<Lesson[]>([]);
+  const [weekOverviewAbsences, setWeekOverviewAbsences] = useState<any[]>([]);
   const [currentWeekAbsences, setCurrentWeekAbsences] = useState<any[]>([]);
   const [dailyAbsences, setDailyAbsences] = useState<any[]>([]);
   const [currentClassExams, setCurrentClassExams] = useState<Exam[]>([]);
@@ -854,6 +856,54 @@ setStudents(uniqueStudents);
     };
     fetchClassContext();
   }, [effectiveClassId]);
+
+  useEffect(() => {
+    if (!effectiveClassId || weeks.length === 0) {
+      setWeekOverviewLessons([]);
+      setWeekOverviewAbsences([]);
+      return;
+    }
+
+    const fetchWeekOverviewData = async () => {
+      const datedWeeks = weeks.filter(w => w.startDate && w.endDate);
+      if (datedWeeks.length === 0) {
+        setWeekOverviewLessons([]);
+        setWeekOverviewAbsences([]);
+        return;
+      }
+
+      const startDate = datedWeeks.reduce((min, week) => week.startDate < min ? week.startDate : min, datedWeeks[0].startDate);
+      const endDate = datedWeeks.reduce((max, week) => week.endDate > max ? week.endDate : max, datedWeeks[0].endDate);
+
+      try {
+        const [{ data: lessonsData, error: lessonsError }, { data: absencesData, error: absencesError }] = await Promise.all([
+          supabase
+            .from('lessons')
+            .select('*')
+            .eq('class_id', effectiveClassId)
+            .gte('date', startDate)
+            .lte('date', endDate),
+          supabase
+            .from('absences')
+            .select('*')
+            .eq('class_id', effectiveClassId)
+            .gte('date', startDate)
+            .lte('date', endDate)
+        ]);
+
+        if (lessonsError) throw lessonsError;
+        if (absencesError) throw absencesError;
+
+        setWeekOverviewLessons(mapList(lessonsData || [], mappers.lesson));
+        setWeekOverviewAbsences(mapList(absencesData || [], mappers.absence));
+      } catch (error) {
+        console.error(error);
+        toast.error('Greška pri učitavanju pregleda radnih tjedana');
+      }
+    };
+
+    fetchWeekOverviewData();
+  }, [effectiveClassId, weeks]);
 
   useEffect(() => {
     if (!effectiveClassId) return;
@@ -2043,9 +2093,77 @@ setStudents(uniqueStudents);
     }
   };
 
+  const teachingDayNumberByDate = useMemo(() => {
+    const entries = weeks
+      .filter(w => w.weekType !== 'SCHOOL_HOLIDAY' && w.weekType !== 'NON_INSTRUCTIONAL' && w.isInstructional !== false)
+      .flatMap(w => w.teachingDays || [])
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+
+    return entries.reduce<Record<string, number>>((acc, dateStr, index) => {
+      acc[dateStr] = index + 1;
+      return acc;
+    }, {});
+  }, [weeks]);
+
   const getDayName = (dateStr: string) => {
     const days = ['Nedjelja', 'Ponedjeljak', 'Utorak', 'Srijeda', 'Četvrtak', 'Petak', 'Subota'];
     return days[new Date(dateStr).getDay()];
+  };
+
+  const formatWeekDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const [year, month, day] = dateStr.split('-');
+    return `${day}.${month}.${year}.`;
+  };
+
+  const getWeekWorkDays = (week: WorkWeek) => {
+    if (!week.startDate || !week.endDate) return [];
+    const [startYear, startMonth, startDay] = week.startDate.split('-').map(Number);
+    const [endYear, endMonth, endDay] = week.endDate.split('-').map(Number);
+    const current = new Date(startYear, startMonth - 1, startDay);
+    const end = new Date(endYear, endMonth - 1, endDay);
+    const days: string[] = [];
+
+    while (current <= end) {
+      const dayOfWeek = current.getDay();
+      if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+        days.push(getLocalDateISO(current));
+      }
+      current.setDate(current.getDate() + 1);
+    }
+
+    return days;
+  };
+
+  const getWeekLessons = (week: WorkWeek) => {
+    return weekOverviewLessons.filter(lesson => lesson.date >= week.startDate && lesson.date <= week.endDate);
+  };
+
+  const getWeekAbsences = (week: WorkWeek) => {
+    return weekOverviewAbsences.filter(absence => absence.date >= week.startDate && absence.date <= week.endDate);
+  };
+
+  const getWeekLessonStats = (week: WorkWeek) => {
+    const lessons = getWeekLessons(week);
+    const held = lessons.filter(lesson => lesson.isHeld !== false).length;
+    const notHeld = lessons.filter(lesson => lesson.isHeld === false).length;
+    return { held, notHeld, total: lessons.length };
+  };
+
+  const getWeekAbsenceStats = (week: WorkWeek) => {
+    const absences = getWeekAbsences(week);
+    const justified = absences.filter(absence => absence.status === AbsenceStatus.JUSTIFIED).length;
+    const unjustified = absences.filter(absence => absence.status === AbsenceStatus.UNJUSTIFIED).length;
+    const other = absences.filter(absence => absence.status === AbsenceStatus.OTHER).length;
+    return { justified, unjustified, other, total: absences.length };
+  };
+
+  const getShiftLabel = (shift?: string) => {
+    if (shift === 'MORNING') return 'ujutro';
+    if (shift === 'AFTERNOON') return 'popodne';
+    if (shift === 'ALL_DAY') return 'cjelodnevna';
+    return (shift || 'Ujutro').toLowerCase();
   };
 
   return (
@@ -2256,106 +2374,114 @@ setStudents(uniqueStudents);
                 </div>
               </div>
 
-              <div className="bg-white border border-gray-300 shadow-sm">
-                 <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-[#005c8d] text-[11px] uppercase tracking-tight">Popis radnih tjedana</div>
-                 <table className="w-full text-left border-collapse text-[12px] ed-table-dense">
-                   <thead>
-                     <tr className="bg-gray-50 border-b border-gray-300">
-                       <th className="px-4 py-2 font-bold uppercase text-gray-500 border-r border-gray-300">Naziv tjedna</th>
-                       <th className="px-4 py-2 font-bold uppercase text-gray-500 w-64 border-r border-gray-300">Period i tip / razlog</th>
-                       <th className="px-4 py-2 font-bold uppercase text-gray-500 border-r border-gray-300">Dežurni učenici</th>
-                       <th className="px-4 py-2 font-bold uppercase text-gray-500 text-center w-36">Akcije</th>
-                     </tr>
-                   </thead>
-                   <tbody className="divide-y divide-gray-200">
-                     {weeks.sort((a,b) => (b.startDate || '').localeCompare(a.startDate || '')).map(w => (
-                       <tr 
-                         key={w.id} 
-                         onClick={() => { setSelectedWeek(w); setView('WEEK_DETAIL'); }}
-                         className="group hover:bg-[#eff6ff] cursor-pointer transition-colors"
-                       >
-                         <td className="px-4 py-2 border-r border-gray-200">
-                            <div className="font-bold text-[#005c8d] uppercase tracking-tight group-hover:underline">{w.name}</div>
-                            <div className="flex flex-wrap gap-1 mt-1">
-                              {w.weekType === 'SCHOOL_HOLIDAY' ? (
-                                <span className="px-2 py-0.5 bg-amber-100 text-amber-800 text-[9px] font-black uppercase rounded-sm">🌴 Praznici</span>
-                              ) : w.weekType === 'NON_INSTRUCTIONAL' ? (
-                                <span className="px-2 py-0.5 bg-slate-100 text-slate-800 text-[9px] font-black uppercase rounded-sm">⚖️ Nenastavni</span>
-                              ) : (
-                                <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-[9px] font-black uppercase rounded-sm">🎓 Nastavni</span>
-                              )}
+              <div className="space-y-2">
+                {weeks.sort((a,b) => (b.startDate || '').localeCompare(a.startDate || '')).map(w => {
+                  const lessonStats = getWeekLessonStats(w);
+                  const absenceStats = getWeekAbsenceStats(w);
+                  const weekAbsences = getWeekAbsences(w);
+                  const dutyStudents = Array.from(new Set(w.onDutyStudentIds || [])).map(sid => {
+                    const studentObj = students.find(s => s.id === sid);
+                    return studentObj ? formatPersonName(studentObj) : null;
+                  }).filter(Boolean).join(' - ') || 'Nema dežurnih';
+                  const weekDays = getWeekWorkDays(w);
+                  const isSpecialWeek = w.weekType === 'SCHOOL_HOLIDAY' || w.weekType === 'NON_INSTRUCTIONAL' || w.isInstructional === false;
+
+                  return (
+                    <div key={w.id} className="bg-white border border-gray-300 shadow-sm">
+                      <div className="grid grid-cols-1 xl:grid-cols-[260px_minmax(520px,1fr)_300px]">
+                        <div className="bg-[#d9eaf7] border-b xl:border-b-0 xl:border-r border-gray-300 min-h-[86px] flex flex-col justify-between">
+                          <div className="px-3 py-2 flex items-start gap-2">
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[12px] font-black text-gray-900 leading-tight">
+                                {w.name} {getShiftLabel(w.shift)}
+                              </div>
+                              <div className="text-[10px] font-semibold text-gray-700 leading-tight mt-1">
+                                {isSpecialWeek
+                                  ? (w.weekType === 'SCHOOL_HOLIDAY'
+                                      ? (croatianHolidayNames[w.holidayType || ''] || 'Školski praznici')
+                                      : (croatianReasonNames[w.non_teaching_reason || ''] || w.non_teaching_reason || 'Nenastavni tjedan'))
+                                  : dutyStudents}
+                              </div>
                             </div>
-                         </td>
-                         <td className="px-4 py-2 border-r border-gray-200">
-                            <div className="text-[11px] font-bold text-gray-600">
-                             {w.startDate ? new Date(w.startDate).toLocaleDateString('hr-HR') : ''} - {w.endDate ? new Date(w.endDate).toLocaleDateString('hr-HR') : ''}
-                            </div>
-                            <div className="text-[10px] uppercase font-bold mt-0.5">
-                              {w.weekType === 'SCHOOL_HOLIDAY' ? (
-                                <span className="text-amber-700">🌴 {croatianHolidayNames[w.holidayType] || w.holidayType || 'Školski praznici'}</span>
-                              ) : w.weekType === 'NON_INSTRUCTIONAL' ? (
-                                <span className="text-slate-500">
-                                  ⚖️ {croatianReasonNames[w.non_teaching_reason || ''] || w.non_teaching_reason || 'Nenastavno'}
-                                  {w.non_teaching_reason_note && ` (${w.non_teaching_reason_note})`}
-                                </span>
-                              ) : (
-                                <span className="text-gray-400">🕒 {w.shift || 'Ujutro'}</span>
-                              )}
-                            </div>
-                         </td>
-                        <td className="px-4 py-2 border-r border-gray-200 text-[11px] text-gray-500">
-                           {w.weekType === 'SCHOOL_HOLIDAY' ? (
-                             <span className="text-amber-600/70 italic font-semibold">Nema dežurstava za praznike</span>
-                           ) : (
-                             Array.from(new Set(w.onDutyStudentIds || [])).map(sid => {
-                               const studentObj = students.find(s => s.id === sid);
-                               return studentObj ? formatPersonName(studentObj) : null;
-                             }).filter(Boolean).join(', ') || 'Nema dežurnih'
-                           )}
-                        </td>
-                       <td className="px-4 py-2 text-center border-l border-gray-200">
-                         <div className="flex items-center justify-center gap-2">
-                           {canManageWeeks && (
-                             <button 
-                               onClick={(e) => {
-                                 e.stopPropagation();
-                                 handleEditWeek(w);
-                               }}
-                               className="text-[#005c8d] hover:text-[#004a71] p-1 flex items-center gap-1.5 text-[11px] font-bold uppercase transition-all"
-                               title="Uredi"
-                             >
-                               <Edit2 size={13} />
-                               <span>Uredi</span>
-                             </button>
-                           )}
-                           {canDeleteWeek && (
-                             <button 
-                               onClick={(e) => {
-                                 e.stopPropagation();
-                                 setDeleteDialog({ isOpen: true, id: w.id, type: 'WEEK', loading: false });
-                               }}
-                               className="text-red-500 hover:text-red-700 p-1 flex items-center gap-1.5 text-[11px] font-bold uppercase transition-all"
-                               title="Obriši"
-                             >
-                               <Trash2 size={13} />
-                               <span>Obriši</span>
-                             </button>
-                           )}
-                           {!canManageWeeks && !canDeleteWeek && (
-                             <span className="text-gray-400 text-[10px] italic">Nema ovlasti</span>
-                           )}
-                         </div>
-                       </td>
-                     </tr>
-                   ))}
-                   {weeks.length === 0 && (
-                     <tr>
-                        <td colSpan={4} className="p-12 text-center text-gray-400 italic">Nema upisanih radnih tjedana.</td>
-                     </tr>
-                   )}
-                 </tbody>
-               </table>
-            </div>
+                            {canManageWeeks && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditWeek(w);
+                                }}
+                                className="p-1 text-gray-500 hover:text-[#005c8d]"
+                                title="Uredi radni tjedan"
+                              >
+                                <Edit2 size={13} />
+                              </button>
+                            )}
+                          </div>
+                          <div className="border-t border-gray-300 bg-white px-3 py-1 text-[10px] text-gray-800 flex flex-wrap gap-x-3 gap-y-1">
+                            <span><span className="font-bold">Sati</span></span>
+                            <span>održani: {lessonStats.held}</span>
+                            <span>neodržani: {lessonStats.notHeld}</span>
+                            <span>ukupno: {lessonStats.total}</span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-5 border-b xl:border-b-0">
+                          {weekDays.map(dateStr => {
+                            const hasAbsence = weekAbsences.some(absence => absence.date === dateStr);
+                            const teachingDayNumber = teachingDayNumberByDate[dateStr];
+                            return (
+                              <button
+                                key={dateStr}
+                                type="button"
+                                onClick={() => { setSelectedWeek(w); setSelectedDate(dateStr); setView('DAY_DETAIL'); }}
+                                className="bg-[#f4f4f4] border-b sm:border-b-0 sm:border-r last:border-r-0 border-gray-300 px-2 py-3 text-center min-h-[72px] cursor-pointer"
+                              >
+                                <div className={cn("text-[11px] font-black lowercase leading-tight", hasAbsence ? "text-red-700" : "text-gray-900")}>
+                                  {getDayName(dateStr).toLowerCase()}{teachingDayNumber ? ` (${teachingDayNumber})` : ''}
+                                </div>
+                                <div className={cn("text-[10px] font-semibold leading-tight mt-1", hasAbsence ? "text-red-700" : "text-gray-600")}>
+                                  {formatWeekDate(dateStr)}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="flex flex-col justify-between min-h-[86px] bg-white">
+                          <div className="flex-1 flex items-center justify-end gap-2 px-3 py-2">
+                            {canDeleteWeek && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteDialog({ isOpen: true, id: w.id, type: 'WEEK', loading: false });
+                                }}
+                                className="text-[10px] font-bold uppercase text-red-600 hover:text-red-700 flex items-center gap-1"
+                                title="Obriši radni tjedan"
+                              >
+                                <Trash2 size={12} />
+                                Obriši
+                              </button>
+                            )}
+                          </div>
+                          <div className="border-t border-gray-300 bg-white px-3 py-1 text-[10px] text-gray-800 flex flex-wrap justify-end gap-x-3 gap-y-1">
+                            <span>Opravdano: {absenceStats.justified}</span>
+                            <span>Neopravdano: {absenceStats.unjustified}</span>
+                            <span>Ostalo: {absenceStats.other}</span>
+                            <span>Ukupno: {absenceStats.total}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {weeks.length === 0 && (
+                  <div className="bg-white border border-gray-300 p-12 text-center text-gray-400 italic shadow-sm">
+                    Nema upisanih radnih tjedana.
+                  </div>
+                )}
+              </div>
           </div>
         );
       })()}
