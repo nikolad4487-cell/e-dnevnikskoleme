@@ -220,7 +220,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     {
       id: 'dnevnik-rada',
       label: 'Dnevnik rada',
-      path: `${classPathPrefix}/pregled-rada`,
+      path: `${classPathPrefix}/dnevnik-rada`,
       icon: <ClipboardList size={14} />,
       children: [
         { id: 'pregled-tjedna', label: 'Pregled tjedna', path: `${classPathPrefix}/pregled-rada`, icon: <List size={14} /> },
@@ -467,7 +467,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                         items: [
                           { label: 'Imenik / Učenici', path: `/class/${effectiveClassId}/imenik`, icon: <BookOpen size={14} /> },
                           { label: 'Pregled rada u razredu', path: `/class/${effectiveClassId}/pregled-rada`, icon: <List size={14} /> },
-                          { label: 'Dnevnik rada', path: `/class/${effectiveClassId}/pregled-rada`, icon: <ClipboardList size={14} /> },
+                          { label: 'Dnevnik rada', path: `/class/${effectiveClassId}/dnevnik-rada`, icon: <ClipboardList size={14} /> },
                           { label: 'Ispiti', path: `/class/${effectiveClassId}/ispiti`, icon: <Calendar size={14} /> },
                           { label: 'Izostanci', path: `/class/${effectiveClassId}/izostanci`, icon: <Clock size={14} /> },
                           ...(canAccessLektira ? [{ label: 'Lektira', path: `/class/${effectiveClassId}/lektira`, icon: <BookOpen size={14} /> }] : []),
