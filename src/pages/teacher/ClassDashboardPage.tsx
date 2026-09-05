@@ -1,11 +1,10 @@
-import React, { useState, useEffect, Suspense, lazy, useRef } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { useParams, useNavigate, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
 import { Class, Role } from '../../types';
-import { Loader2, ShieldAlert, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Settings, Search, Menu, Clock, Bookmark, HelpCircle, ChevronDown, Calendar } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { ShieldAlert } from 'lucide-react';
 import { mappers } from '../../lib/mappers';
 import { ImenikTable } from '../../components/ImenikTable';
 import { canManageClassAdministration } from '../../hooks/useClassAdminAccess';
@@ -178,78 +177,7 @@ export default function ClassDashboardPage() {
     setSelectedSchoolId(cls.schoolId);
   };
 
-  const [isBurgerOpen, setIsBurgerOpen] = useState(false);
-  const burgerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (burgerRef.current && !burgerRef.current.contains(event.target as Node)) {
-        setIsBurgerOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
-
   const canAccessClassAdmin = canManageClassAdministration(user, userSchoolRoles, currentClass, isMainAdmin);
-
-  const tabs = [
-    { id: 'imenik', label: 'Imenik', path: 'imenik', icon: BookOpen },
-    { id: 'pregled-rada', label: 'Pregled rada', path: 'pregled-rada', icon: List },
-    { id: 'dnevnik-rada', label: 'Dnevnik rada', path: 'dnevnik-rada', icon: ClipboardList },
-    { id: 'izostanci', label: 'Izostanci', path: 'izostanci', icon: Clock },
-    { id: 'zapisnici', label: 'Zapisnici', path: 'zapisnici', icon: FileText },
-    { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: 'pedagoska-dokumentacija', icon: FileText },
-    { id: 'raspored', label: 'Raspored', path: 'raspored', icon: Calendar },
-    ...(canAccessClassAdmin ? [{ id: 'admin', label: 'Admin razreda', path: 'admin', icon: Settings }] : []),
-  ];
-
-  const burgerItems = [
-    { label: 'Bilješke', path: 'biljeske', icon: Bookmark },
-    { label: 'Izostanci', path: 'izostanci', icon: Clock },
-    { label: 'Pedagoška dokumentacija', path: 'pedagoska-dokumentacija', icon: FileText },
-    { label: 'Raspored sati', path: 'raspored', icon: Calendar },
-    { label: 'Informativka', path: 'informativka', icon: HelpCircle },
-  ];
-
-  let currentTab = location.pathname.split('/')[3] || 'imenik';
-  if (currentTab === 'imenik-predmeti' || currentTab === 'biljeske') currentTab = 'imenik';
-  if (currentTab === 'work-overview') currentTab = 'pregled-rada';
-  if (currentTab === 'work-journal') currentTab = 'dnevnik-rada';
-  if (currentTab === 'absences') currentTab = 'izostanci';
-  if (currentTab === 'minutes' || currentTab === 'roditeljski-sastanci' || currentTab === 'individualni-razgovori' || currentTab === 'dolasci-roditelja') currentTab = 'zapisnici';
-  if (currentTab === 'pedagogical') currentTab = 'pedagoska-dokumentacija';
-  if (currentTab === 'schedule') currentTab = 'raspored';
-  if (currentTab === 'administration' || currentTab === 'predmeti' || currentTab === 'ucenici' || currentTab === 'upisi-predmeta') currentTab = 'admin';
-
-  const isActive = (tabPath: string) => currentTab === tabPath;
-
-  const sidebarLinks: Record<string, { label: string, path: string }[]> = {
-    'imenik': [
-      { label: 'Imenik učenika', path: 'imenik' },
-      { label: 'Pregled predmeta', path: 'imenik-predmeti' },
-      { label: 'Bilješke', path: 'biljeske' }
-    ],
-    'pregled-rada': [
-      { label: 'Pregled rada', path: 'pregled-rada' }
-    ],
-    'izostanci': [
-      { label: 'Pregled izostanaka', path: 'izostanci' }
-    ],
-    'zapisnici': [
-      { label: 'Zapisnici vijeća', path: 'zapisnici' },
-      { label: 'Roditeljski sastanci', path: 'roditeljski-sastanci' },
-      { label: 'Individualni razgovori', path: 'individualni-razgovori' },
-      { label: 'Dolasci roditelja', path: 'dolasci-roditelja' },
-      { label: 'Pedagoška dokumentacija', path: 'pedagoska-dokumentacija' }
-    ],
-    'admin': [
-      { label: 'Administracija razreda', path: 'admin' },
-      { label: 'Predmeti u razredu', path: 'predmeti' },
-      { label: 'Učenici u razredu', path: 'ucenici' },
-      { label: 'Predmeti učenika', path: 'upisi-predmeta' }
-    ]
-  };
 
   const renderStudentsTable = () => (
     <ImenikTable 
@@ -259,8 +187,6 @@ export default function ClassDashboardPage() {
       classWarnings={{ failingGrades: {}, pendingAbsences: {} }}
     />
   );
-
-  const activeSidebarLinks = currentTab === 'admin' && !canAccessClassAdmin ? [] : (sidebarLinks[currentTab] || []);
 
   const renderClassAdminRoute = (element: React.ReactNode) => {
     if (loading) {
@@ -313,26 +239,6 @@ export default function ClassDashboardPage() {
 
       {/* Content Area */}
       <div className="flex-1 flex overflow-hidden bg-white w-full">
-        {/* Sidebar */}
-        {activeSidebarLinks.length > 0 && (
-          <div className="w-64 border-r border-slate-200 bg-slate-50 p-4 flex flex-col gap-2 shrink-0">
-             {activeSidebarLinks.map(link => (
-               <button
-                 key={link.path}
-                 onClick={() => navigate(`/class/${classId}/${link.path}`)}
-                 className={cn(
-                   "w-full text-left px-4 py-2 text-[11px] font-bold uppercase tracking-wider rounded transition-colors",
-                   location.pathname.endsWith(link.path) 
-                     ? "bg-[#005c8d] text-white" 
-                     : "text-slate-600 hover:bg-slate-200"
-                 )}
-               >
-                 {link.label}
-               </button>
-             ))}
-          </div>
-        )}
-        
         {/* Main Content */}
         <div className="flex-1 flex flex-col overflow-hidden relative w-full h-full" key={classId}>
           <Suspense fallback={null}>
