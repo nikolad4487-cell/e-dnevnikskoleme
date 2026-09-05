@@ -19,7 +19,10 @@ import {
   RefreshCw,
   Users,
   AlertCircle,
-  Check
+  Check,
+  Shield,
+  Printer,
+  X
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -66,6 +69,14 @@ export default function UserManagementPage() {
   const [selectedEmaticaUserIds, setSelectedEmaticaUserIds] = useState<string[]>([]);
   const [loadingEmaticaUsers, setLoadingEmaticaUsers] = useState(false);
   const [importingEmaticaUsers, setImportingEmaticaUsers] = useState(false);
+  const [bulkStaffTotp, setBulkStaffTotp] = useState<{
+    id: string;
+    email: string;
+    name: string;
+    secret: string;
+    qrCode: string;
+    otpauthUrl: string;
+  }[]>([]);
 
   const loadEmaticaUsers = async (searchValue = ematicaSearch) => {
     try {
@@ -250,6 +261,45 @@ export default function UserManagementPage() {
     setStatus('ACTIVE');
     setSelectedRoles([Role.TEACHER]);
     setIsModalOpen(true);
+  };
+
+  const handleGenerateAuthenticatorsForAllStaff = async () => {
+    if (!isAnyAdmin) {
+      toast.error('Ova akcija je dopuštena samo administratorima.');
+      return;
+    }
+
+    if (!confirm('Generirati Microsoft Authenticator QR kodove za sve nastavnike i admin korisnike ove škole? Postojeći Authenticator kodovi bit će zamijenjeni novima.')) return;
+
+    try {
+      setLoading(true);
+      const response = await fetch('/api/auth/bulk-generate-staff-authenticators', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ schoolId: selectedSchoolId })
+      });
+
+      const text = await response.text();
+      let result = null;
+      try {
+        result = text ? JSON.parse(text) : null;
+      } catch (err) {
+        throw new Error('Server nije vratio ispravan JSON odgovor.');
+      }
+
+      if (!response.ok || result?.success === false) {
+        throw new Error(result?.error || 'Greška pri generiranju Authenticator kodova');
+      }
+
+      setBulkStaffTotp(result?.authenticators || []);
+      toast.success(`Generirano Authenticator kodova: ${result?.updatedCount || 0}`);
+      await fetchUsers();
+    } catch (err: any) {
+      console.error('BULK STAFF AUTHENTICATOR FAILED:', err);
+      toast.error(err.message || 'Greška pri generiranju Authenticator kodova');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -586,6 +636,14 @@ export default function UserManagementPage() {
         
         {isAnyAdmin && (
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleGenerateAuthenticatorsForAllStaff}
+              disabled={loading}
+              className="w-full sm:w-auto bg-amber-500 text-white px-5 py-2.5 rounded-lg font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-2 hover:bg-amber-600 transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer"
+            >
+              <Shield size={16} strokeWidth={3} />
+              Aktiviraj MFA svima
+            </button>
             <button 
               onClick={handleOpenEmaticaImport}
               disabled={loadingEmaticaUsers || importingEmaticaUsers}
@@ -1269,6 +1327,113 @@ export default function UserManagementPage() {
                 className="bg-[#005c8d] text-white px-6 py-2.5 rounded-xl font-black uppercase text-[11px] tracking-wider hover:bg-[#004a71] transition-all shadow-md cursor-pointer"
               >
                 Zatvori izvještaj
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bulkStaffTotp.length > 0 && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[210] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[92vh] overflow-hidden flex flex-col border border-white/20">
+            <div className="p-5 bg-[#005c8d] text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-black uppercase tracking-tight">Microsoft Authenticator kodovi</h3>
+                <p className="text-blue-100 text-xs font-medium mt-1">Skenirajte QR kodove redom iz Microsoft Authenticator aplikacije.</p>
+              </div>
+              <button
+                onClick={() => setBulkStaffTotp([])}
+                className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                aria-label="Zatvori"
+              >
+                <X size={20} strokeWidth={3} />
+              </button>
+            </div>
+
+            <div className="p-4 bg-amber-50 border-b border-amber-200 text-[11px] font-bold text-amber-800 leading-relaxed">
+              Generirani su novi Authenticator ključevi za prikazane korisnike. Ako korisnik već ima dodan stari račun u aplikaciji, treba ga obrisati i skenirati novi QR kod.
+            </div>
+
+            <div className="p-5 overflow-y-auto flex-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {bulkStaffTotp.map(item => (
+                  <div key={item.id} className="border border-slate-200 rounded-xl bg-white shadow-sm p-4 space-y-3">
+                    <div className="border-b border-slate-100 pb-2">
+                      <div className="text-sm font-black text-slate-900 uppercase leading-tight">{item.name}</div>
+                      <div className="text-[10px] font-bold text-slate-400 break-all">{item.email || 'Bez e-mail adrese'}</div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <img src={item.qrCode} alt={`Microsoft Authenticator QR kod za ${item.name}`} className="w-32 h-32 border border-slate-200 bg-white p-1 rounded-lg" />
+                      <div className="min-w-0 space-y-2">
+                        <div>
+                          <div className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Ručni ključ</div>
+                          <code className="block text-[11px] font-black tracking-widest break-all bg-slate-50 border border-slate-200 p-2 rounded-lg text-[#005c8d]">{item.secret}</code>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(item.secret);
+                            toast.success('Ključ kopiran');
+                          }}
+                          className="text-[9px] font-black uppercase text-[#005c8d] hover:underline cursor-pointer"
+                        >
+                          Kopiraj ključ
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const printWindow = window.open('', '_blank');
+                  if (!printWindow) return;
+                  const cards = bulkStaffTotp.map(item => `
+                    <section class="card">
+                      <h2>${item.name}</h2>
+                      <p>${item.email || ''}</p>
+                      <img src="${item.qrCode}" />
+                      <div class="secret">${item.secret}</div>
+                    </section>
+                  `).join('');
+                  printWindow.document.write(`
+                    <html>
+                      <head>
+                        <title>Microsoft Authenticator kodovi</title>
+                        <style>
+                          body { font-family: Arial, sans-serif; padding: 24px; color: #111827; }
+                          h1 { color: #005c8d; font-size: 22px; text-transform: uppercase; margin: 0 0 16px; }
+                          .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+                          .card { border: 1px solid #cbd5e1; padding: 16px; break-inside: avoid; }
+                          h2 { font-size: 15px; margin: 0 0 4px; text-transform: uppercase; }
+                          p { font-size: 11px; margin: 0 0 12px; color: #64748b; }
+                          img { width: 160px; height: 160px; display: block; margin-bottom: 10px; }
+                          .secret { font-family: monospace; font-size: 13px; font-weight: 700; letter-spacing: 2px; border: 1px dashed #005c8d; padding: 8px; color: #005c8d; word-break: break-all; }
+                          @media print { body { padding: 12px; } }
+                        </style>
+                      </head>
+                      <body onload="window.print()">
+                        <h1>Microsoft Authenticator kodovi</h1>
+                        <div class="grid">${cards}</div>
+                      </body>
+                    </html>
+                  `);
+                  printWindow.document.close();
+                }}
+                className="bg-slate-800 text-white px-5 py-2.5 rounded-xl font-black uppercase text-[11px] tracking-wider hover:bg-slate-950 transition-all shadow-md cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Printer size={14} strokeWidth={3} /> Printaj sve kodove
+              </button>
+              <button
+                type="button"
+                onClick={() => setBulkStaffTotp([])}
+                className="bg-[#005c8d] text-white px-5 py-2.5 rounded-xl font-black uppercase text-[11px] tracking-wider hover:bg-[#004a71] transition-all shadow-md cursor-pointer"
+              >
+                Gotovo
               </button>
             </div>
           </div>
