@@ -2509,6 +2509,9 @@ setStudents(uniqueStudents);
                const dayAbsences = currentWeekAbsences.filter(abs => abs.date === absenceDate);
                const absencePeriods = Array.from({ length: 13 }, (_, index) => index);
                const firstLessonForDay = dailyLessons[0];
+               const absentStudents = sortStudentsBySurname(students).filter(student =>
+                 dayAbsences.some(absence => absence.studentId === student.id)
+               );
                return (
              <div className="space-y-2">
                <div className="flex items-center justify-between bg-white border border-gray-300 px-3 py-2">
@@ -2586,10 +2589,14 @@ setStudents(uniqueStudents);
                         <td colSpan={18} className="p-12 text-center text-gray-400 italic">Nema učenika u razredu.</td>
                       </tr>
                     )}
-                    {sortStudentsBySurname(students).map(s => {
+                    {absentStudents.map(s => {
                       const studentAbsences = dayAbsences.filter(abs => abs.studentId === s.id);
                       const justified = studentAbsences.filter(abs => abs.status === AbsenceStatus.JUSTIFIED).length;
                       const unjustified = studentAbsences.filter(abs => abs.status === AbsenceStatus.UNJUSTIFIED).length;
+                      const absenceHours = studentAbsences
+                        .map(abs => Number(abs.hour))
+                        .filter(hour => Number.isFinite(hour))
+                        .sort((a, b) => a - b);
                       const reason = studentAbsences
                         .map(abs => [abs.absenceType, abs.note].filter(Boolean).join(' - '))
                         .filter(Boolean)
@@ -2610,7 +2617,9 @@ setStudents(uniqueStudents);
                               formatPersonName(s)
                             )}
                           </td>
-                          <td className="p-1 text-center text-gray-400 border-r border-gray-200">/</td>
+                          <td className="p-1 text-center text-gray-700 border-r border-gray-200">
+                            {absenceHours.length ? absenceHours.join(', ') : ''}
+                          </td>
                           {absencePeriods.map(hour => {
                             const absence = studentAbsences.find(abs => Number(abs.hour) === hour);
                             return (
