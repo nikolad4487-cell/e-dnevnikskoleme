@@ -3255,14 +3255,23 @@ setStudents(uniqueStudents);
                 </button>
               </div>
 
-              <div className="flex items-center gap-2 text-[11px] font-bold">
-                <span className="text-gray-400 uppercase text-[9px] tracking-widest">Dežurni:</span>
-                <span className="text-[#005c8d]">
-                  {Array.from(new Set(selectedWeek?.onDutyStudentIds || [])).map(sid => {
-                    const studentObj = students.find(s => s.id === sid);
-                    return studentObj ? formatPersonName(studentObj) : '';
-                  }).filter(Boolean).join(', ') || 'Nema dežurnih'}
-                </span>
+              <div className="flex items-center gap-3 text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setView('ABSENCES')}
+                  className="px-3 py-1.5 bg-[#005c8d] text-white font-bold text-[10px] uppercase hover:bg-[#004a70]"
+                >
+                  Izostanci
+                </button>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-400 uppercase text-[9px] tracking-widest">Dežurni:</span>
+                  <span className="text-[#005c8d]">
+                    {Array.from(new Set(selectedWeek?.onDutyStudentIds || [])).map(sid => {
+                      const studentObj = students.find(s => s.id === sid);
+                      return studentObj ? formatPersonName(studentObj) : '';
+                    }).filter(Boolean).join(', ') || 'Nema dežurnih'}
+                  </span>
+                </div>
               </div>
             </div>
 
