@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -44,6 +44,7 @@ const normalizeSavedDnevnikView = (savedView: string | null | undefined) => {
 export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA' }) {
   usePageTitle("Dnevnik rada");
   const { classId: routeClassId } = useParams<{ classId: string }>();
+  const navigate = useNavigate();
   const { user, isMainAdmin, highestRole, userSchoolRoles } = useAuth();
   const { selectedSchoolId: contextSchoolId, selectedClassId: contextClassId, selectedYearId } = useSelection();
   
@@ -164,7 +165,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   });
 
   useEffect(() => {
-    if (view !== 'DAY_DETAIL' || weeks.length === 0) return;
+    if ((view !== 'DAY_DETAIL' && view !== 'ABSENCES') || weeks.length === 0) return;
 
     const today = getLocalDateISO();
     const activeWeek = weeks.find(w => today >= w.startDate && today <= w.endDate) || weeks[weeks.length - 1];
@@ -3336,7 +3337,12 @@ setStudents(uniqueStudents);
               <div className="flex items-center gap-3 text-[11px] font-bold">
                 <button
                   type="button"
-                  onClick={() => setView('ABSENCES')}
+                  onClick={() => {
+                    setView('ABSENCES');
+                    if (effectiveClassId) {
+                      navigate(`/class/${effectiveClassId}/dnevnik-rada/izostanci`);
+                    }
+                  }}
                   className="px-3 py-1.5 bg-[#005c8d] text-white font-bold text-[10px] uppercase hover:bg-[#004a70]"
                 >
                   Izostanci

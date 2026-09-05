@@ -346,6 +346,7 @@ export default function ClassDashboardPage() {
               <Route path="work-overview" element={<DnevnikRadaPage initialView="WEEKS" />} />
               
               <Route path="dnevnik-rada" element={<DnevnikRadaPage initialView="DAY_DETAIL" />} />
+              <Route path="dnevnik-rada/izostanci" element={<DnevnikRadaPage initialView="ABSENCES" />} />
               <Route path="work-journal" element={<DnevnikRadaPage initialView="DAY_DETAIL" />} />
               <Route path="ispiti" element={<DnevnikRadaPage initialView="EXAMS" />} />
               <Route path="exams" element={<DnevnikRadaPage initialView="EXAMS" />} />

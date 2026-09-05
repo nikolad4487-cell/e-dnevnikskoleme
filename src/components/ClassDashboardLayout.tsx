@@ -224,7 +224,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       icon: <ClipboardList size={14} />,
       children: [
         { id: 'ispiti', label: 'Ispiti', path: `${classPathPrefix}/ispiti`, icon: <Calendar size={14} /> },
-        { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/izostanci`, icon: <Clock size={14} /> },
+        { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/dnevnik-rada/izostanci`, icon: <Clock size={14} /> },
         { id: 'raspored', label: 'Raspored sati', path: `${classPathPrefix}/raspored`, icon: <Calendar size={14} /> },
         ...(canAccessLektira ? [{ id: 'lektira', label: 'Lektira', path: `${classPathPrefix}/lektira`, icon: <BookOpen size={14} /> }] : []),
         { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: `${classPathPrefix}/pedagoska-dokumentacija`, icon: <FileText size={14} /> },
@@ -273,7 +273,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       return path.includes('/ispiti') || path.includes('/exams');
     }
     if (tabId === 'izostanci') {
-      return path.includes('/izostanci') || path.includes('/absences');
+      return path.includes('/izostanci') || path.includes('/absences') || path.includes('/dnevnik-rada/izostanci');
     }
     if (tabId === 'zapisnici') {
       return path.includes('/zapisnici') || path.includes('/minutes');
