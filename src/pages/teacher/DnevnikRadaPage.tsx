@@ -3789,9 +3789,11 @@ setStudents(uniqueStudents);
                       .filter(absence => absence.lessonId === absenceEntryLesson.id)
                       .map(absence => absence.studentId)
                   );
-                  const availableStudents = sortStudentsBySurname(students).filter(student =>
-                    !existingLessonAbsenceStudentIds.has(student.id) || absenceEntrySelectedStudents.includes(student.id)
-                  );
+                  const availableStudents = sortStudentsBySurname(students)
+                    .map((student, idx) => ({ student, displayNumber: idx + 1 }))
+                    .filter(({ student }) =>
+                      !existingLessonAbsenceStudentIds.has(student.id) || absenceEntrySelectedStudents.includes(student.id)
+                    );
 
                   if (availableStudents.length === 0) {
                     return (
@@ -3801,7 +3803,7 @@ setStudents(uniqueStudents);
                     );
                   }
 
-                  return availableStudents.map((student, idx) => {
+                  return availableStudents.map(({ student, displayNumber }) => {
                   const isSelected = absenceEntrySelectedStudents.includes(student.id);
                   return (
                     <button
@@ -3819,7 +3821,7 @@ setStudents(uniqueStudents);
                         isSelected ? "bg-red-100 text-red-900" : "bg-gray-50 text-gray-400"
                       )}
                     >
-                      <span>{idx + 1}. {formatPersonName(student)}</span>
+                      <span>{displayNumber}. {formatPersonName(student)}</span>
                       {isSelected ? (
                         <CheckCircle size={17} className="text-green-600" />
                       ) : (
