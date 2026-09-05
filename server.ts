@@ -6020,6 +6020,41 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     }
   });
 
+  app.post("/api/auth/mark-staff-authenticators-scanned", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+
+      const { profileIds } = req.body || {};
+      const ids = Array.isArray(profileIds)
+        ? profileIds.map((id: any) => String(id)).filter(Boolean)
+        : [];
+
+      if (ids.length === 0) {
+        return res.status(400).json({ success: false, error: "Nije odabran nijedan korisnik." });
+      }
+
+      const { data, error } = await supabaseAdmin
+        .from('user_profiles')
+        .update({
+          requires_authenticator_setup: false,
+          password_type: 'NORMAL_PASSWORD'
+        })
+        .in('id', ids)
+        .not('authenticator_secret', 'is', null)
+        .select('id');
+
+      if (error) throw error;
+
+      res.status(200).json({
+        success: true,
+        updatedCount: data?.length || 0
+      });
+    } catch (err: any) {
+      console.error("[MARK_STAFF_TOTP_SCANNED] Error:", err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Reset student password endpoint
   app.post("/api/admin/reset-student-password", async (req, res) => {
     try {

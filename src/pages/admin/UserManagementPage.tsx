@@ -302,6 +302,40 @@ export default function UserManagementPage() {
     }
   };
 
+  const handleMarkAuthenticatorsScanned = async (profileIds: string[]) => {
+    if (profileIds.length === 0) return;
+
+    try {
+      setLoading(true);
+      const response = await fetch('/api/auth/mark-staff-authenticators-scanned', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileIds })
+      });
+
+      const text = await response.text();
+      let result = null;
+      try {
+        result = text ? JSON.parse(text) : null;
+      } catch (err) {
+        throw new Error('Server nije vratio ispravan JSON odgovor.');
+      }
+
+      if (!response.ok || result?.success === false) {
+        throw new Error(result?.error || 'Označavanje skeniranih kodova nije uspjelo.');
+      }
+
+      setBulkStaffTotp(prev => prev.filter(item => !profileIds.includes(item.id)));
+      toast.success(`Označeno kao skenirano: ${result?.updatedCount || 0}`);
+      await fetchUsers();
+    } catch (err: any) {
+      console.error('MARK STAFF AUTHENTICATOR SCANNED FAILED:', err);
+      toast.error(err.message || 'Označavanje skeniranih kodova nije uspjelo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (!selectedSchoolId) {
       navigate('/admin/schools');
@@ -1379,6 +1413,14 @@ export default function UserManagementPage() {
                         >
                           Kopiraj ključ
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMarkAuthenticatorsScanned([item.id])}
+                          disabled={loading}
+                          className="block text-[9px] font-black uppercase text-emerald-700 hover:underline cursor-pointer disabled:opacity-50"
+                        >
+                          Označi skenirano
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -1387,6 +1429,17 @@ export default function UserManagementPage() {
             </div>
 
             <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!confirm('Označiti sve trenutno prikazane Authenticator kodove kao skenirane?')) return;
+                  handleMarkAuthenticatorsScanned(bulkStaffTotp.map(item => item.id));
+                }}
+                disabled={loading}
+                className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black uppercase text-[11px] tracking-wider hover:bg-emerald-700 transition-all shadow-md cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                <Check size={14} strokeWidth={3} /> Označi sve prikazane kao skenirano
+              </button>
               <button
                 type="button"
                 onClick={() => {

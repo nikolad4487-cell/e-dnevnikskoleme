@@ -513,6 +513,33 @@ export default function AdministrationPage() {
     }
   };
 
+  const handleMarkAuthenticatorsScanned = async (profileIds: string[]) => {
+    if (profileIds.length === 0) return;
+
+    setLoading(true);
+    try {
+      const response = await fetch('/api/auth/mark-staff-authenticators-scanned', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ profileIds })
+      });
+
+      const result = await safeReadJson(response);
+      if (!response.ok || result?.success === false) {
+        throw new Error(result?.error || 'Označavanje skeniranih kodova nije uspjelo.');
+      }
+
+      setBulkStaffTotp(prev => prev.filter(item => !profileIds.includes(item.id)));
+      toast.success(`Označeno kao skenirano: ${result?.updatedCount || 0}`);
+      await fetchData();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Označavanje skeniranih kodova nije uspjelo.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleResetStudentPassword = async (profileId: string, type: 'DEFAULT' | 'GENERATE') => {
     if (!confirm(`Jeste li sigurni da želite resetirati lozinku za učenika?`)) return;
 
@@ -6939,6 +6966,14 @@ setAllSubjects(uniqueSub2);
                         >
                           Kopiraj ključ
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMarkAuthenticatorsScanned([item.id])}
+                          disabled={loading}
+                          className="block text-[9px] font-black uppercase text-emerald-700 hover:underline disabled:opacity-50"
+                        >
+                          Označi skenirano
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -6947,6 +6982,17 @@ setAllSubjects(uniqueSub2);
             </div>
 
             <div className="p-4 border-t border-gray-200 bg-gray-50 flex flex-col sm:flex-row justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  if (!confirm('Označiti sve trenutno prikazane Authenticator kodove kao skenirane?')) return;
+                  handleMarkAuthenticatorsScanned(bulkStaffTotp.map(item => item.id));
+                }}
+                disabled={loading}
+                className="flex items-center justify-center gap-2 px-4 py-3 bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 disabled:opacity-50"
+              >
+                <CheckCircle size={14} /> Označi sve prikazane kao skenirano
+              </button>
               <button
                 type="button"
                 onClick={() => {
