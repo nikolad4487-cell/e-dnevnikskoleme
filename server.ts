@@ -5762,7 +5762,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       // 2. Get Profile
       let { data: profile, error: profileError } = await supabaseAdmin
         .from('user_profiles')
-        .select('id, email, role, access_role, pin_hash, requires_authenticator_setup, authenticator_secret')
+        .select('id, email, role, access_role, pin_hash, requires_authenticator_setup, authenticator_secret, password_type')
         .eq('auth_user_id', authUser.id)
         .maybeSingle();
 
@@ -5772,7 +5772,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
         const { data: syncedProf } = await supabaseAdmin
           .from('user_profiles')
-          .select('id, email, role, access_role, pin_hash, requires_authenticator_setup, authenticator_secret')
+          .select('id, email, role, access_role, pin_hash, requires_authenticator_setup, authenticator_secret, password_type')
           .or(`auth_user_id.eq.${authUser.id},email.ilike.${DemoresolvedEmail}`)
           .maybeSingle();
 
@@ -5847,6 +5847,16 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
           if (!isValid) {
             return res.status(401).json({ error: "Neispravan autentifikator kod." });
+          }
+
+          if (profile.password_type === 'staff_with_authenticator') {
+            await supabaseAdmin
+              .from('user_profiles')
+              .update({
+                password_type: 'NORMAL_PASSWORD',
+                requires_authenticator_setup: false
+              })
+              .eq('id', profile.id);
           }
         }
       }
@@ -5952,7 +5962,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       const { data: profiles, error: profilesError } = await supabaseAdmin
         .from('user_profiles')
-        .select('id, name, email, role, authenticator_secret, requires_authenticator_setup')
+        .select('id, name, email, role, authenticator_secret, requires_authenticator_setup, password_type')
         .in('id', ids);
 
       if (profilesError) throw profilesError;
@@ -5962,15 +5972,15 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         return staffRoles.includes(role) || ids.includes(profile.id);
       });
       const profilesNeedingAuthenticator = activeProfiles.filter((profile: any) => {
-        return !profile.authenticator_secret || profile.requires_authenticator_setup === true;
+        return !profile.authenticator_secret || profile.requires_authenticator_setup === true || profile.password_type === 'staff_with_authenticator';
       });
       const skippedExistingAuthenticators = activeProfiles.filter((profile: any) => {
-        return profile.authenticator_secret && profile.requires_authenticator_setup !== true;
+        return profile.authenticator_secret && profile.requires_authenticator_setup !== true && profile.password_type !== 'staff_with_authenticator';
       });
 
       const authenticators = [];
       for (const profile of profilesNeedingAuthenticator) {
-        const secret = authenticator.generateSecret();
+        const secret = profile.authenticator_secret || authenticator.generateSecret();
         const labelValue = profile.email || profile.name || profile.id;
         const otpauthUrl = `otpauth://totp/${encodeURIComponent(`e-Dnevnik:${labelValue}`)}?secret=${secret}&issuer=${encodeURIComponent('e-Dnevnik')}`;
         const qrCode = await QRCode.toDataURL(otpauthUrl);
@@ -5979,7 +5989,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           .from('user_profiles')
           .update({
             authenticator_secret: secret,
-            requires_authenticator_setup: false,
+            requires_authenticator_setup: true,
             password_type: 'staff_with_authenticator'
           })
           .eq('id', profile.id);

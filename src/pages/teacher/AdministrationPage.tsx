@@ -489,7 +489,7 @@ export default function AdministrationPage() {
 
   const handleGenerateAuthenticatorsForAllStaff = async () => {
     const scopeText = selectedSchoolId ? 'sve nastavnike i admin korisnike ove škole' : 'sve nastavnike i admin korisnike u sustavu';
-    if (!confirm(`Generirati Microsoft Authenticator QR kodove za ${scopeText} koji još nemaju postavljen Authenticator? Korisnici koji ga već imaju neće se mijenjati.`)) return;
+    if (!confirm(`Prikazati ili generirati Microsoft Authenticator QR kodove za ${scopeText} koji još nemaju potvrđen Authenticator? Korisnici koji ga već imaju potvrđenog neće se mijenjati.`)) return;
 
     setLoading(true);
     try {
@@ -503,7 +503,7 @@ export default function AdministrationPage() {
       if (!response.ok) throw new Error(result.error || 'Greška pri generiranju Authenticator kodova');
 
       setBulkStaffTotp(result.authenticators || []);
-      toast.success(`Generirano: ${result.updatedCount || 0}. Već postavljeno: ${result.skippedCount || 0}.`);
+      toast.success(`Za skeniranje: ${result.updatedCount || 0}. Već potvrđeno: ${result.skippedCount || 0}.`);
       await fetchData();
     } catch (err: any) {
       console.error(err);
@@ -6911,7 +6911,7 @@ setAllSubjects(uniqueSub2);
             </div>
 
             <div className="p-4 bg-amber-50 border-b border-amber-200 text-[11px] font-bold text-amber-800 leading-relaxed">
-              Generirani su novi Authenticator ključevi za prikazane korisnike. Ako korisnik već ima dodan stari račun u aplikaciji, treba ga obrisati i skenirati novi QR kod.
+              Prikazani su Authenticator kodovi za korisnike koji još nisu potvrđeni. Ako je kod već bio generiran, prikazuje se isti QR kod bez resetiranja.
             </div>
 
             <div className="p-5 overflow-auto">
