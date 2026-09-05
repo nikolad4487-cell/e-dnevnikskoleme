@@ -2215,56 +2215,6 @@ setStudents(uniqueStudents);
         </div>
       </div>
 
-      <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 flex items-center gap-0 overflow-x-auto no-scrollbar">
-        <button 
-          onClick={() => setView('WEEKS')}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2 transition-all border-b-2 font-bold text-[11px] uppercase whitespace-nowrap", 
-            view === 'WEEKS' || view === 'WEEK_DETAIL' || view === 'DAY_DETAIL' ? "border-[#005c8d] text-[#005c8d] bg-white" : "border-transparent text-gray-500 hover:bg-gray-100"
-          )}
-        >
-          <List size={12} /> Dnevnik
-        </button>
-        <button 
-          onClick={() => setView('EXAMS')}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2 transition-all border-b-2 font-bold text-[11px] uppercase whitespace-nowrap", 
-            view === 'EXAMS' ? "border-[#005c8d] text-[#005c8d] bg-white" : "border-transparent text-gray-500 hover:bg-gray-100"
-          )}
-        >
-          <Calendar size={12} /> Ispiti
-        </button>
-        <button 
-          onClick={() => setView('ABSENCES')}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2 transition-all border-b-2 font-bold text-[11px] uppercase whitespace-nowrap", 
-            view === 'ABSENCES' ? "border-[#005c8d] text-[#005c8d] bg-white" : "border-transparent text-gray-500 hover:bg-gray-100"
-          )}
-        >
-          <Clock size={12} /> Izostanci
-        </button>
-        <button 
-          onClick={() => setView('SCHEDULE')}
-          className={cn(
-            "flex items-center gap-2 px-4 py-2 transition-all border-b-2 font-bold text-[11px] uppercase whitespace-nowrap", 
-            view === 'SCHEDULE' ? "border-[#005c8d] text-[#005c8d] bg-white" : "border-transparent text-gray-500 hover:bg-gray-100"
-          )}
-        >
-          <Calendar size={12} /> Raspored
-        </button>
-        {canAccessLektira && (
-          <button 
-            onClick={() => setView('LEKTIRA')}
-            className={cn(
-               "flex items-center gap-2 px-4 py-2 transition-all border-b-2 font-bold text-[11px] uppercase whitespace-nowrap", 
-               view === 'LEKTIRA' ? "border-[#005c8d] text-[#005c8d] bg-white" : "border-transparent text-gray-500 hover:bg-gray-100"
-            )}
-          >
-            <Book size={12} /> Lektira
-          </button>
-        )}
-      </div>
-
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-4 bg-[#f0f2f5]">
         {/* WEEKS LIST */}

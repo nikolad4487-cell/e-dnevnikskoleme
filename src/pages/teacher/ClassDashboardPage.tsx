@@ -347,8 +347,10 @@ export default function ClassDashboardPage() {
               <Route path="pregled-rada" element={<DnevnikRadaPage initialView="WEEKS" />} />
               <Route path="work-overview" element={<DnevnikRadaPage initialView="WEEKS" />} />
               
-              <Route path="dnevnik-rada" element={<DnevnikRadaPage initialView="WEEK_DETAIL" />} />
-              <Route path="work-journal" element={<DnevnikRadaPage initialView="WEEK_DETAIL" />} />
+              <Route path="dnevnik-rada" element={<DnevnikRadaPage initialView="WEEKS" />} />
+              <Route path="work-journal" element={<DnevnikRadaPage initialView="WEEKS" />} />
+              <Route path="ispiti" element={<DnevnikRadaPage initialView="EXAMS" />} />
+              <Route path="exams" element={<DnevnikRadaPage initialView="EXAMS" />} />
               
               <Route path="izostanci" element={<TeacherIzostanciPage />} />
               <Route path="absences" element={<TeacherIzostanciPage />} />
@@ -359,6 +361,7 @@ export default function ClassDashboardPage() {
               
               <Route path="raspored" element={<DnevnikRadaPage initialView="SCHEDULE" />} />
               <Route path="schedule" element={<DnevnikRadaPage initialView="SCHEDULE" />} />
+              <Route path="lektira" element={<DnevnikRadaPage initialView="LEKTIRA" />} />
               
               <Route path="zapisnici" element={<ZapisniciPage />} />
               <Route path="minutes" element={<ZapisniciPage />} />

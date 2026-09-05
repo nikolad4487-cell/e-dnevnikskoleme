@@ -72,6 +72,66 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     .filter(r => r && r.schoolId === selectedSchoolId)
     .map(r => r.role);
   const isSchoolAdmin = isMainAdmin || currentSchoolRoles.includes(Role.SCHOOL_ADMIN) || currentSchoolRoles.includes(Role.ADMIN);
+  const [canAccessLektira, setCanAccessLektira] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!isStaff || !effectiveClassId || !user) {
+      setCanAccessLektira(false);
+      return;
+    }
+
+    if (isSchoolAdmin) {
+      setCanAccessLektira(true);
+      return;
+    }
+
+    let isMounted = true;
+
+    const checkLektiraAccess = async () => {
+      const { data: assignments, error: assignmentsError } = await supabase
+        .from('class_subject_teachers')
+        .select('subject_id')
+        .eq('class_id', effectiveClassId)
+        .eq('teacher_id', user.id);
+
+      if (assignmentsError) {
+        console.error('[ClassDashboardLayout] Error checking lektira access:', assignmentsError.message);
+        if (isMounted) setCanAccessLektira(false);
+        return;
+      }
+
+      const subjectIds = Array.from(new Set((assignments || []).map((assignment: any) => assignment.subject_id).filter(Boolean)));
+      if (subjectIds.length === 0) {
+        if (isMounted) setCanAccessLektira(false);
+        return;
+      }
+
+      const { data: subjects, error: subjectsError } = await supabase
+        .from('subjects')
+        .select('id, name, code')
+        .in('id', subjectIds);
+
+      if (subjectsError) {
+        console.error('[ClassDashboardLayout] Error loading subjects for lektira access:', subjectsError.message);
+        if (isMounted) setCanAccessLektira(false);
+        return;
+      }
+
+      const hasCroatian = (subjects || []).some((subject: any) => {
+        const name = String(subject.name || '').trim().toLowerCase();
+        const code = String(subject.code || '').trim().toUpperCase();
+        return name === 'hrvatski jezik' || code === 'HRV';
+      });
+
+      if (isMounted) setCanAccessLektira(hasCroatian);
+    };
+
+    checkLektiraAccess();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isStaff, effectiveClassId, user, isSchoolAdmin]);
   
   // Thesis visibility logic
   const [canAccessThesis, setCanAccessThesis] = React.useState(true);
@@ -160,12 +220,14 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     {
       id: 'dnevnik-rada',
       label: 'Dnevnik rada',
-      path: `${classPathPrefix}/dnevnik-rada`,
+      path: `${classPathPrefix}/pregled-rada`,
       icon: <ClipboardList size={14} />,
       children: [
         { id: 'pregled-tjedna', label: 'Pregled tjedna', path: `${classPathPrefix}/pregled-rada`, icon: <List size={14} /> },
+        { id: 'ispiti', label: 'Ispiti', path: `${classPathPrefix}/ispiti`, icon: <Calendar size={14} /> },
         { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/izostanci`, icon: <Clock size={14} /> },
         { id: 'raspored', label: 'Raspored sati', path: `${classPathPrefix}/raspored`, icon: <Calendar size={14} /> },
+        ...(canAccessLektira ? [{ id: 'lektira', label: 'Lektira', path: `${classPathPrefix}/lektira`, icon: <BookOpen size={14} /> }] : []),
         { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: `${classPathPrefix}/pedagoska-dokumentacija`, icon: <FileText size={14} /> },
       ],
     },
@@ -208,6 +270,9 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     if (tabId === 'dnevnik-rada') {
       return path.includes('/dnevnik-rada') || path.includes('/work-journal');
     }
+    if (tabId === 'ispiti') {
+      return path.includes('/ispiti') || path.includes('/exams');
+    }
     if (tabId === 'izostanci') {
       return path.includes('/izostanci') || path.includes('/absences');
     }
@@ -225,6 +290,9 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     }
     if (tabId === 'raspored') {
       return path.includes('/raspored') || path.includes('/schedule');
+    }
+    if (tabId === 'lektira') {
+      return path.includes('/lektira');
     }
     if (tabId === 'admin') {
       return path.includes('/admin-razreda') || path.includes('/admin') || path.includes('/administration');
@@ -399,8 +467,10 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                         items: [
                           { label: 'Imenik / Učenici', path: `/class/${effectiveClassId}/imenik`, icon: <BookOpen size={14} /> },
                           { label: 'Pregled rada u razredu', path: `/class/${effectiveClassId}/pregled-rada`, icon: <List size={14} /> },
-                          { label: 'Dnevnik rada', path: `/class/${effectiveClassId}/dnevnik-rada`, icon: <ClipboardList size={14} /> },
+                          { label: 'Dnevnik rada', path: `/class/${effectiveClassId}/pregled-rada`, icon: <ClipboardList size={14} /> },
+                          { label: 'Ispiti', path: `/class/${effectiveClassId}/ispiti`, icon: <Calendar size={14} /> },
                           { label: 'Izostanci', path: `/class/${effectiveClassId}/izostanci`, icon: <Clock size={14} /> },
+                          ...(canAccessLektira ? [{ label: 'Lektira', path: `/class/${effectiveClassId}/lektira`, icon: <BookOpen size={14} /> }] : []),
                         ]
                       });
                       categories.push({
