@@ -2199,8 +2199,8 @@ setStudents(uniqueStudents);
       <div className="bg-[#005c8d] border-b border-[#004a70] px-4 py-1.5 flex items-center justify-between sticky top-0 z-10 text-white shadow-sm">
         <div className="flex items-center gap-6">
           <h2 className="text-[12px] font-bold flex items-center gap-2 uppercase tracking-tight">
-            <Book size={14} />
-            Dnevnik rada
+            {view === 'WEEKS' ? <List size={14} /> : <Book size={14} />}
+            {view === 'WEEKS' ? 'Pregled rada' : 'Dnevnik rada'}
           </h2>
         </div>
         

@@ -223,7 +223,6 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       path: `${classPathPrefix}/dnevnik-rada`,
       icon: <ClipboardList size={14} />,
       children: [
-        { id: 'pregled-tjedna', label: 'Pregled tjedna', path: `${classPathPrefix}/pregled-rada`, icon: <List size={14} /> },
         { id: 'ispiti', label: 'Ispiti', path: `${classPathPrefix}/ispiti`, icon: <Calendar size={14} /> },
         { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/izostanci`, icon: <Clock size={14} /> },
         { id: 'raspored', label: 'Raspored sati', path: `${classPathPrefix}/raspored`, icon: <Calendar size={14} /> },

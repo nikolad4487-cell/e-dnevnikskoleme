@@ -222,7 +222,7 @@ export default function ClassDashboardPage() {
   if (currentTab === 'schedule') currentTab = 'raspored';
   if (currentTab === 'administration' || currentTab === 'predmeti' || currentTab === 'ucenici' || currentTab === 'upisi-predmeta') currentTab = 'admin';
 
-  const isActive = (tabPath: string) => currentTab === tabPath || (tabPath === 'dnevnik-rada' && currentTab === 'pregled-rada'); // Simplified for now
+  const isActive = (tabPath: string) => currentTab === tabPath;
 
   const sidebarLinks: Record<string, { label: string, path: string }[]> = {
     'imenik': [
@@ -231,9 +231,7 @@ export default function ClassDashboardPage() {
       { label: 'Bilješke', path: 'biljeske' }
     ],
     'pregled-rada': [
-      { label: 'Pregled rada', path: 'pregled-rada' },
-      { label: 'Dnevnik rada', path: 'dnevnik-rada' },
-      { label: 'Raspored sati', path: 'raspored' }
+      { label: 'Pregled rada', path: 'pregled-rada' }
     ],
     'izostanci': [
       { label: 'Pregled izostanaka', path: 'izostanci' }
