@@ -66,6 +66,20 @@ interface SyncRun {
   error_message?: string | null;
 }
 
+interface EmaticaStudentRecord {
+  id: string;
+  student_id: string;
+  full_name: string;
+  oib?: string | null;
+  class_name?: string | null;
+  program_name?: string | null;
+  grade_summary?: { grades_count?: number; final_grades_count?: number; average?: number | null };
+  absence_summary?: { total?: number; unjustified?: number; pending?: number };
+  final_thesis_summary?: { count?: number };
+  matura_summary?: { registrations_count?: number; study_applications_count?: number };
+  synced_at: string;
+}
+
 export default function MaticnaKnjigaPage() {
   const { selectedSchoolId } = useSelection();
   const { user } = useAuth();
@@ -78,6 +92,7 @@ export default function MaticnaKnjigaPage() {
   const [programs, setPrograms] = useState<any[]>([]);
   const [syncPreview, setSyncPreview] = useState<SyncPreview | null>(null);
   const [syncRuns, setSyncRuns] = useState<SyncRun[]>([]);
+  const [ematicaRecords, setEmaticaRecords] = useState<EmaticaStudentRecord[]>([]);
   const [syncPreviewLoading, setSyncPreviewLoading] = useState(false);
   const [syncRunLoading, setSyncRunLoading] = useState(false);
   
@@ -125,6 +140,7 @@ export default function MaticnaKnjigaPage() {
     loadRegistryData();
     loadSyncPreview();
     loadSyncRuns();
+    loadEmaticaRecords();
   }, [selectedSchoolId]);
 
   const loadSyncPreview = async () => {
@@ -171,6 +187,26 @@ export default function MaticnaKnjigaPage() {
     }
   };
 
+  const loadEmaticaRecords = async () => {
+    if (!selectedSchoolId) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const params = new URLSearchParams({ schoolId: selectedSchoolId });
+      const response = await fetch(`/api/admin/ematica-sync/records?${params.toString()}`, {
+        headers: {
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {})
+        }
+      });
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || 'Sinkronizirani e-Matica zapisi nisu dostupni.');
+      }
+      setEmaticaRecords(json.records || []);
+    } catch (err: any) {
+      console.error('[EMATICA_SYNC_RECORDS] load error', err);
+    }
+  };
+
   const prepareSyncRun = async (mode: 'PREPARE' | 'SYNC' = 'PREPARE') => {
     if (!selectedSchoolId || !syncPreview) return;
     try {
@@ -194,7 +230,10 @@ export default function MaticnaKnjigaPage() {
       }
       toast.success(mode === 'SYNC' ? 'Sinkronizacija u e-Maticu je završena.' : 'Priprema sinkronizacije je spremljena.');
       await loadSyncRuns();
-      if (mode === 'SYNC') await loadSyncPreview();
+      if (mode === 'SYNC') {
+        await loadSyncPreview();
+        await loadEmaticaRecords();
+      }
     } catch (err: any) {
       console.error('[EMATICA_SYNC_RUN] prepare error', err);
       toast.error(err.message || 'Sinkronizacija nije uspjela.');
@@ -711,6 +750,69 @@ export default function MaticnaKnjigaPage() {
             </div>
           )}
         </div>
+      </section>
+
+      <section className="print-hidden bg-white border border-slate-300 rounded-md shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-[#005c8d] text-[10px] font-black uppercase tracking-widest mb-1">
+              <FileText size={14} /> e-Matica zapisi
+            </div>
+            <h2 className="text-lg font-black text-slate-900 uppercase leading-tight">Zadnji sinkronizirani učenici</h2>
+          </div>
+          <button
+            onClick={loadEmaticaRecords}
+            className="inline-flex items-center justify-center gap-2 bg-white border border-slate-300 text-slate-700 text-[10px] font-black px-4 py-2 uppercase rounded hover:bg-slate-50 transition-colors"
+          >
+            <RefreshCw size={14} /> Osvježi
+          </button>
+        </div>
+        {ematicaRecords.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[11px]">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500">Učenik</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500">Razred / Program</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Ocjene</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Izostanci</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Matura</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Sinkronizirano</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ematicaRecords.map((record) => (
+                  <tr key={record.id || record.student_id} className="border-b border-slate-100">
+                    <td className="px-4 py-2">
+                      <span className="block font-black text-slate-900 uppercase">{record.full_name}</span>
+                      <span className="block font-mono text-[10px] text-slate-500">{record.oib || 'OIB nije upisan'}</span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="block font-black text-slate-700">{record.class_name || 'Bez razreda'}</span>
+                      <span className="block text-[10px] font-semibold text-slate-500">{record.program_name || 'Program nije upisan'}</span>
+                    </td>
+                    <td className="px-4 py-2 text-right font-black tabular-nums">
+                      {record.grade_summary?.grades_count || 0} / {record.grade_summary?.final_grades_count || 0}
+                    </td>
+                    <td className="px-4 py-2 text-right font-black tabular-nums">
+                      {record.absence_summary?.total || 0}
+                    </td>
+                    <td className="px-4 py-2 text-right font-black tabular-nums">
+                      {record.matura_summary?.registrations_count || 0}
+                    </td>
+                    <td className="px-4 py-2 text-right font-semibold text-slate-600 whitespace-nowrap">
+                      {new Date(record.synced_at).toLocaleString('hr-HR')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="p-6 text-center text-[11px] font-bold text-slate-400">
+            Nema sinkroniziranih e-Matica zapisa. Pokreni sinkronizaciju nakon kontrolnog pregleda.
+          </div>
+        )}
       </section>
 
       {/* Screen Filters */}

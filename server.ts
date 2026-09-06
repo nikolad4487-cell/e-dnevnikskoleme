@@ -7037,6 +7037,47 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     }
   });
 
+  app.get("/api/admin/ematica-sync/records", async (req, res) => {
+    try {
+      if (!supabaseAdmin) {
+        return res.status(500).json({ success: false, error: "Supabase Admin client not initialized." });
+      }
+
+      const authHeader = req.headers.authorization || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+      const schoolId = String(req.query.schoolId || "");
+
+      const auth = await authorizeClassAdmin(token, schoolId);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: auth.error || "Nemate ovlasti za pregled e-Matica zapisa." });
+      }
+
+      try {
+        const { data, error } = await supabaseAdmin
+          .from("ematica_student_records")
+          .select("*")
+          .eq("school_id", schoolId)
+          .order("synced_at", { ascending: false })
+          .limit(25);
+        if (error) throw error;
+        return res.json({ success: true, records: data || [] });
+      } catch (dbError: any) {
+        if (!["PGRST205", "42P01"].includes(dbError?.code)) {
+          console.warn("[EMATICA_SYNC_RECORDS] DB read failed, using JSON fallback:", dbError?.message || dbError);
+        }
+      }
+
+      const records = readJsonFile("ematica_student_records.json")
+        .filter((item: any) => String(item.school_id) === schoolId)
+        .sort((a: any, b: any) => String(b.synced_at || "").localeCompare(String(a.synced_at || "")))
+        .slice(0, 25);
+      return res.json({ success: true, records });
+    } catch (e: any) {
+      console.error("[EMATICA_SYNC_RECORDS] error:", e);
+      return res.status(500).json({ success: false, error: e.message || "Dohvat e-Matica zapisa nije uspio." });
+    }
+  });
+
   app.post("/api/admin/ematica-sync/run", async (req, res) => {
     try {
       if (!supabaseAdmin) {
