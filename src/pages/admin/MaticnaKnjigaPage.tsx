@@ -82,7 +82,16 @@ interface EmaticaStudentRecord {
   grade_summary?: { grades_count?: number; final_grades_count?: number; average?: number | null; final_grades?: any[] };
   absence_summary?: { total?: number; unjustified?: number; pending?: number };
   final_thesis_summary?: { count?: number; items?: any[] };
-  matura_summary?: { registrations_count?: number; study_applications_count?: number; registrations?: any[]; study_applications?: any[] };
+  matura_summary?: {
+    registrations_count?: number;
+    study_applications_count?: number;
+    results_count?: number;
+    objections_count?: number;
+    registrations?: any[];
+    study_applications?: any[];
+    results?: any[];
+    objections?: any[];
+  };
   synced_at: string;
 }
 
@@ -274,6 +283,19 @@ export default function MaticnaKnjigaPage() {
 
   const hasMissingRequiredRecordData = (record: EmaticaStudentRecord) =>
     !String(record.oib || '').trim() || !String(record.date_of_birth || '').trim() || !String(record.class_name || '').trim();
+
+  const formatMaybeDate = (value?: string | null) => {
+    if (!value) return '-';
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleDateString('hr-HR');
+  };
+
+  const formatMaturaLevel = (value?: string | null) => {
+    if (value === 'A_RAZINA') return 'A razina';
+    if (value === 'B_RAZINA') return 'B razina';
+    if (value === 'JEDNA_RAZINA') return 'Jedna razina';
+    return value || '-';
+  };
 
   const getFilteredEmaticaRecords = () => ematicaRecords.filter((record) => {
     if (ematicaRecordFilter === 'SYNCED') return getRecordDifferences(record).length === 0 && !hasMissingRequiredRecordData(record);
@@ -966,7 +988,97 @@ export default function MaticnaKnjigaPage() {
                 <div className="border border-slate-200 rounded-md p-3">
                   <div className="text-[10px] font-black uppercase text-slate-500 mb-2">Matura</div>
                   <div className="text-2xl font-black text-slate-900">{selectedEmaticaRecord.matura_summary?.registrations_count || 0}</div>
-                  <div className="text-[10px] font-bold text-slate-500">Odabira studija: {selectedEmaticaRecord.matura_summary?.study_applications_count || 0}</div>
+                  <div className="text-[10px] font-bold text-slate-500">
+                    Rezultata: {selectedEmaticaRecord.matura_summary?.results_count || 0}, odabira studija: {selectedEmaticaRecord.matura_summary?.study_applications_count || 0}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="border border-slate-200 rounded-md overflow-hidden">
+                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
+                    <h3 className="text-xs font-black uppercase text-slate-900">Završni rad</h3>
+                  </div>
+                  {(selectedEmaticaRecord.final_thesis_summary?.items || []).length > 0 ? (
+                    <div className="divide-y divide-slate-100">
+                      {(selectedEmaticaRecord.final_thesis_summary?.items || []).map((item: any) => (
+                        <div key={item.id || item.thesis_title} className="p-3 text-[11px]">
+                          <div className="font-black text-slate-900">{item.thesis_title || 'Naslov nije upisan'}</div>
+                          <div className="mt-1 text-slate-500 font-semibold">
+                            Mentor: {item.mentor_name || '-'} · Rok: {item.exam_period || '-'} · Ocjena: {item.final_grade || '-'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-[11px] font-bold text-slate-400">Nema evidentiranog završnog rada.</div>
+                  )}
+                </div>
+
+                <div className="border border-slate-200 rounded-md overflow-hidden">
+                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
+                    <h3 className="text-xs font-black uppercase text-slate-900">Prijave mature</h3>
+                  </div>
+                  {(selectedEmaticaRecord.matura_summary?.registrations || []).length > 0 ? (
+                    <div className="divide-y divide-slate-100">
+                      {(selectedEmaticaRecord.matura_summary?.registrations || []).map((item: any) => (
+                        <div key={item.id || `${item.subject_name}-${item.level}`} className="p-3 text-[11px]">
+                          <div className="font-black text-slate-900">{item.subject_name || 'Predmet nije upisan'}</div>
+                          <div className="mt-1 text-slate-500 font-semibold">
+                            {formatMaturaLevel(item.level)} · {item.status || 'REGISTERED'} · {item.exam_location || 'Lokacija nije upisana'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-[11px] font-bold text-slate-400">Nema prijava mature.</div>
+                  )}
+                </div>
+
+                <div className="border border-slate-200 rounded-md overflow-hidden">
+                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
+                    <h3 className="text-xs font-black uppercase text-slate-900">Rezultati mature</h3>
+                  </div>
+                  {(selectedEmaticaRecord.matura_summary?.results || []).length > 0 ? (
+                    <div className="divide-y divide-slate-100">
+                      {(selectedEmaticaRecord.matura_summary?.results || []).map((item: any) => (
+                        <div key={item.id || `${item.subject_name}-${item.level}`} className="p-3 text-[11px]">
+                          <div className="font-black text-slate-900">{item.subject_name || 'Predmet nije upisan'}</div>
+                          <div className="mt-1 text-slate-500 font-semibold">
+                            {formatMaturaLevel(item.level)} · Ocjena: {item.grade || '-'} · {item.percentage ?? 0}% · {item.status || '-'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-[11px] font-bold text-slate-400">Nema unesenih rezultata mature.</div>
+                  )}
+                </div>
+
+                <div className="border border-slate-200 rounded-md overflow-hidden">
+                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
+                    <h3 className="text-xs font-black uppercase text-slate-900">Prigovori i odabiri studija</h3>
+                  </div>
+                  {(selectedEmaticaRecord.matura_summary?.objections || []).length > 0 || (selectedEmaticaRecord.matura_summary?.study_applications || []).length > 0 ? (
+                    <div className="divide-y divide-slate-100">
+                      {(selectedEmaticaRecord.matura_summary?.objections || []).map((item: any) => (
+                        <div key={item.id || item.subject_name} className="p-3 text-[11px]">
+                          <div className="font-black text-slate-900">Prigovor: {item.subject_name || '-'}</div>
+                          <div className="mt-1 text-slate-500 font-semibold">{item.status || '-'} · {formatMaybeDate(item.created_at)}</div>
+                        </div>
+                      ))}
+                      {(selectedEmaticaRecord.matura_summary?.study_applications || []).map((item: any) => (
+                        <div key={item.id || item.study_program_id} className="p-3 text-[11px]">
+                          <div className="font-black text-slate-900">Odabir studija</div>
+                          <div className="mt-1 text-slate-500 font-semibold">
+                            Program: {item.study_program_name || item.study_program_id || '-'} · Prioritet: {item.priority || '-'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="p-4 text-[11px] font-bold text-slate-400">Nema prigovora ni odabira studija.</div>
+                  )}
                 </div>
               </div>
 

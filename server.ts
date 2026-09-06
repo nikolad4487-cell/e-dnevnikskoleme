@@ -6938,6 +6938,10 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         .filter((item: any) => String(item.school_id || item.schoolId || "") === schoolId);
       const localTransfers = readJsonFile("student_transfers.json")
         .filter((item: any) => activeStudentIds.includes(item.student_id));
+      const localMaturaResults = readJsonFile("matura_results.json")
+        .filter((item: any) => String(item.school_id || "") === schoolId || activeStudentIds.includes(item.student_id));
+      const localMaturaObjections = readJsonFile("matura_objections.json")
+        .filter((item: any) => String(item.school_id || "") === schoolId || activeStudentIds.includes(item.student_id));
 
       const warnings = [
         missingOib > 0 ? `${missingOib} učenika nema upisan OIB.` : "",
@@ -6976,8 +6980,14 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         {
           key: "graduation",
           title: "Završetak školovanja i matura",
-          description: "Završni rad, prijave mature i odabiri studijskih programa.",
-          items: [finalThesis, maturaRegistrations, maturaApplications],
+          description: "Završni rad, prijave mature, rezultati, prigovori i odabiri studijskih programa.",
+          items: [
+            finalThesis,
+            maturaRegistrations,
+            maturaApplications,
+            { label: "Rezultati mature", count: localMaturaResults.length, available: true },
+            { label: "Prigovori na maturu", count: localMaturaObjections.length, available: true }
+          ],
           issues: [finalThesis, maturaRegistrations, maturaApplications].filter((item: any) => !item.available).map((item: any) => `${item.label}: ${item.error}`)
         }
       ];
@@ -7151,6 +7161,10 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         const maturaApplications = activeStudentIds.length > 0
           ? await safeSelect("matura_study_applications", "*", (query) => query.in("student_id", activeStudentIds))
           : [];
+        const maturaResults = readJsonFile("matura_results.json")
+          .filter((item: any) => String(item.school_id || "") === schoolIdText || activeStudentIds.includes(item.student_id));
+        const maturaObjections = readJsonFile("matura_objections.json")
+          .filter((item: any) => String(item.school_id || "") === schoolIdText || activeStudentIds.includes(item.student_id));
 
         const records = profiles.map((profile: any) => {
           const activeEnrollment = enrollments.find((item: any) => item.student_id === profile.id && String(item.status || "ACTIVE").toUpperCase() === "ACTIVE")
@@ -7162,6 +7176,8 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           const studentAbsences = absences.filter((item: any) => item.student_id === profile.id);
           const studentMatura = maturaRegistrations.filter((item: any) => item.student_id === profile.id);
           const studentApplications = maturaApplications.filter((item: any) => item.student_id === profile.id);
+          const studentMaturaResults = maturaResults.filter((item: any) => item.student_id === profile.id);
+          const studentMaturaObjections = maturaObjections.filter((item: any) => item.student_id === profile.id);
           const studentThesis = finalThesis.filter((item: any) => item.student_id === profile.id);
           const numericGrades = studentGrades.map((item: any) => Number(item.value)).filter((value: number) => Number.isFinite(value));
 
@@ -7200,8 +7216,12 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
             matura_summary: {
               registrations_count: studentMatura.length,
               study_applications_count: studentApplications.length,
+              results_count: studentMaturaResults.length,
+              objections_count: studentMaturaObjections.length,
               registrations: studentMatura,
-              study_applications: studentApplications
+              study_applications: studentApplications,
+              results: studentMaturaResults,
+              objections: studentMaturaObjections
             },
             source_updated_at: new Date().toISOString(),
             synced_at: new Date().toISOString()
@@ -7233,7 +7253,9 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           absences: absences.length,
           final_thesis: finalThesis.length,
           matura_registrations: maturaRegistrations.length,
-          matura_study_applications: maturaApplications.length
+          matura_study_applications: maturaApplications.length,
+          matura_results: maturaResults.length,
+          matura_objections: maturaObjections.length
         };
       }
 
