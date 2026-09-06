@@ -222,7 +222,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       path: `${classPathPrefix}/dnevnik-rada/weeks`,
       icon: <ClipboardList size={14} />,
       children: [
-        { id: 'pregled-rada', label: 'Pregled rada', path: `${classPathPrefix}/pregled-rada`, icon: <List size={14} /> },
+        { id: 'pregled-rada', label: 'Pregled rada', path: `${classPathPrefix}/dnevnik-rada/pregled-rada`, icon: <List size={14} /> },
         { id: 'radni-tjedni', label: 'Radni tjedni', path: `${classPathPrefix}/dnevnik-rada/weeks`, icon: <List size={14} /> },
         { id: 'ispiti', label: 'Ispiti', path: `${classPathPrefix}/ispiti`, icon: <Calendar size={14} /> },
         { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/dnevnik-rada/izostanci`, icon: <Clock size={14} /> },
@@ -466,7 +466,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                         title: 'Nastava & Ocjenjivanje',
                         items: [
                           { label: 'Imenik / Učenici', path: `/class/${effectiveClassId}/imenik`, icon: <BookOpen size={14} /> },
-                          { label: 'Pregled rada u razredu', path: `/class/${effectiveClassId}/pregled-rada`, icon: <List size={14} /> },
+                          { label: 'Pregled rada u razredu', path: `/class/${effectiveClassId}/dnevnik-rada/pregled-rada`, icon: <List size={14} /> },
                           { label: 'Dnevnik rada', path: `/class/${effectiveClassId}/dnevnik-rada/weeks`, icon: <ClipboardList size={14} /> },
                           { label: 'Ispiti', path: `/class/${effectiveClassId}/ispiti`, icon: <Calendar size={14} /> },
                           { label: 'Izostanci', path: `/class/${effectiveClassId}/izostanci`, icon: <Clock size={14} /> },

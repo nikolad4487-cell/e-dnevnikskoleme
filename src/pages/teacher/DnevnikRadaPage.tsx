@@ -41,7 +41,7 @@ const normalizeSavedDnevnikView = (savedView: string | null | undefined) => {
   return savedView || 'WEEKS';
 };
 
-type DnevnikView = 'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA';
+type DnevnikView = 'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA' | 'WORK_OVERVIEW' | 'WORK_OVERVIEW_DETAIL';
 
 export default function DnevnikRadaPage({ initialView }: { initialView?: DnevnikView }) {
   usePageTitle("Dnevnik rada");
@@ -82,6 +82,8 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
   
   const routeView = useMemo<DnevnikView | null>(() => {
     const path = location.pathname;
+    if (path.includes('/dnevnik-rada/pregled-rada/week/')) return 'WORK_OVERVIEW_DETAIL';
+    if (path.includes('/dnevnik-rada/pregled-rada')) return 'WORK_OVERVIEW';
     if (path.includes('/dnevnik-rada/weeks')) return 'WEEKS';
     if (path.includes('/dnevnik-rada/week/')) return 'WEEK_DETAIL';
     if (path.includes('/dnevnik-rada/day/')) return 'DAY_DETAIL';
@@ -187,7 +189,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
     if (routeWeekId) {
       const foundWeek = weeks.find(w => w.id === routeWeekId);
       setSelectedWeek(foundWeek || null);
-      setView('WEEK_DETAIL');
+      setView(routeView === 'WORK_OVERVIEW_DETAIL' ? 'WORK_OVERVIEW_DETAIL' : 'WEEK_DETAIL');
       return;
     }
 
@@ -197,7 +199,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
       setSelectedDate(routeDate);
       setView('DAY_DETAIL');
     }
-  }, [effectiveClassId, weeks, routeWeekId, routeDate]);
+  }, [effectiveClassId, weeks, routeWeekId, routeDate, routeView]);
 
   useEffect(() => {
     if ((view !== 'DAY_DETAIL' && view !== 'ABSENCES') || weeks.length === 0) return;
@@ -2317,7 +2319,7 @@ setStudents(uniqueStudents);
   };
 
   const classBasePath = effectiveClassId ? `/class/${effectiveClassId}` : '';
-  const isPregledRadaRoute = location.pathname.includes('/pregled-rada');
+  const isPregledRadaRoute = location.pathname.includes('/dnevnik-rada/pregled-rada') || location.pathname.includes('/pregled-rada');
 
   const goToWeeks = () => {
     if (!classBasePath) return;
@@ -2346,6 +2348,17 @@ setStudents(uniqueStudents);
     navigate(`${classBasePath}/dnevnik-rada/izostanci`);
   };
 
+  const goToWorkOverview = () => {
+    if (!classBasePath) return;
+    navigate(`${classBasePath}/dnevnik-rada/pregled-rada`);
+  };
+
+  const goToWorkOverviewWeek = (week: WorkWeek) => {
+    if (!classBasePath) return;
+    setSelectedWeek(week);
+    navigate(`${classBasePath}/dnevnik-rada/pregled-rada/week/${week.id}`);
+  };
+
   const getDayIndicatorClass = (dateStr: string) => {
     const dayLessons = weekOverviewLessons.filter(lesson => lesson.date === dateStr);
     const dayAbsences = weekOverviewAbsences.filter(absence => absence.date === dateStr);
@@ -2357,6 +2370,10 @@ setStudents(uniqueStudents);
   };
 
   const handleBackNavigation = () => {
+    if (view === 'WORK_OVERVIEW_DETAIL') {
+      goToWorkOverview();
+      return;
+    }
     if (view === 'DAY_DETAIL') {
       goToWeek(selectedWeek);
       return;
@@ -2396,6 +2413,11 @@ setStudents(uniqueStudents);
 
     if (view === 'WEEKS') {
       items.push({ label: isPregledRadaRoute ? 'Pregled rada' : 'Radni tjedni' });
+    } else if (view === 'WORK_OVERVIEW') {
+      items.push({ label: 'Pregled rada' });
+    } else if (selectedWeek && view === 'WORK_OVERVIEW_DETAIL') {
+      items.push({ label: 'Pregled rada', path: classBasePath ? `${classBasePath}/dnevnik-rada/pregled-rada` : undefined });
+      items.push({ label: selectedWeek.name });
     } else if (selectedWeek && (view === 'WEEK_DETAIL' || view === 'DAY_DETAIL' || view === 'ABSENCES')) {
       items.push({ label: selectedWeek.name, path: classBasePath ? `${classBasePath}/dnevnik-rada/week/${selectedWeek.id}` : undefined });
     }
@@ -2478,6 +2500,177 @@ setStudents(uniqueStudents);
             </React.Fragment>
           ))}
         </nav>
+
+        {/* WORK OVERVIEW - Reporting list of weeks */}
+        {view === 'WORK_OVERVIEW' && (
+          <div className="w-full space-y-3">
+            <div className="bg-white border border-gray-300 shadow-sm">
+              <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-[#005c8d] text-[11px] uppercase">
+                Pregled rada po radnim tjednima
+              </div>
+              <table className="w-full text-left border-collapse text-[12px] ed-table-dense">
+                <thead>
+                  <tr className="bg-white border-b border-gray-300 text-[10px] uppercase text-gray-500">
+                    <th className="p-2 border-r border-gray-200">Naziv tjedna</th>
+                    <th className="p-2 border-r border-gray-200">Razdoblje</th>
+                    <th className="p-2 border-r border-gray-200">Dežurni učenici</th>
+                    <th className="p-2 border-r border-gray-200 text-center">Sati</th>
+                    <th className="p-2 text-center">Izostanci</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {weeks.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || '')).map(week => {
+                    const lessonStats = getWeekLessonStats(week);
+                    const absenceStats = getWeekAbsenceStats(week);
+                    const dutyStudents = Array.from(new Set(week.onDutyStudentIds || [])).map(sid => {
+                      const studentObj = students.find(s => s.id === sid);
+                      return studentObj ? formatPersonName(studentObj) : null;
+                    }).filter(Boolean).join(', ') || 'Nema dežurnih';
+
+                    return (
+                      <tr
+                        key={`work-overview-${week.id}`}
+                        onClick={() => goToWorkOverviewWeek(week)}
+                        className="cursor-pointer hover:bg-[#eff6ff]"
+                      >
+                        <td className="p-2 border-r border-gray-200">
+                          <div className="font-black text-[#005c8d]">{week.name} {getShiftLabel(week.shift)}</div>
+                        </td>
+                        <td className="p-2 border-r border-gray-200 font-semibold text-gray-700">
+                          {formatWeekDate(week.startDate)} - {formatWeekDate(week.endDate)}
+                        </td>
+                        <td className="p-2 border-r border-gray-200 text-gray-700">{dutyStudents}</td>
+                        <td className="p-2 border-r border-gray-200 text-center text-gray-700">
+                          održani: {lessonStats.held} / neodržani: {lessonStats.notHeld} / ukupno: {lessonStats.total}
+                        </td>
+                        <td className={cn("p-2 text-center font-bold", absenceStats.unjustified > 0 ? "text-red-700" : "text-gray-700")}>
+                          opravdano: {absenceStats.justified} / neopravdano: {absenceStats.unjustified} / ostalo: {absenceStats.other} / ukupno: {absenceStats.total}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {weeks.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="p-12 text-center text-gray-400 italic">
+                        Nema upisanih radnih tjedana za pregled rada.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* WORK OVERVIEW DETAIL - Weekly report */}
+        {view === 'WORK_OVERVIEW_DETAIL' && selectedWeek && (
+          <div className="w-full space-y-3">
+            {(() => {
+              const weekLessons = getWeekLessons(selectedWeek).sort((a, b) => `${a.date}-${a.hour}`.localeCompare(`${b.date}-${b.hour}`));
+              const weekAbsences = getWeekAbsences(selectedWeek);
+              const lessonStats = getWeekLessonStats(selectedWeek);
+              const absenceStats = getWeekAbsenceStats(selectedWeek);
+              const days = getWeekWorkDays(selectedWeek);
+
+              return (
+                <>
+                  <div className="bg-white border border-gray-300 shadow-sm p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                    <div>
+                      <div className="text-[13px] font-black text-[#005c8d] uppercase">{selectedWeek.name} {getShiftLabel(selectedWeek.shift)}</div>
+                      <div className="text-[11px] font-semibold text-gray-600">
+                        {formatWeekDate(selectedWeek.startDate)} - {formatWeekDate(selectedWeek.endDate)}
+                      </div>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] font-semibold text-gray-700">
+                      <span>Sati održani: {lessonStats.held}</span>
+                      <span>Neodržani: {lessonStats.notHeld}</span>
+                      <span>Ukupno sati: {lessonStats.total}</span>
+                      <span className={absenceStats.unjustified > 0 ? 'text-red-700' : ''}>Izostanci ukupno: {absenceStats.total}</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 xl:grid-cols-5 gap-3">
+                    {days.map(dateStr => {
+                      const dayLessons = weekLessons.filter(lesson => lesson.date === dateStr);
+                      const dayAbsences = weekAbsences.filter(absence => absence.date === dateStr);
+                      const unresolvedAbsences = dayAbsences.filter(absence => absence.status !== AbsenceStatus.JUSTIFIED).length;
+
+                      return (
+                        <div key={`work-overview-day-${dateStr}`} className="bg-white border border-gray-300 shadow-sm min-h-[240px] flex flex-col">
+                          <div className={cn("px-3 py-2 border-b border-gray-300", unresolvedAbsences > 0 ? "bg-red-50" : "bg-gray-50")}>
+                            <div className={cn("text-[11px] font-black uppercase", unresolvedAbsences > 0 ? "text-red-700" : "text-[#005c8d]")}>
+                              {getDayName(dateStr)}
+                            </div>
+                            <div className="text-[10px] font-semibold text-gray-500">{formatWeekDate(dateStr)}</div>
+                          </div>
+
+                          <div className="p-3 space-y-3 flex-1">
+                            <div>
+                              <div className="text-[10px] font-black uppercase text-gray-400 mb-1">Upisani sati</div>
+                              {dayLessons.length > 0 ? (
+                                <div className="space-y-2">
+                                  {dayLessons.map(lesson => {
+                                    const subject = allSubjects.find(s => s.id === lesson.subjectId);
+                                    const teacher = teachers.find(t => t.id === lesson.teacherId);
+                                    return (
+                                      <div key={`overview-lesson-${lesson.id}`} className="border-l-4 border-[#005c8d] pl-2 text-[11px] leading-tight">
+                                        <div className="font-black text-gray-900">
+                                          {lesson.hour}. sat - {formatSubjectName(subject || { name: 'Predmet' })}
+                                        </div>
+                                        <div className="text-gray-600 font-semibold">
+                                          {lesson.teacherDisplayName || (teacher ? formatPersonName(teacher) : 'Nastavnik nije upisan')}
+                                        </div>
+                                        <div className="text-gray-700 mt-1 whitespace-pre-wrap">
+                                          {lesson.topic || (lesson.isHeld === false ? 'Sat nije održan' : 'Nema upisanog sadržaja')}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="text-[11px] italic text-gray-400">Nema upisanih sati.</div>
+                              )}
+                            </div>
+
+                            <div>
+                              <div className="text-[10px] font-black uppercase text-gray-400 mb-1">Izostanci</div>
+                              {dayAbsences.length > 0 ? (
+                                <div className="space-y-1">
+                                  {dayAbsences.map(absence => {
+                                    const student = students.find(s => s.id === absence.studentId);
+                                    return (
+                                      <div key={`overview-absence-${absence.id}`} className={cn("text-[11px] border px-2 py-1", getAbsenceStatusCellClass(absence.status))}>
+                                        <span className="font-black">{absence.hour}. sat</span>
+                                        {' - '}
+                                        <span>{student ? formatPersonName(student) : 'Učenik'}</span>
+                                        <span className="ml-1">({getAbsenceStatusShortLabel(absence.status)})</span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="text-[11px] italic text-gray-400">Nema evidentiranih izostanaka.</div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+        )}
+
+        {view === 'WORK_OVERVIEW_DETAIL' && !selectedWeek && (
+          <div className="w-full bg-white border border-gray-300 p-8 text-center shadow-sm">
+            <h3 className="text-gray-500 font-bold uppercase text-[11px] mb-2">Nema odabranog tjedna za pregled rada</h3>
+            <button onClick={goToWorkOverview} className="mx-auto block px-4 py-2 bg-[#005c8d] text-white font-bold uppercase text-[10px]">
+              Vrati se na pregled rada
+            </button>
+          </div>
+        )}
 
         {/* WEEKS LIST */}
         {view === 'WEEKS' && (() => {

@@ -248,11 +248,13 @@ export default function ClassDashboardPage() {
               <Route path="imenik-predmeti" element={<ImenikPage initialView="SUBJECTS" />} />
               <Route path="biljeske" element={<ClassNotesPage />} />
               
-              <Route path="pregled-rada" element={<DnevnikRadaPage initialView="WEEKS" />} />
-              <Route path="pregled-rada/raspored-sati" element={<Navigate to={`/class/${classId}/pregled-rada`} replace />} />
+              <Route path="pregled-rada" element={<Navigate to={`/class/${classId}/dnevnik-rada/pregled-rada`} replace />} />
+              <Route path="pregled-rada/raspored-sati" element={<Navigate to={`/class/${classId}/dnevnik-rada/pregled-rada`} replace />} />
               <Route path="work-overview" element={<Navigate to={`/class/${classId}/dnevnik-rada/weeks`} replace />} />
               
               <Route path="dnevnik-rada" element={<Navigate to={`/class/${classId}/dnevnik-rada/weeks`} replace />} />
+              <Route path="dnevnik-rada/pregled-rada" element={<DnevnikRadaPage initialView="WORK_OVERVIEW" />} />
+              <Route path="dnevnik-rada/pregled-rada/week/:weekId" element={<DnevnikRadaPage initialView="WORK_OVERVIEW_DETAIL" />} />
               <Route path="dnevnik-rada/weeks" element={<DnevnikRadaPage initialView="WEEKS" />} />
               <Route path="dnevnik-rada/week/:weekId" element={<DnevnikRadaPage initialView="WEEK_DETAIL" />} />
               <Route path="dnevnik-rada/day/:date" element={<DnevnikRadaPage initialView="DAY_DETAIL" />} />
