@@ -413,14 +413,14 @@ async function startServer() {
       const authUserId = authData.user.id;
       let { data: profile } = await supabaseAdmin
         .from("user_profiles")
-        .select("id, auth_user_id, name, surname, full_name, email, role, access_role, school_id, active_school_id")
+        .select("id, auth_user_id, name, email, role, access_role, school_id, active_school_id")
         .eq("auth_user_id", authUserId)
         .maybeSingle();
 
       if (!profile) {
         const { data: fallbackProfile } = await supabaseAdmin
           .from("user_profiles")
-          .select("id, auth_user_id, name, surname, full_name, email, role, access_role, school_id, active_school_id")
+          .select("id, auth_user_id, name, email, role, access_role, school_id, active_school_id")
           .eq("id", authUserId)
           .maybeSingle();
         profile = fallbackProfile;
@@ -488,7 +488,7 @@ async function startServer() {
       if (ids.length === 0) return new Map<string, any>();
       const { data: profiles } = await supabaseAdmin
         .from("user_profiles")
-        .select("id, auth_user_id, name, surname, full_name")
+        .select("id, auth_user_id, name")
         .in("id", ids);
 
       const authorMap = new Map<string, any>();
@@ -501,7 +501,7 @@ async function startServer() {
       if (missingIds.length > 0) {
         const { data: authProfiles } = await supabaseAdmin
           .from("user_profiles")
-          .select("id, auth_user_id, name, surname, full_name")
+          .select("id, auth_user_id, name")
           .in("auth_user_id", missingIds);
 
         (authProfiles || []).forEach((profile: any) => {
@@ -6133,14 +6133,14 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
     let { data: profile, error: profileError } = await supabaseAdmin
       .from("user_profiles")
-      .select("id, auth_user_id, name, surname, full_name, email, role, access_role, school_id, active_school_id")
+      .select("id, auth_user_id, name, email, role, access_role, school_id, active_school_id")
       .eq("auth_user_id", user.id)
       .maybeSingle();
 
     if (!profile && !profileError) {
       const fallback = await supabaseAdmin
         .from("user_profiles")
-        .select("id, auth_user_id, name, surname, full_name, email, role, access_role, school_id, active_school_id")
+        .select("id, auth_user_id, name, email, role, access_role, school_id, active_school_id")
         .eq("id", user.id)
         .maybeSingle();
       profile = fallback.data;
@@ -6150,7 +6150,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     if (!profile && !profileError) {
       const fallback = await supabaseAdmin
         .from("user_profiles")
-        .select("id, auth_user_id, name, surname, full_name, email, role, access_role, school_id, active_school_id")
+        .select("id, auth_user_id, name, email, role, access_role, school_id, active_school_id")
         .eq("email", user.email)
         .maybeSingle();
       profile = fallback.data;
@@ -6318,7 +6318,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       const homeroomTeachersQuery = homeroomTeacherIds.length > 0
         ? supabaseAdmin
           .from("user_profiles")
-          .select("id, name, surname, full_name")
+          .select("id, name")
           .in("id", homeroomTeacherIds)
         : Promise.resolve({ data: [], error: null });
       const [{ data: existingLessons, error: existingError }, { data: workWeeks, error: weeksError }, { data: homeroomTeachers, error: teachersError }] = await Promise.all([
