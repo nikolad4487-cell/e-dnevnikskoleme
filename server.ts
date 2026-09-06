@@ -6121,11 +6121,21 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError || !user) return { authorized: false, error: "Invalid token" };
 
-    const { data: profile, error: profileError } = await supabaseAdmin
+    let { data: profile, error: profileError } = await supabaseAdmin
       .from("user_profiles")
       .select("id, auth_user_id, name, surname, full_name, email, role, access_role, school_id, active_school_id")
       .eq("auth_user_id", user.id)
       .maybeSingle();
+
+    if (!profile && !profileError) {
+      const fallback = await supabaseAdmin
+        .from("user_profiles")
+        .select("id, auth_user_id, name, surname, full_name, email, role, access_role, school_id, active_school_id")
+        .eq("id", user.id)
+        .maybeSingle();
+      profile = fallback.data;
+      profileError = fallback.error;
+    }
 
     if (profileError || !profile) return { authorized: false, error: "User profile not found" };
 
