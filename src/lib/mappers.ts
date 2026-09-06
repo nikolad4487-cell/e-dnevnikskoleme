@@ -249,6 +249,7 @@ export const mappers = {
     teacherId: raw.teacher_id,
     schoolId: raw.school_id,
     groupName: raw.group_name,
+    subjectType: raw.subject_type,
   }),
 
   curriculumPlan: (raw: any) => ({

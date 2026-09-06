@@ -237,7 +237,8 @@ export default function ClassSubjectsPage() {
         class_id: classId,
         subject_id: selectedSubjectId,
         teacher_id: selectedTeacherId,
-        school_id: selectedSchoolId
+        school_id: selectedSchoolId,
+        subject_type: finalSubjectType
       }]).select();
 
       console.log("ASSIGN SUBJECT RESULT:", { data, error });
@@ -318,7 +319,8 @@ export default function ClassSubjectsPage() {
         .from('class_subject_teachers')
         .update({
           teacher_id: teacherId,
-          group_name: groupName || null
+          group_name: groupName || null,
+          subject_type: finalSubjectType
         })
         .eq('id', assignmentId);
 

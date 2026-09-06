@@ -221,6 +221,7 @@ export type ClassSubjectTeacher = {
   teacherId: string;
   schoolId?: string;
   groupName?: string;
+  subjectType?: string;
 };
 
 export type StudentClassEnrollment = {

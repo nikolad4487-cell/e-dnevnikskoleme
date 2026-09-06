@@ -246,6 +246,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
     }
   }, [selectedDate, effectiveClassId]);
   const [dailyLessons, setDailyLessons] = useState<Lesson[]>([]);
+  const [classLessons, setClassLessons] = useState<Lesson[]>([]);
   const [weekOverviewLessons, setWeekOverviewLessons] = useState<Lesson[]>([]);
   const [weekOverviewAbsences, setWeekOverviewAbsences] = useState<any[]>([]);
   const [currentWeekAbsences, setCurrentWeekAbsences] = useState<any[]>([]);
@@ -1043,6 +1044,63 @@ setStudents(uniqueStudents);
     }
   };
 
+  const fetchClassLessons = async () => {
+    if (!effectiveClassId) return;
+    try {
+      const { data, error } = await supabase
+        .from('lessons')
+        .select('*')
+        .eq('class_id', effectiveClassId);
+      if (error) throw error;
+      setClassLessons(mapList(data || [], mappers.lesson));
+    } catch (error) {
+      console.error("fetchClassLessons error:", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchClassLessons();
+  }, [effectiveClassId]);
+
+  const lessonSortValue = (lesson: Lesson) => [
+    lesson.date || '',
+    String(lesson.hour ?? 0).padStart(2, '0'),
+    lesson.createdAt || '',
+    lesson.id || ''
+  ].join('|');
+
+  const sortedClassLessons = useMemo(() => {
+    return [...classLessons].sort((a, b) => lessonSortValue(a).localeCompare(lessonSortValue(b)));
+  }, [classLessons]);
+
+  const getSubjectLessonNumber = (lesson: Lesson) => {
+    if (!lesson.subjectId) return lesson.hour;
+    const subjectLessons = sortedClassLessons.filter(l => l.subjectId === lesson.subjectId && l.isHeld !== false);
+    const index = subjectLessons.findIndex(l => l.id === lesson.id);
+    if (index >= 0) return index + 1;
+    return subjectLessons.filter(l => lessonSortValue(l) < lessonSortValue(lesson)).length + 1;
+  };
+
+  const getPreviousSubjectLesson = () => {
+    if (!lessonForm.subjectId || editingHour === null || !selectedDate) return null;
+    const currentLessonId = lessonForm.id || '';
+    const currentSort = [
+      selectedDate,
+      String(editingHour ?? 0).padStart(2, '0'),
+      lessonForm.id ? (sortedClassLessons.find(l => l.id === lessonForm.id)?.createdAt || '') : '',
+      currentLessonId
+    ].join('|');
+
+    const previousLessons = sortedClassLessons.filter(l =>
+      l.subjectId === lessonForm.subjectId &&
+      l.isHeld !== false &&
+      l.id !== currentLessonId &&
+      lessonSortValue(l) < currentSort
+    );
+
+    return previousLessons[previousLessons.length - 1] || null;
+  };
+
   useEffect(() => {
     if (!selectedDate || !effectiveClassId) return;
     const fetchLessonsForDay = async () => {
@@ -1068,7 +1126,12 @@ setStudents(uniqueStudents);
           return l;
         });
 
-        setDailyLessons(mapList(transformed, mappers.lesson));
+        const mappedLessons = mapList(transformed, mappers.lesson);
+        setDailyLessons(mappedLessons);
+        setClassLessons(prev => {
+          const withoutSelectedDay = prev.filter(l => l.date !== selectedDate);
+          return [...withoutSelectedDay, ...mappedLessons];
+        });
       } catch (error) {
         console.error(error);
         toast.error('Greška pri učitavanju sati za dan');
@@ -1744,6 +1807,7 @@ setStudents(uniqueStudents);
         
         // 3. Update local state
         setDailyLessons(prev => prev.filter(l => l.id !== lessonId));
+        setClassLessons(prev => prev.filter(l => l.id !== lessonId));
         
         // Refresh absences in state
         if (view === 'ABSENCES') {
@@ -1837,7 +1901,7 @@ setStudents(uniqueStudents);
 
       for (let i = 0; i < count; i++) {
         const currentHour = startHour + i;
-        if (currentHour > 8) break;
+        if (currentHour > 12) break;
 
         const lessonData: any = {
           class_id: effectiveClassId,
@@ -1870,7 +1934,9 @@ setStudents(uniqueStudents);
             .eq('id', finalId);
           if (error) throw error;
 
-          setDailyLessons(prev => prev.map(l => l.id === finalId ? mappers.lesson({ ...l, ...lessonData, id: finalId }) : l));
+          const mappedLesson = mappers.lesson({ ...lessonData, id: finalId, created_at: sortedClassLessons.find(l => l.id === finalId)?.createdAt });
+          setDailyLessons(prev => prev.map(l => l.id === finalId ? mappedLesson : l));
+          setClassLessons(prev => prev.map(l => l.id === finalId ? mappedLesson : l));
         } else {
           const { data, error } = await supabase
             .from('lessons')
@@ -1879,7 +1945,9 @@ setStudents(uniqueStudents);
             .maybeSingle();
           if (error || !data) throw error || new Error("Lesson creation failed");
           finalId = data.id;
-          setDailyLessons(prev => [...prev, mappers.lesson(data)]);
+          const mappedLesson = mappers.lesson(data);
+          setDailyLessons(prev => [...prev, mappedLesson]);
+          setClassLessons(prev => [...prev, mappedLesson]);
         }
 
         if (finalId) {
@@ -2037,6 +2105,7 @@ setStudents(uniqueStudents);
       toast.success("Izostanci su uspješno uneseni.");
       
       await fetchAbsencesForDay();
+      await fetchClassLessons();
       await refreshCurrentWeekAbsences();
     } catch (err: any) {
       console.error(err);
@@ -3769,7 +3838,7 @@ setStudents(uniqueStudents);
                                       <div className="flex items-start justify-between gap-2">
                                         <div className="flex-1 animate-fadeIn">
                                           <div className="font-bold text-[#005c8d] uppercase mb-0.5">
-                                            [{lesson.hour}] {formatSubjectName(sub || { name: 'Predmet' })} - {lesson.teacherDisplayName && !lesson.teacherDisplayName.includes('undefined') ? lesson.teacherDisplayName : (teacher ? formatPersonName(teacher) : 'Nepoznat nastavnik')}
+                                            [{getSubjectLessonNumber(lesson)}] {formatSubjectName(sub || { name: 'Predmet' })} - {lesson.teacherDisplayName && !lesson.teacherDisplayName.includes('undefined') ? lesson.teacherDisplayName : (teacher ? formatPersonName(teacher) : 'Nepoznat nastavnik')}
                                             {lesson.groupName && ['GROUP_A', 'GROUP_B'].includes(lesson.groupName.toUpperCase()) ? <span className="text-gray-400 font-normal italic ml-1">({lesson.groupName === 'GROUP_A' ? 'Grupa A' : 'Grupa B'})</span> : (
                                               (lesson.groupName === 'grupa a' || lesson.groupName === 'Grupa A') ? <span className="text-gray-400 font-normal italic ml-1">(Grupa A)</span> :
                                               (lesson.groupName === 'grupa b' || lesson.groupName === 'Grupa B') ? <span className="text-gray-400 font-normal italic ml-1">(Grupa B)</span> : ''
@@ -4054,11 +4123,12 @@ setStudents(uniqueStudents);
                   <div className="mt-3 text-[15px] text-gray-500">
                     <div>Prethodno upisani sat:</div>
                     <div className="text-gray-400">
-                      {dailyLessons
-                        .filter(l => l.hour < editingHour && l.subjectId === lessonForm.subjectId)
-                        .sort((a, b) => b.hour - a.hour)[0]
-                        ? `[${dailyLessons.filter(l => l.hour < editingHour && l.subjectId === lessonForm.subjectId).sort((a, b) => b.hour - a.hour)[0].hour}] ${formatSubjectName(allSubjects.find(s => s.id === lessonForm.subjectId))} - ${dailyLessons.filter(l => l.hour < editingHour && l.subjectId === lessonForm.subjectId).sort((a, b) => b.hour - a.hour)[0].topic || ''}`
-                        : '--'}
+                      {(() => {
+                        const previousLesson = getPreviousSubjectLesson();
+                        return previousLesson
+                          ? `[${getSubjectLessonNumber(previousLesson)}] ${formatSubjectName(allSubjects.find(s => s.id === lessonForm.subjectId))} - ${previousLesson.topic || ''}`
+                          : '--';
+                      })()}
                     </div>
                   </div>
 

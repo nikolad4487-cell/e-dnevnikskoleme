@@ -422,8 +422,9 @@ export default function AdministrationPage() {
              class_id: selectedClassId,
              subject_id: row.subjectId,
              teacher_id: teacherId,
-             school_id: selectedSchoolId
-           }], { onConflict: 'class_id,subject_id,teacher_id' });
+             school_id: selectedSchoolId,
+             subject_type: finalSubjectType
+           }], { onConflict: 'class_id,subject_id,teacher_id,subject_type' });
 
            await ensureDefaultGradingElementsForAssignment(supabase, {
              schoolId: selectedSchoolId,
@@ -2740,7 +2741,8 @@ setAllSubjects(uniqueSub2);
         class_id: assignmentForm.classId,
         teacher_id: assignmentForm.teacherId,
         school_id: selectedSchoolId,
-        group_name: assignmentForm.groupName || null
+        group_name: assignmentForm.groupName || null,
+        subject_type: assignmentForm.subjectType
       };
 
       // Find existing class_subject first to identify existing type if any
@@ -2752,7 +2754,8 @@ setAllSubjects(uniqueSub2);
         .maybeSingle();
 
       const subjectName = allSubjects.find(s => s.id === assignmentForm.subjectId)?.name || '';
-      const finalSubjectType = getForcedSubjectType(subjectName, existingCS?.subject_type || assignmentForm.subjectType);
+      const finalSubjectType = getForcedSubjectType(subjectName, assignmentForm.subjectType || existingCS?.subject_type || 'REDOVNI');
+      payload.subject_type = finalSubjectType;
       const isSelectiveAttendanceSubject = SELECTIVE_ATTENDANCE_SUBJECT_STATUSES.has(finalSubjectType);
 
       const classSubjectPayload = {
@@ -2781,7 +2784,10 @@ setAllSubjects(uniqueSub2);
         if (error) throw error;
         toast.success('Zaduženje ažurirano');
       } else {
-        const { data, error } = await supabase.from('class_subject_teachers').insert([payload]).select();
+        const { data, error } = await supabase
+          .from('class_subject_teachers')
+          .upsert([payload], { onConflict: 'class_id,subject_id,teacher_id,subject_type' })
+          .select();
         
         console.log("CREATE ASSIGNMENT RESULT:", { data, error });
         if (error) throw error;

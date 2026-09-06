@@ -172,9 +172,10 @@ CREATE TABLE public.class_subject_teachers (
     teacher_id UUID NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
     school_id TEXT REFERENCES public.schools(id) ON DELETE CASCADE,
     group_name TEXT,
+    subject_type TEXT NOT NULL DEFAULT 'REDOVNI',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE(class_id, subject_id, teacher_id)
+    UNIQUE(class_id, subject_id, teacher_id, subject_type)
 );
 
 -- 8. Curriculum Plans

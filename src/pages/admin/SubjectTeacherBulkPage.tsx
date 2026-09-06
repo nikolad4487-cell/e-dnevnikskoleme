@@ -79,7 +79,7 @@ export default function SubjectTeacherBulkPage() {
         classQuery,
         supabase.from('subjects').select('*').eq('school_id', selectedSchoolId).order('name'),
         supabase.from('class_subjects').select('id, class_id, subject_id, subject_type, subject_period').eq('school_id', selectedSchoolId),
-        supabase.from('class_subject_teachers').select('id, class_id, subject_id, teacher_id').eq('school_id', selectedSchoolId),
+        supabase.from('class_subject_teachers').select('id, class_id, subject_id, teacher_id, subject_type').eq('school_id', selectedSchoolId),
         supabase
           .from('user_school_roles')
           .select('user:user_profiles(*)')
@@ -199,6 +199,7 @@ export default function SubjectTeacherBulkPage() {
           subject_id: row.subjectId,
           teacher_id: teacherId,
           school_id: selectedSchoolId,
+          subject_type: row.subjectType || 'REDOVNI',
         }));
       });
 
@@ -210,7 +211,7 @@ export default function SubjectTeacherBulkPage() {
       if (assignmentsToInsert.length > 0) {
         const { error } = await supabase
           .from('class_subject_teachers')
-          .upsert(assignmentsToInsert, { onConflict: 'class_id,subject_id,teacher_id' });
+          .upsert(assignmentsToInsert, { onConflict: 'class_id,subject_id,teacher_id,subject_type' });
         if (error) throw error;
 
         await ensureDefaultGradingElementsForAssignments(
