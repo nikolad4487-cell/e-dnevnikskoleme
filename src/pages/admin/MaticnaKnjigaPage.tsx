@@ -108,6 +108,7 @@ export default function MaticnaKnjigaPage() {
   const [selectedYear, setSelectedYear] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
+  const [ematicaRecordFilter, setEmaticaRecordFilter] = useState<'ALL' | 'SYNCED' | 'DIFFERENCES' | 'MISSING_DATA'>('ALL');
 
   const [filteredClasses, setFilteredClasses] = useState<any[]>([]);
 
@@ -268,6 +269,24 @@ export default function MaticnaKnjigaPage() {
       { label: 'Program', matica: record.program_name || '', dnevnik: sourceStudent.program_name || '' }
     ];
     return fields.filter((field) => String(field.matica || '').trim() !== String(field.dnevnik || '').trim());
+  };
+
+  const hasMissingRequiredRecordData = (record: EmaticaStudentRecord) =>
+    !String(record.oib || '').trim() || !String(record.date_of_birth || '').trim() || !String(record.class_name || '').trim();
+
+  const getFilteredEmaticaRecords = () => ematicaRecords.filter((record) => {
+    if (ematicaRecordFilter === 'SYNCED') return getRecordDifferences(record).length === 0 && !hasMissingRequiredRecordData(record);
+    if (ematicaRecordFilter === 'DIFFERENCES') return getRecordDifferences(record).length > 0;
+    if (ematicaRecordFilter === 'MISSING_DATA') return hasMissingRequiredRecordData(record);
+    return true;
+  });
+
+  const filteredEmaticaRecords = getFilteredEmaticaRecords();
+  const ematicaRecordStats = {
+    all: ematicaRecords.length,
+    synced: ematicaRecords.filter((record) => getRecordDifferences(record).length === 0 && !hasMissingRequiredRecordData(record)).length,
+    differences: ematicaRecords.filter((record) => getRecordDifferences(record).length > 0).length,
+    missing: ematicaRecords.filter(hasMissingRequiredRecordData).length
   };
 
   const loadRegistryData = async () => {
@@ -781,21 +800,43 @@ export default function MaticnaKnjigaPage() {
       </section>
 
       <section className="print-hidden bg-white border border-slate-300 rounded-md shadow-sm overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-3">
+        <div className="px-4 py-3 border-b border-slate-200 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 text-[#005c8d] text-[10px] font-black uppercase tracking-widest mb-1">
               <FileText size={14} /> e-Matica zapisi
             </div>
             <h2 className="text-lg font-black text-slate-900 uppercase leading-tight">Zadnji sinkronizirani učenici</h2>
           </div>
-          <button
-            onClick={loadEmaticaRecords}
-            className="inline-flex items-center justify-center gap-2 bg-white border border-slate-300 text-slate-700 text-[10px] font-black px-4 py-2 uppercase rounded hover:bg-slate-50 transition-colors"
-          >
-            <RefreshCw size={14} /> Osvježi
-          </button>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="inline-flex bg-slate-100 border border-slate-200 rounded-md p-1 overflow-x-auto">
+              {[
+                { key: 'ALL', label: `Svi (${ematicaRecordStats.all})` },
+                { key: 'SYNCED', label: `Usklađeni (${ematicaRecordStats.synced})` },
+                { key: 'DIFFERENCES', label: `Razlike (${ematicaRecordStats.differences})` },
+                { key: 'MISSING_DATA', label: `Nedostaje (${ematicaRecordStats.missing})` }
+              ].map((option) => (
+                <button
+                  key={option.key}
+                  onClick={() => setEmaticaRecordFilter(option.key as typeof ematicaRecordFilter)}
+                  className={`whitespace-nowrap px-3 py-1.5 rounded text-[10px] font-black uppercase transition-colors ${
+                    ematicaRecordFilter === option.key
+                      ? 'bg-white text-[#005c8d] shadow-sm'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={loadEmaticaRecords}
+              className="inline-flex items-center justify-center gap-2 bg-white border border-slate-300 text-slate-700 text-[10px] font-black px-4 py-2 uppercase rounded hover:bg-slate-50 transition-colors"
+            >
+              <RefreshCw size={14} /> Osvježi
+            </button>
+          </div>
         </div>
-        {ematicaRecords.length > 0 ? (
+        {filteredEmaticaRecords.length > 0 ? (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[11px]">
               <thead className="bg-slate-50 border-b border-slate-200">
@@ -810,7 +851,7 @@ export default function MaticnaKnjigaPage() {
                 </tr>
               </thead>
               <tbody>
-                {ematicaRecords.map((record) => {
+                {filteredEmaticaRecords.map((record) => {
                   const differences = getRecordDifferences(record);
                   return (
                     <tr key={record.id || record.student_id} className="border-b border-slate-100 hover:bg-slate-50">
@@ -857,7 +898,9 @@ export default function MaticnaKnjigaPage() {
           </div>
         ) : (
           <div className="p-6 text-center text-[11px] font-bold text-slate-400">
-            Nema sinkroniziranih e-Matica zapisa. Pokreni sinkronizaciju nakon kontrolnog pregleda.
+            {ematicaRecords.length > 0
+              ? 'Nema zapisa za odabrani filter.'
+              : 'Nema sinkroniziranih e-Matica zapisa. Pokreni sinkronizaciju nakon kontrolnog pregleda.'}
           </div>
         )}
       </section>
