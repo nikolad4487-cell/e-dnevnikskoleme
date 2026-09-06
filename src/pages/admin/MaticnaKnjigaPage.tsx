@@ -6,7 +6,7 @@ import { logSystemAction } from '../../utils/auditLogger';
 import { 
   FileText, Search, Printer, Filter, Calendar, GraduationCap, Building, 
   MapPin, ShieldAlert, BadgeInfo, Users, ArrowLeft, ArrowRight, BookOpen, Edit2,
-  RefreshCw, Database, CheckCircle2, AlertTriangle
+  RefreshCw, Database, CheckCircle2, AlertTriangle, Play, Clock3
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -55,6 +55,17 @@ interface SyncPreview {
   studentCount: number;
 }
 
+interface SyncRun {
+  id: string;
+  status: string;
+  mode: string;
+  students_count: number;
+  classes_count: number;
+  issues_count: number;
+  created_at: string;
+  error_message?: string | null;
+}
+
 export default function MaticnaKnjigaPage() {
   const { selectedSchoolId } = useSelection();
   const { user } = useAuth();
@@ -66,7 +77,9 @@ export default function MaticnaKnjigaPage() {
   const [classes, setClasses] = useState<any[]>([]);
   const [programs, setPrograms] = useState<any[]>([]);
   const [syncPreview, setSyncPreview] = useState<SyncPreview | null>(null);
+  const [syncRuns, setSyncRuns] = useState<SyncRun[]>([]);
   const [syncPreviewLoading, setSyncPreviewLoading] = useState(false);
+  const [syncRunLoading, setSyncRunLoading] = useState(false);
   
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -111,6 +124,7 @@ export default function MaticnaKnjigaPage() {
     if (!selectedSchoolId) return;
     loadRegistryData();
     loadSyncPreview();
+    loadSyncRuns();
   }, [selectedSchoolId]);
 
   const loadSyncPreview = async () => {
@@ -134,6 +148,57 @@ export default function MaticnaKnjigaPage() {
       toast.error(err.message || 'Nije moguće učitati pregled sinkronizacije.');
     } finally {
       setSyncPreviewLoading(false);
+    }
+  };
+
+  const loadSyncRuns = async () => {
+    if (!selectedSchoolId) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const params = new URLSearchParams({ schoolId: selectedSchoolId });
+      const response = await fetch(`/api/admin/ematica-sync/runs?${params.toString()}`, {
+        headers: {
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {})
+        }
+      });
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || 'Povijest sinkronizacije nije dostupna.');
+      }
+      setSyncRuns(json.runs || []);
+    } catch (err: any) {
+      console.error('[EMATICA_SYNC_RUNS] load error', err);
+    }
+  };
+
+  const prepareSyncRun = async () => {
+    if (!selectedSchoolId || !syncPreview) return;
+    try {
+      setSyncRunLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch('/api/admin/ematica-sync/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {})
+        },
+        body: JSON.stringify({
+          schoolId: selectedSchoolId,
+          mode: 'PREPARE',
+          preview: syncPreview
+        })
+      });
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || 'Priprema sinkronizacije nije uspjela.');
+      }
+      toast.success('Priprema sinkronizacije je spremljena.');
+      await loadSyncRuns();
+    } catch (err: any) {
+      console.error('[EMATICA_SYNC_RUN] prepare error', err);
+      toast.error(err.message || 'Priprema sinkronizacije nije uspjela.');
+    } finally {
+      setSyncRunLoading(false);
     }
   };
 
@@ -520,7 +585,7 @@ export default function MaticnaKnjigaPage() {
           <button
             onClick={loadSyncPreview}
             disabled={syncPreviewLoading}
-            className="inline-flex items-center justify-center gap-2 bg-[#005c8d] text-white text-[10px] font-black px-4 py-2 uppercase rounded hover:bg-[#00476b] disabled:opacity-60 transition-colors"
+            className="inline-flex items-center justify-center gap-2 bg-white border border-slate-300 text-slate-700 text-[10px] font-black px-4 py-2 uppercase rounded hover:bg-slate-50 disabled:opacity-60 transition-colors"
           >
             <RefreshCw size={14} className={syncPreviewLoading ? 'animate-spin' : ''} />
             Osvježi pregled
@@ -572,11 +637,69 @@ export default function MaticnaKnjigaPage() {
         )}
 
         {syncPreview && (
-          <div className="px-4 py-3 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[10px] font-black uppercase text-slate-500">
-            <span>Izvor: e-Dnevnik, odabrana škola</span>
-            <span>Zadnje očitanje: {new Date(syncPreview.generatedAt).toLocaleString('hr-HR')}</span>
+          <div className="px-4 py-3 border-t border-slate-200 bg-slate-50 flex flex-col xl:flex-row xl:items-center xl:justify-between gap-3">
+            <div className="text-[10px] font-black uppercase text-slate-500 flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
+              <span>Izvor: e-Dnevnik, odabrana škola</span>
+              <span>Zadnje očitanje: {new Date(syncPreview.generatedAt).toLocaleString('hr-HR')}</span>
+            </div>
+            <button
+              onClick={prepareSyncRun}
+              disabled={syncRunLoading || !syncPreview}
+              className="inline-flex items-center justify-center gap-2 bg-[#005c8d] text-white text-[10px] font-black px-4 py-2 uppercase rounded hover:bg-[#00476b] disabled:opacity-60 transition-colors"
+            >
+              <Play size={14} />
+              Spremi pripremu sinkronizacije
+            </button>
           </div>
         )}
+
+        <div className="border-t border-slate-200 bg-white">
+          <div className="px-4 py-3 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-500">
+            <Clock3 size={14} /> Zadnja pokretanja
+          </div>
+          {syncRuns.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-[11px]">
+                <thead className="bg-slate-50 border-y border-slate-200">
+                  <tr>
+                    <th className="px-4 py-2 font-black uppercase text-slate-500">Vrijeme</th>
+                    <th className="px-4 py-2 font-black uppercase text-slate-500">Način</th>
+                    <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Učenici</th>
+                    <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Razredi</th>
+                    <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Upozorenja</th>
+                    <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {syncRuns.map((run) => (
+                    <tr key={run.id} className="border-b border-slate-100">
+                      <td className="px-4 py-2 font-semibold text-slate-700 whitespace-nowrap">{new Date(run.created_at).toLocaleString('hr-HR')}</td>
+                      <td className="px-4 py-2 font-black text-slate-700 uppercase">{run.mode === 'SYNC' ? 'Sinkronizacija' : 'Priprema'}</td>
+                      <td className="px-4 py-2 text-right font-black tabular-nums">{run.students_count}</td>
+                      <td className="px-4 py-2 text-right font-black tabular-nums">{run.classes_count}</td>
+                      <td className="px-4 py-2 text-right font-black tabular-nums text-amber-700">{run.issues_count}</td>
+                      <td className="px-4 py-2 text-right">
+                        <span className={`inline-flex px-2 py-0.5 rounded border text-[9px] font-black uppercase ${
+                          run.status === 'COMPLETED'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : run.status === 'FAILED'
+                              ? 'bg-red-50 text-red-700 border-red-200'
+                              : 'bg-amber-50 text-amber-700 border-amber-200'
+                        }`}>
+                          {run.status === 'COMPLETED' ? 'Gotovo' : run.status === 'FAILED' ? 'Greška' : 'U tijeku'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="px-4 pb-4 text-[11px] font-bold text-slate-400">
+              Još nema spremljenih priprema sinkronizacije.
+            </div>
+          )}
+        </div>
       </section>
 
       {/* Screen Filters */}

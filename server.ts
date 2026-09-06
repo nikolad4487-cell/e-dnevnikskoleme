@@ -65,6 +65,7 @@ initJsonFile("matura_results.json");
 initJsonFile("matura_objections.json");
 initJsonFile("matura_study_applications.json");
 initJsonFile("matura_study_programs.json");
+initJsonFile("ematica_sync_runs.json");
 
 function readJsonFile(filename: string): any[] {
   try {
@@ -6991,6 +6992,122 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     } catch (e: any) {
       console.error("[EMATICA_SYNC_PREVIEW] error:", e);
       return res.status(500).json({ success: false, error: e.message || "Pregled sinkronizacije nije uspio." });
+    }
+  });
+
+  app.get("/api/admin/ematica-sync/runs", async (req, res) => {
+    try {
+      if (!supabaseAdmin) {
+        return res.status(500).json({ success: false, error: "Supabase Admin client not initialized." });
+      }
+
+      const authHeader = req.headers.authorization || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+      const schoolId = String(req.query.schoolId || "");
+
+      const auth = await authorizeClassAdmin(token, schoolId);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: auth.error || "Nemate ovlasti za povijest sinkronizacije." });
+      }
+
+      try {
+        const { data, error } = await supabaseAdmin
+          .from("ematica_sync_runs")
+          .select("*")
+          .eq("school_id", schoolId)
+          .order("created_at", { ascending: false })
+          .limit(10);
+        if (error) throw error;
+        return res.json({ success: true, runs: data || [] });
+      } catch (dbError: any) {
+        if (!["PGRST205", "42P01"].includes(dbError?.code)) {
+          console.warn("[EMATICA_SYNC_RUNS] DB read failed, using JSON fallback:", dbError?.message || dbError);
+        }
+      }
+
+      const runs = readJsonFile("ematica_sync_runs.json")
+        .filter((item: any) => String(item.school_id) === schoolId)
+        .sort((a: any, b: any) => String(b.created_at || "").localeCompare(String(a.created_at || "")))
+        .slice(0, 10);
+      return res.json({ success: true, runs });
+    } catch (e: any) {
+      console.error("[EMATICA_SYNC_RUNS] error:", e);
+      return res.status(500).json({ success: false, error: e.message || "Dohvat povijesti sinkronizacije nije uspio." });
+    }
+  });
+
+  app.post("/api/admin/ematica-sync/run", async (req, res) => {
+    try {
+      if (!supabaseAdmin) {
+        return res.status(500).json({ success: false, error: "Supabase Admin client not initialized." });
+      }
+
+      const authHeader = req.headers.authorization || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+      const { schoolId, preview, mode } = req.body || {};
+      const schoolIdText = String(schoolId || "");
+
+      const auth = await authorizeClassAdmin(token, schoolIdText);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: auth.error || "Nemate ovlasti za sinkronizaciju." });
+      }
+
+      const sections = Array.isArray(preview?.sections) ? preview.sections : [];
+      const issuesCount = sections.reduce((total: number, section: any) => total + (Array.isArray(section.issues) ? section.issues.length : 0), 0);
+      const runPayload = {
+        id: crypto.randomUUID(),
+        school_id: schoolIdText,
+        triggered_by: auth.profile?.id || null,
+        mode: String(mode || "PREPARE").toUpperCase() === "SYNC" ? "SYNC" : "PREPARE",
+        status: "COMPLETED",
+        source_system: "e-Dnevnik",
+        target_system: "e-Matica",
+        students_count: Number(preview?.studentCount || 0),
+        classes_count: Number(preview?.classCount || 0),
+        issues_count: issuesCount,
+        summary: {
+          generated_at: preview?.generatedAt || null,
+          sections
+        },
+        error_message: null,
+        created_at: new Date().toISOString()
+      };
+
+      let savedRun = runPayload;
+      try {
+        const { data, error } = await supabaseAdmin
+          .from("ematica_sync_runs")
+          .insert(runPayload)
+          .select()
+          .single();
+        if (error) throw error;
+        savedRun = data || runPayload;
+      } catch (dbError: any) {
+        if (!["PGRST205", "42P01"].includes(dbError?.code)) {
+          console.warn("[EMATICA_SYNC_RUN] DB insert failed, using JSON fallback:", dbError?.message || dbError);
+        }
+        const runs = readJsonFile("ematica_sync_runs.json");
+        runs.push(runPayload);
+        writeJsonFile("ematica_sync_runs.json", runs);
+      }
+
+      try {
+        await supabaseAdmin.from("system_audit_logs").insert({
+          executor_id: auth.profile?.id || null,
+          school_id: schoolIdText,
+          action_type: "EMATICA_SYNC_PREPARED",
+          entity_type: "EMATICA_SYNC",
+          entity_id: savedRun.id,
+          new_value: savedRun
+        });
+      } catch (auditError: any) {
+        console.warn("[EMATICA_SYNC_RUN] audit write failed:", auditError?.message || auditError);
+      }
+
+      return res.json({ success: true, run: savedRun });
+    } catch (e: any) {
+      console.error("[EMATICA_SYNC_RUN] error:", e);
+      return res.status(500).json({ success: false, error: e.message || "Pokretanje pripreme sinkronizacije nije uspjelo." });
     }
   });
 
