@@ -9,6 +9,7 @@ import fs from "fs";
 import crypto from "crypto";
 import { GoogleGenAI, Type } from "@google/genai";
 import { verifyPin, hashPin } from "./src/pinUtils.js";
+import { TEMPLATE_BY_SUBJECT, normalizeGradingTemplateSubjectName } from "./src/lib/gradingElementTemplates.js";
 
 dotenv.config();
 
@@ -258,14 +259,20 @@ async function startServer() {
       if (templatesError) throw templatesError;
 
       const normalize = (value: any) => String(value || "").toLowerCase().trim();
-      const normalizeSubject = (value: any) => normalize(value).replace(/\s*\((izborni|praksa)\)\s*$/i, "").trim();
+      const normalizeSubject = (value: any) => normalizeGradingTemplateSubjectName(String(value || ""));
       const subjectById = new Map<string, any>((subjects || []).map((subject: any) => [String(subject.id), subject]));
       const templateOrder = new Map<string, number>();
       const schoolTemplateOrder = new Map<string, number>();
 
+      for (const [subjectName, elementNames] of Object.entries(TEMPLATE_BY_SUBJECT)) {
+        elementNames.forEach((elementName, index) => {
+          templateOrder.set(`${normalizeSubject(subjectName)}:${normalize(elementName)}`, index);
+        });
+      }
+
       for (const template of templates || []) {
         const key = `${normalizeSubject(template.subject_name)}:${normalize(template.element_name)}`;
-        if (!template.school_id) {
+        if (!template.school_id && !templateOrder.has(key)) {
           templateOrder.set(key, Number(template.display_order ?? 9999));
         } else if (String(template.school_id) === String(schoolId)) {
           schoolTemplateOrder.set(key, Number(template.display_order ?? 9999));

@@ -1,4 +1,4 @@
-const TEMPLATE_BY_SUBJECT: Record<string, string[]> = {
+export const TEMPLATE_BY_SUBJECT: Record<string, string[]> = {
   "biologija s higijenom i ekologijom": ["usvojenost nastavnih sadržaja", "primjena nastavnih sadržaja", "samostalni rad"],
   "engleski jezik i": ["čitanje i slušanje s razumijevanjem", "govorenje", "pisanje", "jezično posredovanje"],
   "etika": ["moralno i etičko djelovanje", "moralno i etičko promišljanje"],
@@ -34,7 +34,7 @@ const TEMPLATE_BY_SUBJECT: Record<string, string[]> = {
   "vjeronauk": ["znanje", "stvaralačko izražavanje", "kultura međusobnog komuniciranja"]
 };
 
-function normalizeSubjectName(subjectName: string): string {
+export function normalizeGradingTemplateSubjectName(subjectName: string): string {
   return String(subjectName || "")
     .toLowerCase()
     .replace(/\s*\((izborni|praksa)\)\s*$/i, "")
@@ -42,7 +42,7 @@ function normalizeSubjectName(subjectName: string): string {
 }
 
 export function getDefaultGradingElementsForSubject(subjectName: string): string[] {
-  const normalized = normalizeSubjectName(subjectName);
+  const normalized = normalizeGradingTemplateSubjectName(subjectName);
   if (normalized === "sat razrednika") return [];
   return TEMPLATE_BY_SUBJECT[normalized] || [];
 }
