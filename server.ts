@@ -6410,6 +6410,125 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     }
   });
 
+  app.post("/api/admin/grading-elements/duplicates", async (req, res) => {
+    try {
+      if (!supabaseAdmin) {
+        return res.status(500).json({ success: false, error: "Supabase Admin client not initialized." });
+      }
+
+      const authHeader = req.headers.authorization || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+      const schoolId = String(req.body?.schoolId || req.body?.school_id || "").trim();
+      const shouldFix = Boolean(req.body?.fix);
+
+      if (!schoolId) {
+        return res.status(400).json({ success: false, error: "Nedostaje school_id." });
+      }
+
+      const authorization = await authorizeClassAdmin(token, schoolId);
+      if (!authorization.authorized) {
+        return res.status(403).json({ success: false, error: authorization.error || "Nemate ovlasti za popravak elemenata vrednovanja." });
+      }
+
+      const [{ data: elements, error: elementsError }, { data: subjects, error: subjectsError }, { data: classes, error: classesError }] = await Promise.all([
+        supabaseAdmin
+          .from("grading_elements")
+          .select("id, school_id, class_id, subject_id, teacher_id, name, display_order, created_at")
+          .eq("school_id", schoolId)
+          .order("class_id", { ascending: true })
+          .order("subject_id", { ascending: true })
+          .order("display_order", { ascending: true }),
+        supabaseAdmin
+          .from("subjects")
+          .select("id, name")
+          .eq("school_id", schoolId),
+        supabaseAdmin
+          .from("classes")
+          .select("id, name")
+          .eq("school_id", schoolId)
+      ]);
+
+      if (elementsError) throw elementsError;
+      if (subjectsError) throw subjectsError;
+      if (classesError) throw classesError;
+
+      const subjectById = new Map<string, any>((subjects || []).map((subject: any) => [String(subject.id), subject]));
+      const classById = new Map<string, any>((classes || []).map((classroom: any) => [String(classroom.id), classroom]));
+      const normalizeElementName = (name: any) => String(name || "").toLowerCase().trim();
+
+      const grouped = new Map<string, any[]>();
+      for (const element of elements || []) {
+        const key = [
+          element.class_id,
+          element.subject_id,
+          normalizeElementName(element.name)
+        ].join(":");
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key)!.push(element);
+      }
+
+      const duplicateGroups = Array.from(grouped.values())
+        .filter(group => group.length > 1)
+        .map(group => {
+          const sorted = [...group].sort((a, b) => {
+            const orderDiff = Number(a.display_order ?? 9999) - Number(b.display_order ?? 9999);
+            if (orderDiff !== 0) return orderDiff;
+            return String(a.created_at || "").localeCompare(String(b.created_at || ""));
+          });
+          const keep = sorted[0];
+          return {
+            classId: keep.class_id,
+            className: classById.get(String(keep.class_id))?.name || keep.class_id,
+            subjectId: keep.subject_id,
+            subjectName: subjectById.get(String(keep.subject_id))?.name || keep.subject_id,
+            elementName: keep.name,
+            count: sorted.length,
+            keepId: keep.id,
+            deleteIds: sorted.slice(1).map(item => item.id)
+          };
+        })
+        .sort((a, b) => {
+          const subjectSort = String(a.subjectName).localeCompare(String(b.subjectName), "hr", { sensitivity: "base" });
+          if (subjectSort !== 0) return subjectSort;
+          const classSort = String(a.className).localeCompare(String(b.className), "hr", { sensitivity: "base", numeric: true });
+          if (classSort !== 0) return classSort;
+          return String(a.elementName).localeCompare(String(b.elementName), "hr", { sensitivity: "base" });
+        });
+
+      const deleteIds = duplicateGroups.flatMap(group => group.deleteIds);
+      let deleted = 0;
+
+      if (shouldFix && deleteIds.length > 0) {
+        for (let i = 0; i < deleteIds.length; i += 100) {
+          const chunk = deleteIds.slice(i, i + 100);
+          const { error: deleteError } = await supabaseAdmin
+            .from("grading_elements")
+            .delete()
+            .in("id", chunk);
+          if (deleteError) throw deleteError;
+          deleted += chunk.length;
+        }
+      }
+
+      return res.json({
+        success: true,
+        fixed: shouldFix,
+        duplicateGroupCount: duplicateGroups.length,
+        duplicateRowCount: deleteIds.length,
+        deleted,
+        duplicates: duplicateGroups.map(group => ({
+          className: group.className,
+          subjectName: group.subjectName,
+          elementName: group.elementName,
+          count: group.count
+        }))
+      });
+    } catch (err: any) {
+      console.error("[GRADING_ELEMENTS_DUPLICATES] Error:", err);
+      return res.status(500).json({ success: false, error: err?.message || "Provjera elemenata vrednovanja nije uspjela." });
+    }
+  });
+
   app.post("/api/admin/classes", async (req, res) => {
     try {
       if (!supabaseAdmin) {
