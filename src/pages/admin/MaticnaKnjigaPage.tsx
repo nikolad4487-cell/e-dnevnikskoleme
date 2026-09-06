@@ -70,13 +70,19 @@ interface EmaticaStudentRecord {
   id: string;
   student_id: string;
   full_name: string;
+  first_name?: string | null;
+  last_name?: string | null;
   oib?: string | null;
+  date_of_birth?: string | null;
+  place_of_birth?: string | null;
+  address?: string | null;
   class_name?: string | null;
   program_name?: string | null;
-  grade_summary?: { grades_count?: number; final_grades_count?: number; average?: number | null };
+  status?: string | null;
+  grade_summary?: { grades_count?: number; final_grades_count?: number; average?: number | null; final_grades?: any[] };
   absence_summary?: { total?: number; unjustified?: number; pending?: number };
-  final_thesis_summary?: { count?: number };
-  matura_summary?: { registrations_count?: number; study_applications_count?: number };
+  final_thesis_summary?: { count?: number; items?: any[] };
+  matura_summary?: { registrations_count?: number; study_applications_count?: number; registrations?: any[]; study_applications?: any[] };
   synced_at: string;
 }
 
@@ -93,6 +99,7 @@ export default function MaticnaKnjigaPage() {
   const [syncPreview, setSyncPreview] = useState<SyncPreview | null>(null);
   const [syncRuns, setSyncRuns] = useState<SyncRun[]>([]);
   const [ematicaRecords, setEmaticaRecords] = useState<EmaticaStudentRecord[]>([]);
+  const [selectedEmaticaRecord, setSelectedEmaticaRecord] = useState<EmaticaStudentRecord | null>(null);
   const [syncPreviewLoading, setSyncPreviewLoading] = useState(false);
   const [syncRunLoading, setSyncRunLoading] = useState(false);
   
@@ -240,6 +247,27 @@ export default function MaticnaKnjigaPage() {
     } finally {
       setSyncRunLoading(false);
     }
+  };
+
+  const getSourceStudentForRecord = (record: EmaticaStudentRecord | null) => {
+    if (!record) return null;
+    return students.find((student) => student.id === record.student_id) || null;
+  };
+
+  const getRecordDifferences = (record: EmaticaStudentRecord | null) => {
+    const sourceStudent = getSourceStudentForRecord(record);
+    if (!record || !sourceStudent) return [];
+    const fields = [
+      { label: 'Ime', matica: record.first_name || '', dnevnik: sourceStudent.name || '' },
+      { label: 'Prezime', matica: record.last_name || '', dnevnik: sourceStudent.surname || '' },
+      { label: 'OIB', matica: record.oib || '', dnevnik: sourceStudent.oib === 'Nije zaveden' ? '' : sourceStudent.oib || '' },
+      { label: 'Datum rođenja', matica: record.date_of_birth || '', dnevnik: sourceStudent.dob === 'Nepoznat' ? '' : sourceStudent.dob || '' },
+      { label: 'Mjesto rođenja', matica: record.place_of_birth || '', dnevnik: sourceStudent.pob === 'Nije zavedeno' ? '' : sourceStudent.pob || '' },
+      { label: 'Adresa', matica: record.address || '', dnevnik: sourceStudent.address === 'Nepoznata adresa' ? '' : sourceStudent.address || '' },
+      { label: 'Razred', matica: record.class_name || '', dnevnik: sourceStudent.class_name || '' },
+      { label: 'Program', matica: record.program_name || '', dnevnik: sourceStudent.program_name || '' }
+    ];
+    return fields.filter((field) => String(field.matica || '').trim() !== String(field.dnevnik || '').trim());
   };
 
   const loadRegistryData = async () => {
@@ -778,33 +806,52 @@ export default function MaticnaKnjigaPage() {
                   <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Izostanci</th>
                   <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Matura</th>
                   <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Sinkronizirano</th>
+                  <th className="px-4 py-2 font-black uppercase text-slate-500 text-right">Akcije</th>
                 </tr>
               </thead>
               <tbody>
-                {ematicaRecords.map((record) => (
-                  <tr key={record.id || record.student_id} className="border-b border-slate-100">
-                    <td className="px-4 py-2">
-                      <span className="block font-black text-slate-900 uppercase">{record.full_name}</span>
-                      <span className="block font-mono text-[10px] text-slate-500">{record.oib || 'OIB nije upisan'}</span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <span className="block font-black text-slate-700">{record.class_name || 'Bez razreda'}</span>
-                      <span className="block text-[10px] font-semibold text-slate-500">{record.program_name || 'Program nije upisan'}</span>
-                    </td>
-                    <td className="px-4 py-2 text-right font-black tabular-nums">
-                      {record.grade_summary?.grades_count || 0} / {record.grade_summary?.final_grades_count || 0}
-                    </td>
-                    <td className="px-4 py-2 text-right font-black tabular-nums">
-                      {record.absence_summary?.total || 0}
-                    </td>
-                    <td className="px-4 py-2 text-right font-black tabular-nums">
-                      {record.matura_summary?.registrations_count || 0}
-                    </td>
-                    <td className="px-4 py-2 text-right font-semibold text-slate-600 whitespace-nowrap">
-                      {new Date(record.synced_at).toLocaleString('hr-HR')}
-                    </td>
-                  </tr>
-                ))}
+                {ematicaRecords.map((record) => {
+                  const differences = getRecordDifferences(record);
+                  return (
+                    <tr key={record.id || record.student_id} className="border-b border-slate-100 hover:bg-slate-50">
+                      <td className="px-4 py-2">
+                        <span className="block font-black text-slate-900 uppercase">{record.full_name}</span>
+                        <span className="block font-mono text-[10px] text-slate-500">{record.oib || 'OIB nije upisan'}</span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className="block font-black text-slate-700">{record.class_name || 'Bez razreda'}</span>
+                        <span className="block text-[10px] font-semibold text-slate-500">{record.program_name || 'Program nije upisan'}</span>
+                      </td>
+                      <td className="px-4 py-2 text-right font-black tabular-nums">
+                        {record.grade_summary?.grades_count || 0} / {record.grade_summary?.final_grades_count || 0}
+                      </td>
+                      <td className="px-4 py-2 text-right font-black tabular-nums">
+                        {record.absence_summary?.total || 0}
+                      </td>
+                      <td className="px-4 py-2 text-right font-black tabular-nums">
+                        {record.matura_summary?.registrations_count || 0}
+                      </td>
+                      <td className="px-4 py-2 text-right font-semibold text-slate-600 whitespace-nowrap">
+                        <span className="block">{new Date(record.synced_at).toLocaleString('hr-HR')}</span>
+                        <span className={`inline-flex mt-1 px-2 py-0.5 rounded border text-[9px] font-black uppercase ${
+                          differences.length > 0
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}>
+                          {differences.length > 0 ? `${differences.length} razlika` : 'Usklađeno'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <button
+                          onClick={() => setSelectedEmaticaRecord(record)}
+                          className="inline-flex items-center justify-center gap-1 bg-blue-50 text-blue-700 border border-blue-100 px-3 py-1.5 rounded text-[10px] font-black uppercase hover:bg-blue-100 transition-colors"
+                        >
+                          <BookOpen size={12} /> Otvori
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -814,6 +861,111 @@ export default function MaticnaKnjigaPage() {
           </div>
         )}
       </section>
+
+      {selectedEmaticaRecord && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex justify-center items-center p-4 z-50 print-hidden">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-5xl overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b bg-slate-50 flex justify-between items-start gap-4">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-widest text-[#005c8d] mb-1">e-Matica kartica učenika</div>
+                <h2 className="text-xl font-black uppercase text-slate-900 leading-tight">{selectedEmaticaRecord.full_name}</h2>
+                <p className="text-[11px] font-semibold text-slate-500 mt-1">
+                  Zadnja sinkronizacija: {new Date(selectedEmaticaRecord.synced_at).toLocaleString('hr-HR')}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedEmaticaRecord(null)}
+                className="text-slate-400 hover:text-slate-700 text-xl leading-none font-bold"
+                aria-label="Zatvori"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                {[
+                  ['OIB', selectedEmaticaRecord.oib || 'Nije upisan'],
+                  ['Razred', selectedEmaticaRecord.class_name || 'Bez razreda'],
+                  ['Program', selectedEmaticaRecord.program_name || 'Nije upisan'],
+                  ['Status', selectedEmaticaRecord.status || 'ACTIVE'],
+                  ['Datum rođenja', selectedEmaticaRecord.date_of_birth ? new Date(selectedEmaticaRecord.date_of_birth).toLocaleDateString('hr-HR') : 'Nije upisan'],
+                  ['Mjesto rođenja', selectedEmaticaRecord.place_of_birth || 'Nije upisano'],
+                  ['Adresa', selectedEmaticaRecord.address || 'Nije upisana'],
+                  ['Prosjek ocjena', selectedEmaticaRecord.grade_summary?.average ?? 'Nema ocjena']
+                ].map(([label, value]) => (
+                  <div key={label} className="border border-slate-200 rounded-md p-3 bg-slate-50">
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">{label}</div>
+                    <div className="text-xs font-black text-slate-900">{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                <div className="border border-slate-200 rounded-md p-3">
+                  <div className="text-[10px] font-black uppercase text-slate-500 mb-2">Ocjene</div>
+                  <div className="text-2xl font-black text-slate-900">{selectedEmaticaRecord.grade_summary?.grades_count || 0}</div>
+                  <div className="text-[10px] font-bold text-slate-500">Zaključnih: {selectedEmaticaRecord.grade_summary?.final_grades_count || 0}</div>
+                </div>
+                <div className="border border-slate-200 rounded-md p-3">
+                  <div className="text-[10px] font-black uppercase text-slate-500 mb-2">Izostanci</div>
+                  <div className="text-2xl font-black text-slate-900">{selectedEmaticaRecord.absence_summary?.total || 0}</div>
+                  <div className="text-[10px] font-bold text-slate-500">
+                    Neopravdano: {selectedEmaticaRecord.absence_summary?.unjustified || 0}, čeka: {selectedEmaticaRecord.absence_summary?.pending || 0}
+                  </div>
+                </div>
+                <div className="border border-slate-200 rounded-md p-3">
+                  <div className="text-[10px] font-black uppercase text-slate-500 mb-2">Završni rad</div>
+                  <div className="text-2xl font-black text-slate-900">{selectedEmaticaRecord.final_thesis_summary?.count || 0}</div>
+                  <div className="text-[10px] font-bold text-slate-500">Evidentiranih zapisa</div>
+                </div>
+                <div className="border border-slate-200 rounded-md p-3">
+                  <div className="text-[10px] font-black uppercase text-slate-500 mb-2">Matura</div>
+                  <div className="text-2xl font-black text-slate-900">{selectedEmaticaRecord.matura_summary?.registrations_count || 0}</div>
+                  <div className="text-[10px] font-bold text-slate-500">Odabira studija: {selectedEmaticaRecord.matura_summary?.study_applications_count || 0}</div>
+                </div>
+              </div>
+
+              <div className="border border-slate-200 rounded-md overflow-hidden">
+                <div className="px-3 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-3">
+                  <h3 className="text-xs font-black uppercase text-slate-900">Usporedba s e-Dnevnikom</h3>
+                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${
+                    getRecordDifferences(selectedEmaticaRecord).length > 0
+                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                  }`}>
+                    {getRecordDifferences(selectedEmaticaRecord).length > 0 ? 'Ima razlika' : 'Usklađeno'}
+                  </span>
+                </div>
+                {getRecordDifferences(selectedEmaticaRecord).length > 0 ? (
+                  <table className="w-full text-left text-[11px]">
+                    <thead className="bg-white border-b border-slate-100">
+                      <tr>
+                        <th className="px-3 py-2 font-black uppercase text-slate-500">Polje</th>
+                        <th className="px-3 py-2 font-black uppercase text-slate-500">e-Matica</th>
+                        <th className="px-3 py-2 font-black uppercase text-slate-500">e-Dnevnik</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {getRecordDifferences(selectedEmaticaRecord).map((difference) => (
+                        <tr key={difference.label} className="border-b border-slate-100">
+                          <td className="px-3 py-2 font-black text-slate-700">{difference.label}</td>
+                          <td className="px-3 py-2 font-semibold text-amber-700">{difference.matica || 'Prazno'}</td>
+                          <td className="px-3 py-2 font-semibold text-slate-700">{difference.dnevnik || 'Prazno'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="p-4 text-[11px] font-bold text-emerald-700 bg-emerald-50">
+                    Osnovni matični podaci su usklađeni s trenutnim e-Dnevnik zapisom.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Screen Filters */}
       <div className="bg-slate-50 border border-slate-200 rounded-md p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 print-hidden">
