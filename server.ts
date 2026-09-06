@@ -413,14 +413,14 @@ async function startServer() {
       const authUserId = authData.user.id;
       let { data: profile } = await supabaseAdmin
         .from("user_profiles")
-        .select("id, auth_user_id, name, surname, full_name, email, role, access_role")
+        .select("id, auth_user_id, name, surname, full_name, email, role, access_role, school_id, active_school_id")
         .eq("auth_user_id", authUserId)
         .maybeSingle();
 
       if (!profile) {
         const { data: fallbackProfile } = await supabaseAdmin
           .from("user_profiles")
-          .select("id, auth_user_id, name, surname, full_name, email, role, access_role")
+          .select("id, auth_user_id, name, surname, full_name, email, role, access_role, school_id, active_school_id")
           .eq("id", authUserId)
           .maybeSingle();
         profile = fallbackProfile;
@@ -6212,11 +6212,21 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         return res.status(400).json({ success: false, error: "Nedostaju sati za unos." });
       }
 
+      const classId = String(req.body?.classId || req.body?.class_id || "").trim();
       let schoolId = String(req.body?.schoolId || req.body?.school_id || "").trim();
       if (!schoolId) {
         const profileSchoolId = (auth as any).profile?.active_school_id || (auth as any).profile?.school_id;
         const roleSchoolId = ((auth as any).roles || []).find((role: any) => role.school_id)?.school_id;
         schoolId = String(profileSchoolId || roleSchoolId || "").trim();
+      }
+      if (!schoolId && classId) {
+        const { data: classSchool, error: classSchoolError } = await supabaseAdmin
+          .from("classes")
+          .select("school_id")
+          .eq("id", classId)
+          .maybeSingle();
+        if (classSchoolError) throw classSchoolError;
+        schoolId = String(classSchool?.school_id || "").trim();
       }
       if (!schoolId) {
         return res.status(400).json({ success: false, error: "Nije moguće odrediti školu za bulk unos." });
