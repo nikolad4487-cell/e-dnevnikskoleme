@@ -6430,7 +6430,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         return res.status(403).json({ success: false, error: authorization.error || "Nemate ovlasti za popravak elemenata vrednovanja." });
       }
 
-      const [{ data: elements, error: elementsError }, { data: subjects, error: subjectsError }, { data: classes, error: classesError }] = await Promise.all([
+      const [{ data: elements, error: elementsError }, { data: subjects, error: subjectsError }, { data: classes, error: classesError }, { data: templates, error: templatesError }] = await Promise.all([
         supabaseAdmin
           .from("grading_elements")
           .select("id, school_id, class_id, subject_id, teacher_id, name, display_order, created_at")
@@ -6445,16 +6445,41 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         supabaseAdmin
           .from("classes")
           .select("id, name")
-          .eq("school_id", schoolId)
+          .eq("school_id", schoolId),
+        supabaseAdmin
+          .from("subject_grading_element_templates")
+          .select("school_id, subject_name, element_name, display_order")
       ]);
 
       if (elementsError) throw elementsError;
       if (subjectsError) throw subjectsError;
       if (classesError) throw classesError;
+      if (templatesError) throw templatesError;
 
       const subjectById = new Map<string, any>((subjects || []).map((subject: any) => [String(subject.id), subject]));
       const classById = new Map<string, any>((classes || []).map((classroom: any) => [String(classroom.id), classroom]));
       const normalizeElementName = (name: any) => String(name || "").toLowerCase().trim();
+      const normalizeSubjectName = (name: any) => normalizeElementName(name).replace(/\s*\((izborni|praksa)\)\s*$/i, "").trim();
+      const templateOrderBySubjectAndElement = new Map<string, number>();
+
+      const globalTemplates = new Map<string, number>();
+      const schoolTemplates = new Map<string, number>();
+      for (const template of templates || []) {
+        const key = `${normalizeSubjectName(template.subject_name)}:${normalizeElementName(template.element_name)}`;
+        if (String(template.school_id || "") === String(schoolId)) {
+          schoolTemplates.set(key, Number(template.display_order ?? 9999));
+        } else if (!template.school_id) {
+          globalTemplates.set(key, Number(template.display_order ?? 9999));
+        }
+      }
+      for (const [key, value] of globalTemplates) templateOrderBySubjectAndElement.set(key, value);
+      for (const [key, value] of schoolTemplates) templateOrderBySubjectAndElement.set(key, value);
+      const getTemplateOrder = (element: any) => {
+        const subject = subjectById.get(String(element.subject_id));
+        if (!subject) return null;
+        const key = `${normalizeSubjectName(subject.name)}:${normalizeElementName(element.name)}`;
+        return templateOrderBySubjectAndElement.has(key) ? templateOrderBySubjectAndElement.get(key)! : null;
+      };
 
       const grouped = new Map<string, any[]>();
       for (const element of elements || []) {
@@ -6497,6 +6522,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       const deleteIds = duplicateGroups.flatMap(group => group.deleteIds);
       let deleted = 0;
+      let reordered = 0;
 
       if (shouldFix && deleteIds.length > 0) {
         for (let i = 0; i < deleteIds.length; i += 100) {
@@ -6510,12 +6536,39 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         }
       }
 
+      const deletedIdSet = new Set(deleteIds);
+      const reorderedGroups = Array.from(grouped.values()).map(group => {
+        const sorted = [...group].sort((a, b) => {
+          const orderDiff = Number(a.display_order ?? 9999) - Number(b.display_order ?? 9999);
+          if (orderDiff !== 0) return orderDiff;
+          return String(a.created_at || "").localeCompare(String(b.created_at || ""));
+        });
+        return sorted[0];
+      }).filter(element => element && !deletedIdSet.has(element.id));
+
+      const reorderItems = reorderedGroups
+        .map(element => ({ element, templateOrder: getTemplateOrder(element) }))
+        .filter(item => item.templateOrder !== null && Number(item.element.display_order ?? 9999) !== item.templateOrder);
+
+      if (shouldFix && reorderItems.length > 0) {
+        for (const item of reorderItems) {
+          const { error: updateError } = await supabaseAdmin
+            .from("grading_elements")
+            .update({ display_order: item.templateOrder })
+            .eq("id", item.element.id);
+          if (updateError) throw updateError;
+          reordered += 1;
+        }
+      }
+
       return res.json({
         success: true,
         fixed: shouldFix,
         duplicateGroupCount: duplicateGroups.length,
         duplicateRowCount: deleteIds.length,
+        outOfOrderCount: reorderItems.length,
         deleted,
+        reordered,
         duplicates: duplicateGroups.map(group => ({
           className: group.className,
           subjectName: group.subjectName,

@@ -19,7 +19,7 @@ import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import GroupGradesModal from '../../components/GroupGradesModal';
 import GroupNotesModal from '../../components/GroupNotesModal';
 import GroupFinalGradesModal from '../../components/GroupFinalGradesModal';
-import { getDefaultGradingElementsForSubject } from '../../lib/gradingElementTemplates';
+import { getDefaultGradingElementsForSubject, sortGradingElementsForSubject } from '../../lib/gradingElementTemplates';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -60,7 +60,7 @@ const getProfileDisplayName = (profile: any) =>
 
 const normalizeGradingElementName = (name?: string | null) => String(name || '').toLowerCase().trim();
 
-const uniqueElementNames = (names: string[]) => {
+const uniqueElementNames = (subjectName: string, names: string[]) => {
   const unique = new Map<string, string>();
   names.forEach((name) => {
     const trimmedName = String(name || '').trim();
@@ -69,7 +69,10 @@ const uniqueElementNames = (names: string[]) => {
       unique.set(key, trimmedName);
     }
   });
-  return Array.from(unique.values());
+  return sortGradingElementsForSubject(
+    subjectName,
+    Array.from(unique.values()).map(name => ({ name }))
+  ).map(element => element.name || '');
 };
 
 interface ElementGroup {
@@ -400,7 +403,7 @@ export default function StudentSubjectDetail() {
       }
       setIsEnrolled(enrolled);
 
-      const elementNames = uniqueElementNames([
+      const elementNames = uniqueElementNames(subData?.name || '', [
         ...((gemData || []).map(g => String(g.name || '').trim()).filter(Boolean)),
         ...getDefaultGradingElementsForSubject(subData?.name || '')
       ]);

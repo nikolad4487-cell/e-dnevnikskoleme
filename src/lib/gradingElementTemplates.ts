@@ -47,6 +47,29 @@ export function getDefaultGradingElementsForSubject(subjectName: string): string
   return TEMPLATE_BY_SUBJECT[normalized] || [];
 }
 
+export function getDefaultGradingElementOrder(subjectName: string, elementName: string): number | null {
+  const elements = getDefaultGradingElementsForSubject(subjectName);
+  const index = elements.findIndex(name => name.toLowerCase().trim() === String(elementName || "").toLowerCase().trim());
+  return index === -1 ? null : index;
+}
+
+export function sortGradingElementsForSubject<T extends { name?: string | null; displayOrder?: number | null; display_order?: number | null }>(
+  subjectName: string,
+  elements: T[]
+): T[] {
+  return [...elements].sort((a, b) => {
+    const aTemplateOrder = getDefaultGradingElementOrder(subjectName, a.name || "");
+    const bTemplateOrder = getDefaultGradingElementOrder(subjectName, b.name || "");
+    if (aTemplateOrder !== null && bTemplateOrder !== null) return aTemplateOrder - bTemplateOrder;
+    if (aTemplateOrder !== null) return -1;
+    if (bTemplateOrder !== null) return 1;
+    const aOrder = Number(a.displayOrder ?? a.display_order ?? 9999);
+    const bOrder = Number(b.displayOrder ?? b.display_order ?? 9999);
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return String(a.name || "").localeCompare(String(b.name || ""), "hr", { sensitivity: "base" });
+  });
+}
+
 export async function ensureDefaultGradingElementsForAssignment(
   supabaseClient: any,
   assignment: {
@@ -72,16 +95,16 @@ export async function ensureDefaultGradingElementsForAssignment(
   }
 
   const existingNames = new Set((existing || []).map((row: { name?: string | null }) => String(row.name || "").toLowerCase().trim()));
-  const displayOffset = existing?.length || 0;
   const rows = elements
-    .filter(name => !existingNames.has(name.toLowerCase().trim()))
-    .map((name, index) => ({
+    .map((name, displayOrder) => ({ name, displayOrder }))
+    .filter(({ name }) => !existingNames.has(name.toLowerCase().trim()))
+    .map(({ name, displayOrder }) => ({
     school_id: assignment.schoolId || null,
     class_id: assignment.classId,
     subject_id: assignment.subjectId,
     teacher_id: assignment.teacherId,
     name,
-    display_order: displayOffset + index
+    display_order: displayOrder
   }));
 
   if (rows.length === 0) return;

@@ -12,7 +12,7 @@ import { SpecialExamReGradeModal } from '../../components/SpecialExamReGradeModa
 import { toast } from 'react-hot-toast';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { ImenikTable } from '../../components/ImenikTable';
-import { getDefaultGradingElementsForSubject } from '../../lib/gradingElementTemplates';
+import { getDefaultGradingElementsForSubject, sortGradingElementsForSubject } from '../../lib/gradingElementTemplates';
 
 type ViewMode = 'STUDENTS' | 'SUBJECTS' | 'GRADES' | 'NOTES';
 
@@ -47,7 +47,7 @@ const mergeDefaultGradingElements = (elements: any[], subjectName?: string | nul
       existingNames.add(key);
     }
   });
-  return dedupeGradingElementsByName(merged);
+  return sortGradingElementsForSubject(subjectName || '', dedupeGradingElementsByName(merged));
 };
 
 function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effectiveClassId, selectedSchoolId, user, classes, onRefresh, canOverrideClassBookLock }: any) {

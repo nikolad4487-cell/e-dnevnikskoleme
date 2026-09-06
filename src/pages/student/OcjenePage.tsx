@@ -10,7 +10,7 @@ import { cn, formatPersonName, finalGradeLabels, formatSubjectDisplayName, forma
 import { BookOpen, GraduationCap, ChevronRight, ArrowLeft } from 'lucide-react';
 import { mappers, mapList } from '../../lib/mappers';
 import { isClassEligibleForFinalThesis } from '../../lib/thesisHelper';
-import { getDefaultGradingElementsForSubject } from '../../lib/gradingElementTemplates';
+import { getDefaultGradingElementsForSubject, sortGradingElementsForSubject } from '../../lib/gradingElementTemplates';
 
 const normalizeElementName = (name?: string | null) => String(name || '').toLowerCase().trim();
 const displayElementName = (name?: string | null) => String(name || '').toLocaleUpperCase('hr-HR');
@@ -36,7 +36,7 @@ const mergeDefaultGradingElements = (elements: any[], subjectName?: string | nul
       existingNames.add(key);
     }
   });
-  return dedupeGradingElementsByName(merged);
+  return sortGradingElementsForSubject(subjectName || '', dedupeGradingElementsByName(merged));
 };
 
 export default function OcjenePage() {
