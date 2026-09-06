@@ -102,6 +102,7 @@ export default function MaticnaKnjigaPage() {
   const [selectedEmaticaRecord, setSelectedEmaticaRecord] = useState<EmaticaStudentRecord | null>(null);
   const [syncPreviewLoading, setSyncPreviewLoading] = useState(false);
   const [syncRunLoading, setSyncRunLoading] = useState(false);
+  const [syncConfirmOpen, setSyncConfirmOpen] = useState(false);
   
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -739,7 +740,7 @@ export default function MaticnaKnjigaPage() {
                 Spremi pripremu
               </button>
               <button
-                onClick={() => prepareSyncRun('SYNC')}
+                onClick={() => setSyncConfirmOpen(true)}
                 disabled={syncRunLoading || !syncPreview}
                 className="inline-flex items-center justify-center gap-2 bg-[#005c8d] text-white text-[10px] font-black px-4 py-2 uppercase rounded hover:bg-[#00476b] disabled:opacity-60 transition-colors"
               >
@@ -1005,6 +1006,57 @@ export default function MaticnaKnjigaPage() {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {syncConfirmOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex justify-center items-center p-4 z-50 print-hidden">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden">
+            <div className="p-4 border-b border-slate-200">
+              <div className="flex items-center gap-2 text-amber-700 text-[10px] font-black uppercase tracking-widest mb-2">
+                <AlertTriangle size={16} /> Potvrda sinkronizacije
+              </div>
+              <h2 className="text-lg font-black uppercase text-slate-900">Pokrenuti prijenos u e-Maticu?</h2>
+              <p className="text-xs font-semibold text-slate-600 mt-2 leading-relaxed">
+                Sustav će upisati ili ažurirati objedinjene e-Matica zapise za {syncPreview?.studentCount || 0} učenika iz odabrane škole.
+                Prije nastavka provjeri upozorenja u kontrolnom pregledu.
+              </p>
+            </div>
+            <div className="p-4 bg-slate-50 border-b border-slate-200 grid grid-cols-3 gap-3 text-center">
+              <div>
+                <div className="text-2xl font-black text-slate-900">{syncPreview?.studentCount || 0}</div>
+                <div className="text-[9px] font-black uppercase text-slate-500">Učenika</div>
+              </div>
+              <div>
+                <div className="text-2xl font-black text-slate-900">{syncPreview?.classCount || 0}</div>
+                <div className="text-[9px] font-black uppercase text-slate-500">Razreda</div>
+              </div>
+              <div>
+                <div className="text-2xl font-black text-amber-700">
+                  {syncPreview?.sections.reduce((total, section) => total + section.issues.length, 0) || 0}
+                </div>
+                <div className="text-[9px] font-black uppercase text-slate-500">Upozorenja</div>
+              </div>
+            </div>
+            <div className="p-4 flex justify-end gap-2">
+              <button
+                onClick={() => setSyncConfirmOpen(false)}
+                className="px-4 py-2 text-[10px] font-black uppercase border border-slate-300 rounded text-slate-600 hover:bg-slate-50"
+              >
+                Odustani
+              </button>
+              <button
+                onClick={async () => {
+                  setSyncConfirmOpen(false);
+                  await prepareSyncRun('SYNC');
+                }}
+                disabled={syncRunLoading}
+                className="px-4 py-2 text-[10px] font-black uppercase rounded bg-[#005c8d] text-white hover:bg-[#00476b] disabled:opacity-60"
+              >
+                Potvrdi sinkronizaciju
+              </button>
             </div>
           </div>
         </div>
