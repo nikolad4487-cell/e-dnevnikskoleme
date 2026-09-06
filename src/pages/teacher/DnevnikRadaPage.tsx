@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -41,15 +41,18 @@ const normalizeSavedDnevnikView = (savedView: string | null | undefined) => {
   return savedView || 'WEEKS';
 };
 
-export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA' }) {
+type DnevnikView = 'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA';
+
+export default function DnevnikRadaPage({ initialView }: { initialView?: DnevnikView }) {
   usePageTitle("Dnevnik rada");
-  const { classId: routeClassId } = useParams<{ classId: string }>();
+  const { classId: routeClassId, weekId: routeWeekId, date: routeDate } = useParams<{ classId: string; weekId?: string; date?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isMainAdmin, highestRole, userSchoolRoles } = useAuth();
   const { selectedSchoolId: contextSchoolId, selectedClassId: contextClassId, selectedYearId } = useSelection();
   
   const selectedSchoolId = contextSchoolId || sessionStorage.getItem('selectedSchoolId') || localStorage.getItem('selectedSchoolId');
-  const effectiveClassId = contextClassId || routeClassId;
+  const effectiveClassId = routeClassId || contextClassId;
   
   const [classes, setClasses] = useState<Class[]>([]);
   const selectedClass = classes.find(c => c.id === effectiveClassId);
@@ -77,9 +80,20 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   const [classSubjects, setClassSubjects] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<User[]>([]);
   
+  const routeView = useMemo<DnevnikView | null>(() => {
+    const path = location.pathname;
+    if (path.includes('/dnevnik-rada/weeks')) return 'WEEKS';
+    if (path.includes('/dnevnik-rada/week/')) return 'WEEK_DETAIL';
+    if (path.includes('/dnevnik-rada/day/')) return 'DAY_DETAIL';
+    if (path.includes('/dnevnik-rada/izostanci')) return 'ABSENCES';
+    if (path.includes('/pregled-rada/raspored-sati')) return 'SCHEDULE';
+    return null;
+  }, [location.pathname]);
+  const effectiveInitialView = routeView || initialView;
+
   const [weeks, setWeeks] = useState<WorkWeek[]>([]);
-  const [view, setView] = useState<'WEEKS' | 'WEEK_DETAIL' | 'DAY_DETAIL' | 'ABSENCES' | 'EXAMS' | 'SCHEDULE' | 'LEKTIRA'>(() => {
-    if (initialView) return initialView;
+  const [view, setView] = useState<DnevnikView>(() => {
+    if (effectiveInitialView) return effectiveInitialView;
     const saved = sessionStorage.getItem(`dnevnik_view_${effectiveClassId || 'default'}`);
     return normalizeSavedDnevnikView(saved) as any;
   });
@@ -104,19 +118,21 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   useEffect(() => {
     if (effectiveClassId) {
       const savedView = sessionStorage.getItem(`dnevnik_view_${effectiveClassId}`) as any;
-      if (initialView) {
-        setView(initialView);
+      if (effectiveInitialView) {
+        setView(effectiveInitialView);
       } else if (savedView) {
         setView(normalizeSavedDnevnikView(savedView) as any);
       } else {
         setView('WEEKS');
       }
 
-      const savedDate = sessionStorage.getItem(`dnevnik_selectedDate_${effectiveClassId}`);
-      setSelectedDate(savedDate || null);
+      if (!routeDate) {
+        const savedDate = sessionStorage.getItem(`dnevnik_selectedDate_${effectiveClassId}`);
+        setSelectedDate(savedDate || null);
+      }
 
       if (weeks.length > 0) {
-        const savedWeekId = sessionStorage.getItem(`dnevnik_selectedWeekId_${effectiveClassId}`);
+        const savedWeekId = routeWeekId || sessionStorage.getItem(`dnevnik_selectedWeekId_${effectiveClassId}`);
         if (savedWeekId) {
           const found = weeks.find(w => w.id === savedWeekId);
           setSelectedWeek(found || null);
@@ -125,7 +141,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
         }
       }
     }
-  }, [effectiveClassId, weeks, initialView]);
+  }, [effectiveClassId, weeks, effectiveInitialView, routeWeekId, routeDate]);
 
   // Persist view changes to sessionStorage
   useEffect(() => {
@@ -146,10 +162,10 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   }, [selectedWeek, effectiveClassId]);
 
   useEffect(() => {
-    if (initialView) {
-      setView(initialView);
+    if (effectiveInitialView) {
+      setView(effectiveInitialView);
     }
-  }, [initialView]);
+  }, [effectiveInitialView]);
 
   useEffect(() => {
     if (view === 'WEEK_DETAIL' && !selectedWeek && weeks.length > 0) {
@@ -165,7 +181,36 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
   });
 
   useEffect(() => {
+    if (!effectiveClassId || weeks.length === 0) return;
+
+    if (routeWeekId) {
+      const foundWeek = weeks.find(w => w.id === routeWeekId);
+      setSelectedWeek(foundWeek || null);
+      setView('WEEK_DETAIL');
+      return;
+    }
+
+    if (routeDate) {
+      const foundWeek = weeks.find(w => routeDate >= w.startDate && routeDate <= w.endDate);
+      setSelectedWeek(foundWeek || null);
+      setSelectedDate(routeDate);
+      setView('DAY_DETAIL');
+    }
+  }, [effectiveClassId, weeks, routeWeekId, routeDate]);
+
+  useEffect(() => {
     if ((view !== 'DAY_DETAIL' && view !== 'ABSENCES') || weeks.length === 0) return;
+
+    if (routeDate) {
+      const routeWeek = weeks.find(w => routeDate >= w.startDate && routeDate <= w.endDate);
+      if (routeWeek && (!selectedWeek || selectedWeek.id !== routeWeek.id)) {
+        setSelectedWeek(routeWeek);
+      }
+      if (selectedDate !== routeDate) {
+        setSelectedDate(routeDate);
+      }
+      return;
+    }
 
     const today = getLocalDateISO();
     const activeWeek = weeks.find(w => today >= w.startDate && today <= w.endDate) || weeks[weeks.length - 1];
@@ -180,7 +225,12 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: 'WEEKS'
     if (!selectedDate || !teachingDays.includes(selectedDate)) {
       setSelectedDate(nextDate);
     }
-  }, [view, weeks, selectedWeek, selectedDate]);
+
+    const targetDate = selectedDate && teachingDays.includes(selectedDate) ? selectedDate : nextDate;
+    if (effectiveClassId && targetDate && location.pathname.endsWith('/dnevnik-rada')) {
+      navigate(`/class/${effectiveClassId}/dnevnik-rada/day/${targetDate}`, { replace: true });
+    }
+  }, [view, weeks, selectedWeek, selectedDate, routeDate, effectiveClassId, location.pathname, navigate]);
 
   // Persist selectedDate changes to sessionStorage
   useEffect(() => {
@@ -1470,7 +1520,7 @@ setStudents(uniqueStudents);
         if (existingWeek) {
           toast.success('Prikazan je postojeći radni tjedan za ovaj datum.');
           setSelectedWeek(existingWeek);
-          setView('WEEK_DETAIL');
+          goToWeek(existingWeek);
           setShowWeekModal(false);
           return;
         }
@@ -1519,7 +1569,9 @@ setStudents(uniqueStudents);
           throw error;
         }
 
-        setWeeks([...weeks, mappers.week(data)]);
+        const createdWeek = mappers.week(data);
+        setWeeks([...weeks, createdWeek]);
+        goToWeek(createdWeek);
         toast.success('Radni tjedan dodan.');
       }
 
@@ -2263,14 +2315,111 @@ setStudents(uniqueStudents);
     return (shift || 'Ujutro').toLowerCase();
   };
 
+  const classBasePath = effectiveClassId ? `/class/${effectiveClassId}` : '';
+
+  const goToWeeks = () => {
+    if (!classBasePath) return;
+    navigate(`${classBasePath}/dnevnik-rada/weeks`);
+  };
+
+  const goToWeek = (week: WorkWeek | null) => {
+    if (!classBasePath) return;
+    if (week?.id) {
+      navigate(`${classBasePath}/dnevnik-rada/week/${week.id}`);
+    } else {
+      navigate(`${classBasePath}/dnevnik-rada/weeks`);
+    }
+  };
+
+  const goToDay = (week: WorkWeek | null, dateStr: string) => {
+    if (!classBasePath) return;
+    if (week) setSelectedWeek(week);
+    setSelectedDate(dateStr);
+    navigate(`${classBasePath}/dnevnik-rada/day/${dateStr}`);
+  };
+
+  const goToAbsencesDate = (dateStr: string) => {
+    if (!classBasePath) return;
+    setSelectedDate(dateStr);
+    navigate(`${classBasePath}/dnevnik-rada/izostanci`);
+  };
+
+  const getDayIndicatorClass = (dateStr: string) => {
+    const dayLessons = weekOverviewLessons.filter(lesson => lesson.date === dateStr);
+    const dayAbsences = weekOverviewAbsences.filter(absence => absence.date === dateStr);
+    const hasUnresolvedAbsence = dayAbsences.some(absence => absence.status !== AbsenceStatus.JUSTIFIED);
+
+    if (hasUnresolvedAbsence) return 'text-red-700';
+    if (dayLessons.length === 0) return 'text-gray-500';
+    return 'text-gray-900';
+  };
+
+  const handleBackNavigation = () => {
+    if (view === 'DAY_DETAIL') {
+      goToWeek(selectedWeek);
+      return;
+    }
+    if (view === 'WEEK_DETAIL') {
+      goToWeeks();
+      return;
+    }
+    if (view === 'ABSENCES') {
+      if (selectedDate) {
+        goToDay(selectedWeek, selectedDate);
+      } else {
+        goToWeeks();
+      }
+      return;
+    }
+    if (view === 'SCHEDULE') {
+      goToWeeks();
+      return;
+    }
+    goToWeeks();
+  };
+
+  const breadcrumbItems = useMemo(() => {
+    const classLabel = selectedClass?.name ? `Razred ${selectedClass.name}` : 'Razred';
+    const items: Array<{ label: string; path?: string }> = [
+      { label: classLabel, path: classBasePath ? `${classBasePath}/imenik` : undefined }
+    ];
+
+    if (view === 'SCHEDULE') {
+      items.push({ label: 'Pregled rada', path: classBasePath ? `${classBasePath}/pregled-rada/raspored-sati` : undefined });
+      items.push({ label: 'Raspored sati' });
+      return items;
+    }
+
+    items.push({ label: 'Dnevnik rada', path: classBasePath ? `${classBasePath}/dnevnik-rada/weeks` : undefined });
+
+    if (view === 'WEEKS') {
+      items.push({ label: 'Radni tjedni' });
+    } else if (selectedWeek && (view === 'WEEK_DETAIL' || view === 'DAY_DETAIL' || view === 'ABSENCES')) {
+      items.push({ label: selectedWeek.name, path: classBasePath ? `${classBasePath}/dnevnik-rada/week/${selectedWeek.id}` : undefined });
+    }
+
+    if (view === 'DAY_DETAIL' && selectedDate) {
+      items.push({ label: `${getDayName(selectedDate)} (${formatWeekDate(selectedDate).slice(0, 5)})` });
+    }
+
+    if (view === 'ABSENCES') {
+      items.push({ label: selectedDate ? `Izostanci (${formatWeekDate(selectedDate).slice(0, 5)})` : 'Izostanci' });
+    }
+
+    if (view === 'EXAMS') items.push({ label: 'Ispiti' });
+    if (view === 'LEKTIRA') items.push({ label: 'Lektira' });
+
+    return items;
+  }, [classBasePath, selectedClass?.name, selectedDate, selectedWeek, view]);
+
   return (
     <div className="flex flex-col h-full bg-[#f0f2f5] font-sans">
       {/* Header */}
       <div className="bg-[#005c8d] border-b border-[#004a70] px-4 py-1.5 flex items-center justify-between sticky top-0 z-10 text-white shadow-sm">
         <div className="flex items-center gap-6">
           <h2 className="text-[12px] font-bold flex items-center gap-2 uppercase tracking-tight">
-            {view === 'WEEKS' ? <List size={14} /> : <Book size={14} />}
-            {view === 'WEEKS' ? 'Pregled rada' : 'Dnevnik rada'}
+            {view === 'SCHEDULE' ? <LayoutGrid size={14} /> : (view === 'WEEKS' ? <List size={14} /> : <Book size={14} />)}
+            {view === 'SCHEDULE' ? 'Raspored sati' : 'Dnevnik rada'}
           </h2>
         </div>
         
@@ -2298,7 +2447,7 @@ setStudents(uniqueStudents);
 
           {view !== 'WEEKS' && (
             <button 
-              onClick={() => setView(view === 'DAY_DETAIL' ? 'WEEK_DETAIL' : 'WEEKS')}
+              onClick={handleBackNavigation}
               className="text-[10px] font-bold text-white bg-blue-700/30 px-3 py-1 border border-white/20 hover:bg-blue-700/50 uppercase flex items-center gap-1"
             >
               <ArrowLeft size={12} /> Natrag
@@ -2309,6 +2458,25 @@ setStudents(uniqueStudents);
 
       {/* Main Content */}
       <div className="flex-1 overflow-auto p-4 bg-[#f0f2f5]">
+        <nav className="mb-3 flex flex-wrap items-center gap-1 text-[11px] font-bold text-gray-500 uppercase">
+          {breadcrumbItems.map((item, index) => (
+            <React.Fragment key={`${item.label}-${index}`}>
+              {index > 0 && <ChevronRight size={12} className="text-gray-300" />}
+              {item.path && index < breadcrumbItems.length - 1 ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(item.path!)}
+                  className="text-[#005c8d] hover:underline"
+                >
+                  {item.label}
+                </button>
+              ) : (
+                <span className="text-gray-700">{item.label}</span>
+              )}
+            </React.Fragment>
+          ))}
+        </nav>
+
         {/* WEEKS LIST */}
         {view === 'WEEKS' && (() => {
           const getRequiredWeeks = (cls: any) => {
@@ -2425,7 +2593,6 @@ setStudents(uniqueStudents);
                 {weeks.sort((a,b) => (b.startDate || '').localeCompare(a.startDate || '')).map(w => {
                   const lessonStats = getWeekLessonStats(w);
                   const absenceStats = getWeekAbsenceStats(w);
-                  const weekAbsences = getWeekAbsences(w);
                   const dutyStudents = Array.from(new Set(w.onDutyStudentIds || [])).map(sid => {
                     const studentObj = students.find(s => s.id === sid);
                     return studentObj ? formatPersonName(studentObj) : null;
@@ -2436,7 +2603,18 @@ setStudents(uniqueStudents);
                   return (
                     <div key={w.id} className="bg-white border border-gray-300 shadow-sm">
                       <div className="grid grid-cols-1 xl:grid-cols-[260px_minmax(520px,1fr)_300px]">
-                        <div className="bg-[#d9eaf7] border-b xl:border-b-0 xl:border-r border-gray-300 min-h-[86px] flex flex-col justify-between">
+                        <div
+                          className="bg-[#d9eaf7] border-b xl:border-b-0 xl:border-r border-gray-300 min-h-[86px] flex flex-col justify-between cursor-pointer hover:bg-[#cfe4f4]"
+                          role="button"
+                          tabIndex={0}
+                          onClick={() => goToWeek(w)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              goToWeek(w);
+                            }
+                          }}
+                        >
                           <div className="px-3 py-2 flex items-start gap-2">
                             <div className="min-w-0 flex-1">
                               <div className="text-[12px] font-black text-gray-900 leading-tight">
@@ -2474,19 +2652,19 @@ setStudents(uniqueStudents);
 
                         <div className="grid grid-cols-1 sm:grid-cols-5 border-b xl:border-b-0">
                           {weekDays.map(dateStr => {
-                            const hasAbsence = weekAbsences.some(absence => absence.date === dateStr);
                             const teachingDayNumber = teachingDayNumberByDate[dateStr];
+                            const dayTextClass = getDayIndicatorClass(dateStr);
                             return (
                               <button
                                 key={dateStr}
                                 type="button"
-                                onClick={() => { setSelectedWeek(w); setSelectedDate(dateStr); setView('DAY_DETAIL'); }}
+                                onClick={() => goToDay(w, dateStr)}
                                 className="bg-[#f4f4f4] border-b sm:border-b-0 sm:border-r last:border-r-0 border-gray-300 px-2 py-3 text-center min-h-[72px] cursor-pointer"
                               >
-                                <div className={cn("text-[11px] font-black lowercase leading-tight", hasAbsence ? "text-red-700" : "text-gray-900")}>
+                                <div className={cn("text-[11px] font-black lowercase leading-tight", dayTextClass)}>
                                   {getDayName(dateStr).toLowerCase()}{teachingDayNumber ? ` (${teachingDayNumber})` : ''}
                                 </div>
-                                <div className={cn("text-[10px] font-semibold leading-tight mt-1", hasAbsence ? "text-red-700" : "text-gray-600")}>
+                                <div className={cn("text-[10px] font-semibold leading-tight mt-1", dayTextClass)}>
                                   {formatWeekDate(dateStr)}
                                 </div>
                               </button>
@@ -2537,7 +2715,7 @@ setStudents(uniqueStudents);
           <div className="w-full bg-white border border-gray-300 p-8 text-center shadow-sm">
             <h3 className="text-gray-500 font-bold uppercase text-[11px] mb-2">Nema odabranog tjedna</h3>
             <p className="text-gray-400 text-xs mb-4">Trenutno ne postoji niti jedan radni tjedan u bazi za ovaj razred. Molimo dodajte tjedan u pregledu rada.</p>
-            <button onClick={() => setView('WEEKS')} className="mx-auto block px-4 py-2 bg-[#005c8d] text-white font-bold uppercase text-[10px]">
+            <button onClick={goToWeeks} className="mx-auto block px-4 py-2 bg-[#005c8d] text-white font-bold uppercase text-[10px]">
               Prebaci na Pregled rada
             </button>
           </div>
@@ -2557,7 +2735,7 @@ setStudents(uniqueStudents);
                      return (
                      <tr
                        key={dateStr}
-                       onClick={() => { setSelectedDate(dateStr); setView('DAY_DETAIL'); }}
+                       onClick={() => goToDay(selectedWeek, dateStr)}
                        className={cn(
                          "group cursor-pointer",
                          isToday ? "bg-red-50 hover:bg-red-100" : "hover:bg-[#eff6ff]"
@@ -2618,7 +2796,7 @@ setStudents(uniqueStudents);
                      onClick={() => {
                        const days = selectedWeek?.teachingDays || [];
                        const idx = days.indexOf(absenceDate);
-                       if (idx > 0) setSelectedDate(days[idx - 1]);
+                       if (idx > 0) goToAbsencesDate(days[idx - 1]);
                      }}
                      disabled={!selectedWeek || (selectedWeek.teachingDays || []).indexOf(absenceDate) <= 0}
                      className="p-1.5 bg-[#005c8d] text-white disabled:bg-gray-300"
@@ -2634,7 +2812,7 @@ setStudents(uniqueStudents);
                      onClick={() => {
                        const days = selectedWeek?.teachingDays || [];
                        const idx = days.indexOf(absenceDate);
-                       if (idx >= 0 && idx < days.length - 1) setSelectedDate(days[idx + 1]);
+                       if (idx >= 0 && idx < days.length - 1) goToAbsencesDate(days[idx + 1]);
                      }}
                      disabled={!selectedWeek || (selectedWeek.teachingDays || []).indexOf(absenceDate) >= (selectedWeek.teachingDays || []).length - 1}
                      className="p-1.5 bg-[#005c8d] text-white disabled:bg-gray-300"
@@ -3312,7 +3490,7 @@ setStudents(uniqueStudents);
                 <button 
                   onClick={() => {
                     const idx = (selectedWeek.teachingDays || []).indexOf(selectedDate);
-                    if (idx > 0) setSelectedDate((selectedWeek.teachingDays || [])[idx-1]);
+                    if (idx > 0) goToDay(selectedWeek, (selectedWeek.teachingDays || [])[idx - 1]);
                   }}
                   disabled={(selectedWeek.teachingDays || []).indexOf(selectedDate) === 0}
                   className="p-1 border border-gray-300 text-[#005c8d] hover:bg-gray-100 disabled:opacity-20 transition-colors"
@@ -3325,7 +3503,7 @@ setStudents(uniqueStudents);
                 <button 
                   onClick={() => {
                     const idx = (selectedWeek.teachingDays || []).indexOf(selectedDate);
-                    if (idx < (selectedWeek.teachingDays || []).length - 1) setSelectedDate((selectedWeek.teachingDays || [])[idx+1]);
+                    if (idx < (selectedWeek.teachingDays || []).length - 1) goToDay(selectedWeek, (selectedWeek.teachingDays || [])[idx + 1]);
                   }}
                   disabled={(selectedWeek.teachingDays || []).indexOf(selectedDate) === (selectedWeek.teachingDays || []).length - 1}
                   className="p-1 border border-gray-300 text-[#005c8d] hover:bg-gray-100 disabled:opacity-20 transition-colors"
@@ -3338,7 +3516,6 @@ setStudents(uniqueStudents);
                 <button
                   type="button"
                   onClick={() => {
-                    setView('ABSENCES');
                     if (effectiveClassId) {
                       navigate(`/class/${effectiveClassId}/dnevnik-rada/izostanci`);
                     }
