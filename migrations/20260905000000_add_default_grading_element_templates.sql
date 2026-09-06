@@ -100,6 +100,7 @@ with templates(subject_name, element_name, display_order) as (
     ('praktična nastava', 'radna higijena', 1),
     ('praktična nastava', 'radna disciplina', 2),
     ('praktična nastava', 'dnevnik rada', 3),
+    ('praktična nastava', 'dokumentacija praktične nastave', 4),
     ('promet i putničke agencije', 'usvojenost nastavnih sadržaja', 0),
     ('promet i putničke agencije', 'primjena nastavnih sadržaja', 1),
     ('promet i putničke agencije', 'samostalni rad', 2),

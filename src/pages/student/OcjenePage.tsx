@@ -10,6 +10,34 @@ import { cn, formatPersonName, finalGradeLabels, formatSubjectDisplayName, forma
 import { BookOpen, GraduationCap, ChevronRight, ArrowLeft } from 'lucide-react';
 import { mappers, mapList } from '../../lib/mappers';
 import { isClassEligibleForFinalThesis } from '../../lib/thesisHelper';
+import { getDefaultGradingElementsForSubject } from '../../lib/gradingElementTemplates';
+
+const normalizeElementName = (name?: string | null) => String(name || '').toLowerCase().trim();
+const displayElementName = (name?: string | null) => String(name || '').toLocaleUpperCase('hr-HR');
+
+const dedupeGradingElementsByName = (elements: any[]) => {
+  const unique = new Map<string, any>();
+  elements.forEach((element) => {
+    const key = normalizeElementName(element.name);
+    if (key && !unique.has(key)) {
+      unique.set(key, element);
+    }
+  });
+  return Array.from(unique.values());
+};
+
+const mergeDefaultGradingElements = (elements: any[], subjectName?: string | null) => {
+  const merged = [...elements];
+  const existingNames = new Set(merged.map(element => normalizeElementName(element.name)));
+  getDefaultGradingElementsForSubject(subjectName || '').forEach((name, index) => {
+    const key = normalizeElementName(name);
+    if (!existingNames.has(key)) {
+      merged.push({ id: `default-${key}`, name, displayOrder: elements.length + index });
+      existingNames.add(key);
+    }
+  });
+  return dedupeGradingElementsByName(merged);
+};
 
 export default function OcjenePage() {
   const navigate = useNavigate();
@@ -40,7 +68,11 @@ export default function OcjenePage() {
         .eq('subject_id', selectedSubject)
         .order('display_order', { ascending: true });
       
-      const elements = data ? mapList(data, mappers.gradingElement) : [];
+      const activeSubjectForElements = subjects.find(subject => subject.id === selectedSubject);
+      const elements = mergeDefaultGradingElements(
+        data ? mapList(data, mappers.gradingElement) : [],
+        activeSubjectForElements?.name
+      );
       setGradingElements(elements);
       
       console.log("STUDENT ASSESSMENT ELEMENTS", elements);
@@ -49,7 +81,7 @@ export default function OcjenePage() {
     };
 
     fetchGradingElements();
-  }, [targetStudent?.id, selectedClassId, selectedSubject, selectedSchoolId]);
+  }, [targetStudent?.id, selectedClassId, selectedSubject, selectedSchoolId, subjects]);
 
   const fetchSpecialExams = async () => {
     if (!targetStudent?.id || !selectedClassId || !selectedSubject || !currentClass?.school_year_id) return;
@@ -565,7 +597,7 @@ export default function OcjenePage() {
               <tbody>
                 {gradingElements.length > 0 ? gradingElements.map((ge) => (
                   <tr key={ge.id} className="border-b border-slate-300">
-                    <td className="p-4 border-r border-slate-300 font-bold text-slate-700 bg-slate-50/30 text-xs">{ge.name}</td>
+                    <td className="p-4 border-r border-slate-300 font-bold text-slate-700 bg-slate-50/30 text-xs">{displayElementName(ge.name)}</td>
                     {MONTHS_ORDER.map(m => (
                       <td key={m} className="p-1 border-r border-slate-300 text-center align-middle bg-white group hover:bg-slate-50 transition-colors">
                         <div className="flex flex-wrap justify-center gap-1.5 min-h-[30px]">

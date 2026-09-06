@@ -20,7 +20,7 @@ const TEMPLATE_BY_SUBJECT: Record<string, string[]> = {
   "povijest": ["činjenično znanje", "uzročno-posljedično zaključivanje", "snalaženje u vremenu i prostoru"],
   "povijest hrvatske kulturne baštine": ["usvojenost nastavnih sadržaja - usmeno", "usvojenost nastavnih sadržaja - pisano", "aktivnost i kreativnost"],
   "poznavanje robe i prehrana": ["usvojenost nastavnih sadržaja", "primjena nastavnih sadržaja", "samostalni rad"],
-  "praktična nastava": ["stručni rad", "radna higijena", "radna disciplina", "dnevnik rada"],
+  "praktična nastava": ["stručni rad", "radna higijena", "radna disciplina", "dnevnik rada", "dokumentacija praktične nastave"],
   "promet i putničke agencije": ["usvojenost nastavnih sadržaja", "primjena nastavnih sadržaja", "samostalni rad"],
   "računalstvo": ["usvojenost nastavnih sadržaja", "primjena nastavnih sadržaja", "samostalni rad"],
   "računovodstvo i kontrola": ["usvojenost nastavnih sadržaja", "primjena nastavnih sadržaja", "samostalni rad"],
@@ -64,18 +64,17 @@ export async function ensureDefaultGradingElementsForAssignment(
     .from("grading_elements")
     .select("name")
     .eq("class_id", assignment.classId)
-    .eq("subject_id", assignment.subjectId)
-    .eq("teacher_id", assignment.teacherId);
+    .eq("subject_id", assignment.subjectId);
 
   if (existingError) {
     console.warn("Default grading elements could not be checked:", existingError);
     return;
   }
 
-  const existingNames = new Set((existing || []).map((row: { name?: string | null }) => String(row.name || "").toLowerCase()));
+  const existingNames = new Set((existing || []).map((row: { name?: string | null }) => String(row.name || "").toLowerCase().trim()));
   const displayOffset = existing?.length || 0;
   const rows = elements
-    .filter(name => !existingNames.has(name.toLowerCase()))
+    .filter(name => !existingNames.has(name.toLowerCase().trim()))
     .map((name, index) => ({
     school_id: assignment.schoolId || null,
     class_id: assignment.classId,

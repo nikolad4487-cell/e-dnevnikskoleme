@@ -12,6 +12,7 @@ import { SpecialExamReGradeModal } from '../../components/SpecialExamReGradeModa
 import { toast } from 'react-hot-toast';
 import { usePageTitle } from '../../hooks/usePageTitle';
 import { ImenikTable } from '../../components/ImenikTable';
+import { getDefaultGradingElementsForSubject } from '../../lib/gradingElementTemplates';
 
 type ViewMode = 'STUDENTS' | 'SUBJECTS' | 'GRADES' | 'NOTES';
 
@@ -22,6 +23,32 @@ const deletionReasonOptions = Object.values(DeletionReason).map(value => ({
 
 const todayDateISO = getLocalDateISO();
 const gradeDateBounds = getGradeDateBounds();
+
+const normalizeGradingElementName = (name?: string | null) => String(name || '').toLowerCase().trim();
+
+const dedupeGradingElementsByName = (elements: any[]) => {
+  const unique = new Map<string, any>();
+  elements.forEach((element) => {
+    const key = normalizeGradingElementName(element.name);
+    if (key && !unique.has(key)) {
+      unique.set(key, element);
+    }
+  });
+  return Array.from(unique.values());
+};
+
+const mergeDefaultGradingElements = (elements: any[], subjectName?: string | null) => {
+  const merged = [...elements];
+  const existingNames = new Set(merged.map(element => normalizeGradingElementName(element.name)));
+  getDefaultGradingElementsForSubject(subjectName || '').forEach((name, index) => {
+    const key = normalizeGradingElementName(name);
+    if (!existingNames.has(key)) {
+      merged.push({ id: `default-${key}`, name, displayOrder: elements.length + index });
+      existingNames.add(key);
+    }
+  });
+  return dedupeGradingElementsByName(merged);
+};
 
 function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effectiveClassId, selectedSchoolId, user, classes, onRefresh, canOverrideClassBookLock }: any) {
   const [period, setPeriod] = useState<'FIRST_TERM' | 'SECOND_TERM'>('FIRST_TERM');
@@ -667,23 +694,17 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
 
     if (viewMode === 'GRADES' && activeStudent && activeSubject) {
       const fetchGradingElements = async () => {
-        const targetTeacherId = (() => {
-          if (isMainAdmin) {
-            const assignment = subjectAssignments.find(a => a.classId === effectiveClassId && a.subjectId === activeSubject.id);
-            if (assignment?.teacherId) return assignment.teacherId;
-          }
-          return user?.id;
-        })();
-
         const { data } = await supabase
           .from('grading_elements')
           .select('*')
           .eq('school_id', selectedSchoolId)
           .eq('class_id', effectiveClassId)
           .eq('subject_id', activeSubject.id)
-          .eq('teacher_id', targetTeacherId)
           .order('display_order', { ascending: true });
-        if (data) setGradingElements(mapList(data, mappers.gradingElement));
+        setGradingElements(mergeDefaultGradingElements(
+          data ? mapList(data, mappers.gradingElement) : [],
+          activeSubject.name
+        ));
       };
 
       const fetchGrades = async () => {
@@ -2950,23 +2971,17 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
           })()}
           onRefresh={() => {
             const fetchGE = async () => {
-              const targetTeacherId = (() => {
-                if (isMainAdmin) {
-                  const assignment = subjectAssignments.find(a => a.classId === effectiveClassId && a.subjectId === activeSubject.id);
-                  if (assignment?.teacherId) return assignment.teacherId;
-                }
-                return user?.id;
-              })();
-
               const { data } = await supabase
                 .from('grading_elements')
                 .select('*')
                 .eq('school_id', selectedSchoolId)
                 .eq('class_id', effectiveClassId)
                 .eq('subject_id', activeSubject.id)
-                .eq('teacher_id', targetTeacherId)
                 .order('display_order', { ascending: true });
-              if (data) setGradingElements(mapList(data, mappers.gradingElement));
+              setGradingElements(mergeDefaultGradingElements(
+                data ? mapList(data, mappers.gradingElement) : [],
+                activeSubject.name
+              ));
             };
             fetchGE();
           }}
@@ -3157,10 +3172,9 @@ function GradingElementsModal({ isOpen, onClose, subject, classId, schoolId, tea
         .eq('school_id', schoolId)
         .eq('class_id', classId)
         .eq('subject_id', subject.id)
-        .eq('teacher_id', teacherId)
         .order('display_order', { ascending: true })
         .order('created_at', { ascending: true });
-      if (data) setElements(data); // mapList deleted because we want native DB row shape with description
+      if (data) setElements(dedupeGradingElementsByName(data)); // native DB row shape with description
     } finally {
       setLoading(false);
     }
@@ -3172,6 +3186,10 @@ function GradingElementsModal({ isOpen, onClose, subject, classId, schoolId, tea
 
   const handleAdd = async () => {
     if (!newElementName.trim()) return;
+    if (elements.some(element => normalizeGradingElementName(element.name) === normalizeGradingElementName(newElementName))) {
+      toast.error('Element s tim nazivom već postoji.');
+      return;
+    }
     
     if (!teacherId) {
       console.error("Missing teacher profile id");

@@ -19,6 +19,7 @@ import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import GroupGradesModal from '../../components/GroupGradesModal';
 import GroupNotesModal from '../../components/GroupNotesModal';
 import GroupFinalGradesModal from '../../components/GroupFinalGradesModal';
+import { getDefaultGradingElementsForSubject } from '../../lib/gradingElementTemplates';
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -56,6 +57,20 @@ const gradeDateBounds = getGradeDateBounds();
 
 const getProfileDisplayName = (profile: any) =>
   formatPersonName(profile) || profile?.full_name || profile?.name || 'Nastavnik';
+
+const normalizeGradingElementName = (name?: string | null) => String(name || '').toLowerCase().trim();
+
+const uniqueElementNames = (names: string[]) => {
+  const unique = new Map<string, string>();
+  names.forEach((name) => {
+    const trimmedName = String(name || '').trim();
+    const key = normalizeGradingElementName(trimmedName);
+    if (key && !unique.has(key)) {
+      unique.set(key, trimmedName);
+    }
+  });
+  return Array.from(unique.values());
+};
 
 interface ElementGroup {
   name: string;
@@ -385,7 +400,10 @@ export default function StudentSubjectDetail() {
       }
       setIsEnrolled(enrolled);
 
-      const elementNames = gemData?.map(g => g.name) || [];
+      const elementNames = uniqueElementNames([
+        ...((gemData || []).map(g => String(g.name || '').trim()).filter(Boolean)),
+        ...getDefaultGradingElementsForSubject(subData?.name || '')
+      ]);
       setGradingElements(elementNames);
       if (elementNames.length > 0 && !newGradeElement) {
         setNewGradeElement(elementNames[0]);
@@ -735,6 +753,11 @@ export default function StudentSubjectDetail() {
       }
 
       const name = newElementName.trim();
+      if (gradingElements.some(elementName => String(elementName || '').trim().toLowerCase() === name.toLowerCase())) {
+        toast.error('Element s tim nazivom već postoji.');
+        return;
+      }
+
       const schoolIdToUse = classroom?.school_id || classroom?.schoolId || null;
       const { error } = await supabase
         .from('grading_elements')
