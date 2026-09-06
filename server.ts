@@ -6121,6 +6121,16 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError || !user) return { authorized: false, error: "Invalid token" };
 
+    const globalAdminRoles = ["SUPER_ADMIN", "MAIN_ADMIN", "ADMIN"];
+    const globalAdminEmails = [
+      "skola@skolehr.xyz",
+      "skole@skolehr.xyz",
+      "nikola.duric@skolehr.xyz",
+      "nikola.duric@eskole.me",
+      "nikolad4487@gmail.com"
+    ];
+    const authEmailText = String(user.email || "").toLowerCase();
+
     let { data: profile, error: profileError } = await supabaseAdmin
       .from("user_profiles")
       .select("id, auth_user_id, name, surname, full_name, email, role, access_role, school_id, active_school_id")
@@ -6137,19 +6147,37 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       profileError = fallback.error;
     }
 
+    if (!profile && !profileError) {
+      const fallback = await supabaseAdmin
+        .from("user_profiles")
+        .select("id, auth_user_id, name, surname, full_name, email, role, access_role, school_id, active_school_id")
+        .eq("email", user.email)
+        .maybeSingle();
+      profile = fallback.data;
+      profileError = fallback.error;
+    }
+
+    if (!profile && !profileError && globalAdminEmails.includes(authEmailText)) {
+      const metadata = (user as any).user_metadata || {};
+      profile = {
+        id: user.id,
+        auth_user_id: user.id,
+        name: metadata.name || "",
+        surname: metadata.surname || "",
+        full_name: metadata.full_name || metadata.name || user.email,
+        email: user.email,
+        role: "ADMIN",
+        access_role: "ADMIN",
+        school_id: null,
+        active_school_id: null
+      };
+    }
+
     if (profileError || !profile) return { authorized: false, error: "User profile not found" };
 
     const roleText = String(profile.role || "").toUpperCase();
     const accessRoleText = String(profile.access_role || "").toUpperCase();
     const emailText = String(profile.email || "").toLowerCase();
-    const globalAdminRoles = ["SUPER_ADMIN", "MAIN_ADMIN", "ADMIN"];
-    const globalAdminEmails = [
-      "skola@skolehr.xyz",
-      "skole@skolehr.xyz",
-      "nikola.duric@skolehr.xyz",
-      "nikola.duric@eskole.me",
-      "nikolad4487@gmail.com"
-    ];
     if (globalAdminRoles.includes(roleText) || globalAdminRoles.includes(accessRoleText) || globalAdminEmails.includes(emailText)) {
       return { authorized: true, profile };
     }
