@@ -3034,34 +3034,32 @@ setStudents(uniqueStudents);
                 <table className="w-full border-collapse min-w-[900px] ed-table-dense">
                   <thead>
                     <tr className="bg-[#eaf4fb] border-b border-gray-300">
-                       <th colSpan={15} className="p-1 text-center text-[10px] font-bold uppercase text-slate-800 border-r border-gray-300">Izostanci učenika</th>
-                       <th rowSpan={2} className="p-2 text-center text-[10px] font-bold uppercase text-slate-800 border-r border-gray-300">Razlog izostanka</th>
+                       <th colSpan={14} className="p-1 text-center text-[10px] font-bold uppercase text-slate-800 border-r border-gray-300">Izostanci učenika</th>
+                       <th rowSpan={3} className="p-2 text-center text-[10px] font-bold uppercase text-slate-800 border-r border-gray-300">Razlog izostanka</th>
                        <th colSpan={2} className="p-1 text-center text-[10px] font-bold uppercase text-slate-800">Izostali sati</th>
                     </tr>
                     <tr className="bg-white border-b border-gray-300">
-                       <th className="p-2 text-left text-[10px] font-bold text-slate-800 border-r border-gray-300">Prezime i ime</th>
-                       <th className="p-2 text-center text-[10px] font-bold text-slate-800 border-r border-gray-300">Sati</th>
+                       <th rowSpan={2} className="p-2 text-left text-[10px] font-bold text-slate-800 border-r border-gray-300 align-bottom">Prezime i ime</th>
+                       <th colSpan={13} className="p-1 text-center text-[10px] font-bold text-slate-800 border-r border-gray-300">Sati</th>
+                       <th rowSpan={2} className="w-14 p-2 text-center text-[10px] font-bold text-slate-800 border-r border-gray-300 align-bottom">oprav.</th>
+                       <th rowSpan={2} className="w-14 p-2 text-center text-[10px] font-bold text-slate-800 align-bottom">neoprav.</th>
+                    </tr>
+                    <tr className="bg-white border-b border-gray-300">
                        {absencePeriods.map(hour => (
                          <th key={`absence-hour-${hour}`} className="w-8 p-1 text-center text-[10px] font-bold text-slate-800 border-r border-gray-300">{hour}</th>
                        ))}
-                       <th className="w-14 p-2 text-center text-[10px] font-bold text-slate-800 border-r border-gray-300">oprav.</th>
-                       <th className="w-14 p-2 text-center text-[10px] font-bold text-slate-800">neoprav.</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {students.length === 0 && (
                       <tr>
-                        <td colSpan={18} className="p-12 text-center text-gray-400 italic">Nema učenika u razredu.</td>
+                        <td colSpan={17} className="p-12 text-center text-gray-400 italic">Nema učenika u razredu.</td>
                       </tr>
                     )}
                     {absentStudents.map(s => {
                       const studentAbsences = dayAbsences.filter(abs => abs.studentId === s.id);
                       const justified = studentAbsences.filter(abs => abs.status === AbsenceStatus.JUSTIFIED).length;
                       const unjustified = studentAbsences.filter(abs => abs.status === AbsenceStatus.UNJUSTIFIED).length;
-                      const absenceHours = studentAbsences
-                        .map(abs => Number(abs.hour))
-                        .filter(hour => Number.isFinite(hour))
-                        .sort((a, b) => a - b);
                       const reason = studentAbsences
                         .map(abs => [abs.absenceType, abs.note].filter(Boolean).join(' - '))
                         .filter(Boolean)
@@ -3081,9 +3079,6 @@ setStudents(uniqueStudents);
                             ) : (
                               formatPersonName(s)
                             )}
-                          </td>
-                          <td className="p-1 text-center text-gray-700 border-r border-gray-200">
-                            {absenceHours.length ? absenceHours.join(', ') : ''}
                           </td>
                           {absencePeriods.map(hour => {
                             const absence = studentAbsences.find(abs => Number(abs.hour) === hour);
