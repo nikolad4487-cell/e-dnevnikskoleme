@@ -171,7 +171,7 @@ export default function MaticnaKnjigaPage() {
     }
   };
 
-  const prepareSyncRun = async () => {
+  const prepareSyncRun = async (mode: 'PREPARE' | 'SYNC' = 'PREPARE') => {
     if (!selectedSchoolId || !syncPreview) return;
     try {
       setSyncRunLoading(true);
@@ -184,7 +184,7 @@ export default function MaticnaKnjigaPage() {
         },
         body: JSON.stringify({
           schoolId: selectedSchoolId,
-          mode: 'PREPARE',
+          mode,
           preview: syncPreview
         })
       });
@@ -192,11 +192,12 @@ export default function MaticnaKnjigaPage() {
       if (!response.ok || !json.success) {
         throw new Error(json.error || 'Priprema sinkronizacije nije uspjela.');
       }
-      toast.success('Priprema sinkronizacije je spremljena.');
+      toast.success(mode === 'SYNC' ? 'Sinkronizacija u e-Maticu je završena.' : 'Priprema sinkronizacije je spremljena.');
       await loadSyncRuns();
+      if (mode === 'SYNC') await loadSyncPreview();
     } catch (err: any) {
       console.error('[EMATICA_SYNC_RUN] prepare error', err);
-      toast.error(err.message || 'Priprema sinkronizacije nije uspjela.');
+      toast.error(err.message || 'Sinkronizacija nije uspjela.');
     } finally {
       setSyncRunLoading(false);
     }
@@ -642,14 +643,24 @@ export default function MaticnaKnjigaPage() {
               <span>Izvor: e-Dnevnik, odabrana škola</span>
               <span>Zadnje očitanje: {new Date(syncPreview.generatedAt).toLocaleString('hr-HR')}</span>
             </div>
-            <button
-              onClick={prepareSyncRun}
-              disabled={syncRunLoading || !syncPreview}
-              className="inline-flex items-center justify-center gap-2 bg-[#005c8d] text-white text-[10px] font-black px-4 py-2 uppercase rounded hover:bg-[#00476b] disabled:opacity-60 transition-colors"
-            >
-              <Play size={14} />
-              Spremi pripremu sinkronizacije
-            </button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={() => prepareSyncRun('PREPARE')}
+                disabled={syncRunLoading || !syncPreview}
+                className="inline-flex items-center justify-center gap-2 bg-white border border-slate-300 text-slate-700 text-[10px] font-black px-4 py-2 uppercase rounded hover:bg-slate-50 disabled:opacity-60 transition-colors"
+              >
+                <Clock3 size={14} />
+                Spremi pripremu
+              </button>
+              <button
+                onClick={() => prepareSyncRun('SYNC')}
+                disabled={syncRunLoading || !syncPreview}
+                className="inline-flex items-center justify-center gap-2 bg-[#005c8d] text-white text-[10px] font-black px-4 py-2 uppercase rounded hover:bg-[#00476b] disabled:opacity-60 transition-colors"
+              >
+                <Play size={14} />
+                Pokreni sinkronizaciju
+              </button>
+            </div>
           </div>
         )}
 

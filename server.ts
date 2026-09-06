@@ -66,6 +66,7 @@ initJsonFile("matura_objections.json");
 initJsonFile("matura_study_applications.json");
 initJsonFile("matura_study_programs.json");
 initJsonFile("ematica_sync_runs.json");
+initJsonFile("ematica_student_records.json");
 
 function readJsonFile(filename: string): any[] {
   try {
@@ -7052,22 +7053,166 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         return res.status(403).json({ success: false, error: auth.error || "Nemate ovlasti za sinkronizaciju." });
       }
 
+      let syncedRecordsCount = 0;
+      let syncDetails: any = null;
+      const requestedMode = String(mode || "PREPARE").toUpperCase() === "SYNC" ? "SYNC" : "PREPARE";
+      if (requestedMode === "SYNC") {
+        const safeSelect = async (table: string, select = "*", apply: (query: any) => any = (query) => query) => {
+          try {
+            const { data, error } = await apply(supabaseAdmin.from(table).select(select));
+            if (error) throw error;
+            return data || [];
+          } catch (error: any) {
+            if (!["PGRST205", "42P01"].includes(error?.code)) {
+              console.warn(`[EMATICA_SYNC_RUN] ${table} read failed:`, error?.message || error);
+            }
+            return [];
+          }
+        };
+
+        const classes = await safeSelect("classes", "id, name, school_year, school_year_id, program_id", (query) => query.eq("school_id", schoolIdText));
+        const classIds = classes.map((item: any) => item.id).filter(Boolean);
+        const classById = new Map<string, any>(classes.map((item: any) => [item.id, item]));
+        const programIds = Array.from(new Set(classes.map((item: any) => item.program_id).filter(Boolean)));
+        const programs = programIds.length > 0
+          ? await safeSelect("programs", "id, name", (query) => query.in("id", programIds))
+          : [];
+        const programById = new Map<string, any>(programs.map((item: any) => [item.id, item]));
+
+        const studentRoles = await safeSelect("user_school_roles", "user_id, status", (query) =>
+          query.eq("school_id", schoolIdText).eq("role", "STUDENT")
+        );
+        const activeStudentIds = Array.from(new Set(studentRoles
+          .filter((role: any) => String(role.status || "ACTIVE").toUpperCase() === "ACTIVE")
+          .map((role: any) => role.user_id)
+          .filter(Boolean)));
+
+        const profiles = activeStudentIds.length > 0
+          ? await safeSelect("user_profiles", "id, name, surname, oib, dob, pob, address, class_id", (query) => query.in("id", activeStudentIds))
+          : [];
+        const enrollments = classIds.length > 0
+          ? await safeSelect("student_class_enrollments", "*", (query) => query.in("class_id", classIds))
+          : [];
+        const subjectEnrollments = classIds.length > 0
+          ? await safeSelect("student_subject_enrollments", "*", (query) => query.in("class_id", classIds))
+          : [];
+        const grades = classIds.length > 0
+          ? await safeSelect("grades", "id, student_id, subject_id, class_id, value, created_at", (query) => query.in("class_id", classIds))
+          : [];
+        const finalGrades = classIds.length > 0
+          ? await safeSelect("final_grades", "id, student_id, subject_id, class_id, grade, period, created_at", (query) => query.in("class_id", classIds))
+          : [];
+        const absences = classIds.length > 0
+          ? await safeSelect("absences", "id, student_id, class_id, status, hour, date, created_at", (query) => query.in("class_id", classIds))
+          : [];
+        const finalThesis = await safeSelect("final_thesis", "*", (query) => query.eq("school_id", schoolIdText));
+        const maturaRegistrations = await safeSelect("matura_registrations", "*", (query) => query.eq("school_id", schoolIdText));
+        const maturaApplications = activeStudentIds.length > 0
+          ? await safeSelect("matura_study_applications", "*", (query) => query.in("student_id", activeStudentIds))
+          : [];
+
+        const records = profiles.map((profile: any) => {
+          const activeEnrollment = enrollments.find((item: any) => item.student_id === profile.id && String(item.status || "ACTIVE").toUpperCase() === "ACTIVE")
+            || enrollments.find((item: any) => item.student_id === profile.id);
+          const classRow = classById.get(activeEnrollment?.class_id || profile.class_id) || null;
+          const programRow = classRow ? programById.get(classRow.program_id) : null;
+          const studentGrades = grades.filter((item: any) => item.student_id === profile.id);
+          const studentFinalGrades = finalGrades.filter((item: any) => item.student_id === profile.id);
+          const studentAbsences = absences.filter((item: any) => item.student_id === profile.id);
+          const studentMatura = maturaRegistrations.filter((item: any) => item.student_id === profile.id);
+          const studentApplications = maturaApplications.filter((item: any) => item.student_id === profile.id);
+          const studentThesis = finalThesis.filter((item: any) => item.student_id === profile.id);
+          const numericGrades = studentGrades.map((item: any) => Number(item.value)).filter((value: number) => Number.isFinite(value));
+
+          return {
+            school_id: schoolIdText,
+            student_id: profile.id,
+            class_id: classRow?.id || activeEnrollment?.class_id || profile.class_id || null,
+            program_id: programRow?.id || activeEnrollment?.program_id || classRow?.program_id || null,
+            school_year: activeEnrollment?.school_year || classRow?.school_year || null,
+            full_name: `${profile.name || ""} ${profile.surname || ""}`.trim(),
+            first_name: profile.name || null,
+            last_name: profile.surname || null,
+            oib: profile.oib || null,
+            date_of_birth: profile.dob || null,
+            place_of_birth: profile.pob || null,
+            address: profile.address || null,
+            class_name: classRow?.name || null,
+            program_name: programRow?.name || null,
+            status: activeEnrollment?.status || "ACTIVE",
+            grade_summary: {
+              grades_count: studentGrades.length,
+              final_grades_count: studentFinalGrades.length,
+              average: numericGrades.length > 0 ? Number((numericGrades.reduce((sum: number, value: number) => sum + value, 0) / numericGrades.length).toFixed(2)) : null,
+              final_grades: studentFinalGrades
+            },
+            absence_summary: {
+              total: studentAbsences.length,
+              justified: studentAbsences.filter((item: any) => ["OPRAVDANO", "JUSTIFIED"].includes(String(item.status || "").toUpperCase())).length,
+              unjustified: studentAbsences.filter((item: any) => ["NEOPRAVDANO", "UNJUSTIFIED"].includes(String(item.status || "").toUpperCase())).length,
+              pending: studentAbsences.filter((item: any) => ["CEKA_ODLUKU", "PENDING", ""].includes(String(item.status || "").toUpperCase())).length
+            },
+            final_thesis_summary: {
+              count: studentThesis.length,
+              items: studentThesis
+            },
+            matura_summary: {
+              registrations_count: studentMatura.length,
+              study_applications_count: studentApplications.length,
+              registrations: studentMatura,
+              study_applications: studentApplications
+            },
+            source_updated_at: new Date().toISOString(),
+            synced_at: new Date().toISOString()
+          };
+        });
+
+        if (records.length > 0) {
+          try {
+            const { error } = await supabaseAdmin
+              .from("ematica_student_records")
+              .upsert(records, { onConflict: "school_id,student_id" });
+            if (error) throw error;
+          } catch (dbError: any) {
+            if (!["PGRST205", "42P01"].includes(dbError?.code)) {
+              console.warn("[EMATICA_SYNC_RUN] student records DB upsert failed, using JSON fallback:", dbError?.message || dbError);
+            }
+            const existing = readJsonFile("ematica_student_records.json")
+              .filter((item: any) => String(item.school_id) !== schoolIdText);
+            writeJsonFile("ematica_student_records.json", [...existing, ...records]);
+          }
+        }
+
+        syncedRecordsCount = records.length;
+        syncDetails = {
+          synced_student_records: records.length,
+          subject_enrollments: subjectEnrollments.length,
+          grades: grades.length,
+          final_grades: finalGrades.length,
+          absences: absences.length,
+          final_thesis: finalThesis.length,
+          matura_registrations: maturaRegistrations.length,
+          matura_study_applications: maturaApplications.length
+        };
+      }
+
       const sections = Array.isArray(preview?.sections) ? preview.sections : [];
       const issuesCount = sections.reduce((total: number, section: any) => total + (Array.isArray(section.issues) ? section.issues.length : 0), 0);
       const runPayload = {
         id: crypto.randomUUID(),
         school_id: schoolIdText,
         triggered_by: auth.profile?.id || null,
-        mode: String(mode || "PREPARE").toUpperCase() === "SYNC" ? "SYNC" : "PREPARE",
+        mode: requestedMode,
         status: "COMPLETED",
         source_system: "e-Dnevnik",
         target_system: "e-Matica",
-        students_count: Number(preview?.studentCount || 0),
+        students_count: syncedRecordsCount || Number(preview?.studentCount || 0),
         classes_count: Number(preview?.classCount || 0),
         issues_count: issuesCount,
         summary: {
           generated_at: preview?.generatedAt || null,
-          sections
+          sections,
+          sync_details: syncDetails
         },
         error_message: null,
         created_at: new Date().toISOString()
@@ -7095,7 +7240,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         await supabaseAdmin.from("system_audit_logs").insert({
           executor_id: auth.profile?.id || null,
           school_id: schoolIdText,
-          action_type: "EMATICA_SYNC_PREPARED",
+          action_type: requestedMode === "SYNC" ? "EMATICA_SYNC_COMPLETED" : "EMATICA_SYNC_PREPARED",
           entity_type: "EMATICA_SYNC",
           entity_id: savedRun.id,
           new_value: savedRun
