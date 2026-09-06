@@ -6123,7 +6123,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
     const { data: profile, error: profileError } = await supabaseAdmin
       .from("user_profiles")
-      .select("id, auth_user_id, email, role, access_role, school_id, active_school_id")
+      .select("id, auth_user_id, name, surname, full_name, email, role, access_role, school_id, active_school_id")
       .eq("auth_user_id", user.id)
       .maybeSingle();
 
@@ -6185,6 +6185,182 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
     return { authorized: true, profile };
   }
+
+  app.post("/api/admin/bulk-first-school-day-lessons", async (req, res) => {
+    try {
+      if (!supabaseAdmin) {
+        return res.status(500).json({ success: false, error: "Supabase Admin client not initialized." });
+      }
+
+      const authHeader = req.headers.authorization || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+      const auth = await resolveAuthenticatedUser(req);
+      if ((auth as any).error) {
+        return res.status((auth as any).status || 401).json({ success: false, error: (auth as any).error });
+      }
+
+      const requestedDate = String(req.body?.date || "2026-09-07");
+      const topic = String(req.body?.topic || "Prvi nastavni dan");
+      const hours = Array.isArray(req.body?.hours) && req.body.hours.length > 0
+        ? req.body.hours.map((hour: any) => Number(hour)).filter((hour: number) => Number.isInteger(hour))
+        : [1, 2];
+
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(requestedDate)) {
+        return res.status(400).json({ success: false, error: "Datum mora biti u formatu YYYY-MM-DD." });
+      }
+      if (hours.length === 0) {
+        return res.status(400).json({ success: false, error: "Nedostaju sati za unos." });
+      }
+
+      let schoolId = String(req.body?.schoolId || req.body?.school_id || "").trim();
+      if (!schoolId) {
+        const profileSchoolId = (auth as any).profile?.active_school_id || (auth as any).profile?.school_id;
+        const roleSchoolId = ((auth as any).roles || []).find((role: any) => role.school_id)?.school_id;
+        schoolId = String(profileSchoolId || roleSchoolId || "").trim();
+      }
+      if (!schoolId) {
+        return res.status(400).json({ success: false, error: "Nije moguće odrediti školu za bulk unos." });
+      }
+
+      const authorization = await authorizeClassAdmin(token, schoolId);
+      if (!authorization.authorized) {
+        return res.status(403).json({ success: false, error: authorization.error || "Nemate ovlasti za bulk unos sati." });
+      }
+
+      let { data: subject } = await supabaseAdmin
+        .from("subjects")
+        .select("id, name")
+        .eq("school_id", schoolId)
+        .ilike("name", "Sat razrednika")
+        .maybeSingle();
+
+      if (!subject) {
+        const subjectId = `${schoolId}-sat-razrednika`;
+        const { data: createdSubject, error: subjectCreateError } = await supabaseAdmin
+          .from("subjects")
+          .upsert({
+            id: subjectId,
+            school_id: schoolId,
+            name: "Sat razrednika",
+            code: "SR"
+          })
+          .select("id, name")
+          .maybeSingle();
+        if (subjectCreateError || !createdSubject) {
+          throw subjectCreateError || new Error("Nije moguće kreirati predmet Sat razrednika.");
+        }
+        subject = createdSubject;
+      }
+
+      const { data: classes, error: classesError } = await supabaseAdmin
+        .from("classes")
+        .select("id, name, school_id, school_year_id, school_year, homeroom_teacher_id, status")
+        .eq("school_id", schoolId)
+        .eq("status", "ACTIVE")
+        .order("name", { ascending: true });
+      if (classesError) throw classesError;
+
+      const activeClasses = classes || [];
+      if (activeClasses.length === 0) {
+        return res.json({ success: true, inserted: 0, skipped: 0, classes: 0, message: "Nema aktivnih razreda za odabranu školu." });
+      }
+
+      const classIds = activeClasses.map((cls: any) => cls.id);
+      const homeroomTeacherIds = activeClasses.map((cls: any) => cls.homeroom_teacher_id).filter(Boolean);
+      const homeroomTeachersQuery = homeroomTeacherIds.length > 0
+        ? supabaseAdmin
+          .from("user_profiles")
+          .select("id, name, surname, full_name")
+          .in("id", homeroomTeacherIds)
+        : Promise.resolve({ data: [], error: null });
+      const [{ data: existingLessons, error: existingError }, { data: workWeeks, error: weeksError }, { data: homeroomTeachers, error: teachersError }] = await Promise.all([
+        supabaseAdmin
+          .from("lessons")
+          .select("id, class_id, hour")
+          .in("class_id", classIds)
+          .eq("date", requestedDate)
+          .in("hour", hours),
+        supabaseAdmin
+          .from("work_weeks")
+          .select("id, class_id, start_date, end_date")
+          .in("class_id", classIds)
+          .lte("start_date", requestedDate)
+          .gte("end_date", requestedDate),
+        homeroomTeachersQuery
+      ]);
+      if (existingError) throw existingError;
+      if (weeksError) throw weeksError;
+      if (teachersError) throw teachersError;
+
+      const existingKeys = new Set((existingLessons || []).map((lesson: any) => `${lesson.class_id}:${Number(lesson.hour)}`));
+      const weekByClassId = new Map((workWeeks || []).map((week: any) => [week.class_id, week.id]));
+      const teacherById = new Map((homeroomTeachers || []).map((teacher: any) => [teacher.id, teacher]));
+      const fallbackTeacherId = (authorization.profile as any)?.id || (auth as any).userId;
+      const fallbackTeacherName = fullNameFromProfile(authorization.profile);
+
+      const rows: any[] = [];
+      const skipped: Array<{ classId: string; className: string; hour: number }> = [];
+
+      for (const cls of activeClasses) {
+        const teacherId = cls.homeroom_teacher_id || fallbackTeacherId;
+        const homeroomTeacher = teacherById.get(cls.homeroom_teacher_id);
+        const teacherDisplayName = homeroomTeacher ? fullNameFromProfile(homeroomTeacher) : fallbackTeacherName;
+
+        for (const hour of hours) {
+          const key = `${cls.id}:${hour}`;
+          if (existingKeys.has(key)) {
+            skipped.push({ classId: cls.id, className: cls.name, hour });
+            continue;
+          }
+
+          rows.push({
+            class_id: cls.id,
+            subject_id: subject.id,
+            teacher_id: teacherId,
+            school_id: schoolId,
+            school_year_id: cls.school_year_id,
+            work_week_id: weekByClassId.get(cls.id) || null,
+            date: requestedDate,
+            hour,
+            topic,
+            homework: null,
+            notes: null,
+            materials: null,
+            group_name: null,
+            is_held: true,
+            is_block: false,
+            block_count: 1,
+            created_by_user_id: (auth as any).userId,
+            teacher_display_name: teacherDisplayName
+          });
+        }
+      }
+
+      let insertedRows: any[] = [];
+      if (rows.length > 0) {
+        const { data: inserted, error: insertError } = await supabaseAdmin
+          .from("lessons")
+          .insert(rows)
+          .select("id, class_id, hour");
+        if (insertError) throw insertError;
+        insertedRows = inserted || [];
+      }
+
+      return res.json({
+        success: true,
+        schoolId,
+        date: requestedDate,
+        subjectId: subject.id,
+        classes: activeClasses.length,
+        inserted: insertedRows.length,
+        skipped: skipped.length,
+        skippedItems: skipped
+      });
+    } catch (err: any) {
+      console.error("[BULK_FIRST_DAY_LESSONS] Error:", err);
+      return res.status(500).json({ success: false, error: err?.message || "Bulk unos sati nije uspio." });
+    }
+  });
 
   app.post("/api/admin/classes", async (req, res) => {
     try {
