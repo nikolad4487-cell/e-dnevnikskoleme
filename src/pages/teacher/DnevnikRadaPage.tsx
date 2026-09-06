@@ -2915,52 +2915,37 @@ setStudents(uniqueStudents);
           </div>
         )}
 
-        {/* WEEK DETAIL - List of Days */}
+        {/* WEEK DETAIL - Work days */}
         {view === 'WEEK_DETAIL' && selectedWeek && (
-          <div className="w-full">
-            <div className="bg-white border border-gray-300 shadow-sm">
-               <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-[#005c8d] text-[11px] uppercase tracking-tight flex items-center justify-between">
-                  <span>{selectedWeek.name} - Radni dani</span>
-               </div>
-               <table className="w-full text-left border-collapse text-[12px] ed-table-dense">
-                 <tbody className="divide-y divide-gray-200">
-                   {(selectedWeek.teachingDays || []).map(dateStr => {
-                     const isToday = dateStr === getLocalDateISO();
-                     return (
-                     <tr
-                       key={dateStr}
-                       onClick={() => goToDay(selectedWeek, dateStr)}
-                       className={cn(
-                         "group cursor-pointer",
-                         isToday ? "bg-red-50 hover:bg-red-100" : "hover:bg-[#eff6ff]"
-                       )}
-                     >
-                       <td className={cn(
-                         "px-4 py-2 w-20 align-middle border-r border-gray-200",
-                         isToday ? "bg-red-100/80 border-red-200" : "bg-gray-100/30"
-                       )}>
-                          <div className="flex flex-col items-center">
-                             <div className={cn("text-[9px] font-bold uppercase leading-none mb-1", isToday ? "text-red-700" : "text-[#005c8d]")}>{new Date(dateStr).toLocaleDateString('hr-HR', { month: 'short' })}</div>
-                             <div className={cn("text-xl font-bold leading-none", isToday ? "text-red-700" : "text-gray-700")}>{new Date(dateStr).getDate()}.</div>
-                          </div>
-                       </td>
-                       <td className="px-4 py-2">
-                          <div className={cn("text-[13px] font-bold uppercase tracking-tight group-hover:underline", isToday ? "text-red-700" : "text-[#005c8d]")}>{getDayName(dateStr)}</div>
-                          <div className={cn("text-[10px] font-bold uppercase", isToday ? "text-red-500" : "text-gray-400")}>{dateStr}</div>
-                       </td>
-                       <td className="px-4 py-2 text-right">
-                          <div className={cn("text-[10px] font-bold", isToday ? "text-red-700" : "text-gray-500")}>
-                             {dailyLessons.filter(l => l.date === dateStr).length} sati upisano
-                          </div>
-                       </td>
-                       <td className="px-4 py-2 text-center w-10 border-l border-gray-200">
-                          <ChevronRight size={14} className={cn("text-gray-300", isToday ? "group-hover:text-red-700" : "group-hover:text-[#005c8d]")} />
-                       </td>
-                     </tr>
-                     );
-                   })}
-                 </tbody>
-               </table>
+          <div className="w-full bg-white border border-gray-300 shadow-sm">
+            <div className="bg-[#f8f9fa] border-b border-gray-300 px-4 py-2 font-bold text-[#005c8d] text-[11px] uppercase tracking-tight">
+              {selectedWeek.name} - Radni dani
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-5">
+              {getWeekWorkDays(selectedWeek).map(dateStr => {
+                const dayLessons = weekOverviewLessons.filter(lesson => lesson.date === dateStr);
+                const teachingDayNumber = teachingDayNumberByDate[dateStr];
+                const dayTextClass = getDayIndicatorClass(dateStr);
+
+                return (
+                  <button
+                    key={`week-detail-day-${dateStr}`}
+                    type="button"
+                    onClick={() => goToDay(selectedWeek, dateStr)}
+                    className="bg-[#f4f4f4] border-b md:border-b-0 md:border-r last:border-r-0 border-gray-300 px-3 py-5 text-center min-h-[92px] cursor-pointer hover:bg-[#eef6fc]"
+                  >
+                    <div className={cn("text-[12px] font-black lowercase leading-tight", dayTextClass)}>
+                      {getDayName(dateStr).toLowerCase()}{teachingDayNumber ? ` (${teachingDayNumber})` : ''}
+                    </div>
+                    <div className={cn("text-[10px] font-semibold leading-tight mt-1", dayTextClass)}>
+                      {formatWeekDate(dateStr)}
+                    </div>
+                    <div className="text-[10px] font-bold text-gray-500 mt-3">
+                      {dayLessons.length} sati upisano
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
