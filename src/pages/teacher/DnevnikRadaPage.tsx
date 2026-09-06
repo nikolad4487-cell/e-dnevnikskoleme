@@ -1286,6 +1286,7 @@ setStudents(uniqueStudents);
   const days = ['PON', 'UTO', 'SRI', 'ČET', 'PET', 'SUB'];
   const morningPeriods = [1, 2, 3, 4, 5, 6, 7, 8];
   const afternoonPeriods = [0, 1, 2, 3, 4, 5, 6, 7];
+  const diaryDayPeriods = Array.from({ length: 13 }, (_, index) => index);
 
   const getCellSubjects = (day: string, shift: 'MORNING' | 'AFTERNOON', period: number) => {
     const cell = scheduleCells.find(c => c.classId === effectiveClassId && c.dayOfWeek === day && c.shift === shift && c.periodNumber === period);
@@ -1316,9 +1317,7 @@ setStudents(uniqueStudents);
   };
 
   const getActivePeriodsForWeek = () => {
-    if (!selectedWeek) return morningPeriods;
-    const isAfternoonWeek = selectedWeek.shift === 'Popodne' || (selectedWeek.shift as string) === 'AFTERNOON';
-    return isAfternoonWeek ? afternoonPeriods : morningPeriods;
+    return diaryDayPeriods;
   };
 
   const getLessonSubjectLabel = (lesson: Lesson) => {
