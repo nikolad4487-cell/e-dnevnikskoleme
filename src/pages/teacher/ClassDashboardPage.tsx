@@ -248,11 +248,11 @@ export default function ClassDashboardPage() {
               <Route path="imenik-predmeti" element={<ImenikPage initialView="SUBJECTS" />} />
               <Route path="biljeske" element={<ClassNotesPage />} />
               
-              <Route path="pregled-rada" element={<Navigate to={`/class/${classId}/pregled-rada/raspored-sati`} replace />} />
-              <Route path="pregled-rada/raspored-sati" element={<DnevnikRadaPage initialView="SCHEDULE" />} />
+              <Route path="pregled-rada" element={<DnevnikRadaPage initialView="WEEKS" />} />
+              <Route path="pregled-rada/raspored-sati" element={<Navigate to={`/class/${classId}/pregled-rada`} replace />} />
               <Route path="work-overview" element={<Navigate to={`/class/${classId}/dnevnik-rada/weeks`} replace />} />
               
-              <Route path="dnevnik-rada" element={<DnevnikRadaPage initialView="DAY_DETAIL" />} />
+              <Route path="dnevnik-rada" element={<Navigate to={`/class/${classId}/dnevnik-rada/weeks`} replace />} />
               <Route path="dnevnik-rada/weeks" element={<DnevnikRadaPage initialView="WEEKS" />} />
               <Route path="dnevnik-rada/week/:weekId" element={<DnevnikRadaPage initialView="WEEK_DETAIL" />} />
               <Route path="dnevnik-rada/day/:date" element={<DnevnikRadaPage initialView="DAY_DETAIL" />} />
@@ -268,8 +268,8 @@ export default function ClassDashboardPage() {
               <Route path="pedagogical" element={<PedagoskaDokumentacijaPage />} />
               <Route path="dosje" element={<DigitalniDosjePage />} />
               
-              <Route path="raspored" element={<Navigate to={`/class/${classId}/pregled-rada/raspored-sati`} replace />} />
-              <Route path="schedule" element={<Navigate to={`/class/${classId}/pregled-rada/raspored-sati`} replace />} />
+              <Route path="raspored" element={<DnevnikRadaPage initialView="SCHEDULE" />} />
+              <Route path="schedule" element={<DnevnikRadaPage initialView="SCHEDULE" />} />
               <Route path="lektira" element={<DnevnikRadaPage initialView="LEKTIRA" />} />
               
               <Route path="zapisnici" element={<ZapisniciPage />} />

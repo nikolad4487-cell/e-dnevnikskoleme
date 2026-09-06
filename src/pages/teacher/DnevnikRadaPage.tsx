@@ -87,6 +87,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
     if (path.includes('/dnevnik-rada/day/')) return 'DAY_DETAIL';
     if (path.includes('/dnevnik-rada/izostanci')) return 'ABSENCES';
     if (path.includes('/pregled-rada/raspored-sati')) return 'SCHEDULE';
+    if (path.includes('/pregled-rada')) return 'WEEKS';
     return null;
   }, [location.pathname]);
   const effectiveInitialView = routeView || initialView;
@@ -2316,6 +2317,7 @@ setStudents(uniqueStudents);
   };
 
   const classBasePath = effectiveClassId ? `/class/${effectiveClassId}` : '';
+  const isPregledRadaRoute = location.pathname.includes('/pregled-rada');
 
   const goToWeeks = () => {
     if (!classBasePath) return;
@@ -2385,7 +2387,7 @@ setStudents(uniqueStudents);
     ];
 
     if (view === 'SCHEDULE') {
-      items.push({ label: 'Pregled rada', path: classBasePath ? `${classBasePath}/pregled-rada/raspored-sati` : undefined });
+      items.push({ label: 'Dnevnik rada', path: classBasePath ? `${classBasePath}/dnevnik-rada/weeks` : undefined });
       items.push({ label: 'Raspored sati' });
       return items;
     }
@@ -2393,7 +2395,7 @@ setStudents(uniqueStudents);
     items.push({ label: 'Dnevnik rada', path: classBasePath ? `${classBasePath}/dnevnik-rada/weeks` : undefined });
 
     if (view === 'WEEKS') {
-      items.push({ label: 'Radni tjedni' });
+      items.push({ label: isPregledRadaRoute ? 'Pregled rada' : 'Radni tjedni' });
     } else if (selectedWeek && (view === 'WEEK_DETAIL' || view === 'DAY_DETAIL' || view === 'ABSENCES')) {
       items.push({ label: selectedWeek.name, path: classBasePath ? `${classBasePath}/dnevnik-rada/week/${selectedWeek.id}` : undefined });
     }
@@ -2410,7 +2412,7 @@ setStudents(uniqueStudents);
     if (view === 'LEKTIRA') items.push({ label: 'Lektira' });
 
     return items;
-  }, [classBasePath, selectedClass?.name, selectedDate, selectedWeek, view]);
+  }, [classBasePath, isPregledRadaRoute, selectedClass?.name, selectedDate, selectedWeek, view]);
 
   return (
     <div className="flex flex-col h-full bg-[#f0f2f5] font-sans">
@@ -2419,7 +2421,7 @@ setStudents(uniqueStudents);
         <div className="flex items-center gap-6">
           <h2 className="text-[12px] font-bold flex items-center gap-2 uppercase tracking-tight">
             {view === 'SCHEDULE' ? <LayoutGrid size={14} /> : (view === 'WEEKS' ? <List size={14} /> : <Book size={14} />)}
-            {view === 'SCHEDULE' ? 'Raspored sati' : 'Dnevnik rada'}
+            {view === 'SCHEDULE' ? 'Raspored sati' : (isPregledRadaRoute ? 'Pregled rada' : 'Dnevnik rada')}
           </h2>
         </div>
         

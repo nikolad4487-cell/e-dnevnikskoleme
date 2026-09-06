@@ -216,17 +216,17 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
         ...(canAccessThesis ? [{ id: 'zavrsni-rad', label: 'Završni radovi', path: '/teacher/zavrsni-radovi', icon: <FileSpreadsheet size={14} /> }] : []),
       ],
     },
-    { id: 'pregled-rada', label: 'Pregled rada', path: `${classPathPrefix}/pregled-rada/raspored-sati`, icon: <List size={14} /> },
     {
       id: 'dnevnik-rada',
       label: 'Dnevnik rada',
-      path: `${classPathPrefix}/dnevnik-rada`,
+      path: `${classPathPrefix}/dnevnik-rada/weeks`,
       icon: <ClipboardList size={14} />,
       children: [
+        { id: 'pregled-rada', label: 'Pregled rada', path: `${classPathPrefix}/pregled-rada`, icon: <List size={14} /> },
         { id: 'radni-tjedni', label: 'Radni tjedni', path: `${classPathPrefix}/dnevnik-rada/weeks`, icon: <List size={14} /> },
         { id: 'ispiti', label: 'Ispiti', path: `${classPathPrefix}/ispiti`, icon: <Calendar size={14} /> },
         { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/dnevnik-rada/izostanci`, icon: <Clock size={14} /> },
-        { id: 'raspored', label: 'Raspored sati', path: `${classPathPrefix}/pregled-rada/raspored-sati`, icon: <Calendar size={14} /> },
+        { id: 'raspored', label: 'Raspored sati', path: `${classPathPrefix}/raspored`, icon: <Calendar size={14} /> },
         ...(canAccessLektira ? [{ id: 'lektira', label: 'Lektira', path: `${classPathPrefix}/lektira`, icon: <BookOpen size={14} /> }] : []),
         { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: `${classPathPrefix}/pedagoska-dokumentacija`, icon: <FileText size={14} /> },
       ],
@@ -268,7 +268,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       return path.includes('/pregled-rada') || path.includes('/work-overview');
     }
     if (tabId === 'dnevnik-rada') {
-      return path.includes('/dnevnik-rada') || path.includes('/work-journal');
+      return path.includes('/dnevnik-rada') || path.includes('/pregled-rada') || path.includes('/work-journal');
     }
     if (tabId === 'ispiti') {
       return path.includes('/ispiti') || path.includes('/exams');
@@ -289,7 +289,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
       return path.includes('zavrsni-radovi');
     }
     if (tabId === 'raspored') {
-      return path.includes('/raspored') || path.includes('/schedule') || path.includes('/pregled-rada/raspored-sati');
+      return path.includes('/raspored') || path.includes('/schedule');
     }
     if (tabId === 'lektira') {
       return path.includes('/lektira');
@@ -466,8 +466,8 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                         title: 'Nastava & Ocjenjivanje',
                         items: [
                           { label: 'Imenik / Učenici', path: `/class/${effectiveClassId}/imenik`, icon: <BookOpen size={14} /> },
-                          { label: 'Pregled rada u razredu', path: `/class/${effectiveClassId}/pregled-rada/raspored-sati`, icon: <List size={14} /> },
-                          { label: 'Dnevnik rada', path: `/class/${effectiveClassId}/dnevnik-rada`, icon: <ClipboardList size={14} /> },
+                          { label: 'Pregled rada u razredu', path: `/class/${effectiveClassId}/pregled-rada`, icon: <List size={14} /> },
+                          { label: 'Dnevnik rada', path: `/class/${effectiveClassId}/dnevnik-rada/weeks`, icon: <ClipboardList size={14} /> },
                           { label: 'Ispiti', path: `/class/${effectiveClassId}/ispiti`, icon: <Calendar size={14} /> },
                           { label: 'Izostanci', path: `/class/${effectiveClassId}/izostanci`, icon: <Clock size={14} /> },
                           ...(canAccessLektira ? [{ label: 'Lektira', path: `/class/${effectiveClassId}/lektira`, icon: <BookOpen size={14} /> }] : []),
