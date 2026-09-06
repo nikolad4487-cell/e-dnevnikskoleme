@@ -6831,6 +6831,169 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     }
   });
 
+  app.get("/api/admin/ematica-sync/preview", async (req, res) => {
+    try {
+      if (!supabaseAdmin) {
+        return res.status(500).json({ success: false, error: "Supabase Admin client not initialized." });
+      }
+
+      const authHeader = req.headers.authorization || "";
+      const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+      const schoolId = String(req.query.schoolId || "");
+
+      const auth = await authorizeClassAdmin(token, schoolId);
+      if (!auth.authorized) {
+        return res.status(403).json({ success: false, error: auth.error || "Nemate ovlasti za pregled sinkronizacije." });
+      }
+
+      const countQuery = async (label: string, table: string, apply: (query: any) => any = (query) => query) => {
+        try {
+          const query = apply(supabaseAdmin.from(table).select("id", { count: "exact", head: true }));
+          const { count, error } = await query;
+          if (error) throw error;
+          return { label, count: count || 0, available: true };
+        } catch (error: any) {
+          console.warn(`[EMATICA_SYNC_PREVIEW] ${table} count failed:`, error?.message || error);
+          return { label, count: 0, available: false, error: error?.message || "Nedostupno" };
+        }
+      };
+
+      const { data: classes, error: classesError } = await supabaseAdmin
+        .from("classes")
+        .select("id, name, school_year, school_year_id, program_id")
+        .eq("school_id", schoolId);
+      if (classesError) throw classesError;
+
+      const classIds = (classes || []).map((item: any) => item.id).filter(Boolean);
+
+      const { data: studentRoles, error: studentRolesError } = await supabaseAdmin
+        .from("user_school_roles")
+        .select("user_id, status")
+        .eq("school_id", schoolId)
+        .eq("role", "STUDENT");
+      if (studentRolesError) throw studentRolesError;
+
+      const activeStudentIds = Array.from(new Set((studentRoles || [])
+        .filter((role: any) => String(role.status || "ACTIVE").toUpperCase() === "ACTIVE")
+        .map((role: any) => role.user_id)
+        .filter(Boolean)));
+
+      let profiles: any[] = [];
+      if (activeStudentIds.length > 0) {
+        const { data, error } = await supabaseAdmin
+          .from("user_profiles")
+          .select("id, name, surname, oib, dob, pob, address, class_id")
+          .in("id", activeStudentIds);
+        if (error) throw error;
+        profiles = data || [];
+      }
+
+      const missingOib = profiles.filter((profile) => !String(profile.oib || "").trim()).length;
+      const missingDob = profiles.filter((profile) => !String(profile.dob || "").trim()).length;
+      const missingClass = profiles.filter((profile) => !profile.class_id).length;
+
+      const classScopedCount = (label: string, table: string) =>
+        classIds.length === 0
+          ? Promise.resolve({ label, count: 0, available: true })
+          : countQuery(label, table, (query) => query.in("class_id", classIds));
+
+      const studentScopedCount = (label: string, table: string) =>
+        activeStudentIds.length === 0
+          ? Promise.resolve({ label, count: 0, available: true })
+          : countQuery(label, table, (query) => query.in("student_id", activeStudentIds));
+
+      const [
+        schoolYears,
+        programs,
+        subjects,
+        classSubjects,
+        classEnrollments,
+        subjectEnrollments,
+        lessons,
+        grades,
+        finalGrades,
+        absences,
+        finalThesis,
+        maturaRegistrations,
+        maturaApplications
+      ] = await Promise.all([
+        countQuery("Školske godine", "school_years", (query) => query.eq("school_id", schoolId)),
+        countQuery("Programi", "programs", (query) => query.eq("school_id", schoolId)),
+        countQuery("Predmeti", "subjects", (query) => query.eq("school_id", schoolId)),
+        classScopedCount("Predmeti u razredima", "class_subjects"),
+        classScopedCount("Upisi učenika u razrede", "student_class_enrollments"),
+        classScopedCount("Upisi učenika u predmete", "student_subject_enrollments"),
+        classScopedCount("Sati dnevnika rada", "lessons"),
+        classScopedCount("Ocjene", "grades"),
+        classScopedCount("Zaključne ocjene", "final_grades"),
+        classScopedCount("Izostanci", "absences"),
+        countQuery("Završni radovi", "final_thesis", (query) => query.eq("school_id", schoolId)),
+        countQuery("Prijave mature", "matura_registrations", (query) => query.eq("school_id", schoolId)),
+        studentScopedCount("Odabiri studija", "matura_study_applications")
+      ]);
+
+      const localRegistrations = readJsonFile("student_registrations.json")
+        .filter((item: any) => String(item.school_id || item.schoolId || "") === schoolId);
+      const localTransfers = readJsonFile("student_transfers.json")
+        .filter((item: any) => activeStudentIds.includes(item.student_id));
+
+      const warnings = [
+        missingOib > 0 ? `${missingOib} učenika nema upisan OIB.` : "",
+        missingDob > 0 ? `${missingDob} učenika nema datum rođenja.` : "",
+        missingClass > 0 ? `${missingClass} učenika nije vezano uz razred.` : "",
+        classIds.length === 0 ? "Nema razreda za odabranu školu." : ""
+      ].filter(Boolean);
+
+      const sections = [
+        {
+          key: "registry",
+          title: "Matični podaci",
+          description: "Učenici, osobni podaci, upisi i promjene statusa.",
+          items: [
+            { label: "Aktivni učenici", count: profiles.length, available: true },
+            { label: "Razredi", count: classIds.length, available: true },
+            { label: "Evidencije upisa/ispisa", count: localRegistrations.length, available: true },
+            { label: "Premještaji", count: localTransfers.length, available: true }
+          ],
+          issues: warnings
+        },
+        {
+          key: "teaching",
+          title: "Nastava",
+          description: "Programi, predmeti, upisi u predmete i sati dnevnika rada.",
+          items: [schoolYears, programs, subjects, classSubjects, classEnrollments, subjectEnrollments, lessons],
+          issues: [classSubjects, subjectEnrollments, lessons].filter((item: any) => !item.available).map((item: any) => `${item.label}: ${item.error}`)
+        },
+        {
+          key: "outcomes",
+          title: "Ocjene i izostanci",
+          description: "Ocjene, zaključne ocjene i izostanci za prijenos u e-Maticu.",
+          items: [grades, finalGrades, absences],
+          issues: [grades, finalGrades, absences].filter((item: any) => !item.available).map((item: any) => `${item.label}: ${item.error}`)
+        },
+        {
+          key: "graduation",
+          title: "Završetak školovanja i matura",
+          description: "Završni rad, prijave mature i odabiri studijskih programa.",
+          items: [finalThesis, maturaRegistrations, maturaApplications],
+          issues: [finalThesis, maturaRegistrations, maturaApplications].filter((item: any) => !item.available).map((item: any) => `${item.label}: ${item.error}`)
+        }
+      ];
+
+      return res.json({
+        success: true,
+        generatedAt: new Date().toISOString(),
+        schoolId,
+        classCount: classIds.length,
+        studentCount: profiles.length,
+        sections
+      });
+    } catch (e: any) {
+      console.error("[EMATICA_SYNC_PREVIEW] error:", e);
+      return res.status(500).json({ success: false, error: e.message || "Pregled sinkronizacije nije uspio." });
+    }
+  });
+
   app.post("/api/admin/import-ematica-users", async (req, res) => {
     try {
       if (!supabaseAdmin) {

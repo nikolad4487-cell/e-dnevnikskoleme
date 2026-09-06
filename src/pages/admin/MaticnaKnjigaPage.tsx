@@ -5,7 +5,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { logSystemAction } from '../../utils/auditLogger';
 import { 
   FileText, Search, Printer, Filter, Calendar, GraduationCap, Building, 
-  MapPin, ShieldAlert, BadgeInfo, Users, ArrowLeft, ArrowRight, BookOpen, Edit2
+  MapPin, ShieldAlert, BadgeInfo, Users, ArrowLeft, ArrowRight, BookOpen, Edit2,
+  RefreshCw, Database, CheckCircle2, AlertTriangle
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
@@ -31,6 +32,29 @@ interface StudentRegistryItem {
   status: string;
 }
 
+interface SyncPreviewItem {
+  label: string;
+  count: number;
+  available: boolean;
+  error?: string;
+}
+
+interface SyncPreviewSection {
+  key: string;
+  title: string;
+  description: string;
+  items: SyncPreviewItem[];
+  issues: string[];
+}
+
+interface SyncPreview {
+  success: boolean;
+  generatedAt: string;
+  sections: SyncPreviewSection[];
+  classCount: number;
+  studentCount: number;
+}
+
 export default function MaticnaKnjigaPage() {
   const { selectedSchoolId } = useSelection();
   const { user } = useAuth();
@@ -41,6 +65,8 @@ export default function MaticnaKnjigaPage() {
   const [schoolYears, setSchoolYears] = useState<any[]>([]);
   const [classes, setClasses] = useState<any[]>([]);
   const [programs, setPrograms] = useState<any[]>([]);
+  const [syncPreview, setSyncPreview] = useState<SyncPreview | null>(null);
+  const [syncPreviewLoading, setSyncPreviewLoading] = useState(false);
   
   // Filter States
   const [searchTerm, setSearchTerm] = useState('');
@@ -84,7 +110,32 @@ export default function MaticnaKnjigaPage() {
   useEffect(() => {
     if (!selectedSchoolId) return;
     loadRegistryData();
+    loadSyncPreview();
   }, [selectedSchoolId]);
+
+  const loadSyncPreview = async () => {
+    if (!selectedSchoolId) return;
+    try {
+      setSyncPreviewLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      const params = new URLSearchParams({ schoolId: selectedSchoolId });
+      const response = await fetch(`/api/admin/ematica-sync/preview?${params.toString()}`, {
+        headers: {
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {})
+        }
+      });
+      const json = await response.json();
+      if (!response.ok || !json.success) {
+        throw new Error(json.error || 'Pregled sinkronizacije nije uspio.');
+      }
+      setSyncPreview(json);
+    } catch (err: any) {
+      console.error('[EMATICA_SYNC_PREVIEW] load error', err);
+      toast.error(err.message || 'Nije moguće učitati pregled sinkronizacije.');
+    } finally {
+      setSyncPreviewLoading(false);
+    }
+  };
 
   const loadRegistryData = async () => {
     try {
@@ -453,6 +504,80 @@ export default function MaticnaKnjigaPage() {
           <Printer size={14} /> Ispis matične knjige
         </button>
       </div>
+
+      {/* e-Matica Sync Preview */}
+      <section className="print-hidden bg-white border border-slate-300 rounded-md shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-200 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-[#005c8d] text-[10px] font-black uppercase tracking-widest mb-1">
+              <Database size={14} /> Sinkronizacija e-Dnevnik → e-Matica
+            </div>
+            <h2 className="text-lg font-black text-slate-900 uppercase leading-tight">Kontrolni pregled podataka</h2>
+            <p className="text-[11px] text-slate-500 font-semibold mt-1">
+              Pregled pokazuje što je dostupno za prijenos prije pokretanja stvarne sinkronizacije.
+            </p>
+          </div>
+          <button
+            onClick={loadSyncPreview}
+            disabled={syncPreviewLoading}
+            className="inline-flex items-center justify-center gap-2 bg-[#005c8d] text-white text-[10px] font-black px-4 py-2 uppercase rounded hover:bg-[#00476b] disabled:opacity-60 transition-colors"
+          >
+            <RefreshCw size={14} className={syncPreviewLoading ? 'animate-spin' : ''} />
+            Osvježi pregled
+          </button>
+        </div>
+
+        {syncPreview ? (
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            {syncPreview.sections.map((section) => {
+              const hasIssues = section.issues.length > 0 || section.items.some(item => !item.available);
+              return (
+                <article key={section.key} className="border border-slate-200 rounded-md bg-slate-50/60 overflow-hidden">
+                  <div className="p-3 border-b border-slate-200 flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-xs font-black uppercase text-slate-900">{section.title}</h3>
+                      <p className="text-[10px] font-semibold text-slate-500 leading-snug mt-1">{section.description}</p>
+                    </div>
+                    {hasIssues ? (
+                      <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                    ) : (
+                      <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                    )}
+                  </div>
+                  <div className="divide-y divide-slate-200 bg-white">
+                    {section.items.map((item) => (
+                      <div key={item.label} className="px-3 py-2 flex items-center justify-between gap-3">
+                        <span className={`text-[10px] font-black uppercase ${item.available ? 'text-slate-600' : 'text-red-600'}`}>
+                          {item.label}
+                        </span>
+                        <span className="text-sm font-black text-slate-950 tabular-nums">{item.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                  {section.issues.length > 0 && (
+                    <div className="p-3 bg-amber-50 border-t border-amber-100 space-y-1">
+                      {section.issues.map((issue) => (
+                        <p key={issue} className="text-[10px] font-bold text-amber-800 leading-snug">{issue}</p>
+                      ))}
+                    </div>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="p-6 text-center text-[11px] font-black uppercase text-slate-400">
+            {syncPreviewLoading ? 'Učitavanje pregleda sinkronizacije...' : 'Pregled sinkronizacije još nije učitan.'}
+          </div>
+        )}
+
+        {syncPreview && (
+          <div className="px-4 py-3 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-[10px] font-black uppercase text-slate-500">
+            <span>Izvor: e-Dnevnik, odabrana škola</span>
+            <span>Zadnje očitanje: {new Date(syncPreview.generatedAt).toLocaleString('hr-HR')}</span>
+          </div>
+        )}
+      </section>
 
       {/* Screen Filters */}
       <div className="bg-slate-50 border border-slate-200 rounded-md p-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 print-hidden">
