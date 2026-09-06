@@ -235,6 +235,94 @@ async function startServer() {
       }
     });
 
+    async function repairGradingElementsForSchool(schoolId: string) {
+      if (!supabaseAdmin || !schoolId) return { deleted: 0, reordered: 0 };
+
+      const [{ data: elements, error: elementsError }, { data: subjects, error: subjectsError }, { data: templates, error: templatesError }] = await Promise.all([
+        supabaseAdmin
+          .from("grading_elements")
+          .select("id, school_id, class_id, subject_id, name, display_order, created_at")
+          .eq("school_id", schoolId)
+          .order("display_order", { ascending: true }),
+        supabaseAdmin
+          .from("subjects")
+          .select("id, name")
+          .eq("school_id", schoolId),
+        supabaseAdmin
+          .from("subject_grading_element_templates")
+          .select("school_id, subject_name, element_name, display_order")
+      ]);
+
+      if (elementsError) throw elementsError;
+      if (subjectsError) throw subjectsError;
+      if (templatesError) throw templatesError;
+
+      const normalize = (value: any) => String(value || "").toLowerCase().trim();
+      const normalizeSubject = (value: any) => normalize(value).replace(/\s*\((izborni|praksa)\)\s*$/i, "").trim();
+      const subjectById = new Map<string, any>((subjects || []).map((subject: any) => [String(subject.id), subject]));
+      const templateOrder = new Map<string, number>();
+      const schoolTemplateOrder = new Map<string, number>();
+
+      for (const template of templates || []) {
+        const key = `${normalizeSubject(template.subject_name)}:${normalize(template.element_name)}`;
+        if (!template.school_id) {
+          templateOrder.set(key, Number(template.display_order ?? 9999));
+        } else if (String(template.school_id) === String(schoolId)) {
+          schoolTemplateOrder.set(key, Number(template.display_order ?? 9999));
+        }
+      }
+      for (const [key, value] of schoolTemplateOrder) {
+        templateOrder.set(key, value);
+      }
+
+      const grouped = new Map<string, any[]>();
+      for (const element of elements || []) {
+        const key = `${element.class_id}:${element.subject_id}:${normalize(element.name)}`;
+        if (!grouped.has(key)) grouped.set(key, []);
+        grouped.get(key)!.push(element);
+      }
+
+      const deleteIds: string[] = [];
+      const keptElements: any[] = [];
+      for (const group of grouped.values()) {
+        const sorted = [...group].sort((a, b) => {
+          const orderDiff = Number(a.display_order ?? 9999) - Number(b.display_order ?? 9999);
+          if (orderDiff !== 0) return orderDiff;
+          return String(a.created_at || "").localeCompare(String(b.created_at || ""));
+        });
+        keptElements.push(sorted[0]);
+        deleteIds.push(...sorted.slice(1).map(item => item.id));
+      }
+
+      let deleted = 0;
+      for (let i = 0; i < deleteIds.length; i += 100) {
+        const chunk = deleteIds.slice(i, i + 100);
+        const { error } = await supabaseAdmin
+          .from("grading_elements")
+          .delete()
+          .in("id", chunk);
+        if (error) throw error;
+        deleted += chunk.length;
+      }
+
+      let reordered = 0;
+      for (const element of keptElements) {
+        const subject = subjectById.get(String(element.subject_id));
+        const key = `${normalizeSubject(subject?.name)}:${normalize(element.name)}`;
+        if (!templateOrder.has(key)) continue;
+        const desiredOrder = templateOrder.get(key)!;
+        if (Number(element.display_order ?? 9999) === desiredOrder) continue;
+        const { error } = await supabaseAdmin
+          .from("grading_elements")
+          .update({ display_order: desiredOrder })
+          .eq("id", element.id);
+        if (error) throw error;
+        reordered += 1;
+      }
+
+      return { deleted, reordered };
+    }
+
     // Run startup migrations for final exam defense schedule tables if supabase is available
     if (supabaseAdmin) {
       try {
@@ -270,6 +358,25 @@ async function startServer() {
         }
       } catch (migrationErr: any) {
         console.error("[SERVER] Startup migration error:", migrationErr.message);
+      }
+
+      try {
+        const { data: schoolsForElementRepair, error: schoolsForElementRepairError } = await supabaseAdmin
+          .from("schools")
+          .select("id")
+          .not("id", "is", null);
+        if (schoolsForElementRepairError) throw schoolsForElementRepairError;
+
+        let totalDeleted = 0;
+        let totalReordered = 0;
+        for (const school of schoolsForElementRepair || []) {
+          const result = await repairGradingElementsForSchool(String(school.id));
+          totalDeleted += result.deleted;
+          totalReordered += result.reordered;
+        }
+        console.log("[SERVER] Grading elements repaired on startup:", { totalDeleted, totalReordered });
+      } catch (gradingElementsErr: any) {
+        console.error("[SERVER] Grading elements startup repair error:", gradingElementsErr.message);
       }
     }
 
