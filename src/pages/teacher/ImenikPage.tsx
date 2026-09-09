@@ -541,9 +541,8 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
           .gte('date', lastMonthISO),
         supabase
           .from('absences')
-          .select('student_id')
+          .select('student_id, status')
           .eq('class_id', effectiveClassId)
-          .eq('status', 'PENDING')
       ]);
 
       if (gradesError) throw gradesError;
@@ -556,7 +555,15 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
 
       const absenceWarnings: Record<string, boolean> = {};
       absences?.forEach(a => {
-        absenceWarnings[a.student_id] = true;
+        const status = String(a.status ?? '').trim().toUpperCase();
+        const isPending = status === 'PENDING'
+          || status === 'CEKA'
+          || status === 'CEKA_ODLUKU'
+          || status === 'ČEKA'
+          || status === 'ČEKA_ODLUKU'
+          || status === 'ČEKA ODLUKU';
+
+        if (isPending) absenceWarnings[a.student_id] = true;
       });
 
       const newData = { failingGrades: failing, absenceWarnings };
