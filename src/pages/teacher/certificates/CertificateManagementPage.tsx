@@ -3,7 +3,7 @@ import { FileText, Printer, Lock, Unlock, Loader2, Award, User } from 'lucide-re
 import { supabase } from '../../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { generateClassCertificatePDF } from '../../../lib/pdfGenerator';
-import { sortStudentsBySurname } from '../../../lib/utils';
+import { isNonGradedSubjectName, sortStudentsBySurname } from '../../../lib/utils';
 import { StudentDocument } from '../../../types/certificates';
 import { CertificateData } from '../../../lib/pdfGenerator';
 import { useSelection } from '../../../contexts/SelectionContext';
@@ -410,7 +410,11 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
           return;
       }
 
-      if (!finalGradesData || finalGradesData.length === 0) {
+      const gradedFinalGrades = (finalGradesData || []).filter((grade: any) =>
+        !isNonGradedSubjectName((grade.subjects as any)?.name)
+      );
+
+      if (gradedFinalGrades.length === 0) {
           console.log("CERT SETTINGS ERROR", settingsError);
           console.log("CERT SETTINGS DATA", settings);
           console.log("CERT STUDENT ERROR", studentError);
@@ -446,7 +450,7 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
       // Deduplicate grades/subjects (Jedan predmet smije biti prikazan samo jednom)
       const uniqueGradesMap = new Map<string, any>();
       if (finalGradesData) {
-          for (const g of finalGradesData) {
+          for (const g of gradedFinalGrades) {
               const subjectName = (g.subjects as any)?.name || 'Nepoznat predmet';
               const cleanName = subjectName.replace(/\s*\(izborni\)\s*$/i, '').trim();
               const subjectType = classSubjectTypeMap1.get(g.subject_id) || (g.subjects as any)?.subject_type || 'REQUIRED';
@@ -598,6 +602,10 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
         .select('subject_id, subject_type')
         .eq('class_id', classId);
 
+      const { data: allSubjects } = await supabase
+        .from('subjects')
+        .select('id, name');
+
       let requiredSubjectIds: string[] = [];
       if (subjectEnrollments && subjectEnrollments.length > 0) {
         requiredSubjectIds = subjectEnrollments.map(e => e.subject_id);
@@ -605,7 +613,15 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
         requiredSubjectIds = classSubjects.map(c => c.subject_id);
       }
 
-      const missingSubjectIds = requiredSubjectIds.filter(subId => !finalGrades || !finalGrades.some(fg => fg.subject_id === subId));
+      requiredSubjectIds = requiredSubjectIds.filter((subjectId) => {
+        const subject = allSubjects?.find((item) => item.id === subjectId);
+        return !subject || !isNonGradedSubjectName(subject.name);
+      });
+
+      const gradedFinalGrades = (finalGrades || []).filter((grade: any) =>
+        !isNonGradedSubjectName((grade.subjects as any)?.name)
+      );
+      const missingSubjectIds = requiredSubjectIds.filter(subId => !gradedFinalGrades.some(fg => fg.subject_id === subId));
 
       if (missingSubjectIds.length > 0) {
         const { data: allSubjects } = await supabase
@@ -621,7 +637,7 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
         return;
       }
 
-      if (!finalGrades || finalGrades.length === 0) {
+      if (gradedFinalGrades.length === 0) {
         toast.error("Nema zaključnih ocjena.");
         setLoading(false);
         return;
@@ -675,7 +691,7 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
       }
 
       const uniqueGradesMap = new Map<string, any>();
-      for (const g of finalGrades || []) {
+      for (const g of gradedFinalGrades) {
           const subjectName = (g.subjects as any)?.name || 'Nepoznat predmet';
           const cleanName = subjectName.replace(/\s*\(izborni\)\s*$/i, '').trim();
           const subjectType = classSubjectTypeMap2.get(g.subject_id) || (g.subjects as any)?.subject_type || 'REQUIRED';

@@ -7,7 +7,7 @@ import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, Cu
 import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info, FileText } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
-import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortStudentsBySurname, getForcedSubjectType, getProgramDisplayName } from '../../lib/utils';
+import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortStudentsBySurname, getForcedSubjectType, getProgramDisplayName, isNonGradedSubjectName } from '../../lib/utils';
 import { ensureDefaultGradingElementsForAssignment } from '../../lib/gradingElementTemplates';
 import { mappers, mapList } from '../../lib/mappers';
 import CertificateManagementPage from './certificates/CertificateManagementPage';
@@ -1734,9 +1734,14 @@ setStudents(uniqueMapped as any);
       const studentClassEnrollments = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
       const studentTotalEnrollCount = classEnrollments.filter(e => e.studentId === student.id).length;
       
-      const requiredSubjects = studentTotalEnrollCount > 0 
+      const isGradedSubjectId = (subjectId: string) => {
+        const subject = allSubjects.find(s => s.id === subjectId);
+        return !subject || !isNonGradedSubjectName(subject.name);
+      };
+      const requiredSubjects = (studentTotalEnrollCount > 0
         ? studentClassEnrollments.map(e => e.subjectId)
-        : Array.from(new Set(subjectAssignments.filter(a => a.classId === classId).map(a => a.subjectId)));
+        : Array.from(new Set(subjectAssignments.filter(a => a.classId === classId).map(a => a.subjectId))))
+        .filter(isGradedSubjectId);
 
       // 2. Fetch final grades for this student
       const { data: finalGradesData, error: finalGradesError } = await supabase
@@ -1843,9 +1848,14 @@ setStudents(uniqueMapped as any);
       const studentClassEnrollments = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
       const studentTotalEnrollCount = classEnrollments.filter(e => e.studentId === student.id).length;
       
-      const requiredSubjects = studentTotalEnrollCount > 0 
+      const isGradedSubjectId = (subjectId: string) => {
+        const subject = allSubjects.find(s => s.id === subjectId);
+        return !subject || !isNonGradedSubjectName(subject.name);
+      };
+      const requiredSubjects = (studentTotalEnrollCount > 0
         ? studentClassEnrollments.map(e => e.subjectId)
-        : Array.from(new Set(subjectAssignments.filter(a => a.classId === classId).map(a => a.subjectId)));
+        : Array.from(new Set(subjectAssignments.filter(a => a.classId === classId).map(a => a.subjectId))))
+        .filter(isGradedSubjectId);
 
       // 3. Check missing subjects
       const missingSubjects = requiredSubjects
@@ -2040,9 +2050,14 @@ setStudents(uniqueMapped as any);
         const studentClassEnrollments = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
         const studentTotalEnrollCount = classEnrollments.filter(e => e.studentId === student.id).length;
         
-        const requiredSubjects = studentTotalEnrollCount > 0 
+        const isGradedSubjectId = (subjectId: string) => {
+          const subject = allSubjects.find(s => s.id === subjectId);
+          return !subject || !isNonGradedSubjectName(subject.name);
+        };
+        const requiredSubjects = (studentTotalEnrollCount > 0
           ? studentClassEnrollments.map(e => e.subjectId)
-          : Array.from(new Set(subjectAssignments.filter(a => a.classId === classId).map(a => a.subjectId)));
+          : Array.from(new Set(subjectAssignments.filter(a => a.classId === classId).map(a => a.subjectId))))
+          .filter(isGradedSubjectId);
 
         const studentFinalGrades = (finalGradesData || []).filter(fg => fg.student_id === student.id);
 
@@ -4449,9 +4464,13 @@ setAllSubjects(uniqueSub2);
                          const studentClassEnrollments = classEnrollments.filter(e => e.studentId === student.id && e.status === 'ACTIVE');
                          const studentTotalEnrollCount = classEnrollments.filter(e => e.studentId === student.id).length;
                          
-                         const requiredSubjects = studentTotalEnrollCount > 0 
+                         const requiredSubjects = (studentTotalEnrollCount > 0
                            ? studentClassEnrollments.map(e => e.subjectId)
-                           : Array.from(new Set(subjectAssignments.filter(a => a.classId === effectiveClassId).map(a => a.subjectId)));
+                           : Array.from(new Set(subjectAssignments.filter(a => a.classId === effectiveClassId).map(a => a.subjectId))))
+                           .filter((subjectId) => {
+                             const subject = allSubjects.find(s => s.id === subjectId);
+                             return !subject || !isNonGradedSubjectName(subject.name);
+                           });
                          
                          const studentFinalGrades = finalGrades.filter(fg => fg.studentId === student.id);
                          
