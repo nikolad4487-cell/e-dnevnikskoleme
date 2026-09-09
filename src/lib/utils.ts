@@ -141,7 +141,8 @@ export function formatName(item: any) {
 
 /** Subjects without grading elements must not participate in final-grade workflows. */
 export function isNonGradedSubjectName(name?: string | null): boolean {
-  return String(name || '').trim().replace(/\s+/g, ' ').toLowerCase() === 'sat razrednika';
+  const normalized = String(name || '').trim().replace(/\s+/g, ' ').toLowerCase();
+  return normalized === 'sat razrednika' || normalized.startsWith('sat razrednika (');
 }
 
 export function cleanModuleOrTrack(value: any): string {

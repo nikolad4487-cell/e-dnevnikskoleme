@@ -1422,19 +1422,15 @@ setStudents(uniqueMapped as any);
         .eq('class_id', classToFetch);
       if (notesData) setOverallNotes(mapList(notesData, mappers.studentOverallNotes));
 
-      const yearId = selectedClassData?.school_year_id || selectedYearId;
-      let fQuery = supabase
+      // The class id already identifies the school-year class. Do not filter
+      // by school_year_id here because older final-grade rows may have that
+      // legacy column empty even though the grade is valid for this class.
+      const { data: gradesData } = await supabase
         .from('final_grades')
         .select('*')
         .eq('class_id', classToFetch)
         .eq('period', 'SECOND_TERM');
-      
-      if (yearId) {
-        fQuery = fQuery.eq('school_year_id', yearId);
-      }
-
-      const { data: gradesData } = await fQuery;
-      if (gradesData) setFinalGrades(mapList(gradesData, mappers.finalGrade));
+      setFinalGrades(mapList(gradesData || [], mappers.finalGrade));
 
     } catch (error) {
       console.error(error);
@@ -1687,6 +1683,15 @@ setStudents(uniqueMapped as any);
     }
   };
 
+  const findStudentSummary = (studentId: string, classId: string) => {
+    const matchingSummaries = summaries.filter(summary =>
+      summary.studentId === studentId && summary.classId === classId
+    );
+    const currentYearId = selectedClassData?.school_year_id || selectedYearId;
+    return matchingSummaries.find(summary => !currentYearId || summary.schoolYearId === currentYearId)
+      || matchingSummaries[0];
+  };
+
   const recordOverallSuccessAuditLog = async (studentId: string, studentName: string, action: string, details: string) => {
     try {
       const classId = effectiveClassId || selectedClassId;
@@ -1770,7 +1775,7 @@ setStudents(uniqueMapped as any);
       }
 
       // 3. Update status to 'UNLOCKED', clearing all locking summaries
-      const summary = summaries.find(s => s.studentId === student.id && (s.classId === selectedClassId || s.classId === classId));
+      const summary = findStudentSummary(student.id, classId);
       if (!summary) {
         toast.error("Dokument općeg uspjeha ne postoji za tog učenika.");
         setLoading(false);
@@ -1872,7 +1877,7 @@ setStudents(uniqueMapped as any);
       }
 
       // 4. Calculate behavior (default and DB summary behavior)
-      const summary = summaries.find(s => s.studentId === student.id && (s.classId === selectedClassId || s.classId === classId));
+      const summary = findStudentSummary(student.id, classId);
       
       // Calculate autoBehavior as fallback
       const studentNotes = overallNotes.find(n => n.studentId === student.id);
@@ -2071,7 +2076,7 @@ setStudents(uniqueMapped as any);
           continue;
         }
 
-        const summary = summaries.find(s => s.studentId === student.id && (s.classId === selectedClassId || s.classId === classId));
+        const summary = findStudentSummary(student.id, classId);
         
         const studentNotes = overallNotes.find(n => n.studentId === student.id);
         let autoBehavior = 'Uzorno';
@@ -4490,7 +4495,7 @@ setAllSubjects(uniqueSub2);
                            period: "SECOND_TERM"
                          });
 
-                         const summary = summaries.find(s => s.studentId === student.id && (s.classId === selectedClassId || s.classId === effectiveClassId));
+                         const summary = findStudentSummary(student.id, effectiveClassId);
                          const isFinalized = summary && summary.status === 'FINALIZED';
 
                          const studentNotes = overallNotes.find(n => n.studentId === student.id);
