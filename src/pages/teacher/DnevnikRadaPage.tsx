@@ -2398,6 +2398,27 @@ setStudents(uniqueStudents);
     return { justified, unjustified, other, total: absences.length };
   };
 
+  const todayISO = getLocalDateISO(new Date());
+
+  const isUnresolvedAbsence = (status?: AbsenceStatus | string) => {
+    const normalized = String(status ?? '').trim().toUpperCase();
+    return normalized === AbsenceStatus.PENDING
+      || normalized === AbsenceStatus.UNJUSTIFIED
+      || normalized === 'CEKA'
+      || normalized === 'CEKA_ODLUKU'
+      || normalized === 'ČEKA'
+      || normalized === 'ČEKA_ODLUKU'
+      || normalized === 'ČEKA ODLUKU';
+  };
+
+  const isLessonLate = (lesson: Lesson) => {
+    if (!lesson.createdAt || !lesson.date) return false;
+    const enteredAt = new Date(lesson.createdAt);
+    const lessonDate = new Date(`${lesson.date}T00:00:00`);
+    if (Number.isNaN(enteredAt.getTime()) || Number.isNaN(lessonDate.getTime())) return false;
+    return Math.floor((enteredAt.getTime() - lessonDate.getTime()) / (24 * 60 * 60 * 1000)) >= 14;
+  };
+
   const getShiftLabel = (shift?: string) => {
     if (shift === 'MORNING') return 'ujutro';
     if (shift === 'AFTERNOON') return 'popodne';
@@ -2449,12 +2470,30 @@ setStudents(uniqueStudents);
   const getDayIndicatorClass = (dateStr: string) => {
     const dayLessons = weekOverviewLessons.filter(lesson => lesson.date === dateStr);
     const dayAbsences = weekOverviewAbsences.filter(absence => absence.date === dateStr);
-    const hasUnresolvedAbsence = dayAbsences.some(absence => absence.status !== AbsenceStatus.JUSTIFIED);
+    const hasUnresolvedAbsence = dayAbsences.some(absence => isUnresolvedAbsence(absence.status));
 
     if (hasUnresolvedAbsence) return 'text-red-700';
+    if (dateStr === todayISO) return 'text-green-700';
     if (dayLessons.length === 0) return 'text-gray-500';
-    return 'text-gray-900';
+    return 'text-gray-700';
   };
+
+  const getDayBackgroundClass = (dateStr: string) => {
+    const dayAbsences = weekOverviewAbsences.filter(absence => absence.date === dateStr);
+    if (dayAbsences.some(absence => isUnresolvedAbsence(absence.status))) return 'bg-red-50';
+    if (dateStr === todayISO) return 'bg-green-50';
+    return 'bg-gray-100';
+  };
+
+  const isCurrentWeek = (week: WorkWeek) => week.startDate <= todayISO && todayISO <= week.endDate;
+
+  const getWeekHeaderClass = (week: WorkWeek) =>
+    isCurrentWeek(week) ? 'bg-green-100 hover:bg-green-200' : 'bg-gray-100 hover:bg-gray-200';
+
+  const getLessonReportClass = (lesson: Lesson) =>
+    isLessonLate(lesson)
+      ? 'border-l-4 border-yellow-500 bg-yellow-50 pl-2 text-[11px] leading-tight'
+      : 'border-l-4 border-[#005c8d] pl-2 text-[11px] leading-tight';
 
   const handleBackNavigation = () => {
     if (view === 'WORK_OVERVIEW_DETAIL') {
@@ -2680,7 +2719,7 @@ setStudents(uniqueStudents);
                     {days.map(dateStr => {
                       const dayLessons = weekLessons.filter(lesson => lesson.date === dateStr);
                       const dayAbsences = weekAbsences.filter(absence => absence.date === dateStr);
-                      const unresolvedAbsences = dayAbsences.filter(absence => absence.status !== AbsenceStatus.JUSTIFIED).length;
+                      const unresolvedAbsences = dayAbsences.filter(absence => isUnresolvedAbsence(absence.status)).length;
 
                       return (
                         <div key={`work-overview-day-${dateStr}`} className="bg-white border border-gray-300 shadow-sm min-h-[240px] flex flex-col">
@@ -2700,7 +2739,7 @@ setStudents(uniqueStudents);
                                     const subject = allSubjects.find(s => s.id === lesson.subjectId);
                                     const teacher = teachers.find(t => t.id === lesson.teacherId);
                                     return (
-                                      <div key={`overview-lesson-${lesson.id}`} className="border-l-4 border-[#005c8d] pl-2 text-[11px] leading-tight">
+                                      <div key={`overview-lesson-${lesson.id}`} className={getLessonReportClass(lesson)}>
                                         <div className="font-black text-gray-900">
                                           {lesson.hour}. sat - {formatSubjectName(subject || { name: 'Predmet' })}
                                         </div>
@@ -2886,7 +2925,7 @@ setStudents(uniqueStudents);
                     <div key={w.id} className="bg-white border border-gray-300 shadow-sm">
                       <div className="grid grid-cols-1 xl:grid-cols-[260px_minmax(520px,1fr)_300px]">
                         <div
-                          className="bg-[#d9eaf7] border-b xl:border-b-0 xl:border-r border-gray-300 min-h-[86px] flex flex-col justify-between cursor-pointer hover:bg-[#cfe4f4]"
+                          className={cn("border-b xl:border-b-0 xl:border-r border-gray-300 min-h-[86px] flex flex-col justify-between cursor-pointer", getWeekHeaderClass(w))}
                           role="button"
                           tabIndex={0}
                           onClick={() => goToWeek(w)}
@@ -2941,7 +2980,7 @@ setStudents(uniqueStudents);
                                 key={dateStr}
                                 type="button"
                                 onClick={() => goToDay(w, dateStr)}
-                                className="bg-[#f4f4f4] border-b sm:border-b-0 sm:border-r last:border-r-0 border-gray-300 px-2 py-3 text-center min-h-[72px] cursor-pointer"
+                                className={cn("border-b sm:border-b-0 sm:border-r last:border-r-0 border-gray-300 px-2 py-3 text-center min-h-[72px] cursor-pointer", getDayBackgroundClass(dateStr))}
                               >
                                 <div className={cn("text-[11px] font-black lowercase leading-tight", dayTextClass)}>
                                   {getDayName(dateStr).toLowerCase()}{teachingDayNumber ? ` (${teachingDayNumber})` : ''}
@@ -3020,7 +3059,7 @@ setStudents(uniqueStudents);
                     key={`week-detail-day-${dateStr}`}
                     type="button"
                     onClick={() => goToDay(selectedWeek, dateStr)}
-                    className="bg-[#f4f4f4] border-b md:border-b-0 md:border-r last:border-r-0 border-gray-300 px-3 py-5 text-center min-h-[92px] cursor-pointer hover:bg-[#eef6fc]"
+                    className={cn("border-b md:border-b-0 md:border-r last:border-r-0 border-gray-300 px-3 py-5 text-center min-h-[92px] cursor-pointer hover:brightness-95", getDayBackgroundClass(dateStr))}
                   >
                     <div className={cn("text-[12px] font-black lowercase leading-tight", dayTextClass)}>
                       {getDayName(dateStr).toLowerCase()}{teachingDayNumber ? ` (${teachingDayNumber})` : ''}
