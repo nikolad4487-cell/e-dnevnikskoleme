@@ -41,6 +41,49 @@ export default function ClassDashboardPage() {
   const [accessDenied, setAccessDenied] = useState(false);
   const [students, setStudents] = useState<any[]>([]);
   const [currentClass, setCurrentClass] = useState<Class | null>(null);
+  const [classWarnings, setClassWarnings] = useState({
+    failingGrades: {} as Record<string, number>,
+    absenceWarnings: {} as Record<string, boolean>
+  });
+
+  const fetchClassWarnings = async () => {
+    if (!classId) return;
+
+    const lastMonth = new Date();
+    lastMonth.setDate(lastMonth.getDate() - 30);
+    const lastMonthISO = lastMonth.toISOString().slice(0, 10);
+
+    const [{ data: grades, error: gradesError }, { data: absences, error: absencesError }] = await Promise.all([
+      supabase
+        .from('grades')
+        .select('student_id')
+        .eq('class_id', classId)
+        .eq('value', 1)
+        .gte('date', lastMonthISO),
+      supabase
+        .from('absences')
+        .select('student_id, status')
+        .eq('class_id', classId)
+    ]);
+
+    if (gradesError) throw gradesError;
+    if (absencesError) throw absencesError;
+
+    const failingGrades: Record<string, number> = {};
+    grades?.forEach((grade) => {
+      failingGrades[grade.student_id] = (failingGrades[grade.student_id] || 0) + 1;
+    });
+
+    const absenceWarnings: Record<string, boolean> = {};
+    absences?.forEach((absence) => {
+      const status = String(absence.status ?? '').trim().toUpperCase();
+      if (['PENDING', 'CEKA', 'CEKA_ODLUKU', 'ČEKA', 'ČEKA_ODLUKU', 'ČEKA ODLUKU'].includes(status)) {
+        absenceWarnings[absence.student_id] = true;
+      }
+    });
+
+    setClassWarnings({ failingGrades, absenceWarnings });
+  };
 
   useEffect(() => {
     const profile = user;
@@ -53,6 +96,7 @@ export default function ClassDashboardPage() {
   useEffect(() => {
     if (classId) {
       checkAccessAndLoad();
+      fetchClassWarnings().catch((error) => console.error('[CLASS PAGE] Warning load error:', error));
     }
   }, [classId, user, userSchoolRoles]);
 
@@ -184,7 +228,7 @@ export default function ClassDashboardPage() {
       students={students} 
       studentEnrollments={students} 
       onStudentClick={(student) => navigate(`/class/${classId}/student/${student.student?.id}`)}
-      classWarnings={{ failingGrades: {}, absenceWarnings: {} }}
+      classWarnings={classWarnings}
     />
   );
 
