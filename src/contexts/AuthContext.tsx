@@ -590,10 +590,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const formattedRoles = React.useMemo(() => {
     if (allRoles.length === 0) return '';
-    return allRoles
-      .sort((a, b) => (ROLE_PRIORITY[a] ?? 99) - (ROLE_PRIORITY[b] ?? 99))
-      .map(r => ROLE_DISPLAY_NAMES[r])
-      .join(', ');
+
+    const hasAdministratorRole = allRoles.some(role => [
+      Role.ADMIN,
+      Role.SCHOOL_ADMIN,
+      Role.SUPER_ADMIN,
+      Role.MAIN_ADMIN
+    ].includes(role));
+
+    if (hasAdministratorRole) return 'Školski admin';
+
+    const hasTeachingRole = allRoles.some(role => [
+      Role.TEACHER,
+      Role.HOMEROOM,
+      Role.DEPUTY
+    ].includes(role));
+
+    if (hasTeachingRole) return 'Nastavnik';
+
+    const highest = [...allRoles].sort(
+      (a, b) => (ROLE_PRIORITY[a] ?? 99) - (ROLE_PRIORITY[b] ?? 99)
+    )[0];
+    return ROLE_DISPLAY_NAMES[highest] || 'Korisnik';
   }, [allRoles]);
 
   const reloadUserDataWrapper = async () => {
