@@ -1430,7 +1430,17 @@ setStudents(uniqueMapped as any);
         .select('*')
         .eq('class_id', classToFetch)
         .eq('period', 'SECOND_TERM');
-      setFinalGrades(mapList(gradesData || [], mappers.finalGrade));
+      let resolvedGradesData = gradesData || [];
+      if (resolvedGradesData.length === 0) {
+        // Some older records were saved without the SECOND_TERM period value.
+        // Use the class-scoped final grade rows as a compatibility fallback.
+        const { data: legacyGradesData } = await supabase
+          .from('final_grades')
+          .select('*')
+          .eq('class_id', classToFetch);
+        resolvedGradesData = legacyGradesData || [];
+      }
+      setFinalGrades(mapList(resolvedGradesData, mappers.finalGrade));
 
     } catch (error) {
       console.error(error);
@@ -4480,7 +4490,7 @@ setAllSubjects(uniqueSub2);
                          const studentFinalGrades = finalGrades.filter(fg => fg.studentId === student.id);
                          
                          const missingSubjects = requiredSubjects
-                            .filter(subId => !studentFinalGrades.some(fg => fg.subjectId === subId))
+                            .filter(subId => !studentFinalGrades.some(fg => String(fg.subjectId) === String(subId)))
                             .map(subId => allSubjects.find(s => s.id === subId)?.name)
                             .filter(Boolean);
 
