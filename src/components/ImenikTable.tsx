@@ -42,7 +42,7 @@ export function ImenikTable({ students, studentEnrollments, onStudentClick, clas
                       </span>
                     )}
                     {hasAbsence && (
-                      <span title="Učenik ima uneseni izostanak" className="inline-flex text-slate-600">
+                      <span title="Izostanak čeka odluku" className="inline-flex text-black">
                         <Clock3 size={15} aria-hidden="true" />
                       </span>
                     )}

@@ -543,6 +543,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
           .from('absences')
           .select('student_id')
           .eq('class_id', effectiveClassId)
+          .eq('status', 'PENDING')
       ]);
 
       if (gradesError) throw gradesError;
@@ -2630,7 +2631,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                         </span>
                       )}
                       {classWarnings.absenceWarnings[s.id] && (
-                        <span title="Učenik ima uneseni izostanak" className="text-xs font-bold text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1">
+                        <span title="Izostanak čeka odluku" className="text-xs font-bold text-black bg-slate-50 px-2 py-0.5 rounded border border-slate-300 flex items-center gap-1">
                           <Clock3 size={14} aria-hidden="true" />
                         </span>
                       )}
@@ -2661,7 +2662,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                             </span>
                           )}
                           {classWarnings.absenceWarnings[s.id] && (
-                            <span title="Učenik ima uneseni izostanak" className="inline-flex ml-2 text-slate-600 font-bold">
+                            <span title="Izostanak čeka odluku" className="inline-flex ml-2 text-black font-bold">
                               <Clock3 size={15} aria-hidden="true" />
                             </span>
                           )}
