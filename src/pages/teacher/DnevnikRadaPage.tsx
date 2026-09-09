@@ -36,6 +36,26 @@ const getAbsenceStatusCellClass = (status?: string) => {
   return 'bg-red-100 text-red-700 border-red-300';
 };
 
+const MORNING_DIARY_PERIODS = [1, 2, 3, 4, 5, 6, 7, 8];
+const AFTERNOON_DIARY_PERIODS = [0, 1, 2, 3, 4, 5, 6, 7];
+const FULL_DAY_DIARY_PERIODS = Array.from({ length: 13 }, (_, index) => index);
+
+const isAfternoonShift = (shift?: string) => {
+  const normalized = String(shift || '').trim().toUpperCase();
+  return normalized === 'POPODNE' || normalized === 'AFTERNOON';
+};
+
+const getDiaryPeriodsForShift = (shift?: string) => {
+  if (isAfternoonShift(shift)) return AFTERNOON_DIARY_PERIODS;
+
+  const normalized = String(shift || '').trim().toUpperCase();
+  if (normalized === 'CJELODNEVNA' || normalized === 'ALL_DAY') {
+    return FULL_DAY_DIARY_PERIODS;
+  }
+
+  return MORNING_DIARY_PERIODS;
+};
+
 const normalizeSavedDnevnikView = (savedView: string | null | undefined) => {
   if (savedView === 'WEEK_DETAIL' || savedView === 'DAY_DETAIL') return 'WEEKS';
   return savedView || 'WEEKS';
@@ -1349,7 +1369,6 @@ setStudents(uniqueStudents);
   const days = ['PON', 'UTO', 'SRI', 'ČET', 'PET', 'SUB'];
   const morningPeriods = [1, 2, 3, 4, 5, 6, 7, 8];
   const afternoonPeriods = [0, 1, 2, 3, 4, 5, 6, 7];
-  const diaryDayPeriods = Array.from({ length: 13 }, (_, index) => index);
 
   const getCellSubjects = (day: string, shift: 'MORNING' | 'AFTERNOON', period: number) => {
     const cell = scheduleCells.find(c => c.classId === effectiveClassId && c.dayOfWeek === day && c.shift === shift && c.periodNumber === period);
@@ -1359,16 +1378,16 @@ setStudents(uniqueStudents);
 
   const getScheduledSubjectsForNow = (hour: number) => {
     if (!selectedDate || !selectedWeek) return [];
+    const activePeriods = getDiaryPeriodsForShift(selectedWeek.shift);
+    if (!activePeriods.includes(hour)) return [];
+
     const date = new Date(selectedDate);
     const dayNames = ['NED', 'PON', 'UTO', 'SRI', 'ČET', 'PET', 'SUB'];
     const day = dayNames[date.getDay()];
-    
-    let shift: 'MORNING' | 'AFTERNOON' = 'MORNING';
-    if (selectedWeek.shift === 'Popodne' || (selectedWeek.shift as string) === 'AFTERNOON') shift = 'AFTERNOON';
-    
-    // Period structure cross-check
-    if (shift === 'MORNING' && hour === 0) shift = 'AFTERNOON';
-    if (shift === 'AFTERNOON' && hour === 8) shift = 'MORNING';
+
+    const shift: 'MORNING' | 'AFTERNOON' = isAfternoonShift(selectedWeek.shift)
+      ? 'AFTERNOON'
+      : 'MORNING';
 
     const cell = scheduleCells.find(c => 
       c.dayOfWeek === day && 
@@ -1380,7 +1399,7 @@ setStudents(uniqueStudents);
   };
 
   const getActivePeriodsForWeek = () => {
-    return diaryDayPeriods;
+    return getDiaryPeriodsForShift(selectedWeek?.shift);
   };
 
   const getLessonSubjectLabel = (lesson: Lesson) => {

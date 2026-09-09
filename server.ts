@@ -1536,6 +1536,22 @@ async function startServer() {
       const count = Number(consecutivePeriods);
       const end = start + count - 1;
 
+      const normalizedShift = String(shift).trim().toUpperCase();
+      const isMorning = normalizedShift === 'MORNING';
+      const isAfternoon = normalizedShift === 'AFTERNOON';
+      if (!isMorning && !isAfternoon) {
+        return res.status(400).json({ success: false, error: 'Nepoznata smjena rasporeda.' });
+      }
+      if (count < 1 || !Number.isInteger(start) || !Number.isInteger(count)) {
+        return res.status(400).json({ success: false, error: 'Raspon sati nije valjan.' });
+      }
+      if (isMorning && (start < 1 || end > 8)) {
+        return res.status(400).json({ success: false, error: 'Jutarnja smjena dopušta samo sate od 1. do 8.' });
+      }
+      if (isAfternoon && (start < 0 || end > 7)) {
+        return res.status(400).json({ success: false, error: 'Popodnevna smjena dopušta samo sate od 0. do 7.' });
+      }
+
       // Assign each consecutive period
       for (let p = start; p <= end; p++) {
         // 1. Upsert or find schedule_cell
