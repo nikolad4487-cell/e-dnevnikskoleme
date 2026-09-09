@@ -1,11 +1,12 @@
 import React from 'react';
 import { cn, sortStudentsBySurname } from '../lib/utils';
+import { Clock3, TriangleAlert } from 'lucide-react';
 
 export function ImenikTable({ students, studentEnrollments, onStudentClick, classWarnings }: { 
   students: any[], 
   studentEnrollments: any[], 
   onStudentClick: (student: any) => void,
-  classWarnings: { failingGrades: Record<string, number>, pendingAbsences: Record<string, boolean> }
+  classWarnings: { failingGrades: Record<string, number>, absenceWarnings: Record<string, boolean> }
 }) {
   const sortedStudents = sortStudentsBySurname(students);
 
@@ -23,7 +24,7 @@ export function ImenikTable({ students, studentEnrollments, onStudentClick, clas
           {sortedStudents.map((student: any, i: number) => {
             const name = student.student?.full_name || student.student?.name || 'Nepoznato ime';
             const failingCount = classWarnings.failingGrades[student.student_id] || 0;
-            const hasPending = classWarnings.pendingAbsences[student.student_id];
+            const hasAbsence = classWarnings.absenceWarnings[student.student_id];
 
             return (
               <tr 
@@ -35,8 +36,16 @@ export function ImenikTable({ students, studentEnrollments, onStudentClick, clas
                 <td className="p-2 font-bold">{name}</td>
                 <td className="p-2 text-center font-bold">
                   <div className="flex justify-center gap-2">
-                    {failingCount > 0 && <span className="text-red-600">⚠️ {failingCount}</span>}
-                    {hasPending && <span className="text-red-500">🕒</span>}
+                    {failingCount > 0 && (
+                      <span title={`${failingCount} jedinica u zadnjih 30 dana`} className="inline-flex items-center gap-1 text-orange-600">
+                        <TriangleAlert size={15} aria-hidden="true" /> {failingCount}
+                      </span>
+                    )}
+                    {hasAbsence && (
+                      <span title="Učenik ima uneseni izostanak" className="inline-flex text-slate-600">
+                        <Clock3 size={15} aria-hidden="true" />
+                      </span>
+                    )}
                   </div>
                 </td>
               </tr>

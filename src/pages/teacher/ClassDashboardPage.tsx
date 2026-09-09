@@ -184,7 +184,7 @@ export default function ClassDashboardPage() {
       students={students} 
       studentEnrollments={students} 
       onStudentClick={(student) => navigate(`/class/${classId}/student/${student.student?.id}`)}
-      classWarnings={{ failingGrades: {}, pendingAbsences: {} }}
+      classWarnings={{ failingGrades: {}, absenceWarnings: {} }}
     />
   );
 

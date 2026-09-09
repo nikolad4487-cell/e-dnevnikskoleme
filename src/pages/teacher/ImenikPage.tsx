@@ -6,7 +6,7 @@ import { useSelection } from '../../contexts/SelectionContext';
 import { Class, User, Role, Grade, Subject, StudentNote, Exam, FinalGrade, ClassSubjectTeacher as SubjectTeachingAssignment, StudentSubjectEnrollment, StudentNotes, ClassNotes, StudentYearSummary, specialExamTypeLabels, DeletionReason, deletionReasonLabels } from '../../types';
 import { cn, formatName, getSurname, formatSubjectDisplayName, formatSubjectName, finalGradeLabels, sortStudentsBySurname, getGradeDateBounds, getLocalDateISO, isGradeDateAllowed } from '../../lib/utils';
 import { mappers, mapList } from '../../lib/mappers';
-import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2, Check } from 'lucide-react';
+import { Plus, Table as TableIcon, Users, ChevronLeft, BookOpen, MessageSquare, ClipboardList, Trash2, User as UserIcon, X, Copy, Edit2, Check, Clock3, TriangleAlert } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { SpecialExamReGradeModal } from '../../components/SpecialExamReGradeModal';
 import { toast } from 'react-hot-toast';
@@ -521,36 +521,44 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
 
   const [classWarnings, setClassWarnings] = useState<{
     failingGrades: Record<string, number>,
-    pendingAbsences: Record<string, boolean>
-  }>({ failingGrades: {}, pendingAbsences: {} });
+    absenceWarnings: Record<string, boolean>
+  }>({ failingGrades: {}, absenceWarnings: {} });
 
   const fetchWarningData = async () => {
     if (!effectiveClassId) return;
     try {
       console.log("REFETCH WARNINGS - Class:", effectiveClassId);
-      const { data: grades } = await supabase
-        .from('grades')
-        .select('student_id')
-        .eq('class_id', effectiveClassId)
-        .eq('value', 1);
-      
-      const { data: absences } = await supabase
-        .from('absences')
-        .select('student_id')
-        .eq('class_id', effectiveClassId)
-        .eq('status', 'PENDING');
+      const lastMonth = new Date();
+      lastMonth.setDate(lastMonth.getDate() - 30);
+      const lastMonthISO = getLocalDateISO(lastMonth);
+
+      const [{ data: grades, error: gradesError }, { data: absences, error: absencesError }] = await Promise.all([
+        supabase
+          .from('grades')
+          .select('student_id')
+          .eq('class_id', effectiveClassId)
+          .eq('value', 1)
+          .gte('date', lastMonthISO),
+        supabase
+          .from('absences')
+          .select('student_id')
+          .eq('class_id', effectiveClassId)
+      ]);
+
+      if (gradesError) throw gradesError;
+      if (absencesError) throw absencesError;
 
       const failing: Record<string, number> = {};
       grades?.forEach(g => {
         failing[g.student_id] = (failing[g.student_id] || 0) + 1;
       });
 
-      const pending: Record<string, boolean> = {};
+      const absenceWarnings: Record<string, boolean> = {};
       absences?.forEach(a => {
-        pending[a.student_id] = true;
+        absenceWarnings[a.student_id] = true;
       });
 
-      const newData = { failingGrades: failing, pendingAbsences: pending };
+      const newData = { failingGrades: failing, absenceWarnings };
       console.log("WARNING DATA UPDATED", newData);
       setClassWarnings(newData);
     } catch (e) {
@@ -2617,13 +2625,13 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                     </div>
                     <div className="flex items-center gap-1.5">
                       {classWarnings.failingGrades[s.id] > 0 && (
-                        <span className="text-xs font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-100 flex items-center gap-1">
-                          ⚠️ {classWarnings.failingGrades[s.id]}
+                        <span title={`${classWarnings.failingGrades[s.id]} jedinica u zadnjih 30 dana`} className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200 flex items-center gap-1">
+                          <TriangleAlert size={14} aria-hidden="true" /> {classWarnings.failingGrades[s.id]}
                         </span>
                       )}
-                      {classWarnings.pendingAbsences[s.id] && (
-                        <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 flex items-center gap-1">
-                          🕒
+                      {classWarnings.absenceWarnings[s.id] && (
+                        <span title="Učenik ima uneseni izostanak" className="text-xs font-bold text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 flex items-center gap-1">
+                          <Clock3 size={14} aria-hidden="true" />
                         </span>
                       )}
                     </div>
@@ -2647,8 +2655,16 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                         <td className="border p-2 text-center">{i + 1}.</td>
                         <td className="border p-2">{s.surname ? `${s.surname} ${s.name}` : s.name}</td>
                         <td className="border p-2 text-center">
-                          {classWarnings.failingGrades[s.id] > 0 && <span className="text-red-600 font-bold">⚠️ {classWarnings.failingGrades[s.id]}</span>}
-                          {classWarnings.pendingAbsences[s.id] && <span className="text-red-500 font-bold ml-2">🕒</span>}
+                          {classWarnings.failingGrades[s.id] > 0 && (
+                            <span title={`${classWarnings.failingGrades[s.id]} jedinica u zadnjih 30 dana`} className="inline-flex items-center gap-1 text-orange-600 font-bold">
+                              <TriangleAlert size={15} aria-hidden="true" /> {classWarnings.failingGrades[s.id]}
+                            </span>
+                          )}
+                          {classWarnings.absenceWarnings[s.id] && (
+                            <span title="Učenik ima uneseni izostanak" className="inline-flex ml-2 text-slate-600 font-bold">
+                              <Clock3 size={15} aria-hidden="true" />
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
