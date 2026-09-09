@@ -241,7 +241,9 @@ export default function UserManagementPage() {
       ...(user.roles || []),
       ...activeRolesFromSchoolRoles,
       ...(user.role ? [user.role] : [])
-    ]));
+    ].map((role: string) =>
+      role === Role.HOMEROOM || role === Role.DEPUTY ? Role.TEACHER : role
+    )));
 
     setSelectedRoles(combinedRoles.length > 0 ? (combinedRoles as Role[]) : [Role.TEACHER]);
     setIsModalOpen(true);
@@ -394,7 +396,9 @@ export default function UserManagementPage() {
         if (allActiveRoles.length === 0 && user.role) {
           allActiveRoles.push(user.role);
         }
-        allActiveRoles = Array.from(new Set(allActiveRoles));
+        allActiveRoles = Array.from(new Set(allActiveRoles.map((role: string) =>
+          role === Role.HOMEROOM || role === Role.DEPUTY ? Role.TEACHER : role
+        )));
 
         const displayStatus = user.user_school_roles?.some((r: any) => r.status === "ACTIVE")
           ? "ACTIVE"
@@ -1202,7 +1206,7 @@ export default function UserManagementPage() {
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">Uloge u školi (odaberi više)</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {[Role.TEACHER, Role.STUDENT, Role.PARENT, Role.SCHOOL_ADMIN, Role.HOMEROOM, Role.DEPUTY].map((role) => (
+                  {[Role.TEACHER, Role.STUDENT, Role.PARENT, Role.SCHOOL_ADMIN].map((role) => (
                     <button
                       key={role}
                       type="button"
@@ -1216,8 +1220,7 @@ export default function UserManagementPage() {
                       {role === Role.TEACHER ? 'Nastavnik' : 
                        role === Role.STUDENT ? 'Učenik' :
                        role === Role.PARENT ? 'Roditelj' :
-                       role === Role.SCHOOL_ADMIN ? 'Admin Škole' :
-                       role === Role.HOMEROOM ? 'Razrednik' : 'Zamjenik'}
+                       role === Role.SCHOOL_ADMIN ? 'Admin Škole' : ''}
                     </button>
                   ))}
                 </div>

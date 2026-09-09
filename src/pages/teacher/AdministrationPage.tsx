@@ -6743,8 +6743,6 @@ setAllSubjects(uniqueSub2);
                             >
                               <option value={Role.TEACHER}>Nastavnik</option>
                               <option value={Role.SCHOOL_ADMIN}>Admin škole</option>
-                              <option value={Role.HOMEROOM}>Razrednik</option>
-                              <option value={Role.DEPUTY}>Zamjenik razrednika</option>
                               <option value={Role.STUDENT}>Učenik</option>
                               <option value={Role.PARENT}>Roditelj</option>
                             </select>

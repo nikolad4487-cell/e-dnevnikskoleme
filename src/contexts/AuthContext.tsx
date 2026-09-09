@@ -478,7 +478,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.warn('[AUTH] Enrollment repair failed, non-critical:', e);
       }
 
-      const roles = mapList(rolesData, mappers.userSchoolRole);
+      // Razrednik i zamjenik razrednika određuju se na razredu, a ne kao
+      // zasebne korisničke uloge. Legacy zapise zato tretiramo kao nastavnika.
+      const roles = mapList(rolesData, mappers.userSchoolRole).map((role) => ({
+        ...role,
+        role: role.role === Role.HOMEROOM || role.role === Role.DEPUTY ? Role.TEACHER : role.role
+      }));
       
       setUser(profile);
       setUserSchoolRoles(prev => {
