@@ -1513,6 +1513,144 @@ async function startServer() {
   });
 
   // Bulk schedule assignment POST endpoint
+  app.post("/api/admin/bulk-fill-work-week", async (req, res) => {
+    try {
+      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
+
+      const startDate = String(req.body?.startDate || "2026-09-08");
+      const endDate = String(req.body?.endDate || "2026-09-11");
+      const topic = String(req.body?.topic || "Ponavljanje");
+      const days = [
+        { date: "2026-09-08", day: "TUESDAY" },
+        { date: "2026-09-09", day: "WEDNESDAY" },
+        { date: "2026-09-10", day: "THURSDAY" },
+        { date: "2026-09-11", day: "FRIDAY" }
+      ].filter(item => item.date >= startDate && item.date <= endDate);
+
+      const { data: activeYears, error: yearsError } = await supabaseAdmin
+        .from("school_years")
+        .select("id")
+        .eq("is_active", true);
+      if (yearsError) throw yearsError;
+      const yearIds = (activeYears || []).map((year: any) => year.id);
+      if (yearIds.length === 0) return res.json({ success: true, created: 0, skipped: 0, warnings: ["Nema aktivne školske godine."] });
+
+      const { data: classes, error: classesError } = await supabaseAdmin
+        .from("classes")
+        .select("id, school_id, school_year_id, homeroom_teacher_id, name")
+        .in("school_year_id", yearIds)
+        .neq("status", "ARCHIVED");
+      if (classesError) throw classesError;
+      const classIds = (classes || []).map((item: any) => item.id);
+      if (classIds.length === 0) return res.json({ success: true, created: 0, skipped: 0, warnings: ["Nema aktivnih razreda."] });
+
+      const [{ data: weeks, error: weeksError }, { data: cells, error: cellsError }, { data: assignments, error: assignmentsError }, { data: subjects, error: subjectsError }, { data: profiles, error: profilesError }] = await Promise.all([
+        supabaseAdmin.from("work_weeks").select("id, class_id, start_date, end_date, shift").in("class_id", classIds).lte("start_date", endDate).gte("end_date", startDate),
+        supabaseAdmin.from("schedule_cells").select("id, class_id, day_of_week, shift, period_number").in("class_id", classIds).in("day_of_week", days.map(day => day.day)),
+        supabaseAdmin.from("class_subject_teachers").select("class_id, subject_id, teacher_id").in("class_id", classIds),
+        supabaseAdmin.from("subjects").select("id, name"),
+        supabaseAdmin.from("user_profiles").select("id, full_name, first_name, last_name")
+      ]);
+      if (weeksError) throw weeksError;
+      if (cellsError) throw cellsError;
+      if (assignmentsError) throw assignmentsError;
+      if (subjectsError) throw subjectsError;
+      if (profilesError) throw profilesError;
+
+      const cellIds = (cells || []).map((cell: any) => cell.id);
+      const { data: cellSubjects, error: cellSubjectsError } = cellIds.length
+        ? await supabaseAdmin.from("schedule_cell_subjects").select("schedule_cell_id, subject_id, teacher_id").in("schedule_cell_id", cellIds)
+        : { data: [], error: null };
+      if (cellSubjectsError) throw cellSubjectsError;
+
+      const { data: existingLessons, error: lessonsError } = await supabaseAdmin
+        .from("lessons")
+        .select("class_id, date, hour")
+        .in("class_id", classIds)
+        .gte("date", startDate)
+        .lte("date", endDate);
+      if (lessonsError) throw lessonsError;
+
+      const classById = new Map<string, any>((classes || []).map((item: any) => [item.id, item] as [string, any]));
+      const subjectById = new Map<string, any>((subjects || []).map((item: any) => [item.id, item] as [string, any]));
+      const profileById = new Map<string, any>((profiles || []).map((item: any) => [item.id, item] as [string, any]));
+      const assignmentsByKey = new Map<string, any[]>();
+      (assignments || []).forEach((assignment: any) => {
+        const key = `${assignment.class_id}:${assignment.subject_id}`;
+        assignmentsByKey.set(key, [...(assignmentsByKey.get(key) || []), assignment]);
+      });
+      const subjectsByCell = new Map<string, any[]>();
+      (cellSubjects || []).forEach((item: any) => {
+        subjectsByCell.set(item.schedule_cell_id, [...(subjectsByCell.get(item.schedule_cell_id) || []), item]);
+      });
+      const existingKeys = new Set((existingLessons || []).map((lesson: any) => `${lesson.class_id}:${lesson.date}:${lesson.hour}`));
+      const rows: any[] = [];
+      const warnings: string[] = [];
+
+      for (const day of days) {
+        for (const cell of (cells || []).filter((item: any) => item.day_of_week === day.day)) {
+          const cls = classById.get(cell.class_id);
+          const week = (weeks || []).find((item: any) => item.class_id === cell.class_id && item.start_date <= day.date && item.end_date >= day.date);
+          if (!cls || !week) continue;
+          const shift = String(week.shift || "").toUpperCase();
+          if (shift !== "ALL_DAY" && shift !== cell.shift) continue;
+
+          for (const cellSubject of subjectsByCell.get(cell.id) || []) {
+            const subject = subjectById.get(cellSubject.subject_id);
+            if (!subject) continue;
+            const subjectName = String(subject.name || "").trim();
+            const isHomeroom = subjectName.toLowerCase().includes("sat razrednika");
+            const matchingAssignments = assignmentsByKey.get(`${cell.class_id}:${cellSubject.subject_id}`) || [];
+            const assignment = cellSubject.teacher_id
+              ? matchingAssignments.find((item: any) => item.teacher_id === cellSubject.teacher_id)
+              : matchingAssignments[0];
+            const teacherId = isHomeroom ? cls.homeroom_teacher_id : (assignment?.teacher_id || cellSubject.teacher_id);
+            if (!teacherId) {
+              warnings.push(`${cls.name}: ${subjectName} ${day.date} ${cell.period_number}. sat nema nastavnika.`);
+              continue;
+            }
+
+            const key = `${cell.class_id}:${day.date}:${cell.period_number}`;
+            if (existingKeys.has(key)) continue;
+            existingKeys.add(key);
+            const profile = profileById.get(teacherId);
+            const displayName = profile?.full_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "";
+            rows.push({
+              class_id: cell.class_id,
+              school_id: cls.school_id,
+              school_year_id: cls.school_year_id,
+              work_week_id: week.id,
+              date: day.date,
+              hour: cell.period_number,
+              is_held: true,
+              subject_id: cellSubject.subject_id,
+              group_name: "FULL_CLASS",
+              is_block: false,
+              block_count: 1,
+              topic,
+              notes: "",
+              materials: "",
+              teacher_id: teacherId,
+              created_by_user_id: teacherId,
+              teacher_display_name: displayName,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+          }
+        }
+      }
+
+      if (rows.length > 0) {
+        const { error: insertError } = await supabaseAdmin.from("lessons").insert(rows);
+        if (insertError) throw insertError;
+      }
+      return res.json({ success: true, created: rows.length, skipped: (existingLessons || []).length, warnings });
+    } catch (err: any) {
+      console.error("[SERVER] Bulk fill work week error:", err);
+      return res.status(500).json({ success: false, error: err.message || "Skupni upis sati nije uspio." });
+    }
+  });
+
   app.post("/api/admin/bulk-schedule-assign", async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
