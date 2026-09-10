@@ -205,7 +205,7 @@ export default function BiljeskePage() {
             <div className="bg-white border border-gray-300 p-3 text-[12px] min-h-[40px] shadow-sm">
               {studentYearSummary?.finalizedAt || studentYearSummary?.status === 'FINALIZED' ? (
                 <div className="text-gray-700 font-black uppercase tracking-widest">
-                  {studentYearSummary?.behavior || studentYearSummary?.conduct || 'Uzorno'}
+                  {studentYearSummary?.behavior || 'Uzorno'}
                 </div>
               ) : (
                 <div className="text-gray-400 italic">Vladanje još nije zaključeno.</div>

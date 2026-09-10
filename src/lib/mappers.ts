@@ -324,7 +324,7 @@ export const mappers = {
     school_year_id: raw.school_year_id,
     schoolYear: raw.school_year,
     average: raw.average,
-    behavior: raw.behavior,
+    behavior: raw.behavior || raw.conduct,
     finalResult: raw.final_result,
     status: raw.status,
     finalizedAt: raw.finalized_at,
