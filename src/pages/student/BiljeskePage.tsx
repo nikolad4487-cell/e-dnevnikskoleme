@@ -99,7 +99,7 @@ export default function BiljeskePage() {
             // Fetch Year Summary for Behavior
             const { data: sumData } = await supabase.from('student_year_summaries').select('*').eq('student_id', targetStudentId).eq('class_id', selectedClassId).maybeSingle();
             if (sumData) {
-              setStudentYearSummary(sumData as StudentYearSummary);
+              setStudentYearSummary(mappers.studentYearSummary(sumData) as StudentYearSummary);
             } else {
               setStudentYearSummary(null);
             }
@@ -203,9 +203,9 @@ export default function BiljeskePage() {
           <div className="space-y-1">
             <h3 className="text-[11px] font-black uppercase text-gray-500 tracking-tight">Vladanje</h3>
             <div className="bg-white border border-gray-300 p-3 text-[12px] min-h-[40px] shadow-sm">
-              {studentYearSummary?.finalizedAt ? (
+              {studentYearSummary?.finalizedAt || studentYearSummary?.status === 'FINALIZED' ? (
                 <div className="text-gray-700 font-black uppercase tracking-widest">
-                  {studentYearSummary?.behavior || 'Uzorno'}
+                  {studentYearSummary?.behavior || studentYearSummary?.conduct || 'Uzorno'}
                 </div>
               ) : (
                 <div className="text-gray-400 italic">Vladanje još nije zaključeno.</div>
