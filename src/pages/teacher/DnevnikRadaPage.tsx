@@ -42,7 +42,7 @@ const FULL_DAY_DIARY_PERIODS = Array.from({ length: 13 }, (_, index) => index);
 
 const isAfternoonShift = (shift?: string) => {
   const normalized = String(shift || '').trim().toUpperCase();
-  return normalized === 'POPODNE' || normalized === 'AFTERNOON';
+  return normalized === 'POPODNE' || normalized === 'POPODNEVNA' || normalized === 'AFTERNOON' || normalized === 'PM';
 };
 
 const getDiaryPeriodsForShift = (shift?: string) => {
@@ -55,6 +55,15 @@ const getDiaryPeriodsForShift = (shift?: string) => {
 
   return MORNING_DIARY_PERIODS;
 };
+
+const normalizeScheduleShift = (shift?: string): 'MORNING' | 'AFTERNOON' =>
+  isAfternoonShift(shift) ? 'AFTERNOON' : 'MORNING';
+
+const getDiaryScheduleShift = (shift?: string): 'MORNING' | 'AFTERNOON' =>
+  normalizeScheduleShift(shift);
+
+const isDiaryPeriodAllowed = (shift: string | undefined, period: number) =>
+  getDiaryPeriodsForShift(shift).includes(period);
 
 const normalizeSavedDnevnikView = (savedView: string | null | undefined) => {
   if (savedView === 'WEEK_DETAIL' || savedView === 'DAY_DETAIL') return 'WEEKS';
@@ -1371,27 +1380,27 @@ setStudents(uniqueStudents);
   const afternoonPeriods = [0, 1, 2, 3, 4, 5, 6, 7];
 
   const getCellSubjects = (day: string, shift: 'MORNING' | 'AFTERNOON', period: number) => {
-    const cell = scheduleCells.find(c => c.classId === effectiveClassId && c.dayOfWeek === day && c.shift === shift && c.periodNumber === period);
+    const cell = scheduleCells.find(c => c.classId === effectiveClassId && c.dayOfWeek === day && normalizeScheduleShift(c.shift) === shift && c.periodNumber === period);
     if (!cell) return [];
     return scheduleSubjects.filter(s => s.scheduleCellId === cell.id);
   };
 
   const getScheduledSubjectsForNow = (hour: number) => {
     if (!selectedDate || !selectedWeek) return [];
-    const activePeriods = getDiaryPeriodsForShift(selectedWeek.shift);
-    if (!activePeriods.includes(hour)) return [];
+    if (!isDiaryPeriodAllowed(selectedWeek.shift, hour)) return [];
 
     const date = new Date(selectedDate);
     const dayNames = ['NED', 'PON', 'UTO', 'SRI', 'ČET', 'PET', 'SUB'];
     const day = dayNames[date.getDay()];
 
-    const shift: 'MORNING' | 'AFTERNOON' = isAfternoonShift(selectedWeek.shift)
-      ? 'AFTERNOON'
-      : 'MORNING';
+    // A morning work week can only read periods 1-8 from MORNING.
+    // A afternoon work week can only read periods 0-7 from AFTERNOON.
+    const shift = getDiaryScheduleShift(selectedWeek.shift);
 
     const cell = scheduleCells.find(c => 
+      c.classId === effectiveClassId &&
       c.dayOfWeek === day && 
-      c.shift === shift && 
+      normalizeScheduleShift(c.shift) === shift &&
       c.periodNumber === hour
     );
     if (!cell) return [];
