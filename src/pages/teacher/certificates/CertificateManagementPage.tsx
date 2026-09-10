@@ -3,7 +3,7 @@ import { FileText, Printer, Lock, Unlock, Loader2, Award, User } from 'lucide-re
 import { supabase } from '../../../lib/supabase';
 import { toast } from 'react-hot-toast';
 import { generateClassCertificatePDF } from '../../../lib/pdfGenerator';
-import { isNonGradedSubjectName, sortStudentsBySurname } from '../../../lib/utils';
+import { isNonGradedSubjectName, selectPreferredFinalGrades, sortStudentsBySurname } from '../../../lib/utils';
 import { StudentDocument } from '../../../types/certificates';
 import { CertificateData } from '../../../lib/pdfGenerator';
 import { useSelection } from '../../../contexts/SelectionContext';
@@ -388,12 +388,11 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
       }
 
       // 6. Fetch final grades (period = 'SECOND_TERM' and select value) for specific class
-      const { data: finalGradesData, error: fgErr } = await supabase
+      const { data: finalGradesRows, error: fgErr } = await supabase
           .from('final_grades')
-          .select('value, subject_id, subjects(name, subject_type)')
+          .select('value, subject_id, period, updated_at, created_at, subjects(name, subject_type)')
           .eq('student_id', student.id)
-          .eq('class_id', studentData.class_id || '')
-          .eq('period', 'SECOND_TERM');
+          .eq('class_id', studentData.class_id || '');
 
       finalGradesError = fgErr;
 
@@ -410,6 +409,7 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
           return;
       }
 
+      const finalGradesData = selectPreferredFinalGrades(finalGradesRows || []);
       const gradedFinalGrades = (finalGradesData || []).filter((grade: any) =>
         !isNonGradedSubjectName((grade.subjects as any)?.name)
       );
@@ -575,12 +575,13 @@ export default function CertificateManagementPage({ currentClass, currentSchoolI
         return;
       }
 
-      const { data: finalGrades, error: fError } = await supabase
+      const { data: finalGradesRows, error: fError } = await supabase
         .from('final_grades')
         .select('*, subjects(name, subject_type)')
         .eq('student_id', selectedStudent.id)
-        .eq('class_id', classId)
-        .eq('period', 'SECOND_TERM');
+        .eq('class_id', classId);
+
+      const finalGrades = selectPreferredFinalGrades(finalGradesRows || []);
 
       console.log("FINAL GRADES CHECK", finalGrades);
 

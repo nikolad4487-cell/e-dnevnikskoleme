@@ -7,7 +7,7 @@ import { Class, User, Role, ClassSubjectTeacher as SubjectTeachingAssignment, Cu
 import { Settings, Plus, UserPlus, Users, GraduationCap, School as SchoolIcon, Trash2, ChevronLeft, ChevronDown, CheckCircle, XCircle, BookOpen, Clock, X, Printer, Mail, ShieldAlert, ArrowRight, Eye, Settings2, Shield, User as UserIcon, Info, FileText } from 'lucide-react';
 import { DeleteConfirmDialog } from '../../components/DeleteConfirmDialog';
 import { toast } from 'react-hot-toast';
-import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortStudentsBySurname, getForcedSubjectType, getProgramDisplayName, isNonGradedSubjectName } from '../../lib/utils';
+import { cn, getSurname, formatSubjectDisplayName, formatPersonName, sanitizeSubjectType, sortStudentsBySurname, getForcedSubjectType, getProgramDisplayName, isNonGradedSubjectName, selectPreferredFinalGrades } from '../../lib/utils';
 import { ensureDefaultGradingElementsForAssignment } from '../../lib/gradingElementTemplates';
 import { mappers, mapList } from '../../lib/mappers';
 import CertificateManagementPage from './certificates/CertificateManagementPage';
@@ -1422,25 +1422,13 @@ setStudents(uniqueMapped as any);
         .eq('class_id', classToFetch);
       if (notesData) setOverallNotes(mapList(notesData, mappers.studentOverallNotes));
 
-      // The class id already identifies the school-year class. Do not filter
-      // by school_year_id here because older final-grade rows may have that
-      // legacy column empty even though the grade is valid for this class.
+      // The class id already identifies the school-year class. Load all final
+      // grade periods and prefer SECOND_TERM per subject when it exists.
       const { data: gradesData } = await supabase
         .from('final_grades')
         .select('*')
-        .eq('class_id', classToFetch)
-        .eq('period', 'SECOND_TERM');
-      let resolvedGradesData = gradesData || [];
-      if (resolvedGradesData.length === 0) {
-        // Some older records were saved without the SECOND_TERM period value.
-        // Use the class-scoped final grade rows as a compatibility fallback.
-        const { data: legacyGradesData } = await supabase
-          .from('final_grades')
-          .select('*')
-          .eq('class_id', classToFetch);
-        resolvedGradesData = legacyGradesData || [];
-      }
-      setFinalGrades(mapList(resolvedGradesData, mappers.finalGrade));
+        .eq('class_id', classToFetch);
+      setFinalGrades(mapList(selectPreferredFinalGrades(gradesData || []), mappers.finalGrade));
 
     } catch (error) {
       console.error(error);
@@ -1759,12 +1747,12 @@ setStudents(uniqueMapped as any);
         .filter(isGradedSubjectId);
 
       // 2. Fetch final grades for this student
-      const { data: finalGradesData, error: finalGradesError } = await supabase
+      const { data: finalGradesRows, error: finalGradesError } = await supabase
         .from('final_grades')
         .select('student_id, subject_id, value, period, school_year_id')
         .eq('student_id', student.id)
-        .eq('class_id', classId)
-        .eq('period', 'SECOND_TERM');
+        .eq('class_id', classId);
+      const finalGradesData = selectPreferredFinalGrades(finalGradesRows || []);
 
       if (finalGradesError) {
         console.error("Error fetching final grades for unlock check:", finalGradesError);
@@ -1845,12 +1833,12 @@ setStudents(uniqueMapped as any);
       const schoolYearId = selectedClassData.school_year_id || selectedYearId || '';
 
       // 1. Fetch final grades for this student
-      const { data: finalGradesData, error: finalGradesError } = await supabase
+      const { data: finalGradesRows, error: finalGradesError } = await supabase
         .from('final_grades')
         .select('student_id, subject_id, value, period, school_year_id')
         .eq('student_id', student.id)
-        .eq('class_id', classId)
-        .eq('period', 'SECOND_TERM');
+        .eq('class_id', classId);
+      const finalGradesData = selectPreferredFinalGrades(finalGradesRows || []);
 
       if (finalGradesError) {
         console.error("Error fetching final grades:", finalGradesError);
@@ -2046,11 +2034,11 @@ setStudents(uniqueMapped as any);
     try {
       const schoolYearId = selectedClassData.school_year_id || selectedYearId || '';
 
-      const { data: finalGradesData, error: finalGradesError } = await supabase
+      const { data: finalGradesRows, error: finalGradesError } = await supabase
         .from('final_grades')
         .select('student_id, subject_id, value, period, school_year_id')
-        .eq('class_id', classId)
-        .eq('period', 'SECOND_TERM');
+        .eq('class_id', classId);
+      const finalGradesData = selectPreferredFinalGrades(finalGradesRows || []);
 
       if (finalGradesError) {
         console.error("Error fetching final grades:", finalGradesError);

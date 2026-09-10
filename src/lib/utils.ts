@@ -145,6 +145,25 @@ export function isNonGradedSubjectName(name?: string | null): boolean {
   return normalized === 'sat razrednika' || normalized.startsWith('sat razrednika (');
 }
 
+export function selectPreferredFinalGrades<T extends { subject_id?: string; period?: string; updated_at?: string; created_at?: string }>(grades: T[] = []): T[] {
+  const bySubject = new Map<string, T>();
+
+  for (const grade of grades) {
+    const subjectId = String(grade.subject_id || '');
+    if (!subjectId) continue;
+
+    const current = bySubject.get(subjectId);
+    const shouldReplace = !current
+      || (grade.period === 'SECOND_TERM' && current.period !== 'SECOND_TERM')
+      || (grade.period === current.period
+        && String(grade.updated_at || grade.created_at || '') > String(current.updated_at || current.created_at || ''));
+
+    if (shouldReplace) bySubject.set(subjectId, grade);
+  }
+
+  return Array.from(bySubject.values());
+}
+
 export function cleanModuleOrTrack(value: any): string {
   return String(value || "")
     .replace(/^Modul\s+/i, "")
