@@ -1,3 +1,4 @@
+import { PlanningWeekSchedule } from '../../components/PlanningWeekSchedule';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -358,6 +359,8 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
   const [selectedAbsentees, setSelectedAbsentees] = useState<string[]>([]);
 
   // Schedule State
+  const [scheduleLoading, setScheduleLoading] = useState(true);
+  const [scheduleError, setScheduleError] = useState(false);
   const [scheduleCells, setScheduleCells] = useState<any[]>([]);
   const [scheduleSubjects, setScheduleSubjects] = useState<any[]>([]);
   const [curriculumPlans, setCurriculumPlans] = useState<any[]>([]);
@@ -1017,7 +1020,10 @@ setStudents(uniqueStudents);
 
   useEffect(() => {
     if (!effectiveClassId) return;
+    let cancelled = false;
     const fetchScheduleData = async () => {
+      setScheduleLoading(true);
+      setScheduleError(false);
       setScheduleCells([]);
       setScheduleSubjects([]);
       try {
@@ -1025,6 +1031,7 @@ setStudents(uniqueStudents);
           .from('schedule_cells')
           .select('*')
           .eq('class_id', effectiveClassId);
+        if (cancelled) return;
         if (ce) throw ce;
         
         const cells = mapList(cellsData || [], mappers.scheduleCell);
@@ -1036,6 +1043,7 @@ setStudents(uniqueStudents);
             .from('schedule_cell_subjects')
             .select('*')
             .in('schedule_cell_id', cellIds);
+          if (cancelled) return;
           if (sse) throw sse;
 
           setScheduleSubjects(mapList(subjectsData || [], mappers.scheduleCellSubject));
@@ -1047,15 +1055,21 @@ setStudents(uniqueStudents);
           .from('curriculum_plans')
           .select('*')
           .eq('class_id', effectiveClassId);
+        if (cancelled) return;
         if (pe) throw pe;
 
         setCurriculumPlans(mapList(plansData || [], mappers.curriculumPlan));
       } catch (error) {
+        if (cancelled) return;
+        setScheduleError(true);
         console.error(error);
         toast.error('Greška pri učitavanju rasporeda');
+      } finally {
+        if (!cancelled) setScheduleLoading(false);
       }
     };
     fetchScheduleData();
+    return () => { cancelled = true; };
   }, [effectiveClassId, reloadScheduleTrigger]);
 
   const fetchAbsencesForDay = async () => {
@@ -3722,7 +3736,7 @@ setStudents(uniqueStudents);
         {/* LEKTIRA MODAL */}
         {showLektiraModal && canAccessLektira && (
           <div className="fixed inset-0 bg-black/45 z-55 flex items-center justify-center p-4 backdrop-blur-sm">
-            <div className="bg-white border border-gray-300 w-full max-w-lg shadow-2xl animate-in fade-in zoom-in duration-200">
+            <div className="bg-white border border-gray-300 w-full max-w-5xl max-h-[90dvh] overflow-y-auto shadow-2xl animate-in fade-in zoom-in duration-200">
               <div className="bg-[#005c8d] p-3 text-white flex items-center justify-between shrink-0">
                 <h3 className="text-xs font-extrabold uppercase tracking-widest">
                   {editingLektira ? 'UREDI LEKTIRU/DJELO' : 'DODAJ NOVU LEKTIRU'}
@@ -3758,6 +3772,20 @@ setStudents(uniqueStudents);
                     className="w-full border border-gray-300 p-2.5 rounded font-bold text-slate-800"
                   />
                 </div>
+
+                <PlanningWeekSchedule
+                  date={lektiraForm.completedDate}
+                  subjectId={getHrvatskiJezikSubjectId()}
+                  classId={effectiveClassId || ''}
+                  initialDate={selectedWeek?.startDate}
+                  weeks={weeks}
+                  cells={scheduleCells}
+                  assignments={scheduleSubjects}
+                  subjects={allSubjects}
+                  loading={scheduleLoading}
+                  error={scheduleError}
+                  onSelectDate={date => setLektiraForm(form => ({...form, completedDate: date}))}
+                />
 
                 <div>
                   <label className="block text-[10px] font-black uppercase text-gray-400 tracking-wider mb-1">Kako je obrađeno / Detalji</label>
@@ -4590,7 +4618,7 @@ setStudents(uniqueStudents);
       {/* EXAM MODAL */}
       {showExamModal && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 text-[11px]">
-          <div className="bg-white border border-gray-300 w-full max-w-lg shadow-[10px_10px_0px_rgba(0,0,0,0.05)]">
+          <div className="bg-white border border-gray-300 w-full max-w-5xl max-h-[90dvh] overflow-y-auto shadow-[10px_10px_0px_rgba(0,0,0,0.05)]">
             <div className="bg-[#005c8d] p-2 text-white flex items-center justify-between">
               <h3 className="text-[11px] font-bold uppercase tracking-tight">{editingExam ? 'Uredite provjeru' : 'Planiranje provjere'}</h3>
               <button onClick={() => { setShowExamModal(false); setEditingExam(null); }} className="hover:text-red-200"><X size={16} /></button>
@@ -4622,6 +4650,19 @@ setStudents(uniqueStudents);
                   onChange={e => setExamForm({...examForm, date: e.target.value})}
                 />
               </div>
+              <PlanningWeekSchedule
+                date={examForm.date || ''}
+                subjectId={examForm.subjectId}
+                classId={effectiveClassId || ''}
+                initialDate={selectedWeek?.startDate}
+                weeks={weeks}
+                cells={scheduleCells}
+                assignments={scheduleSubjects}
+                subjects={allSubjects}
+                loading={scheduleLoading}
+                error={scheduleError}
+                onSelectDate={date => setExamForm(form => ({...form, date}))}
+              />
               <div className="space-y-1">
                 <label className="text-[9px] font-bold text-gray-400 uppercase tracking-tight block leading-none">Opis (nastavna jedinica)</label>
                 <textarea 
