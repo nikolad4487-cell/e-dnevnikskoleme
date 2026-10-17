@@ -1,3 +1,4 @@
+import { schoolCalendarRoutes, legacyCalendarGuard } from './server/calendar/routes';
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -3366,6 +3367,12 @@ async function startServer() {
 
   // ==========================================
   // School Events (Školski Kalendar) APIs
+  app.use('/api/school-calendar', schoolCalendarRoutes(supabaseAdmin));
+  app.get('/api/school-events', legacyCalendarGuard(supabaseAdmin));
+  app.post('/api/school-events', legacyCalendarGuard(supabaseAdmin));
+  app.delete('/api/school-events/:id', legacyCalendarGuard(supabaseAdmin));
+  app.post('/api/admin/delete-school-event', legacyCalendarGuard(supabaseAdmin));
+
   // ==========================================
   function getSchoolYearFromDate(dateStr: string): string {
     if (!dateStr) return "2025/2026";

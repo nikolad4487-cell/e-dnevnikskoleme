@@ -1,4 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import { calendarRequest, syncSchoolCalendar } from '../../lib/calendarApi';
+import { schoolYearForDate, calendarYearLabel, calendarYear as parseCalendarYear, type CalendarSource } from '../../lib/schoolCalendar';
+import { getLocalDateISO } from '../../lib/utils';
+import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -19,26 +22,44 @@ interface SchoolEvent {
   end_date?: string; // YYYY-MM-DD
   start_time?: string; // HH:MM
   end_time?: string; // HH:MM
-  holiday_type?: 'WINTER_1' | 'WINTER_2' | 'SPRING' | 'SUMMER';
-  type: 'PRAZNIK' | 'SJEDNICA' | 'SASTANAK' | 'OBRANA' | 'NATJECANJE' | 'IZLET' | 'DOGAĐAJ' | 'ŠKOLSKI_PRAZNIK';
+  holiday_type?: 'WINTER_1' | 'WINTER_2' | 'SPRING' | 'SUMMER' | 'AUTUMN';
+  type: 'PRAZNIK' | 'SJEDNICA' | 'SASTANAK' | 'OBRANA' | 'NATJECANJE' | 'IZLET' | 'DOGAĐAJ' | 'ŠKOLSKI_PRAZNIK' | 'NENASTAVNI_DAN' | 'DAN_SKOLE';
   title: string;
   classroom?: string;
   notes?: string;
   is_instructional_day?: boolean;
+  automatic?: boolean;
+  creator_id?: string;
+  source_status?: string;
 }
 
 export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: boolean }) {
-  const { user, isStaff: authIsStaff, isMainAdmin, userSchoolRoles } = useAuth();
-  const isStaff = authIsStaff && !readOnly;
-  const { selectedSchoolId } = useSelection();
+  const { user, isStaff: authIsStaff } = useAuth();
+  const [calendarAccess, setCalendarAccess] = useState({staff: false, admin: false});
+  const isStaff = authIsStaff && !readOnly && calendarAccess.staff;
+  const { selectedSchoolId, selectedYearId } = useSelection();
   const navigate = useNavigate();
   const location = useLocation();
 
-  const isSchoolAdmin = isMainAdmin || (userSchoolRoles && userSchoolRoles.some(r => (r.schoolId === selectedSchoolId || r.school_id === selectedSchoolId) && (r.role === 'ADMIN' || r.role === 'SCHOOL_ADMIN')));
+  const isSchoolAdmin = calendarAccess.admin;
 
   const [events, setEvents] = useState<SchoolEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [academicYear, setAcademicYear] = useState(() => schoolYearForDate(getLocalDateISO()));
+  const [calendarSource, setCalendarSource] = useState<CalendarSource | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const requestGeneration = useRef(0);
+  const syncedYears = useRef(new Set<string>());
+  useEffect(() => {
+    if (!selectedYearId || !selectedSchoolId) return;
+    let active = true;
+    supabase.from('school_years').select('name').eq('id', selectedYearId).eq('school_id', selectedSchoolId).maybeSingle().then(({data}) => {
+      if (!active || !data) return;
+      try { const year = parseCalendarYear(data.name); setAcademicYear(year); setCurrentDate(d => schoolYearForDate(getLocalDateISO(d)) === year ? d : new Date(year, 8, 1)); } catch { /* A nonstandard year name cannot select calendar dates reliably. */ }
+    });
+    return () => { active = false; };
+  }, [selectedYearId, selectedSchoolId]);
   
   // Filtering & Add modal
   const [showAddModal, setShowAddModal] = useState(false);
@@ -50,8 +71,9 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
 
   // Form State
   const [newDate, setNewDate] = useState('');
+  const [newEndDate, setNewEndDate] = useState('');
   const [newTime, setNewTime] = useState('08:00');
-  const [newType, setNewType] = useState<'PRAZNIK' | 'SJEDNICA' | 'SASTANAK' | 'OBRANA' | 'NATJECANJE' | 'IZLET' | 'DOGAĐAJ' | 'ŠKOLSKI_PRAZNIK'>('DOGAĐAJ');
+  const [newType, setNewType] = useState<'PRAZNIK' | 'SJEDNICA' | 'SASTANAK' | 'OBRANA' | 'NATJECANJE' | 'IZLET' | 'DOGAĐAJ' | 'ŠKOLSKI_PRAZNIK' | 'NENASTAVNI_DAN' | 'DAN_SKOLE'>('DOGAĐAJ');
   const [newTitle, setNewTitle] = useState('');
   const [newClassroom, setNewClassroom] = useState('');
   const [newNotes, setNewNotes] = useState('');
@@ -61,30 +83,31 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
   const [holidayEndDate, setHolidayEndDate] = useState('');
   const [holidayStartTime, setHolidayStartTime] = useState('08:00');
   const [holidayEndTime, setHolidayEndTime] = useState('14:00');
-  const [holidaySubType, setHolidaySubType] = useState<'WINTER_1' | 'WINTER_2' | 'SPRING' | 'SUMMER'>('WINTER_1');
+  const [holidaySubType, setHolidaySubType] = useState<'WINTER_1' | 'WINTER_2' | 'SPRING' | 'SUMMER' | 'AUTUMN'>('WINTER_1');
   const [isInstructionalDay, setIsInstructionalDay] = useState(true);
 
   useEffect(() => {
-    if (!selectedSchoolId) return;
-    loadEvents();
-  }, [selectedSchoolId]);
-
-  useEffect(() => {
-    if (newType === 'PRAZNIK' || newType === 'ŠKOLSKI_PRAZNIK') {
-      setIsInstructionalDay(false);
-    } else {
-      setIsInstructionalDay(true);
-    }
-  }, [newType]);
+    if (!selectedSchoolId) { setEvents([]); setLoading(false); return; }
+    setEvents([]); setCalendarSource(null); setCalendarAccess({staff:false,admin:false}); setShowAddModal(false); setShowDetailsModal(false); void loadEvents();
+    return () => { requestGeneration.current++; };
+  }, [selectedSchoolId, academicYear]);
 
   const loadEvents = async () => {
+    const generation = ++requestGeneration.current;
     try {
       setLoading(true);
-      // Fetch school events from JSON backend
-      const res = await fetch(`/api/school-events?schoolId=${selectedSchoolId}`);
-      if (res.ok) {
-        const data = await res.json();
-        
+      const payload = await calendarRequest(`?schoolId=${encodeURIComponent(selectedSchoolId || '')}&year=${academicYear}`);
+      if (generation !== requestGeneration.current) return;
+      const data = payload.events;
+      setCalendarSource(payload.source);
+      setCalendarAccess({staff:payload.canManage===true,admin:payload.canSync===true});
+      const syncKey = `${selectedSchoolId}:${academicYear}`;
+      if (payload.canSync && !readOnly && !syncedYears.current.has(syncKey)) {
+        syncedYears.current.add(syncKey);
+        try { await syncSchoolCalendar(selectedSchoolId!, academicYear); }
+        catch { syncedYears.current.delete(syncKey); if (generation === requestGeneration.current) toast.error('Kalendar je prikazan, ali automatski unos nije spremljen. Pokušajte osvježiti izvor.'); }
+      }
+      {
         // Also fetch defenses & meetings from live tables to populate dynamically!
         const liveEvents: SchoolEvent[] = [...data];
 
@@ -128,13 +151,14 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
           }
         });
 
-        setEvents(liveEvents);
+        if (generation !== requestGeneration.current) return;
+        setEvents(liveEvents.filter(event => { const start = event.start_date || event.date; const end = event.end_date || event.date; return start <= `${academicYear + 1}-08-31` && end >= `${academicYear}-09-01`; }));
       }
     } catch (err) {
       console.error(err);
-      toast.error('Nije moguće učitati školski kalendar.');
+      if (generation === requestGeneration.current) toast.error('Nije moguće učitati školski kalendar.');
     } finally {
-      setLoading(false);
+      if (generation === requestGeneration.current) setLoading(false);
     }
   };
 
@@ -143,6 +167,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
       case 'WINTER_1': return 'Zimski praznici - 1. dio';
       case 'WINTER_2': return 'Zimski praznici - 2. dio';
       case 'SPRING': return 'Proljetni praznici';
+      case 'AUTUMN': return 'Jesenski praznici';
       case 'SUMMER': return 'Ljetni praznici';
       default: return 'Školski praznici';
     }
@@ -161,6 +186,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
       setHolidaySubType(event.holiday_type || 'WINTER_1');
     } else {
       setNewDate(event.start_date || event.date || '');
+      setNewEndDate(event.end_date || event.date || '');
       if (event.time && event.time.includes('-')) {
         setNewTime(event.time.split('-')[0].trim());
       } else {
@@ -198,22 +224,12 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
 
     try {
       const startDate = isHoliday ? holidayStartDate : computedDate;
-      const endDate = isHoliday ? holidayEndDate : computedDate;
+      const endDate = isHoliday ? holidayEndDate : (newEndDate || computedDate);
+      if (endDate < startDate) throw new Error('Završetak događaja mora biti nakon početka.');
       const startTime = isHoliday ? holidayStartTime : newTime;
       const endTime = isHoliday ? holidayEndTime : null;
 
-      // Calculate school year from date
-      let school_year = "2025/2026";
-      const dateObj = new Date(startDate);
-      if (!isNaN(dateObj.getTime())) {
-        const year = dateObj.getFullYear();
-        const month = dateObj.getMonth() + 1;
-        if (month >= 9) {
-          school_year = `${year}/${year + 1}`;
-        } else {
-          school_year = `${year - 1}/${year}`;
-        }
-      }
+      const school_year = calendarYearLabel(schoolYearForDate(startDate));
 
       const dbPayload = {
         school_id: selectedSchoolId || '',
@@ -229,26 +245,8 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         classroom: isHoliday ? null : (newClassroom || null)
       };
 
-      // 6. Log payload before sending
-      console.log("SAVE SCHOOL CALENDAR PAYLOAD", dbPayload);
-
-      let result;
-      if (editingEventId) {
-        result = await supabase
-          .from("school_events")
-          .update(dbPayload)
-          .eq("id", editingEventId)
-          .select()
-          .single();
-      } else {
-        result = await supabase
-          .from("school_events")
-          .insert([dbPayload])
-          .select()
-          .single();
-      }
-
-      if (!result.error) {
+      await calendarRequest('/events', { method: 'POST', body: JSON.stringify({...dbPayload, id: editingEventId || undefined, notes: newNotes, holiday_type: isHoliday ? holidaySubType : undefined}) });
+      {
         toast.success(editingEventId ? 'Školski događaj je ažuriran.' : 'Školski događaj je zabilježen u kalendaru.');
         setShowAddModal(false);
         setEditingEventId(null);
@@ -275,9 +273,6 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         setHolidayEndTime('14:00');
         setHolidaySubType('WINTER_1');
         loadEvents();
-      } else {
-        const errorObj = new Error(result.error.message || 'Nepoznata greška na poslužitelju');
-        throw errorObj;
       }
     } catch (error: any) {
       // 7. Log error in catch
@@ -294,50 +289,22 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
   };
 
   const handleDeleteEvent = async (eventId: string) => {
-    console.log("DELETE EVENT START", eventId);
-
+    if (!window.confirm('Obrisati ovaj školski događaj?')) return;
     try {
-      console.log("DELETE EVENT AFTER START");
-
-      if (!eventId) {
-        console.error("Missing eventId");
-        return;
-      }
-
-      console.log("BEFORE EVENT SUPABASE DELETE", eventId);
-
-      const result = await supabase
-        .from("school_events")
-        .delete()
-        .eq("id", eventId)
-        .select();
-
-      console.log("AFTER EVENT SUPABASE DELETE", result);
-
-      if (result.error) {
-        console.error("DELETE EVENT ERROR", result.error);
-        alert("Greška pri brisanju zapisa: " + result.error.message);
-        return;
-      }
-
-      if (!result.data || result.data.length === 0) {
-        console.error("DELETE DID NOT DELETE ANY ROW", eventId);
-        alert("Zapis nije obrisan iz baze. Provjeri id i izvornu tablicu.");
-        return;
-      }
-
-      console.log("DELETE EVENT SUCCESS", result.data);
-
-      setEvents((prev) => prev.filter((item) => item.id !== eventId));
-      setSelectedDayEvents((prev) => prev.filter((item) => item.id !== eventId));
-      toast.success('Događaj uklonjen.');
-      setShowDetailsModal(false);
-      loadEvents();
-
-    } catch (err: any) {
-      console.error("DELETE EVENT CRASHED", err);
-      alert("Brisanje zapisa se srušilo. Pogledaj konzolu.");
-    }
+      await calendarRequest(`/events/${encodeURIComponent(eventId)}?schoolId=${encodeURIComponent(selectedSchoolId || '')}`, {method: 'DELETE'});
+      setShowDetailsModal(false); toast.success('Događaj je obrisan.'); await loadEvents();
+    } catch (error: any) { toast.error(error.message); }
+  };
+  const canEditEvent = (event: SchoolEvent) => !readOnly && !event.automatic && !event.id.startsWith('meeting-') && !event.id.startsWith('defense-') && (isSchoolAdmin || (isStaff && event.creator_id === user?.id));
+  const openNewEvent = (date: string) => {
+    setEditingEventId(null); setNewDate(date); setNewEndDate(date); setNewType('DOGAĐAJ'); setNewTitle(''); setNewNotes(''); setNewClassroom(''); setNewTime('08:00'); setHolidayStartDate(date); setHolidayEndDate(date); setHolidaySubType('WINTER_1'); setIsInstructionalDay(true); setShowDetailsModal(false); setShowAddModal(true);
+  };
+  const refreshSource = async () => {
+    if (!selectedSchoolId) return;
+    setSyncing(true);
+    try { const result = await syncSchoolCalendar(selectedSchoolId, academicYear, true); setCalendarSource(result.source); await loadEvents(); toast.success('Provjera i unos kalendara završeni.'); }
+    catch (error: any) { toast.error(error.message); }
+    finally { setSyncing(false); }
   };
 
   // Helper date generators for Monthly Grid
@@ -387,11 +354,11 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
   ];
 
   const handlePrevMonth = () => {
-    setCurrentDate(new Date(currentYear, currentMonth - 1, 1));
+    const date = new Date(currentYear, currentMonth - 1, 1); setCurrentDate(date); setAcademicYear(schoolYearForDate(getLocalDateISO(date)));
   };
 
   const handleNextMonth = () => {
-    setCurrentDate(new Date(currentYear, currentMonth + 1, 1));
+    const date = new Date(currentYear, currentMonth + 1, 1); setCurrentDate(date); setAcademicYear(schoolYearForDate(getLocalDateISO(date)));
   };
 
   // Badge mapping
@@ -417,6 +384,8 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
       case 'OBRANA': return '🎓 Obrana Završnog Rada';
       case 'NATJECANJE': return '⭐ Školsko/Državno Natjecanje';
       case 'IZLET': return '🚌 Izlet / Terenska Nastava';
+      case 'NENASTAVNI_DAN': return '📌 Planirani nenastavni dan';
+      case 'DAN_SKOLE': return '🏫 Dan škole';
       default: return '🎉 Školski Događaj / Ostalo';
     }
   };
@@ -444,26 +413,38 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
         {isStaff && (
           <button 
             onClick={() => {
-              setNewDate(new Date().toISOString().substring(0, 10));
-              setShowAddModal(true);
+              openNewEvent(getLocalDateISO(currentDate));
             }}
             className="bg-[#005c8d] text-white text-[10px] sm:text-xs font-black px-4 py-2 uppercase rounded-md shadow-sm hover:bg-[#004b73] transition-all inline-flex items-center gap-2 w-fit"
           >
-            <Plus size={14} /> Dodaj događaj / Obranu
+            <Plus size={14} /> Dodaj školski događaj
           </button>
         )}
       </div>
 
+      <div className="bg-white border rounded p-3 flex flex-wrap items-center gap-3">
+        <label className="text-xs font-bold">Školska godina <select aria-label="Školska godina kalendara" value={academicYear} onChange={e => { const year = Number(e.target.value); setAcademicYear(year); setCurrentDate(new Date(year, 8, 1)); }} className="ml-2 border rounded p-2">
+          {Array.from(new Set([...Array.from({length: 13}, (_, i) => schoolYearForDate(getLocalDateISO()) - 6 + i), academicYear])).sort((a,b)=>a-b).map(year => <option key={year} value={year}>{calendarYearLabel(year)}</option>)}
+        </select></label>
+        {isSchoolAdmin && !readOnly && <button disabled={syncing} onClick={refreshSource} className="ml-auto border rounded px-3 py-2 text-xs font-bold text-sky-800 disabled:opacity-50">{syncing ? 'Provjera izvora…' : 'Osvježi izvor i praznike'}</button>}
+      </div>
+      {calendarSource && <div className={`border rounded p-4 space-y-2 text-xs ${calendarSource.status === 'PUBLISHED' ? 'bg-sky-50 border-sky-200' : 'bg-amber-50 border-amber-200'}`}>
+        <p className="font-bold">{calendarSource.status === 'PROPOSAL' ? 'Kalendar je preuzet iz prijedloga' : calendarSource.status === 'PUBLISHED' ? 'Školski praznici preuzeti s ucenici.com' : calendarSource.status === 'REVIEW_REQUIRED' ? 'Izvor kalendara zahtijeva provjeru' : calendarSource.status === 'UNAVAILABLE' ? 'Izvor kalendara trenutačno nije dostupan' : 'Školski praznici čekaju objavu izvora'}</p>
+        {calendarSource.notes.map(note => <p key={note}>{note}</p>)}
+        <p>Blagdani RH računaju se za odabranu godinu. Događaji škole ostaju sačuvani pri osvježavanju.</p>
+        <a href={calendarSource.url} target="_blank" rel="noreferrer" className="underline text-sky-800">Pogledaj izvor kalendara</a>
+      </div>}
+
       {/* Month selectors + Filter */}
       <div className="bg-white border rounded-md shadow-sm p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-4">
-          <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 rounded border transition-all">
+          <button aria-label="Prethodni mjesec" onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 rounded border transition-all">
             <ChevronLeft size={16} />
           </button>
           <span className="text-sm font-black text-slate-900 uppercase tracking-wide w-[200px] text-center">
             {CRO_MONTHS[currentMonth]} {currentYear}.
           </span>
-          <button onClick={handleNextMonth} className="p-2 hover:bg-slate-100 rounded border transition-all">
+          <button aria-label="Sljedeći mjesec" onClick={handleNextMonth} className="p-2 hover:bg-slate-100 rounded border transition-all">
             <ChevronRight size={16} />
           </button>
         </div>
@@ -503,8 +484,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                   setSelectedDayDateStr(cell.dateStr);
                   setShowDetailsModal(true);
                 } else if (isStaff) {
-                  setNewDate(cell.dateStr);
-                  setShowAddModal(true);
+                  openNewEvent(cell.dateStr);
                 }
               }}
               className={`min-h-[105px] border-b border-r border-slate-100 p-2 overflow-y-auto hover:bg-slate-50/50 cursor-pointer transition-all flex flex-col justify-between ${
@@ -573,10 +553,12 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
               <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Kategorija događaja</label>
               <select 
                 value={newType}
-                onChange={(e: any) => setNewType(e.target.value)}
+                onChange={(e: any) => { setNewType(e.target.value); setIsInstructionalDay(!['PRAZNIK','ŠKOLSKI_PRAZNIK','NENASTAVNI_DAN'].includes(e.target.value)); }}
                 className="w-full border rounded text-xs p-1.5 focus:outline-none font-bold"
               >
                 <option value="DOGAĐAJ">🎉 OPĆI ŠKOLSKI DOGAĐAJ</option>
+                <option value="NENASTAVNI_DAN">📌 PLANIRANI NENASTAVNI DAN</option>
+                <option value="DAN_SKOLE">🏫 DAN ŠKOLE</option>
                 <option value="ŠKOLSKI_PRAZNIK">🌴 ŠKOLSKI PRAZNICI (Zimski, proljetni, ljetni)</option>
                 <option value="PRAZNIK">🌴 BLAGDAN / JEDNODNEVNI PRAZNIK (Nema nastave)</option>
                 <option value="SJEDNICA">⚖️ NASTAVNIČKO VIJEĆE / SJEDNICA</option>
@@ -594,7 +576,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                   <input 
                     type="date" 
                     value={newDate}
-                    onChange={(e) => setNewDate(e.target.value)}
+                    onChange={(e) => { const next=e.target.value; setNewDate(next); setNewEndDate(end => !end || end === newDate || end < next ? next : end); }}
                     className="w-full border rounded text-xs p-1.5 focus:outline-none font-medium"
                     required
                   />
@@ -622,6 +604,7 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                     <option value="WINTER_2">Zimski praznici - 2. dio</option>
                     <option value="SPRING">Proljetni praznici</option>
                     <option value="SUMMER">Ljetni praznici</option>
+                    <option value="AUTUMN">Jesenski praznici</option>
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -669,11 +652,13 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
               </div>
             )}
 
+            {newType !== 'ŠKOLSKI_PRAZNIK' && <label className="block text-xs font-bold">Datum završetka (za višednevni događaj)<input type="date" min={newDate} value={newEndDate || newDate} onChange={e => setNewEndDate(e.target.value)} className="block w-full border rounded p-2 mt-1" /></label>}
             <div className="flex items-center gap-2 py-1 bg-slate-50 border p-2 rounded">
               <input 
                 id="is_instructional_day"
                 type="checkbox" 
                 checked={isInstructionalDay}
+                disabled={['PRAZNIK','ŠKOLSKI_PRAZNIK','NENASTAVNI_DAN'].includes(newType)}
                 onChange={(e) => setIsInstructionalDay(e.target.checked)}
                 className="rounded border-gray-300 text-[#005c8d] focus:ring-[#005c8d] h-4 w-4"
               />
@@ -805,13 +790,14 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
                         )}
                       </>
                     )}
+                    {e.automatic && <p className="text-[10px] font-bold text-sky-800">Automatski kalendar · {e.source_status === 'PROPOSAL' ? 'prijedlog' : 'uvezeno'}</p>}
                     {e.notes && (
                       <p className="text-[10px] text-slate-600 italic font-medium whitespace-pre-wrap mt-2 p-2 bg-white border border-dashed rounded">
                         " {e.notes} "
                       </p>
                     )}
                   </div>
-                  {isSchoolAdmin && e.id && (
+                  {canEditEvent(e) && e.id && (
                     <div className="flex items-center gap-2 pt-2 mt-2 border-t border-slate-100 justify-end">
                       {!e.id.includes('defense') && !e.id.includes('meeting') && (
                           <button 
@@ -844,7 +830,8 @@ export default function SkolskiKalendarPage({ readOnly = false }: { readOnly?: b
               ))}
             </div>
 
-            <div className="flex justify-end pt-2 border-t">
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              {isStaff && <button onClick={() => openNewEvent(selectedDayDateStr)} className="border rounded text-xs font-bold px-3 py-2">Dodaj školski događaj</button>}
               <button 
                 onClick={() => setShowDetailsModal(false)}
                 className="bg-slate-900 text-white text-xs font-black uppercase px-4 py-2 rounded"

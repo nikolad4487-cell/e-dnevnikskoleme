@@ -1,3 +1,5 @@
+import { syncSchoolCalendar } from '../../lib/calendarApi';
+import { calendarYear } from '../../lib/schoolCalendar';
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -207,6 +209,10 @@ export default function SchoolYearsPage() {
 
       setIsModalOpen(false);
       await fetchYears();
+      try {
+        const calendar = await syncSchoolCalendar(schoolId, calendarYear(name));
+        if (['WAITING', 'UNAVAILABLE', 'REVIEW_REQUIRED'].includes(calendar.source.status)) toast('Godina je spremljena. Blagdani su uneseni, a školski praznici čekaju dostupan i provjeren izvor.', {icon: '📅'});
+      } catch { toast.error('Godina je spremljena, ali kalendar još nije popunjen. Otvorite školski kalendar za ponovni pokušaj.'); }
     } catch (err: any) {
       toast.error('Greška pri spremanju školske godine: ' + err.message);
     }
@@ -250,6 +256,7 @@ export default function SchoolYearsPage() {
       }
 
       toast.success(`Školska godina ${year.name} je sada aktivna.`);
+      try { await syncSchoolCalendar(schoolId, calendarYear(year.name)); } catch { toast.error('Godina je aktivna, ali kalendar još nije osvježen. Pokušat će se ponovno pri otvaranju kalendara.'); }
       await fetchYears();
     } catch (err: any) {
       toast.error('Greška pri aktivaciji: ' + err.message);
