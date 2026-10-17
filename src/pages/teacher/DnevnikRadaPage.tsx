@@ -4694,18 +4694,18 @@ setStudents(uniqueStudents);
 
       {showWeekModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-100">
-            <div className="bg-[#005c8d] p-6 text-white flex items-center justify-between">
-              <h3 className="text-xl font-black uppercase tracking-tight">{editingWeekId ? 'Uredi radni tjedan' : 'Novi radni tjedan'}</h3>
-              <button onClick={() => { setShowWeekModal(false); setEditingWeekId(null); }} className="hover:rotate-90 transition-transform"><X /></button>
+          <div role="dialog" aria-modal="true" aria-labelledby="work-week-dialog-title" className="work-week-dialog bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden border border-gray-100">
+            <div className="work-week-dialog-header bg-[#005c8d] p-6 text-white flex shrink-0 items-center justify-between gap-3">
+              <h3 id="work-week-dialog-title" className="text-xl font-black uppercase tracking-tight">{editingWeekId ? 'Uredi radni tjedan' : 'Novi radni tjedan'}</h3>
+              <button aria-label="Zatvori prozor radnog tjedna" onClick={() => { setShowWeekModal(false); setEditingWeekId(null); }} className="shrink-0 p-1 hover:rotate-90 transition-transform"><X /></button>
             </div>
-            <div className="p-8 space-y-6">
+            <div className="work-week-dialog-body p-8 space-y-6 min-h-0 overflow-y-auto overscroll-contain">
                <div className="space-y-2">
                  <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block">Naziv tjedna</label>
                  <input 
                    type="text" 
                    placeholder="npr. 12. radni tjedan"
-                   className="w-full border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none font-bold"
+                   className="w-full min-w-0 border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none font-bold"
                    value={newWeek.name}
                    onChange={e => setNewWeek({...newWeek, name: e.target.value})}
                  />
@@ -4716,7 +4716,7 @@ setStudents(uniqueStudents);
                     <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block">Od datuma</label>
                     <input 
                       type="date" 
-                      className="w-full border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none"
+                      className="w-full min-w-0 border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none"
                       value={newWeek.startDate}
                       onChange={e => setNewWeek({...newWeek, startDate: e.target.value})}
                     />
@@ -4725,7 +4725,7 @@ setStudents(uniqueStudents);
                     <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block">Do datuma</label>
                     <input 
                       type="date" 
-                      className="w-full border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none"
+                      className="w-full min-w-0 border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none"
                       value={newWeek.endDate}
                       onChange={e => setNewWeek({...newWeek, endDate: e.target.value})}
                     />
@@ -4763,7 +4763,7 @@ setStudents(uniqueStudents);
                  <div className="space-y-3 bg-amber-50/50 border border-amber-200 p-4 rounded-xl">
                    <label className="text-xs font-black text-amber-800 uppercase tracking-widest block">Vrsta školskih praznika</label>
                    <select
-                     className="w-full border-2 border-amber-200 p-3 bg-white rounded-lg font-bold text-amber-950 focus:border-[#005c8d] outline-none"
+                     className="w-full min-w-0 border-2 border-amber-200 p-3 bg-white rounded-lg font-bold text-amber-950 focus:border-[#005c8d] outline-none"
                      value={newWeek.holidayType}
                      onChange={e => setNewWeek({...newWeek, holidayType: e.target.value as any})}
                    >
@@ -4781,7 +4781,7 @@ setStudents(uniqueStudents);
                    <div className="space-y-2">
                      <label className="text-xs font-bold text-slate-700 uppercase tracking-widest block">Razlog</label>
                      <select
-                       className="w-full border-2 border-slate-200 p-3 bg-white rounded-lg font-bold text-slate-800"
+                       className="w-full min-w-0 border-2 border-slate-200 p-3 bg-white rounded-lg font-bold text-slate-800"
                        value={newWeek.non_teaching_reason || ''}
                        onChange={e => setNewWeek({...newWeek, non_teaching_reason: e.target.value})}
                      >
@@ -4797,7 +4797,7 @@ setStudents(uniqueStudents);
                      <label className="text-xs font-bold text-slate-700 uppercase tracking-widest block">Napomena / Detalji</label>
                      <input
                        type="text"
-                       className="w-full border-2 border-slate-200 p-3 bg-white rounded-lg focus:border-[#005c8d] outline-none"
+                       className="w-full min-w-0 border-2 border-slate-200 p-3 bg-white rounded-lg focus:border-[#005c8d] outline-none"
                        placeholder="npr. Dan škole, Dan sporta..."
                        value={newWeek.non_teaching_reason_note || ''}
                        onChange={e => setNewWeek({...newWeek, non_teaching_reason_note: e.target.value})}
@@ -4808,7 +4808,7 @@ setStudents(uniqueStudents);
                  <div className="space-y-2">
                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block">Smjena tjedna</label>
                    <select 
-                    className="w-full border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none font-bold"
+                    className="w-full min-w-0 border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none font-bold"
                     value={newWeek.shift}
                     onChange={e => setNewWeek({...newWeek, shift: e.target.value as any})}
                    >
@@ -4822,9 +4822,9 @@ setStudents(uniqueStudents);
                {newWeek.weekType !== 'SCHOOL_HOLIDAY' && (
                  <div className="space-y-2">
                    <label className="text-xs font-bold text-gray-400 uppercase tracking-widest block">Dežurni učenici</label>
-                   <div className="flex gap-4">
+                   <div className="grid grid-cols-2 gap-4">
                      <select
-                       className="w-full border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none font-bold"
+                       className="w-full min-w-0 border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none font-bold"
                        value={newWeek.onDutyStudentIds[0] || ''}
                        onChange={e => {
                          const next = [...newWeek.onDutyStudentIds];
@@ -4836,7 +4836,7 @@ setStudents(uniqueStudents);
                        {sortStudentsBySurname(students).map(s => <option key={s.id} value={s.id}>{formatPersonName(s)}</option>)}
                      </select>
                    <select
-                     className="w-full border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none font-bold"
+                     className="w-full min-w-0 border-2 border-gray-100 p-3 rounded-lg focus:border-[#005c8d] outline-none font-bold"
                      value={newWeek.onDutyStudentIds[1] || ''}
                      onChange={e => {
                        const next = [...newWeek.onDutyStudentIds];
@@ -4872,7 +4872,7 @@ setStudents(uniqueStudents);
                             <div className="text-[10px] font-black uppercase">{names[day]}</div>
                             {!isTeaching && <X size={14} />}
                           </button>
-                          <div className="text-[9px] font-bold text-gray-400 uppercase">
+                          <div className="text-[8px] sm:text-[9px] font-bold text-gray-400 uppercase">
                             {isTeaching ? 'Nastavni' : 'Nenastavni'}
                           </div>
                         </div>
@@ -4890,21 +4890,21 @@ setStudents(uniqueStudents);
                   </button>
                </div>
 
-               <div className="flex gap-4 pt-4">
-                  <button 
-                    onClick={handleSaveWeek}
-                    disabled={!newWeek.name || !newWeek.startDate || !newWeek.endDate}
-                    className="flex-1 bg-[#005c8d] text-white font-black py-4 rounded-lg uppercase tracking-widest hover:bg-[#004a70] shadow-lg transition-all active:scale-95 disabled:opacity-50"
-                  >
-                    {editingWeekId ? 'Spremi promjene' : 'Kreiraj tjedan'}
-                  </button>
-                  <button 
-                    onClick={() => { setShowWeekModal(false); setEditingWeekId(null); }}
-                    className="px-8 py-4 bg-gray-100 text-gray-600 font-black rounded-lg uppercase tracking-widest hover:bg-gray-200"
-                  >
-                    Odustani
-                  </button>
-               </div>
+            </div>
+            <div className="work-week-dialog-footer flex shrink-0 gap-2 border-t border-gray-100 bg-white p-4">
+               <button
+                 onClick={handleSaveWeek}
+                 disabled={!newWeek.name || !newWeek.startDate || !newWeek.endDate}
+                 className="flex-1 bg-[#005c8d] text-white font-black py-3 px-2 text-xs rounded-lg uppercase tracking-wide hover:bg-[#004a70] shadow-lg transition-all active:scale-95 disabled:opacity-50"
+               >
+                 {editingWeekId ? 'Spremi promjene' : 'Kreiraj tjedan'}
+               </button>
+               <button
+                 onClick={() => { setShowWeekModal(false); setEditingWeekId(null); }}
+                 className="px-4 py-3 bg-gray-100 text-gray-600 text-xs font-black rounded-lg uppercase tracking-wide hover:bg-gray-200"
+               >
+                 Odustani
+               </button>
             </div>
           </div>
         </div>

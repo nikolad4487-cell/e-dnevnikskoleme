@@ -180,3 +180,46 @@ html.student-dark [class*="bg-[#005c8d]"] {
   background-color: #0067a0 !important;
 }
 
+
+/* Keep the work-week form comfortable on laptops and zoomed browser windows. */
+@media (max-height: 850px) {
+  .work-week-dialog-header {
+    padding: 1rem;
+  }
+
+  .work-week-dialog-header h3 {
+    font-size: 1rem;
+  }
+
+  .work-week-dialog-body {
+    padding: 1rem;
+  }
+
+  .work-week-dialog-body > * {
+    margin-block-start: 0;
+    margin-block-end: 0;
+  }
+
+  .work-week-dialog-body > :not(:last-child) {
+    margin-block-end: 0.875rem;
+  }
+
+  .work-week-dialog-body label {
+    margin-bottom: 0.25rem;
+  }
+
+  .work-week-dialog-body input,
+  .work-week-dialog-body select {
+    min-height: 2.375rem;
+    padding: 0.5rem;
+  }
+
+  .work-week-dialog-body button.aspect-square {
+    aspect-ratio: auto;
+    height: 2.75rem;
+  }
+
+  .work-week-dialog-footer {
+    padding: 0.75rem 1rem;
+  }
+}
