@@ -1,6 +1,6 @@
 import { extractText } from 'unpdf';
 import { addDays, format, parseISO } from 'date-fns';
-import { calendarYearLabel, validCalendarDate, uploadedCalendar2026, type CalendarItem, type CalendarSource } from '../../src/lib/schoolCalendar';
+import { calendarYearLabel, validCalendarDate, uploadedCalendar2026, type CalendarItem, type CalendarSource } from '../../src/lib/schoolCalendar.js';
 
 const hosts = new Set(['ucenici.com','www.ucenici.com']);
 export function allowedCalendarUrl(value: string, base = 'https://ucenici.com'): URL {

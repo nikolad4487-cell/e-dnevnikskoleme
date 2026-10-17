@@ -1,4 +1,4 @@
-import { schoolCalendarRoutes, legacyCalendarGuard } from './server/calendar/routes';
+import { schoolCalendarRoutes, legacyCalendarGuard } from './server/calendar/routes.js';
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";

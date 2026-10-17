@@ -1,7 +1,7 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
 import { createHash, randomUUID } from 'node:crypto';
-import { calendarYear, calendarYearLabel, croatianHolidays, schoolYearForDate, validCalendarDate, type CalendarSource } from '../../src/lib/schoolCalendar';
-import { fetchYearCalendar, allowedCalendarUrl } from './source';
+import { calendarYear, calendarYearLabel, croatianHolidays, schoolYearForDate, validCalendarDate, type CalendarSource } from '../../src/lib/schoolCalendar.js';
+import { fetchYearCalendar, allowedCalendarUrl } from './source.js';
 
 const marker='EDNEVNIK_CALENDAR_V1:';
 export const calendarMeta = (row: any): any => { try { return String(row.description||'').startsWith(marker)?JSON.parse(row.description.slice(marker.length)):null; } catch { return null; } };
