@@ -6,9 +6,10 @@ export function creationCredentials(password:unknown,roles:string[],fallback:()=
  if(typeof value!=='string'||value.length<6)throw new Error('Lozinka mora sadržavati najmanje 6 znakova.');
  return {password:value,isStaff,isStudent:roles.includes('STUDENT')};
 }
+const normalizedRole=(value:unknown)=>String(value||'').toUpperCase();
 export function canManageSchool(auth:any,schoolId:string){
- const global=[auth?.profile?.role,auth?.profile?.access_role].some(r=>['MAIN_ADMIN','SUPER_ADMIN'].includes(r)) || (auth.roles||[]).some((r:any)=>r.status==='ACTIVE'&&!r.school_id&&['MAIN_ADMIN','SUPER_ADMIN'].includes(r.role));
- const schoolAdmin=['ADMIN','SCHOOL_ADMIN'].includes(auth?.profile?.role)&&auth?.profile?.school_id===schoolId;
+ const global=[auth?.profile?.role,auth?.profile?.access_role].some(r=>['MAIN_ADMIN','SUPER_ADMIN'].includes(normalizedRole(r))) || (auth.roles||[]).some((r:any)=>r.status==='ACTIVE'&&!r.school_id&&['MAIN_ADMIN','SUPER_ADMIN'].includes(r.role));
+ const schoolAdmin=[auth?.profile?.role,auth?.profile?.access_role].some(r=>['ADMIN','SCHOOL_ADMIN'].includes(normalizedRole(r)))&&auth?.profile?.school_id===schoolId;
  const schoolRole=(auth.roles||[]).some((r:any)=>r.school_id===schoolId&&r.status==='ACTIVE'&&['ADMIN','SCHOOL_ADMIN','MAIN_ADMIN','SUPER_ADMIN'].includes(r.role));
  return {allowed:!!schoolId&&(global||schoolAdmin||schoolRole),global};
 }

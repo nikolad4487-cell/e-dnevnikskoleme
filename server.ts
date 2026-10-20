@@ -1,3 +1,4 @@
+import {provisioningCors} from './server/auth/provisioningCors.js';
 import {creationCredentials, userManagementScope, STAFF_ROLES} from './server/auth/userProvisioning.js';
 import {staffSession} from './server/auth/staffSession.js';
 import {apiAccessGuard} from './server/auth/apiAccess.js';
@@ -555,6 +556,7 @@ async function startServer() {
       return { userId, profile, roles: roles || [], token };
     }
 
+    app.use(provisioningCors);
     app.use(apiAccessGuard(resolveAuthenticatedUser));
 
     app.post('/api/auth/complete-authenticator', async (req,res) => {
@@ -5349,7 +5351,9 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       const authenticatorSecret = isStaff ? authenticator.generateSecret() : null;
       const requiresAuthenticatorSetup = isStaff;
       const passwordType = isStaff ? 'staff_with_authenticator' : isStudent&&!req.body.password ? 'student_static' : 'standard';
-      const initialPinHash = isStaff ? await hashPin('1234') : null;
+      const initialPin = req.body.pin === undefined ? '1234' : req.body.pin;
+      if(isStaff&&(typeof initialPin!=='string'||!/^\d{4}$/.test(initialPin)))return res.status(400).json({success:false,error:'Početni PIN mora imati točno 4 znamenke.'});
+      const initialPinHash = isStaff ? await hashPin(initialPin) : null;
 
       const programId = studentData?.programId || req.body.programId;
       const dob = studentData?.dob || req.body.dob;
