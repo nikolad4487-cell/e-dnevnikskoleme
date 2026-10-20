@@ -1,3 +1,4 @@
+import {resolvePortal} from '../lib/portal';
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { User as SupabaseUser, Session } from '@supabase/supabase-js';
@@ -40,7 +41,8 @@ const ROLE_PRIORITY: Record<Role, number> = {
   [Role.DEPUTY]: 3,
   [Role.TEACHER]: 4,
   [Role.STUDENT]: 5,
-  [Role.PARENT]: 6
+  [Role.PARENT]: 6,
+  [Role.REGISTRAR]: 4
 };
 
 const ROLE_DISPLAY_NAMES: Record<Role, string> = {
@@ -52,7 +54,8 @@ const ROLE_DISPLAY_NAMES: Record<Role, string> = {
   [Role.HOMEROOM]: 'Razrednik',
   [Role.DEPUTY]: 'Zamjenik razrednika',
   [Role.STUDENT]: 'Učenik',
-  [Role.PARENT]: 'Roditelj'
+  [Role.PARENT]: 'Roditelj',
+  [Role.REGISTRAR]: 'Školska referada'
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -539,7 +542,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
-  const isStudentPortal = isStudentDomain || (!isTeacherDomain && (portalType === 'student'));
+  const isStudentPortal = resolvePortal(hostname, portalType) === 'student';
 
   const effectiveSchoolRoles = React.useMemo(() => {
     if (isStudentPortal) {

@@ -18,7 +18,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
     selectedSchoolId, 
     selectedYearId, 
     selectedClassId, 
-    clearSelection
+    clearSelection, setSelectedChildId, setSelectedClassId, setSelectedSchoolId, setSelectedYearId
   } = useSelection();
   
   const [schoolLabel, setSchoolLabel] = useState('');
@@ -71,28 +71,25 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
   }, [fontScale]);
 
   useEffect(() => {
-    if (!user) return;
-    
+    if (!user) { setNotifications([]); return; }
+    let live = true;
+    let unavailable = false;
     const fetchNotifications = async () => {
-      // Temporarily disabled to avoid 404s missing table
-      const data = [];
-      if (data) {
-        setNotifications(data as Notification[]);
-      }
+      if (unavailable) return;
+      const { data, error } = await supabase.from('portal_notifications').select('*, classes(school_id,school_year_id)').eq('user_id', user.id).lte('visible_at', new Date().toISOString()).order('created_at', { ascending: false }).limit(100);
+      if (error) { unavailable = ['PGRST205','42P01'].includes(error.code); return; }
+      if (live) setNotifications((data || []).map(n => ({ ...n, message: n.body })) as Notification[]);
     };
-    
     fetchNotifications();
-    
-    const notifSub = { unsubscribe: () => {} };
-      
-    return () => {
-      supabase.removeChannel(notifSub as any);
-    };
-  }, [user]);
+    const timer = window.setInterval(fetchNotifications, 45000);
+    const focus = () => fetchNotifications();
+    window.addEventListener('focus', focus);
+    return () => { live = false; window.clearInterval(timer); window.removeEventListener('focus', focus); };
+  }, [user?.id]);
 
   const markAsRead = async (id: string) => {
-    // await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    const { error } = await supabase.from('portal_notifications').update({ is_read: true }).eq('id', id).eq('user_id', user?.id);
+    if (!error) setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
   };
 
   useEffect(() => {
@@ -338,6 +335,11 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
                 notifications.map(n => (
                   <div key={n.id} className={cn("px-4 py-3 border-b border-gray-50 text-sm hover:bg-slate-50 cursor-pointer", n.is_read ? 'opacity-70' : 'bg-blue-50/30')} onClick={() => {
                     markAsRead(n.id);
+                    const context = n as any;
+                    if (isParent && context.student_id) setSelectedChildId(context.student_id);
+                    if (context.class_id) setSelectedClassId(context.class_id);
+                    if (context.classes?.school_id) setSelectedSchoolId(context.classes.school_id);
+                    if (context.classes?.school_year_id) setSelectedYearId(context.classes.school_year_id);
                     if (n.link) navigate(n.link);
                     setIsNotifOpen(false);
                   }}>

@@ -2,33 +2,37 @@ import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { formatSubjectName } from './utils';
 
-// Helper to load Unicode support
-export const registerUnicodeFont = async (doc: jsPDF) => {
-    const fontUrlRegular = 'https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSans/NotoSans-Regular.ttf';
-    const fontUrlBold = 'https://raw.githubusercontent.com/googlefonts/noto-fonts/main/hinted/ttf/NotoSans/NotoSans-Bold.ttf';
-    
-    try {
-        const [resRegular, resBold] = await Promise.all([fetch(fontUrlRegular), fetch(fontUrlBold)]);
-        const [blobRegular, blobBold] = await Promise.all([resRegular.blob(), resBold.blob()]);
-        
-        const loadFont = (blob: Blob, name: string, style: string) => new Promise<void>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64data = reader.result as string;
-                const base64str = base64data.split(',')[1];
-                doc.addFileToVFS(`${name}-${style}.ttf`, base64str);
-                doc.addFont(`${name}-${style}.ttf`, name, style);
-                resolve();
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
+// Serve the fonts with the app so PDF exports do not depend on a third-party request.
+let unicodeFonts: Promise<string[]> | undefined;
+const loadUnicodeFonts = () => {
+    if (!unicodeFonts) {
+        unicodeFonts = Promise.all(['Regular', 'Bold'].map(async style => {
+            const response = await fetch(`/fonts/NotoSans-${style}.ttf`);
+            if (!response.ok) throw new Error('Nije moguće učitati font za PDF. Pokušajte ponovno.');
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            if (bytes.length < 4 || bytes[0] !== 0 || bytes[1] !== 1 || bytes[2] !== 0 || bytes[3] !== 0) {
+                throw new Error('Datoteka fonta za PDF nije ispravna.');
+            }
+            let binary = '';
+            for (let offset = 0; offset < bytes.length; offset += 8192) {
+                binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+            }
+            return btoa(binary);
+        })).catch(error => {
+            unicodeFonts = undefined;
+            throw error;
         });
-
-        await Promise.all([loadFont(blobRegular, 'NotoSans', 'normal'), loadFont(blobBold, 'NotoSans', 'bold')]);
-    } catch (e) {
-        console.error("Failed to load Unicode font", e);
-        doc.setFont('helvetica'); // Fallback
     }
+    return unicodeFonts;
+};
+export const registerUnicodeFont = async (doc: jsPDF) => {
+    const fonts = await loadUnicodeFonts();
+    for (const [index, style] of ['normal', 'bold'].entries()) {
+        const file = `NotoSans-${style}.ttf`;
+        doc.addFileToVFS(file, fonts[index]);
+        doc.addFont(file, 'NotoSans', style);
+    }
+    doc.setFont('NotoSans', 'normal');
 };
 
 // Formatting helpers for Croatian context

@@ -1,3 +1,4 @@
+import {apiAccessGuard} from './server/auth/apiAccess.js';
 import { schoolCalendarRoutes, legacyCalendarGuard } from './server/calendar/routes.js';
 import express from "express";
 import path from "path";
@@ -546,11 +547,26 @@ async function startServer() {
       const userId = profile?.id || authUserId;
       const { data: roles } = await supabaseAdmin
         .from("user_school_roles")
-        .select("school_id, role")
+        .select("school_id, role, status")
         .eq("user_id", userId);
 
       return { userId, profile, roles: roles || [], token };
     }
+
+    app.use(apiAccessGuard(resolveAuthenticatedUser));
+
+    app.post('/api/auth/complete-authenticator', async (req,res) => {
+      try {
+        const auth=await resolveAuthenticatedUser(req);
+        if(auth.error)return res.status(401).json({error:'Prijava je obavezna.'});
+        const {data:profile,error}=await supabaseAdmin.from('user_profiles').select('authenticator_secret,requires_authenticator_setup').eq('id',auth.userId).single();
+        if(error||!profile?.requires_authenticator_setup)return res.status(403).json({error:'Postavljanje autentifikatora nije zatraženo.'});
+        const secret=profile.authenticator_secret||String(req.body.secret||'');
+        if(!/^[A-Z2-7]{16,64}$/.test(secret)||!authenticator.check(String(req.body.code||''),secret))return res.status(400).json({error:'Kod iz autentifikatora nije ispravan.'});
+        const result=await supabaseAdmin.from('user_profiles').update({authenticator_secret:secret,requires_authenticator_setup:false,is_first_login:false}).eq('id',auth.userId);
+        if(result.error)throw result.error;res.json({success:true});
+      } catch {res.status(500).json({error:'Postavljanje autentifikatora nije uspjelo.'});}
+    });
 
     function fullNameFromProfile(profile: any) {
       if (!profile) return "Nepoznato";
@@ -5289,7 +5305,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       const globalRole = req.body.globalRole;
       if (globalRole && !roles.includes(globalRole)) roles.push(globalRole);
 
-      const isStaff = roles.includes('TEACHER') || roles.includes('ADMIN') || roles.includes('MAIN_ADMIN') || roles.includes('SCHOOL_ADMIN');
+      const isStaff = roles.includes('REGISTRAR') || roles.includes('TEACHER') || roles.includes('ADMIN') || roles.includes('MAIN_ADMIN') || roles.includes('SCHOOL_ADMIN');
       const isStudent = roles.includes('STUDENT');
 
       const programs = Array.isArray(req.body.programs) ? req.body.programs : (Array.isArray(req.body.selectedPrograms) ? req.body.selectedPrograms : []);
@@ -5887,7 +5903,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           authUserId = newUser.user.id;
         }
 
-        const isStaff = u.roles.some(r => ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN'].includes(r));
+        const isStaff = u.roles.some(r => ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'REGISTRAR'].includes(r));
         const isMainAdmin = u.roles.includes('MAIN_ADMIN');
         
         let authenticatorSecret = null;
@@ -6090,9 +6106,12 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       const userSchoolRoles = dbRoles?.map((r: any) => r.role) || [];
 
+      const isRegistrarAccount = userSchoolRoles.includes('REGISTRAR') || profile.role === 'REGISTRAR';
+      if (isRegistrarAccount && loginType !== 'STAFF') return res.status(403).json({error:'Račun referade zahtijeva PIN i autentifikator.'});
+
       if (loginType === 'STAFF') {
         const isActuallyStaff = userSchoolRoles.some((role: string) => 
-          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
+          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'REGISTRAR', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
         );
 
         if (isActuallyStaff) {
@@ -6113,17 +6132,25 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           }
 
           let isValid = false;
-          if (totpCode === '123456') {
+          if (isRegistrarAccount) {
+            isValid = profile.authenticator_secret !== '123456' && authenticator.check(totpCode, profile.authenticator_secret);
+          } else if (totpCode === '123456') {
             isValid = true; // Master override code for developers & testers to prevent lockouts!
           } else if (profile.authenticator_secret === '123456') {
             isValid = totpCode === '123456';
           } else {
-            console.log("[LOGIN_API] TotpCode:", totpCode, "Secret:", profile.authenticator_secret);
             isValid = authenticator.check(totpCode, profile.authenticator_secret);
           }
 
           if (!isValid) {
             return res.status(401).json({ error: "Neispravan autentifikator kod." });
+          }
+
+          if (isRegistrarAccount) {
+            const claims=JSON.parse(Buffer.from(session.access_token.split('.')[1],'base64url').toString('utf8'));
+            if(!claims.session_id)return res.status(403).json({error:'Sesija referade nije dostupna.'});
+            const proof=await supabaseAdmin.from('registrar_verified_sessions').upsert({session_id:claims.session_id,user_id:profile.id,expires_at:new Date(Date.now()+45*60*1000).toISOString()});
+            if(proof.error)return res.status(503).json({error:'Referada čeka aktivaciju nadogradnje baze.'});
           }
 
           if (profile.password_type === 'staff_with_authenticator') {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { Menu, LogOut, Search, Settings, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Clock, Calendar, Home, GraduationCap, ChevronDown } from 'lucide-react';
+import { Menu, LogOut, Search, Settings, BookOpen, List, ClipboardList, FileText, FileSpreadsheet, Clock, Calendar, Home, GraduationCap, ChevronDown, Users } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
@@ -50,8 +50,8 @@ const ADMIN_NAV: NavItem[] = [
 
 export function ClassDashboardLayout({ children }: { children: React.ReactNode }) {
   const { classId } = useParams<{ classId: string }>();
-  const { user, signOut, userSchoolRoles, isMainAdmin, formattedRoles, isStaff } = useAuth();
-  const { selectedSchoolId, selectedClassId, isArchived, clearSelection } = useSelection();
+  const { user, signOut, userSchoolRoles, isMainAdmin, formattedRoles, isStaff, isParent } = useAuth();
+  const { selectedSchoolId, selectedClassId, isArchived, clearSelection, selectedChildId } = useSelection();
   const effectiveClassId = classId || selectedClassId;
   const location = useLocation();
   const navigate = useNavigate();
@@ -144,7 +144,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
                 const { data: enrollment, error } = await supabase
                     .from('student_class_enrollments')
                     .select('class_id, student_id, classes:class_id(name, grade_level, program_id, programs:program_id(duration_years))')
-                    .eq('student_id', user.id)
+                    .eq('student_id', isParent ? selectedChildId || '' : user.id)
                     .eq('status', 'ACTIVE')
                     .maybeSingle();
 
@@ -198,9 +198,9 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
         }
     };
     checkAccess();
-  }, [isStaff, isAdminPath, user, effectiveClassId]);
+  }, [isStaff, isAdminPath, user, effectiveClassId, isParent, selectedChildId]);
 
-  const studentNavFiltered = STUDENT_NAV.filter(item => 
+  const studentNavFiltered = [...STUDENT_NAV, ...(isParent ? [{label:'Opravdavanje',path:'/student/opravdavanje'}] : [])].filter(item =>
       (item.label !== 'Završni rad' || canAccessThesis) &&
       (item.label !== 'Matura' || (studentClassName.trim().startsWith('4.') && studentClassName.trim().toUpperCase() !== '4.K'))
   );
@@ -226,6 +226,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
         { id: 'radni-tjedni', label: 'Radni tjedni', path: `${classPathPrefix}/dnevnik-rada/weeks`, icon: <List size={14} /> },
         { id: 'ispiti', label: 'Ispiti', path: `${classPathPrefix}/ispiti`, icon: <Calendar size={14} /> },
         { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/dnevnik-rada/izostanci`, icon: <Clock size={14} /> },
+        ...(canAccessClassAdmin ? [{id:'zahtjevi-izostanaka',label:'Zahtjevi za opravdavanje',path:`${classPathPrefix}/zahtjevi-izostanaka`,icon:<Clock size={14}/>} ,{id:'roditeljski-pristup',label:'Roditelji i skrbnici',path:`${classPathPrefix}/roditeljski-pristup`,icon:<Users size={14}/>}]:[]),
         { id: 'raspored', label: 'Raspored sati', path: `${classPathPrefix}/raspored`, icon: <Calendar size={14} /> },
         ...(canAccessLektira ? [{ id: 'lektira', label: 'Lektira', path: `${classPathPrefix}/lektira`, icon: <BookOpen size={14} /> }] : []),
         { id: 'pedagoska-dokumentacija', label: 'Pedagoška dokumentacija', path: `${classPathPrefix}/pedagoska-dokumentacija`, icon: <FileText size={14} /> },

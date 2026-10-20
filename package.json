@@ -39,6 +39,7 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.3.16",
     "@eslint/js": "^10.0.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^4.17.21",

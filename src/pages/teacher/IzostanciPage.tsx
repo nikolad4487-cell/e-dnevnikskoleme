@@ -69,10 +69,10 @@ export default function TeacherIzostanciPage() {
       if (effectiveClassId) {
         const { data: classData } = await supabase
           .from('classes')
-          .select('homeroom_teacher_id')
+          .select('homeroom_teacher_id,deputy_teacher_id,deputy_homeroom_teacher_id')
           .eq('id', effectiveClassId)
           .maybeSingle();
-        if (classData && classData.homeroom_teacher_id === user?.id) {
+        if (classData && [classData.homeroom_teacher_id,classData.deputy_teacher_id,classData.deputy_homeroom_teacher_id].includes(user?.id)) {
           setIsHomeroomTeacher(true);
         } else {
           setIsHomeroomTeacher(false);

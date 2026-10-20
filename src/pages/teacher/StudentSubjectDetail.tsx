@@ -568,7 +568,7 @@ export default function StudentSubjectDetail() {
     if (isAdminForCurrentSchool()) return true;
     if (!isTeacher) return false;
     const isCreator = isCreatedByCurrentUser(g);
-    return isCreator && isWithinMinutes(g?.created_at || g?.createdAt, 10);
+    return isCreator && isWithinMinutes(g?.created_at || g?.createdAt, 45);
   };
 
   const canDeleteNote = (n: any) => {
@@ -580,7 +580,7 @@ export default function StudentSubjectDetail() {
     const grade = grades.find(g => g.id === id);
     const isGradeAdmin = isAdminForCurrentSchool();
     const isCreator = isCreatedByCurrentUser(grade);
-    const isOwnQuickDelete = isCreator && isWithinMinutes(grade?.created_at || grade?.createdAt, 10);
+    const isOwnQuickDelete = isCreator && isWithinMinutes(grade?.created_at || grade?.createdAt, 45);
     const requiresAdminConfirmation = isGradeAdmin && !isOwnQuickDelete;
 
     if (!isGradeAdmin && !isCreator) {

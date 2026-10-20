@@ -1,3 +1,4 @@
+import {resolvePortal} from '../lib/portal';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
@@ -14,7 +15,8 @@ export default function LoginPage() {
   const hostname = window.location.hostname;
   console.log("HOSTNAME", hostname);
 
-  const isTeacherDomain = hostname === "e-dnevnik.skolehr.xyz" || hostname === "ednevnik.skolehr.xyz";
+  const isRegistrarPortal = resolvePortal(hostname, import.meta.env.VITE_APP_PORTAL) === 'registrar';
+  const isTeacherDomain = isRegistrarPortal || hostname === "e-dnevnik.skolehr.xyz" || hostname === "ednevnik.skolehr.xyz";
   const isStudentDomain = hostname === "e-ocjene.skolehr.xyz" || hostname === "ocjene.skolehr.xyz";
 
   useEffect(() => {
@@ -24,7 +26,7 @@ export default function LoginPage() {
   }, [hostname, isTeacherDomain, isStudentDomain]);
 
   const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
-  const isStudentPortal = isStudentDomain || (!isTeacherDomain && (portalType === 'student'));
+  const isStudentPortal = resolvePortal(hostname, portalType) === 'student';
 
   const [loginType, setLoginType] = useState<'STAFF' | 'USER'>(() => {
     if (isTeacherDomain) return 'STAFF';
@@ -135,7 +137,7 @@ export default function LoginPage() {
       }
 
       const raw = await response.text();
-      console.log("LOGIN RAW RESPONSE", raw);
+
 
       let result: any = null;
       try {
@@ -145,7 +147,7 @@ export default function LoginPage() {
         throw new Error('Prijava trenutno nije moguća (server nije vratio ispravan JSON odgovor).');
       }
 
-      console.log("LOGIN API RESULT", JSON.stringify(result, null, 2));
+
 
       if (!response.ok) {
         throw new Error(result?.error || raw || 'Greška pri prijavi.');
@@ -167,13 +169,13 @@ export default function LoginPage() {
 
       const { session } = result;
 
-      console.log('[LOGIN] API Result:', { result });
+
 
       const roles: string[] = result.roles || [];
 
       // Enforce domain/portal-based role checks
       console.log("[LOGIN] Enforcing domain role check with roles:", roles);
-      const staffRoles = ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'];
+      const staffRoles = ['REGISTRAR', 'TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'];
       const studentRoles = ['STUDENT', 'PARENT'];
 
       if (isTeacherDomain) {
@@ -252,7 +254,7 @@ export default function LoginPage() {
       <div className="absolute inset-0 opacity-[0.03] pointer-events-none select-none overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full flex flex-wrap content-start">
            {Array.from({length: 100}).map((_, i) => (
-             <div key={i} className="text-8xl font-black p-4 rotate-12 uppercase tracking-tighter">e-Dnevnik</div>
+             <div key={i} className="text-8xl font-black p-4 rotate-12 uppercase tracking-tighter">{isRegistrarPortal ? 'Referada' : 'e-Dnevnik'}</div>
            ))}
         </div>
       </div>
@@ -260,7 +262,7 @@ export default function LoginPage() {
       <div className="max-w-md w-full relative z-10 transition-all duration-500 animate-in fade-in slide-in-from-bottom-4">
         <div className="text-center mb-10">
           <div className="inline-block px-3 py-1 bg-[#005c8d] text-white text-[10px] font-black uppercase tracking-[0.2em] mb-4">Službeni pristup</div>
-          <h1 className="text-5xl font-black text-[#005c8d] tracking-tighter uppercase">e-Dnevnik</h1>
+          <h1 className="text-3xl sm:text-5xl font-black text-[#005c8d] tracking-tighter uppercase">{isRegistrarPortal ? 'Školska referada' : 'e-Dnevnik'}</h1>
           <div className="h-1 w-12 bg-[#005c8d] mx-auto mt-2"></div>
           <p className="text-gray-500 mt-4 text-[11px] font-bold uppercase tracking-widest leading-none">Sustav za upravljanje informacijama u školi</p>
         </div>

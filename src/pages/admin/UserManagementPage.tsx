@@ -201,6 +201,8 @@ export default function UserManagementPage() {
   };
 
   const toggleRole = (role: Role) => {
+    if (role === Role.REGISTRAR) { setSelectedRoles([Role.REGISTRAR]); return; }
+    if (selectedRoles.includes(Role.REGISTRAR)) { setSelectedRoles([role]); return; }
     setSelectedRoles(prev => 
       prev.includes(role) 
         ? prev.filter(r => r !== role)
@@ -733,6 +735,7 @@ export default function UserManagementPage() {
             <option value={Role.TEACHER}>Nastavnici</option>
             <option value={Role.STUDENT}>Učenici</option>
             <option value={Role.PARENT}>Roditelji</option>
+            <option value={Role.REGISTRAR}>Školska referada</option>
           </select>
         </div>
       </div>
@@ -1048,7 +1051,7 @@ export default function UserManagementPage() {
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">Uloga za sve unesene korisnike</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[Role.ADMIN, Role.TEACHER, Role.STUDENT, Role.PARENT].map((role) => (
+                  {[Role.ADMIN, Role.TEACHER, Role.REGISTRAR, Role.STUDENT, Role.PARENT].map((role) => (
                     <button
                       key={role}
                       type="button"
@@ -1061,7 +1064,7 @@ export default function UserManagementPage() {
                     >
                       {role === Role.TEACHER ? 'Nastavnik' : 
                        role === Role.STUDENT ? 'Učenik' :
-                       role === Role.PARENT ? 'Roditelj' : 'Admin Škole'}
+                       role === Role.REGISTRAR ? 'Školska referada' : role === Role.PARENT ? 'Roditelj' : 'Admin Škole'}
                     </button>
                   ))}
                 </div>
@@ -1206,7 +1209,7 @@ export default function UserManagementPage() {
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">Uloge u školi (odaberi više)</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {[Role.TEACHER, Role.STUDENT, Role.PARENT, Role.SCHOOL_ADMIN].map((role) => (
+                  {[Role.TEACHER, Role.REGISTRAR, Role.STUDENT, Role.PARENT, Role.SCHOOL_ADMIN].map((role) => (
                     <button
                       key={role}
                       type="button"
@@ -1219,7 +1222,7 @@ export default function UserManagementPage() {
                     >
                       {role === Role.TEACHER ? 'Nastavnik' : 
                        role === Role.STUDENT ? 'Učenik' :
-                       role === Role.PARENT ? 'Roditelj' :
+                       role === Role.REGISTRAR ? 'Školska referada' : role === Role.PARENT ? 'Roditelj' :
                        role === Role.SCHOOL_ADMIN ? 'Admin Škole' : ''}
                     </button>
                   ))}
