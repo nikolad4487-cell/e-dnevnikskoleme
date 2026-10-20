@@ -39,4 +39,10 @@ Ova verzija pokriva roditeljske zahtjeve, povezivanje računa, obavijesti i potv
 3. Dopuna službenih obrazaca i posebnih modula prema priručnicima, uz provjeru stvarnih školskih pravila.
 4. Vanjske integracije tek po dobivanju službenog pristupa; API pristup trenutačno nije dostupan.
 
-Aktivacija u stvarnoj bazi i povezivanje novog Vercel projekta još nisu izvršeni. Servisni Supabase API ključ ne omogućuje izvođenje DDL SQL-a, a dostupna sesija nema pristup upravljanju Vercel projektima.
+Korisnik je 20. listopada 2026. potvrdio uspješno izvršavanje objedinjene SQL datoteke. Dostupnost novih tablica dodatno je provjerena čitanjem bez dohvaćanja podataka. Vercel projekt `referada` povezan je s repozitorijem, što potvrđuje uspješan preview check. Produkcijsku objavu pratiti preko GitHub deployment statusa. Izvorni PNG potpisa i namjenski korisnički račun još treba spremiti.
+
+## Ispravak stvaranja korisnika
+
+Poslužitelj je za djelatnike prepisivao unesenu lozinku četveroznamenkastim PIN-om, što Supabase Auth odbija. Sada čuva unesenu lozinku (najmanje 6 znakova), a početni PIN 1234 sprema zasebno kao bcrypt hash. Prijava djelatnika provjerava PIN na poslužitelju i razmjenjuje privatni jednokratni Auth token; ne ovisi o poznatoj zajedničkoj Auth lozinci. Za postojeću e-mail adresu stvaranje više ne mijenja lozinku postojećeg računa.
+
+Stvaranje, izmjena i skupno stvaranje provjeravaju administratorski pristup odabranoj školi i pripadnost razreda. Glavni administrator može odabrati školu. Školski administrator ne može dodijeliti globalnu ulogu, mijenjati Auth ID niti uređivati račun koji se dijeli s drugim školama. Izmjena globalnih ovlasti više se ne izvodi na temelju posebne e-mail adrese.
