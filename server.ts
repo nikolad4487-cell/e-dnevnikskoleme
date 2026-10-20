@@ -4795,7 +4795,7 @@ CREATE TABLE IF NOT EXISTS public.final_thesis_committee_members (
           if (autoFix) {
             const { data: newAuth, error: createAuthErr } = await supabaseAdmin.auth.admin.createUser({
               email: emailLower,
-              password: '1234',
+              password: STAFF_ROLES.includes(prof.role) ? crypto.randomBytes(18).toString('base64url') : 'yupu8Ev4',
               email_confirm: true,
               user_metadata: { full_name: prof.name || emailLower.split('@')[0] }
             });
@@ -4822,7 +4822,7 @@ CREATE TABLE IF NOT EXISTS public.final_thesis_committee_members (
         }
       }
 
-      const isStaff = ['TEACHER', 'HOMEROOM', 'DEPUTY', 'SCHOOL_ADMIN', 'ADMIN', 'MAIN_ADMIN'].includes(prof.role);
+      const isStaff = STAFF_ROLES.includes(prof.role);
       if (isStaff && !prof.pin_hash && autoFix) {
         await supabaseAdmin
           .from('user_profiles')
@@ -7516,7 +7516,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         const requestedRole = rolesByUserId?.[profile.id];
         const role = String(requestedRole || profile.role || "TEACHER").toUpperCase();
         const isStudent = role === "STUDENT";
-        const password = isStudent ? "yupu8Ev4" : "1234";
+        const password = creationCredentials(undefined,[role],()=>STAFF_ROLES.includes(role)?crypto.randomBytes(18).toString('base64url'):'yupu8Ev4').password;
 
         let authUserId = profile.auth_user_id;
         if (!authUserId && profile.email) {
