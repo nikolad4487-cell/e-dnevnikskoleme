@@ -1,3 +1,6 @@
+import {creationCredentials, userManagementScope, STAFF_ROLES} from './server/auth/userProvisioning.js';
+import {staffSession} from './server/auth/staffSession.js';
+import {apiAccessGuard} from './server/auth/apiAccess.js';
 import { schoolCalendarRoutes, legacyCalendarGuard } from './server/calendar/routes.js';
 import express from "express";
 import path from "path";
@@ -546,11 +549,26 @@ async function startServer() {
       const userId = profile?.id || authUserId;
       const { data: roles } = await supabaseAdmin
         .from("user_school_roles")
-        .select("school_id, role")
+        .select("school_id, role, status")
         .eq("user_id", userId);
 
       return { userId, profile, roles: roles || [], token };
     }
+
+    app.use(apiAccessGuard(resolveAuthenticatedUser));
+
+    app.post('/api/auth/complete-authenticator', async (req,res) => {
+      try {
+        const auth=await resolveAuthenticatedUser(req);
+        if(auth.error)return res.status(401).json({error:'Prijava je obavezna.'});
+        const {data:profile,error}=await supabaseAdmin.from('user_profiles').select('authenticator_secret,requires_authenticator_setup').eq('id',auth.userId).single();
+        if(error||!profile?.requires_authenticator_setup)return res.status(403).json({error:'Postavljanje autentifikatora nije zatraženo.'});
+        const secret=profile.authenticator_secret||String(req.body.secret||'');
+        if(!/^[A-Z2-7]{16,64}$/.test(secret)||!authenticator.check(String(req.body.code||''),secret))return res.status(400).json({error:'Kod iz autentifikatora nije ispravan.'});
+        const result=await supabaseAdmin.from('user_profiles').update({authenticator_secret:secret,requires_authenticator_setup:false,is_first_login:false}).eq('id',auth.userId);
+        if(result.error)throw result.error;res.json({success:true});
+      } catch {res.status(500).json({error:'Postavljanje autentifikatora nije uspjelo.'});}
+    });
 
     function fullNameFromProfile(profile: any) {
       if (!profile) return "Nepoznato";
@@ -4777,7 +4795,7 @@ CREATE TABLE IF NOT EXISTS public.final_thesis_committee_members (
           if (autoFix) {
             const { data: newAuth, error: createAuthErr } = await supabaseAdmin.auth.admin.createUser({
               email: emailLower,
-              password: '1234',
+              password: STAFF_ROLES.includes(prof.role) ? crypto.randomBytes(18).toString('base64url') : 'yupu8Ev4',
               email_confirm: true,
               user_metadata: { full_name: prof.name || emailLower.split('@')[0] }
             });
@@ -4804,7 +4822,7 @@ CREATE TABLE IF NOT EXISTS public.final_thesis_committee_members (
         }
       }
 
-      const isStaff = ['TEACHER', 'HOMEROOM', 'DEPUTY', 'SCHOOL_ADMIN', 'ADMIN', 'MAIN_ADMIN'].includes(prof.role);
+      const isStaff = STAFF_ROLES.includes(prof.role);
       if (isStaff && !prof.pin_hash && autoFix) {
         await supabaseAdmin
           .from('user_profiles')
@@ -5022,7 +5040,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 }
 
   // Admin bulk create users endpoint
-  app.post("/api/admin/bulk-create-users", async (req, res) => {
+  app.post("/api/admin/bulk-create-users", userManagementScope(resolveAuthenticatedUser, supabaseAdmin), async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       
@@ -5168,7 +5186,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     }
   });
 
-  app.post("/api/admin/bulk-create-general", async (req, res) => {
+  app.post("/api/admin/bulk-create-general", userManagementScope(resolveAuthenticatedUser, supabaseAdmin), async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       const { users, role, schoolId } = req.body;
@@ -5191,8 +5209,8 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       });
 
       const results = [];
-      const isStaff = role === 'ADMIN' || role === 'TEACHER';
-      const userPassword = isStaff ? '1234' : 'yupu8Ev4';
+      const isStaff = STAFF_ROLES.includes(role);
+      const userPassword = creationCredentials(req.body.password,[role],()=>isStaff?crypto.randomBytes(18).toString('base64url'):'yupu8Ev4').password;
       const passwordType = isStaff ? 'staff_with_authenticator' : (role === 'STUDENT' ? 'student_static' : 'parent_static');
 
       for (const userData of users) {
@@ -5227,7 +5245,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
          }
 
          const userId = authUser.user.id;
-         console.log("CREATED AUTH USER", authUser.user);
+
 
          const { data: profile, error: profileError } = await supabaseAdmin
            .from('user_profiles')
@@ -5239,6 +5257,8 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
               is_first_login: true,
               requires_password_change: false,
               requires_authenticator_setup: isStaff,
+              authenticator_secret: isStaff ? authenticator.generateSecret() : null,
+              pin_hash: isStaff ? await hashPin('1234') : null,
               password_type: passwordType,
               school_id: schoolId
            }, { onConflict: 'auth_user_id' })
@@ -5249,7 +5269,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
             results.push({ ...userData, success: false, error: profileError?.message || 'Greška u profilu' });
             continue;
          }
-         console.log("CREATED PROFILE", profile);
+
 
          if (schoolId) {
             await supabaseAdmin.from('user_school_roles').upsert({
@@ -5271,8 +5291,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
   });
 
   // Admin create user endpoint
-  app.post("/api/admin/create-user", async (req, res) => {
-    console.log("[ADMIN_CREATE - KORAK 1: prije validacije] Primljen zahtjev za kreiranje/dodavanje korisnika. Tijelo zahtjeva:", JSON.stringify(req.body));
+  app.post("/api/admin/create-user", userManagementScope(resolveAuthenticatedUser, supabaseAdmin), async (req, res) => {
     try {
       if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
         console.error("[ADMIN_CREATE] Nedostaje SUPABASE_SERVICE_ROLE_KEY na serveru.");
@@ -5289,12 +5308,13 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       const globalRole = req.body.globalRole;
       if (globalRole && !roles.includes(globalRole)) roles.push(globalRole);
 
-      const isStaff = roles.includes('TEACHER') || roles.includes('ADMIN') || roles.includes('MAIN_ADMIN') || roles.includes('SCHOOL_ADMIN');
+      const isStaff = roles.some(role=>STAFF_ROLES.includes(role));
       const isStudent = roles.includes('STUDENT');
 
       const programs = Array.isArray(req.body.programs) ? req.body.programs : (Array.isArray(req.body.selectedPrograms) ? req.body.selectedPrograms : []);
 
       let { email, name, surname, address, oib, schoolId, classId, studentData } = req.body;
+      classId = classId || studentData?.classId;
       if (email && typeof email === 'string') {
         email = email.trim().toLowerCase();
         if (!email.includes('@')) {
@@ -5321,33 +5341,16 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           console.log("[ADMIN_CREATE] Generirana jedinstvena e-mail adresa:", email);
       }
 
-      // Determination of password and role requirements
-      let finalPassword = req.body.password;
-      let requiresPasswordChange = true;
-      let authenticatorSecret = null;
-      let requiresAuthenticatorSetup = false;
-      let passwordType: any = 'standard';
+      let credentials;
+      try {credentials=creationCredentials(req.body.password,roles,()=>isStudent?'yupu8Ev4':crypto.randomBytes(18).toString('base64url'));}
+      catch(error:any){return res.status(400).json({success:false,error:error.message});}
+      const finalPassword = credentials.password;
+      const requiresPasswordChange = true;
+      const authenticatorSecret = isStaff ? authenticator.generateSecret() : null;
+      const requiresAuthenticatorSetup = isStaff;
+      const passwordType = isStaff ? 'staff_with_authenticator' : isStudent&&!req.body.password ? 'student_static' : 'standard';
+      const initialPinHash = isStaff ? await hashPin('1234') : null;
 
-      if (isStudent) {
-        finalPassword = 'yupu8Ev4';
-        requiresPasswordChange = false;
-        passwordType = 'student_static';
-      } else if (isStaff) {
-        finalPassword = '1234';
-        requiresPasswordChange = true;
-        authenticatorSecret = authenticator.generateSecret();
-        requiresAuthenticatorSetup = true;
-        passwordType = 'staff_with_authenticator';
-      }
-
-      console.log("[ADMIN_CREATE] Provjera konfiguracije: ", { 
-        email, 
-        roles, 
-        programs, 
-        hasClassId: !!classId,
-        finalPassword
-      });
-      
       const programId = studentData?.programId || req.body.programId;
       const dob = studentData?.dob || req.body.dob;
       const pob = studentData?.pob || req.body.pob;
@@ -5361,13 +5364,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       let createdAuthUser;
       if (existingUser) {
         userId = existingUser.id;
-        console.log("[ADMIN_CREATE] Korisnik već postoji u Auth. Ažuriramo lozinku za user_id:", userId);
-        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: finalPassword });
-        if (updateError) {
-          console.error("[ADMIN_CREATE] Greška pri ažuriranju postojećeg korisnika u Auth:", updateError);
-          return res.status(500).json({ success: false, error: `Greška pri ažuriranju Auth korisnika: ${updateError.message}` });
-        }
-        createdAuthUser = existingUser;
+        return res.status(409).json({success:false,error:'Račun s ovom e-mail adresom već postoji. Uredite postojećeg korisnika ili ga uvezite; lozinka nije promijenjena.'});
       } else {
         console.log("[ADMIN_CREATE] Korisnik ne postoji u Auth. Kreiramo novog Auth korisnika:", email);
         const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -5405,13 +5402,15 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         .upsert({
           auth_user_id: userId,
           email,
-          name: name || (surname ? `${name} ${surname}` : name),
+          name: [name,surname].filter(Boolean).join(' ').trim(),
           address: address || studentData?.address,
           oib: oib || studentData?.oib,
           dob,
           pob,
           mobile,
-          role: isStudent ? 'STUDENT' : (globalRole || 'TEACHER'),
+          role: isStudent ? 'STUDENT' : (globalRole || roles[0] || 'PARENT'),
+          access_role: isStudent ? 'STUDENT' : (globalRole || roles[0] || 'PARENT'),
+          pin_hash: initialPinHash,
           class_id: classId || studentData?.classId,
           school_id: schoolId || studentData?.schoolId,
           school_year_id: studentData?.schoolYearId,
@@ -5455,7 +5454,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
               status: 'ACTIVE'
             }, { onConflict: 'user_id,school_id,role' });
           if (roleErr) {
-             console.error(`[ADMIN_CREATE] Greška pri dodiranju uloge ${role}:`, roleErr);
+             return res.status(500).json({success:false,error:`Profil je stvoren, ali dodjela uloge nije uspjela: ${roleErr.message}. Nemojte ponovno stvarati račun; uredite postojeći profil.`});
           }
         }
       }
@@ -5502,7 +5501,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
   });
 
   // Admin update user endpoint
-  app.patch("/api/admin/update-user", async (req, res) => {
+  app.patch("/api/admin/update-user", userManagementScope(resolveAuthenticatedUser, supabaseAdmin), async (req, res) => {
     try {
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
       const { 
@@ -5545,7 +5544,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       }
 
       const emailLower = email ? String(email).trim().toLowerCase() : undefined;
-      const isGlobalAdmin = emailLower === 'skole@skolehr.xyz' || emailLower === 'skola@skolehr.xyz';
+      const isGlobalAdmin = (Array.isArray(roles)?roles:[]).some(role=>['MAIN_ADMIN','SUPER_ADMIN'].includes(role));
       
       const rolesArray = Array.isArray(roles) ? roles : (roles ? [roles] : []);
       
@@ -5554,8 +5553,8 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       let accessRole = 'user';
 
       if (isGlobalAdmin) {
-        primaryRole = 'SUPER_ADMIN';
-        accessRole = 'SUPER_ADMIN';
+        primaryRole = rolesArray.includes('SUPER_ADMIN') ? 'SUPER_ADMIN' : 'MAIN_ADMIN';
+        accessRole = primaryRole;
       } else if (rolesArray.includes('SCHOOL_ADMIN')) {
         primaryRole = 'SCHOOL_ADMIN';
         accessRole = 'SCHOOL_ADMIN';
@@ -5579,15 +5578,11 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         accessRole = rolesArray[0];
       }
 
-      const targetSchoolId = isGlobalAdmin ? null : (schoolId || activeSchoolId || 'srednja-kola-glina-zagreb');
+      const targetSchoolId = schoolId || activeSchoolId;
 
-      // 1. Update Auth user if needed
-      let targetAuthId = authUserId;
-      if (!targetAuthId && emailLower) {
-        const { data: existingAuth } = await supabaseAdmin.auth.admin.listUsers();
-        const found = existingAuth?.users?.find((u: any) => u.email?.toLowerCase() === emailLower);
-        if (found) targetAuthId = found.id;
-      }
+      // The authorization middleware resolves the Auth ID from the selected profile.
+      // Never link a different existing Auth account merely by changing an e-mail.
+      const targetAuthId = authUserId;
 
       if (targetAuthId) {
         const authUpdatePayload: any = {};
@@ -5598,7 +5593,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         if (Object.keys(authUpdatePayload).length > 0) {
           const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(targetAuthId, authUpdatePayload);
           if (authErr) {
-            console.warn("[ADMIN_UPDATE] Warning updating auth user:", authErr.message);
+            return res.status(400).json({success:false,error:`Promjena Auth računa nije uspjela: ${authErr.message}`});
           }
         }
       }
@@ -5617,7 +5612,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       if (oib !== undefined) profilePayload.oib = oib;
       if (targetAuthId) profilePayload.auth_user_id = targetAuthId;
 
-      const isStaffRole = ['TEACHER', 'HOMEROOM', 'DEPUTY', 'SCHOOL_ADMIN', 'ADMIN', 'MAIN_ADMIN', 'SUPER_ADMIN'].includes(primaryRole);
+      const isStaffRole = STAFF_ROLES.includes(primaryRole);
       if (isStaffRole) {
         const DEFAULT_PIN_HASH = '$2b$10$EEbRoX3UU0AtHm3CMZSABOXxL9ghae0./0eeeBuKVpYEsAaDdXQ72';
         const { data: curProf } = await supabaseAdmin.from('user_profiles').select('pin_hash').eq('id', profileId).maybeSingle();
@@ -5887,7 +5882,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           authUserId = newUser.user.id;
         }
 
-        const isStaff = u.roles.some(r => ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN'].includes(r));
+        const isStaff = u.roles.some(r => ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'REGISTRAR'].includes(r));
         const isMainAdmin = u.roles.includes('MAIN_ADMIN');
         
         let authenticatorSecret = null;
@@ -5993,18 +5988,16 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         DemoresolvedEmail = dbResolvedProfile.email;
       }
 
-      // 1. Sign in with Supabase
-      // Try '1234' first as the standard password, falling back to '123456' for compatibility
+      // The PIN and Auth password are separate. Mint a private, single-use
+      // Auth token only after checking this staff account's PIN on the server.
       let authResult;
       if (loginType === 'STAFF') {
-        let res = await signInWithPasswordDirect(DemoresolvedEmail, '1234');
-        if (res.error && res.error.message === 'Invalid login credentials') {
-          const retryRes = await signInWithPasswordDirect(DemoresolvedEmail, '123456');
-          if (!retryRes.error) {
-            res = retryRes;
+        authResult = await staffSession({database:supabaseAdmin,email:DemoresolvedEmail,pin:password,verifyPin,
+          verifyToken: async tokenHash => {
+            const client=createClient(supabaseUrl,supabaseAnonKey||supabaseServiceKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
+            return client.auth.verifyOtp({token_hash:tokenHash,type:'magiclink'});
           }
-        }
-        authResult = res;
+        });
       } else {
         authResult = await signInWithPasswordDirect(DemoresolvedEmail, password);
       }
@@ -6090,9 +6083,12 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       const userSchoolRoles = dbRoles?.map((r: any) => r.role) || [];
 
+      const isRegistrarAccount = userSchoolRoles.includes('REGISTRAR') || profile.role === 'REGISTRAR';
+      if (isRegistrarAccount && loginType !== 'STAFF') return res.status(403).json({error:'Račun referade zahtijeva PIN i autentifikator.'});
+
       if (loginType === 'STAFF') {
         const isActuallyStaff = userSchoolRoles.some((role: string) => 
-          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
+          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'REGISTRAR', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
         );
 
         if (isActuallyStaff) {
@@ -6113,17 +6109,25 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           }
 
           let isValid = false;
-          if (totpCode === '123456') {
+          if (isRegistrarAccount) {
+            isValid = profile.authenticator_secret !== '123456' && authenticator.check(totpCode, profile.authenticator_secret);
+          } else if (totpCode === '123456') {
             isValid = true; // Master override code for developers & testers to prevent lockouts!
           } else if (profile.authenticator_secret === '123456') {
             isValid = totpCode === '123456';
           } else {
-            console.log("[LOGIN_API] TotpCode:", totpCode, "Secret:", profile.authenticator_secret);
             isValid = authenticator.check(totpCode, profile.authenticator_secret);
           }
 
           if (!isValid) {
             return res.status(401).json({ error: "Neispravan autentifikator kod." });
+          }
+
+          if (isRegistrarAccount) {
+            const claims=JSON.parse(Buffer.from(session.access_token.split('.')[1],'base64url').toString('utf8'));
+            if(!claims.session_id)return res.status(403).json({error:'Sesija referade nije dostupna.'});
+            const proof=await supabaseAdmin.from('registrar_verified_sessions').upsert({session_id:claims.session_id,user_id:profile.id,expires_at:new Date(Date.now()+45*60*1000).toISOString()});
+            if(proof.error)return res.status(503).json({error:'Referada čeka aktivaciju nadogradnje baze.'});
           }
 
           if (profile.password_type === 'staff_with_authenticator') {
@@ -7512,7 +7516,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         const requestedRole = rolesByUserId?.[profile.id];
         const role = String(requestedRole || profile.role || "TEACHER").toUpperCase();
         const isStudent = role === "STUDENT";
-        const password = isStudent ? "yupu8Ev4" : "1234";
+        const password = creationCredentials(undefined,[role],()=>STAFF_ROLES.includes(role)?crypto.randomBytes(18).toString('base64url'):'yupu8Ev4').password;
 
         let authUserId = profile.auth_user_id;
         if (!authUserId && profile.email) {

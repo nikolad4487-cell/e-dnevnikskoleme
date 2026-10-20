@@ -1,8 +1,11 @@
+import {installApiSessionFetch} from './lib/apiSessionFetch';
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App';
 import './index.css';
 import { ErrorBoundary } from './components/ErrorBoundary';
+
+installApiSessionFetch();
 
 // Debug listeners
 window.addEventListener("beforeunload", () => {

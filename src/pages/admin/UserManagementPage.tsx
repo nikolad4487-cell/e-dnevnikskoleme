@@ -201,6 +201,8 @@ export default function UserManagementPage() {
   };
 
   const toggleRole = (role: Role) => {
+    if (role === Role.REGISTRAR) { setSelectedRoles([Role.REGISTRAR]); return; }
+    if (selectedRoles.includes(Role.REGISTRAR)) { setSelectedRoles([role]); return; }
     setSelectedRoles(prev => 
       prev.includes(role) 
         ? prev.filter(r => r !== role)
@@ -454,14 +456,6 @@ export default function UserManagementPage() {
         password: editingUser ? undefined : password
       };
 
-      // Task 6: Debug log at start of save
-      console.log("SAVE USER START", {
-        userProfileId,
-        payload,
-        selectedRoles,
-        selectedSchoolId
-      });
-
       const response = await fetch(endpoint, {
         method: editingUser ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -484,11 +478,6 @@ export default function UserManagementPage() {
         const errorMsg = data?.error || data?.message || 'Neuspjela obrada zahtjeva';
         throw new Error(errorMsg);
       }
-
-      // Task 6: Debug logs for update results
-      console.log("SAVE USER PROFILE UPDATE RESULT", data.profileResult || data);
-      console.log("SAVE USER ROLES UPDATE RESULT", data.rolesResult || selectedRoles);
-      console.log("SAVE USER REFRESHED DATA", data.refreshedUser || data);
 
       toast.success(editingUser ? 'Korisnik uspješno ažuriran' : 'Korisnik uspješno kreiran');
       setIsModalOpen(false);
@@ -733,6 +722,7 @@ export default function UserManagementPage() {
             <option value={Role.TEACHER}>Nastavnici</option>
             <option value={Role.STUDENT}>Učenici</option>
             <option value={Role.PARENT}>Roditelji</option>
+            <option value={Role.REGISTRAR}>Školska referada</option>
           </select>
         </div>
       </div>
@@ -1048,7 +1038,7 @@ export default function UserManagementPage() {
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">Uloga za sve unesene korisnike</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[Role.ADMIN, Role.TEACHER, Role.STUDENT, Role.PARENT].map((role) => (
+                  {[Role.ADMIN, Role.TEACHER, Role.REGISTRAR, Role.STUDENT, Role.PARENT].map((role) => (
                     <button
                       key={role}
                       type="button"
@@ -1061,7 +1051,7 @@ export default function UserManagementPage() {
                     >
                       {role === Role.TEACHER ? 'Nastavnik' : 
                        role === Role.STUDENT ? 'Učenik' :
-                       role === Role.PARENT ? 'Roditelj' : 'Admin Škole'}
+                       role === Role.REGISTRAR ? 'Školska referada' : role === Role.PARENT ? 'Roditelj' : 'Admin Škole'}
                     </button>
                   ))}
                 </div>
@@ -1156,6 +1146,7 @@ export default function UserManagementPage() {
                   <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1">Privremena lozinka</label>
                   <input 
                     type="text" 
+                    minLength={6}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     className="w-full bg-[#f8f9fa] border border-[#dee2e6] rounded-md p-3 font-bold text-slate-900 text-xs focus:border-[#005c8d] outline-none"
@@ -1163,6 +1154,8 @@ export default function UserManagementPage() {
                   />
                 </div>
               )}
+
+              {!editingUser && selectedRoles.some(role => [Role.TEACHER, Role.REGISTRAR, Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(role)) && <p className="text-sm text-slate-600">Djelatnik se prijavljuje početnim PIN-om 1234 i autentifikatorom. Privremena lozinka zasebna je od PIN-a.</p>}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -1206,7 +1199,7 @@ export default function UserManagementPage() {
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">Uloge u školi (odaberi više)</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {[Role.TEACHER, Role.STUDENT, Role.PARENT, Role.SCHOOL_ADMIN].map((role) => (
+                  {[Role.TEACHER, Role.REGISTRAR, Role.STUDENT, Role.PARENT, Role.SCHOOL_ADMIN].map((role) => (
                     <button
                       key={role}
                       type="button"
@@ -1219,7 +1212,7 @@ export default function UserManagementPage() {
                     >
                       {role === Role.TEACHER ? 'Nastavnik' : 
                        role === Role.STUDENT ? 'Učenik' :
-                       role === Role.PARENT ? 'Roditelj' :
+                       role === Role.REGISTRAR ? 'Školska referada' : role === Role.PARENT ? 'Roditelj' :
                        role === Role.SCHOOL_ADMIN ? 'Admin Škole' : ''}
                     </button>
                   ))}

@@ -18,6 +18,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: 'Admin. škole', path: '/admin-skole' },
   { label: 'Razredi', path: '/admin-skole/razredi' },
   { label: 'Zamjene', path: '/admin-skole/zamjene' },
+  { label: 'Školska referada', path: '/admin-skole/referada-pristup' },
   { label: 'Korisnici', path: '/admin-skole/korisnici' },
   { label: 'Predmeti', path: '/admin-skole/predmeti' },
   { label: 'Dodjele', path: '/admin-skole/masovna-dodjela-nastavnika' },

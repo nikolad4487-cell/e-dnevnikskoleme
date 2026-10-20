@@ -28,6 +28,8 @@ const DolasciRoditeljaPage = lazy(() => import('./DolasciRoditeljaPage'));
 const StudentDashboard = lazy(() => import('./StudentDashboard'));
 const StudentSubjectDetail = lazy(() => import('./StudentSubjectDetail'));
 const DigitalniDosjePage = lazy(() => import('../shared/DigitalniDosjePage'));
+const FamilyAbsencePage = lazy(() => import('../family/FamilyAbsencePage'));
+const FamilyLinksPage = lazy(() => import('../family/FamilyLinksPage'));
 const ClassNotesPage = BiljeskePage;
 
 export default function ClassDashboardPage() {
@@ -308,6 +310,8 @@ export default function ClassDashboardPage() {
               <Route path="exams" element={<DnevnikRadaPage initialView="EXAMS" />} />
               
               <Route path="izostanci" element={<TeacherIzostanciPage />} />
+              <Route path="zahtjevi-izostanaka" element={<FamilyAbsencePage review />} />
+              <Route path="roditeljski-pristup" element={<FamilyLinksPage />} />
               <Route path="absences" element={<TeacherIzostanciPage />} />
               
               <Route path="pedagoska-dokumentacija" element={<PedagoskaDokumentacijaPage />} />

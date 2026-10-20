@@ -1,3 +1,4 @@
+import { addSchoolAttestation, schoolAttestationSettings } from '../../lib/attendancePdf';
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -513,6 +514,7 @@ export default function MaticnaKnjigaPage() {
         styles: { fontSize: 8, cellPadding: 2, font: 'NotoSans' }
       });
 
+      await addSchoolAttestation(doc, await schoolAttestationSettings(selectedSchoolId!), {newPage: (doc as any).lastAutoTable.finalY > doc.internal.pageSize.getHeight() - 65});
       doc.save(`MaticnaKnjiga_${new Date().toISOString().split('T')[0]}.pdf`);
       console.log("[MATIČNA] PDF generated");
     } catch (e: any) {
@@ -564,6 +566,7 @@ export default function MaticnaKnjigaPage() {
       doc.text(`Školska godina: ${student.school_year}`, 14, startY); startY += 6;
       doc.text(`Status: ${student.status === 'ACTIVE' ? 'Aktivna' : student.status === 'GRADUATED' ? 'Završio' : 'Ispisan'}`, 14, startY); startY += 6;
       
+      await addSchoolAttestation(doc, await schoolAttestationSettings(selectedSchoolId!));
       doc.save(`Izvadak_${student.name}_${student.surname}.pdf`);
       console.log("[MATIČNA] PDF generated");
       toast.success('PDF izvadak je preuzet.');
@@ -678,6 +681,8 @@ export default function MaticnaKnjigaPage() {
         >
           <Printer size={14} /> Ispis matične knjige
         </button>
+        <button onClick={() => navigate('/admin-skole/potvrde-skolovanje')} className="px-4 py-2 border border-[#005c8d] text-[#005c8d] rounded font-bold">Potvrde o redovnom školovanju</button>
+        <button onClick={() => navigate('/admin-skole/referada-pristup')} className="px-4 py-2 border rounded font-bold">Pristup Školskoj referadi</button>
       </div>
 
       {/* e-Matica Sync Preview */}

@@ -1,3 +1,8 @@
+import {jsPDF} from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import toast from 'react-hot-toast';
+import {registerUnicodeFont} from '../../lib/pdfGenerator';
+import {addSchoolAttestation,schoolAttestationSettings} from '../../lib/attendancePdf';
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -159,7 +164,7 @@ export default function IzvjestajiPage() {
          const meetings: any[] = [];
          
          if (effectiveClassId) {
-            const { data: parentMeet } = await supabase.from('parent_teacher_meetings').select('*').eq('class_id', effectiveClassId);
+            const { data: parentMeet } = await supabase.from('parent_meetings').select('*').eq('class_id', effectiveClassId);
             const { data: indivDisc } = await supabase.from('individual_discussions').select('*, user_profiles!student_id(name)').eq('class_id', effectiveClassId);
             const { data: arrivals } = await supabase.from('parent_arrivals').select('*, user_profiles!student_id(name)').eq('class_id', effectiveClassId);
             
@@ -181,6 +186,29 @@ export default function IzvjestajiPage() {
     fetchData();
   }, [selectedSchoolId, effectiveClassId, activeTab]);
 
+  const [exporting, setExporting] = useState(false);
+  const exportPdf = async () => {
+    if (!selectedSchoolId) return;
+    setExporting(true);
+    try {
+      const settings = await schoolAttestationSettings(selectedSchoolId);
+      const doc = new jsPDF('p', 'mm', 'a4');
+      await registerUnicodeFont(doc); doc.setFont('NotoSans', 'normal');doc.setFontSize(14);
+      const titles: Record<string,string> = {GENERAL:'Opći izvještaj',STUDENTS:'Izvještaj po učeniku',CLASSES:'Izvještaj po razredu',SUBJECTS:'Izvještaj po predmetu',ABSENCES:'Izostanci',FINAL_GRADES:'Zaključne ocjene',MEASURES:'Pedagoške mjere',EXPERT:'Stručna služba',MEETINGS:'Suradnja s roditeljima'};
+      doc.text(titles[activeTab],14,20);doc.setFontSize(9);doc.text(settings?.school_name_print || settings?.school_name || 'Škola',14,27);
+      const labels: Record<string,string> = {totalStudents:'Učenici',avgGrade:'Prosjek ocjena',totalAbsences:'Izostanci',justified:'Opravdani',unjustified:'Neopravdani',pending:'Čekaju odluku',name:'Ime i prezime / naziv',avg:'Prosjek',count:'Broj',absences:'Izostanci',value:'Ocjena',status:'Status',date:'Datum',measure_type:'Mjera',reason:'Razlog',displayTitle:'Zapis',person:'Sudionik',description:'Opis'};
+      if (activeTab==='GENERAL' || activeTab==='ABSENCES') {
+        autoTable(doc,{startY:34,head:[['Podatak','Vrijednost']],body:Object.entries(stats).filter(([,v])=>typeof v==='number'||typeof v==='string').map(([k,v])=>[labels[k]||k,String(v)]),styles:{font:'NotoSans',fontSize:9},margin:{bottom:65}});
+      } else {
+        const columns=Object.keys(labels).filter(k=>reportData.some(row=>typeof row[k]==='string'||typeof row[k]==='number'));
+        autoTable(doc,{startY:34,head:[columns.map(k=>labels[k])],body:reportData.map(row=>columns.map(k=>String(row[k]??''))),styles:{font:'NotoSans',fontSize:8},margin:{bottom:65}});
+      }
+      await addSchoolAttestation(doc,settings);
+      doc.save(`Izvjestaj-${activeTab}-${new Date().toISOString().slice(0,10)}.pdf`);
+    } catch (e:any) { toast.error(e.message || 'Izvještaj nije moguće preuzeti.'); }
+    finally { setExporting(false); }
+  };
+
   return (
     <div className="flex flex-col h-full bg-white font-sans">
       <div className="bg-[#f8fafc] border-b border-gray-300 px-4 py-0 flex flex-col pt-3">
@@ -189,7 +217,7 @@ export default function IzvjestajiPage() {
             <BarChart3 size={16} />
             Izvještaji i statistika
             </h2>
-            <div className="text-[10px] text-gray-400 font-bold uppercase tracking-widest underline decoration-dotted">Školska godina 2023/2024</div>
+            <button disabled={loading || exporting} onClick={exportPdf} className="bg-[#005c8d] text-white rounded px-4 py-2 text-xs font-bold disabled:opacity-50">{exporting ? 'Priprema…' : 'Službeni izvještaj PDF'}</button>
         </div>
         
         <div className="flex gap-4 overflow-x-auto">

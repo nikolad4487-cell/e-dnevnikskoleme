@@ -16,7 +16,7 @@ export default function AuthenticatorSetupPage() {
   const [secret] = useState(() => {
     if (user?.authenticatorSecret) return user.authenticatorSecret;
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-    return Array.from({ length: 16 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    return Array.from(crypto.getRandomValues(new Uint8Array(20)), value => chars[value % chars.length]).join('');
   });
 
   const otpAuthUrl = `otpauth://totp/e-Dnevnik:${user?.email}?secret=${secret}&issuer=e-Dnevnik`;
@@ -37,18 +37,9 @@ export default function AuthenticatorSetupPage() {
 
       if (!user) throw new Error('Korisnik nije prijavljen');
 
-      // Update user profile in Supabase
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({
-          authenticator_secret: secret,
-          requires_authenticator_setup: false,
-          is_first_login: false,
-          password_type: 'NORMAL_PASSWORD'
-        })
-        .eq('id', user.id);
-
-      if (error) throw error;
+      const response = await fetch('/api/auth/complete-authenticator', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({secret,code:otp})});
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Kod nije ispravan.');
 
       await reloadUserData();
       

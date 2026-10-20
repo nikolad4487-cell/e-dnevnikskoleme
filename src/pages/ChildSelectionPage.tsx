@@ -8,6 +8,7 @@ import { ArrowRight, User as UserIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Header } from '../components/Header';
 import { formatPersonName } from '../lib/utils';
+import { familyRpc } from '../lib/familyPortal';
 
 export default function ChildSelectionPage() {
   const { user } = useAuth();
@@ -32,40 +33,10 @@ export default function ChildSelectionPage() {
     }, 10000);
 
     try {
-      // 1. Get child IDs from relationships table
-      const { data: relations, error: relError } = await supabase
-        .from('parent_child_relationships')
-        .select('child_id')
-        .eq('parent_id', user.id);
-
-      if (relError) throw relError;
-
-      if (!relations || relations.length === 0) {
-        setChildren([]);
-        setLoading(false);
-        return;
-      }
-
-      const childIds = relations.map(r => r.child_id);
-
-      // 2. Fetch profile data for these children
-      const { data: profiles, error: profError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .in('id', childIds);
-
-      if (profError) throw profError;
-
-      const mappedChildren = (profiles || []).map(p => {
-        const fullName = p.name || '';
-        const nameParts = fullName.split(' ');
-        return {
-          id: p.id,
-          name: nameParts[0] || '',
-          surname: nameParts.slice(1).join(' ') || '',
-          email: p.email
-        } as User;
-      });
+      const profiles = await familyRpc<any[]>('family_children');
+      const mappedChildren = [...new Map(profiles.map(p => [p.id, {
+        id: p.id, name: p.name || '', surname: '', email: p.email
+      } as User])).values()];
 
       setChildren(mappedChildren);
 

@@ -1,3 +1,4 @@
+import {resolvePortal} from './lib/portal';
 import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
@@ -29,6 +30,10 @@ const PedagoskaDokumentacijaPage = lazy(() => import('./pages/teacher/PedagoskaD
 const CertificateManagementPage = lazy(() => import('./pages/teacher/certificates/CertificateManagementPage'));
 
 
+const RegistrarPortal = lazy(() => import('./pages/registrar/RegistrarPortal'));
+const RegistrarAccessPage = lazy(() => import('./pages/registrar/RegistrarAccessPage'));
+const CertificateVerificationPage = lazy(() => import('./pages/CertificateVerificationPage'));
+const FamilyAbsencePage = lazy(() => import('./pages/family/FamilyAbsencePage'));
 // Student/Parent Pages
 const OcjenePage = lazy(() => import('./pages/student/OcjenePage'));
 const BiljeskePage = lazy(() => import('./pages/student/BiljeskePage'));
@@ -128,7 +133,7 @@ function TitleManager() {
       location.pathname.includes(item.match)
     );
 
-    document.title = current?.title || "e-Dnevnik";
+    document.title = resolvePortal(window.location.hostname, import.meta.env.VITE_APP_PORTAL) === 'registrar' ? 'Školska referada' : current?.title || 'e-Dnevnik';
   }, [location.pathname]);
 
   return null;
@@ -155,7 +160,8 @@ export default function App() {
   const isStudentDomain = hostname === "e-ocjene.skolehr.xyz" || hostname === "ocjene.skolehr.xyz";
 
   const portalType = import.meta.env.VITE_APP_PORTAL || 'staff';
-  const isStudentPortal = isStudentDomain || (!isTeacherDomain && (portalType === 'student'));
+  const isStudentPortal = resolvePortal(hostname, portalType) === 'student';
+  const isRegistrarPortal = resolvePortal(hostname, portalType) === 'registrar';
 
   useEffect(() => {
     console.log(`[APP] Mounted | Hostname: ${hostname} | Portal Type: ${portalType} | Is Student Portal: ${isStudentPortal}`);
@@ -178,6 +184,10 @@ export default function App() {
                 </ProtectedRoute>
               } />
               
+              {isRegistrarPortal ? <>
+                <Route path="/" element={<ProtectedRoute><RegistrarPortal /></ProtectedRoute>} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </> : <>
               <Route path="/select-school" element={
                 <ProtectedRoute allowedRoles={isStudentPortal ? [Role.STUDENT, Role.PARENT] : [Role.TEACHER, Role.ADMIN, Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.STUDENT, Role.PARENT]}>
                   <SchoolSelectionPage />
@@ -196,6 +206,7 @@ export default function App() {
                 </ProtectedRoute>
               } />
 
+              <Route path="/provjera-potvrde" element={<CertificateVerificationPage />} />
               <Route path="/" element={
                 <ProtectedRoute>
                   <Navigate to="/select-class" replace />
@@ -240,6 +251,8 @@ export default function App() {
                           <Route path="matura" element={<MaturaTeacherPage />} />
                           <Route path="ravnatelj-dashboard" element={<RavnateljDashboardPage />} />
                           <Route path="maticna-knjiga" element={<MaticnaKnjigaPage />} />
+                          <Route path="potvrde-skolovanje" element={<PotvrdePage schoolOffice />} />
+                          <Route path="referada-pristup" element={<RegistrarAccessPage />} />
                           <Route path="arhiva" element={<ArhivaPage />} />
                           <Route path="*" element={<Navigate to="/admin-skole" replace />} />
                         </Routes>
@@ -320,6 +333,7 @@ export default function App() {
                           <Route path="ispiti" element={<StudentIspitiPage />} />
                           <Route path="matura" element={<MaturaPage />} />
                           <Route path="izostanci" element={<IzostanciPage />} />
+                          <Route path="opravdavanje" element={<FamilyAbsencePage />} />
                           <Route path="raspored" element={<RasporedPage />} />
                           <Route path="osobni-podaci" element={<OsobniPodaciPage />} />
                           <Route path="potvrde" element={<PotvrdePage />} />
@@ -337,6 +351,7 @@ export default function App() {
               )}
 
               <Route path="*" element={<Navigate to="/" replace />} />
+              </>}
             </Routes>
           </Suspense>
         </BrowserRouter>

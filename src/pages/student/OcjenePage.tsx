@@ -1,3 +1,4 @@
+import { visibleParentGrades } from '../../lib/familyPortal';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jsPDF } from 'jspdf';
@@ -224,7 +225,7 @@ export default function OcjenePage() {
           .eq('student_id', targetStudentId)
           .eq('class_id', selectedClassId);
         
-        setGrades(mapList(gradesData, mappers.grade));
+        setGrades(isParent ? visibleParentGrades(mapList(gradesData, mappers.grade)) : mapList(gradesData, mappers.grade));
 
         // 6. Get final grades
         const { data: finalGradesData } = await supabase
@@ -241,7 +242,7 @@ export default function OcjenePage() {
             value: isStatus ? '' : fg.value
           };
         });
-        setFinalGrades(mappedList);
+        setFinalGrades(isParent ? visibleParentGrades(mappedList) : mappedList);
 
       } catch (error) {
         console.error(error);
