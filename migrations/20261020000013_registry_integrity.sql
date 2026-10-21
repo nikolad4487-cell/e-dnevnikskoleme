@@ -18,9 +18,18 @@ BEGIN
  IF student IS NOT NULL AND NOT registry_student_visible(student) THEN RAISE EXCEPTION 'Učenik nije dostupan za ovu promjenu.';END IF;
  IF TG_OP='DELETE' THEN RETURN OLD;ELSE RETURN NEW;END IF;
 END $$;
-DO $$ DECLARE t text;BEGIN
+DO $$ DECLARE t text;relation_kind "char";BEGIN
  FOREACH t IN ARRAY ARRAY['schools','registry_students','student_class_enrollments','student_school_enrollments','classes','programs','school_years','student_year_end_summaries','student_certificates','grades','final_grades','enrollment_final_grades','special_exams'] LOOP
-  EXECUTE format('CREATE TRIGGER registry_write_scope BEFORE INSERT OR UPDATE OR DELETE ON %I FOR EACH ROW EXECUTE FUNCTION registry_write_scope_guard()',t);
+  SELECT c.relkind INTO relation_kind FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='public' AND c.relname=t;
+  IF relation_kind IN ('r','p') THEN
+   EXECUTE format('CREATE TRIGGER registry_write_scope BEFORE INSERT OR UPDATE OR DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION registry_write_scope_guard()',t);
+  ELSIF relation_kind='v' THEN
+   -- Views inherit the caller's access to their underlying tables. In particular,
+   -- enrollment_final_grades is a view; its definition must remain unchanged.
+   EXECUTE format('ALTER VIEW public.%I SET (security_invoker=true)',t);
+  ELSE
+   RAISE EXCEPTION 'Nepodržana ili nedostajuća relacija public.% (vrsta: %).',t,coalesce(relation_kind::text,'nedostaje');
+  END IF;
  END LOOP;
 END $$;
 CREATE FUNCTION public.registry_certificate_snapshot() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$

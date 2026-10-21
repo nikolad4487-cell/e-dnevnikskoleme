@@ -338,20 +338,13 @@ ALTER TABLE public."grades" ADD COLUMN IF NOT EXISTS "element" text;
 ALTER TABLE public."grades" ADD COLUMN IF NOT EXISTS "grade_type" text;
 ALTER TABLE public."grades" ADD COLUMN IF NOT EXISTS "is_final" boolean;
 ALTER TABLE public."grades" ADD COLUMN IF NOT EXISTS "period" text;
-CREATE TABLE IF NOT EXISTS public."enrollment_final_grades" (id uuid PRIMARY KEY DEFAULT gen_random_uuid());
-ALTER TABLE public."enrollment_final_grades" ADD COLUMN IF NOT EXISTS "student_id" uuid;
-ALTER TABLE public."enrollment_final_grades" ADD COLUMN IF NOT EXISTS "subject_id" text;
-ALTER TABLE public."enrollment_final_grades" ADD COLUMN IF NOT EXISTS "teacher_id" uuid;
-ALTER TABLE public."enrollment_final_grades" ADD COLUMN IF NOT EXISTS "class_id" text;
-ALTER TABLE public."enrollment_final_grades" ADD COLUMN IF NOT EXISTS "school_id" text;
-ALTER TABLE public."enrollment_final_grades" ADD COLUMN IF NOT EXISTS "school_year_id" uuid;
-ALTER TABLE public."enrollment_final_grades" ADD COLUMN IF NOT EXISTS "grade_value" text;
-ALTER TABLE public."enrollment_final_grades" ADD COLUMN IF NOT EXISTS "period" text;
-ALTER TABLE public."enrollment_final_grades" ADD COLUMN IF NOT EXISTS "term" text;
-ALTER TABLE public."enrollment_final_grades" ADD COLUMN IF NOT EXISTS "note" text;
-ALTER TABLE public."enrollment_final_grades" ADD COLUMN IF NOT EXISTS "date" date;
-ALTER TABLE public."enrollment_final_grades" ADD COLUMN IF NOT EXISTS "created_at" timestamptz;
-ALTER TABLE public."enrollment_final_grades" ADD COLUMN IF NOT EXISTS "updated_at" timestamptz;
+-- Relation type confirmed by the Supabase activation error: this is a view.
+-- Minimal representative projection (the REST catalogue lists columns, not view SQL).
+CREATE VIEW public.enrollment_final_grades AS
+SELECT id,student_id,subject_id,teacher_id,class_id,school_id,school_year_id,
+       value AS grade_value,period,term,note,date,created_at,updated_at
+FROM public.final_grades;
+
 CREATE TABLE IF NOT EXISTS public."subjects" (id text PRIMARY KEY DEFAULT gen_random_uuid()::text);
 ALTER TABLE public."subjects" ADD COLUMN IF NOT EXISTS "school_id" text;
 ALTER TABLE public."subjects" ADD COLUMN IF NOT EXISTS "name" text;

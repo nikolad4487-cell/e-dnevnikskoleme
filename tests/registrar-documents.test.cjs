@@ -1,16 +1,29 @@
 const {PGlite}=require('@electric-sql/pglite');
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
 const read=p=>fs.readFileSync(path.join(__dirname,p),'utf8');
-require('node:test').test('Registrar documents require verified school sessions, real enrollment, PDF review and private archive',async()=>{
+for (const gradeRelation of ['view','table']) require('node:test').test(`Registrar documents preserve school security with enrollment_final_grades as ${gradeRelation}`,async()=>{
  const db=new PGlite();const uid=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
  try{
  await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid PRIMARY KEY);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb $$;CREATE SCHEMA storage;CREATE TABLE storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);CREATE TABLE storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;`);
- await db.exec(read('fixtures/family-schema.sql'));await db.exec(read('fixtures/registry-schema.sql'));await db.exec(read('fixtures/existing-enrollment-bridge.sql'));
+ await db.exec(read('fixtures/family-schema.sql'));await db.exec(read('fixtures/registry-schema.sql'));
+ if(gradeRelation==='table')await db.exec('CREATE TABLE enrollment_final_grades_legacy AS SELECT * FROM enrollment_final_grades;DROP VIEW enrollment_final_grades;ALTER TABLE enrollment_final_grades_legacy RENAME TO enrollment_final_grades;ALTER TABLE enrollment_final_grades ALTER COLUMN id SET DEFAULT gen_random_uuid();ALTER TABLE enrollment_final_grades ADD PRIMARY KEY(id);');
+ await db.exec(read('fixtures/existing-enrollment-bridge.sql'));
  await db.exec(`CREATE VIEW v_school_document_records_detailed AS SELECT * FROM school_document_records;CREATE VIEW v_weekly_assignments_detailed AS SELECT * FROM weekly_assignments;CREATE VIEW v_student_education_records_detailed AS SELECT * FROM student_education_records;CREATE VIEW v_student_transport_records_detailed AS SELECT * FROM student_transport_records;GRANT USAGE ON SCHEMA public,auth,storage TO authenticated;GRANT ALL ON ALL TABLES IN SCHEMA public,storage TO authenticated;`);
  await db.exec(read('../docs/AKTIVACIJA-RODITELJI-REFERADA.sql'));
  await db.exec("CREATE FUNCTION get_active_school_year() RETURNS text LANGUAGE sql SECURITY DEFINER AS $$ SELECT 'private-year'::text $$;");
  await db.exec("CREATE FUNCTION admin_create_user(p_email text) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER AS $$ BEGIN RETURN gen_random_uuid();END $$;");
- const {activationSql}=await import('../scripts/build-registry-activation.mjs');assert.equal(read('../docs/AKTIVACIJA-EMATICA-REFERADA.sql'),activationSql(),'Generated SQL must match source migrations');assert.equal((activationSql().match(/^BEGIN;$/gm)||[]).length,1);assert.equal((activationSql().match(/^COMMIT;$/gm)||[]).length,1);await db.exec(activationSql());
+ const {activationSql}=await import('../scripts/build-registry-activation.mjs');assert.equal(read('../docs/AKTIVACIJA-EMATICA-REFERADA.sql'),activationSql(),'Generated SQL must match source migrations');assert.equal((activationSql().match(/^BEGIN;$/gm)||[]).length,1);assert.equal((activationSql().match(/^COMMIT;$/gm)||[]).length,1);
+ if(gradeRelation==='view'){
+  const broken=activationSql().replace("ELSIF relation_kind='v' THEN", "ELSIF relation_kind='v' THEN EXECUTE format('CREATE TRIGGER regression_before_view BEFORE INSERT ON public.%I FOR EACH ROW EXECUTE FUNCTION registry_write_scope_guard()',t);");
+  await assert.rejects(db.exec(broken),error=>error.code==='42809');await db.exec('ROLLBACK');
+  assert.equal((await db.query("SELECT to_regclass('public.school_registry_sections') AS relation")).rows[0].relation,null,'A failed activation must roll back earlier migrations');
+ }
+ await db.exec(activationSql());
+ const relation=await db.query("SELECT relkind,reloptions FROM pg_class WHERE oid='public.enrollment_final_grades'::regclass");
+ assert.equal(relation.rows[0].relkind,gradeRelation==='view'?'v':'r');
+ const triggers=await db.query("SELECT c.relkind FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid WHERE t.tgname='registry_write_scope'");assert(triggers.rows.every(t=>['r','p'].includes(t.relkind)));
+ if(gradeRelation==='view')assert(relation.rows[0].reloptions.includes('security_invoker=true'));
+
  const admin=uid(1),office=uid(2),student=uid(3),year=uid(4),registry=uid(5),enrollment=uid(6),sid=uid(7),otherYear=uid(8);
  await db.exec("INSERT INTO schools(id,name,education_level,is_active)VALUES('a','School A','SECONDARY',true),('b','School B','HIGHER',true);INSERT INTO classes(id,school_id,name,is_active,is_graduating_class)VALUES('ca','a','4.A',true,true),('cb','b','1.B',true,false);");
  for(const [id,role] of [[admin,'MAIN_ADMIN'],[office,'REGISTRAR'],[student,'STUDENT']]){await db.query('INSERT INTO auth.users(id)VALUES($1)',[id]);await db.query('INSERT INTO user_profiles(id,auth_user_id,role,requires_authenticator_setup,name,oib,dob)VALUES($1,$1,$2,false,$2,\'12345678901\',\'2008-01-01\')',[id,role])}
@@ -37,7 +50,7 @@ require('node:test').test('Registrar documents require verified school sessions,
  r=await db.query('SELECT * FROM school_document_records');assert.equal(r.rows.length,0,'Registrar has no direct legacy table access');
  await assert.rejects(prepare('transcript',{purpose:'Stipendija',grade_kind:'FINAL',years:[year],attest:false}));
  await db.exec("RESET ROLE;SELECT set_config('request.jwt.claim.sub','',false)");await db.query("INSERT INTO subjects(id,name)VALUES('math','Matematika')");await db.query("INSERT INTO final_grades(student_id,subject_id,class_id,school_id,school_year_id,value,date)VALUES($1,'math','ca','a',$2,'5','2027-06-15')",[student,year]);
- await login(office);r=await prepare('transcript',{purpose:'Stipendija',grade_kind:'FINAL',years:[year],attest:false});assert.equal(r.rows[0].x.snapshot.grades[0].value,'5');
+ await login(office);r=await prepare('transcript',{purpose:'Stipendija',grade_kind:'FINAL',years:[year],attest:false});assert.equal(r.rows[0].x.snapshot.grades[0].value,'5');assert.equal(r.rows[0].x.snapshot.grades.length,1,'A view must not duplicate the underlying final grade');
  await assert.rejects(prepare('transcript',{purpose:'Stipendija',grade_kind:'FINAL',years:[otherYear],attest:false}));
  await db.query('SELECT registrar_cancel_document($1,$2)',[doc.id,'Pogrešna svrha dokumenta']);r=await db.query('SELECT registrar_document($1) AS x',[doc.id]);assert.equal(r.rows[0].x.status,'PONIŠTENO');
  await db.exec("RESET ROLE;SELECT set_config('request.jwt.claim.sub','',false)");const thesis=uid(9);await db.query("INSERT INTO final_thesis(id,student_id,school_year_id,thesis_title)VALUES($1,$2,$3,'Stvarni završni rad')",[thesis,student,year]);
@@ -109,7 +122,7 @@ require('node:test').test('Registrar documents require verified school sessions,
  // Enrollment-level final grades are included without creating missing marks.
  await db.query("INSERT INTO subjects(id,name,school_id)VALUES('croatian','Hrvatski jezik','a')");
  await db.query("INSERT INTO enrollment_final_grades(student_id,class_id,school_year_id,subject_id,grade_value,date)VALUES($1,'next',$2,'croatian','4','2028-06-15')",[student,nextYear]);
- await login(office);r=await db.query("SELECT registrar_prepare_document($1,'next',$2,'transcript',$3) AS x",[nextYear,registry,JSON.stringify({purpose:'Stipendija',grade_kind:'FINAL',years:[nextYear],attest:false})]);assert.equal(r.rows[0].x.snapshot.grades[0].value,'4');
+ await login(office);r=await db.query("SELECT registrar_prepare_document($1,'next',$2,'transcript',$3) AS x",[nextYear,registry,JSON.stringify({purpose:'Stipendija',grade_kind:'FINAL',years:[nextYear],attest:false})]);assert.equal(r.rows[0].x.snapshot.grades[0].value,'4');assert.equal(r.rows[0].x.snapshot.grades.length,1,'One source grade appears once in the transcript');
  // Certificate snapshots keep real citizenship/program; preparing twice is idempotent,
  // and an authenticated operator cannot manufacture a qualified sealing result.
  await db.exec("RESET ROLE;SELECT set_config('request.jwt.claim.sub','',false)");const certId=uid(81);

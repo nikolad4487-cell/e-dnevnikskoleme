@@ -85,7 +85,7 @@ BEGIN
     FROM (
      SELECT student_id,class_id,subject_id,value,date,created_at,coalesce(term,period,'') AS term,0 AS priority FROM final_grades WHERE nullif(value,'') IS NOT NULL
      UNION ALL
-     SELECT student_id,class_id,subject_id,grade_value,date,created_at,'FINAL',1 FROM enrollment_final_grades WHERE nullif(grade_value,'') IS NOT NULL
+     SELECT eg.student_id,eg.class_id,eg.subject_id,eg.grade_value,eg.date,eg.created_at,coalesce(eg.term,eg.period,'FINAL'),1 FROM enrollment_final_grades eg WHERE nullif(eg.grade_value,'') IS NOT NULL AND NOT EXISTS(SELECT 1 FROM final_grades fg WHERE fg.id=eg.id)
     ) g JOIN classes cl ON cl.id=g.class_id JOIN school_years y ON y.id=cl.school_year_id LEFT JOIN subjects sub ON sub.id=g.subject_id
     WHERE g.student_id=e.student_id AND cl.school_id=s AND y.id=ANY(ys) ORDER BY cl.school_year_id,g.class_id,g.subject_id,g.term,g.priority,g.date DESC,g.created_at DESC
    )q;
