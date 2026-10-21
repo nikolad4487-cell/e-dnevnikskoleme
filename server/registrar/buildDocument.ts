@@ -5,6 +5,15 @@ import { PDFDocument, PDFCheckBox, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import monthCoordinates from "./monthCoordinates.js";
 import {
+  boxCharacters,
+  boxedBirthDate,
+  drawCharacterBoxes,
+  hzppPersonalBoxes,
+  hzppYearBoxes,
+  zetGeneralComb,
+  zetRegularComb,
+} from "./characterBoxes.js";
+import {
   assertAllowed,
   templateCatalog,
   type Rect,
@@ -125,33 +134,38 @@ export async function buildRegistrarDocument(
     for (const [key, value] of Object.entries(values)) {
       const field = form.getTextField(key);
       let text = clean(value);
-      const comb =
-        key === "text_14uida" || key === "text_14qrej"
-          ? 11
-          : key === "text_13hkah" || key === "text_13agio"
-            ? 8
-            : key === "text_8exdz"
-              ? 14
-              : key === "text_9evmo"
-                ? 15
-                : 0;
-      if (comb) {
-        if (comb === 8) text = text.replace(/[^0-9]/g, "");
-        if (text.length > comb)
-          throw new Error(
-            "Podatak je predug za broj kućica na izvornom obrascu.",
-          );
-        field.setMaxLength(comb);
+      const layout = (general ? zetGeneralComb : zetRegularComb)[key];
+      let size = 9;
+      if (layout) {
+        assertAllowed(template, layout.area);
+        text = boxCharacters(
+          layout.date ? boxedBirthDate(student.dob) : text,
+          layout.label,
+          layout.count,
+        ).join("");
+        const page = pdf.getPage(layout.area.page);
+        for (const widget of field.acroField.getWidgets())
+          widget.setRectangle({
+            x: layout.area.x,
+            y: page.getHeight() - layout.area.top - layout.area.height,
+            width: layout.area.width,
+            height: layout.area.height,
+          });
+        field.setMaxLength(layout.count);
         field.enableCombing();
+      } else {
+        const width = field.acroField.getWidgets()[0].getRectangle().width - 4;
+        while (size > 5.5 && font.widthOfTextAtSize(text, size) > width)
+          size -= 0.25;
+        if (font.widthOfTextAtSize(text, size) > width)
+          throw new Error("Podatak je predug za ZET rubriku.");
       }
       field.setText(text);
-      let size = 9;
-      const width = field.acroField.getWidgets()[0].getRectangle().width - 4;
-      while (size > 5.5 && font.widthOfTextAtSize(clean(value), size) > width)
-        size -= 0.25;
-      if (font.widthOfTextAtSize(clean(value), size) > width)
-        throw new Error("Podatak je predug za ZET rubriku.");
       field.setFontSize(size);
+      // Original widgets can override the field's font size (for example 14 pt).
+      // Clear that override so the comb appearance fits the printed cell height.
+      for (const widget of field.acroField.getWidgets())
+        widget.setDefaultAppearance("");
       field.updateAppearances(font);
     }
     const requests = general
@@ -178,17 +192,14 @@ export async function buildRegistrarDocument(
     form.updateFieldAppearances(font);
     form.flatten();
   } else if (kind.startsWith("hzpp-")) {
-    const rows = [
-      student.first_name,
-      student.last_name,
-      student.oib,
-      student.address,
-      student.city,
-      student.postal_code,
-      student.country || "",
-      date(student.dob),
-    ];
-    rows.forEach((v, i) => draw(v, at(0, 222, 134 + i * 29.76, 315, 20), 11));
+    for (const [key, layout] of Object.entries(hzppPersonalBoxes))
+      drawCharacterBoxes(
+        pdf,
+        font,
+        template,
+        layout,
+        key === "dob" ? boxedBirthDate(student.dob) : student[key],
+      );
     const higher = kind === "hzpp-student";
     check(
       1,
@@ -199,10 +210,14 @@ export async function buildRegistrarDocument(
     const years = String(year).match(/\d{4}/g);
     if (years?.length !== 2)
       throw new Error("Nedostaje ispravna školska / akademska godina.");
-    for (let i = 0; i < 4; i++) {
-      draw(years[0][i], at(1, (higher ? 251 : 227) + i * 17, 392, 12), 10);
-      draw(years[1][i], at(1, (higher ? 336 : 312) + i * 17, 392, 12), 10);
-    }
+    drawCharacterBoxes(
+      pdf,
+      font,
+      template,
+      hzppYearBoxes(higher),
+      years.join(""),
+      10,
+    );
     draw(school.name, at(1, 40, 459, 490), 9);
   } else if (kind.startsWith("transport-")) {
     const seventy = kind === "transport-75-2026-2027",

@@ -55,3 +55,9 @@ Preglednik je dodatno provjeren na sintetičkim podacima: tok referade do izdava
 5. Izdati testni dokument, otvoriti ga iz arhive, provjeriti filtar te ga poništiti s razlogom. Izmjena matičnih podataka nakon pregleda zahtijeva novu pripremu PDF-a.
 6. Ponoviti s drugom školom i potvrditi da prvi dokument nije dostupan. Za studenta koristiti samo vlastito visoko učilište i njegov potvrđeni upis.
 7. Provjeriti prijepis više godina, zaprimanje već postojećeg završnog rada te CSV/XLSX. Priprema za elektronički pečat ne smije prikazati uspješno kvalificirano pečatiranje bez povezane usluge.
+
+## Znakovi u kućicama PDF-a
+
+`tests/registrar-character-boxes.test.ts` izrađuje oba HŽPP i oba ZET obrasca te iz nastalog PDF-a provjerava položaj svakoga znaka prema stvarnim kućicama izvornika. Provjerava ime/prezime s hrvatskim znakovima i Unicode normalizacijom, OIB i broj iskaznice s vodećim nulama, adresu, mjesto, poštanski broj, državu, MojZET podatke, telefon gdje postoje kućice te datum i školsku/akademsku godinu. Razmak troši praznu kućicu; datum ima osam znamenaka DDMMYYYY i prati razmaknute skupine dana/mjeseca/godine na HŽPP-u. Predugi unos vraća jasnu pogrešku, bez odsijecanja podataka. Područja drugih potpisnika ostaju prazna.
+
+Doradu primjenjuje poslužitelj pri novoj pripremi PDF-a. Ranije izdane i arhivirane datoteke ne prepravljaju se. Za pregled ispravljenog rasporeda ponovno pripremiti dokument u Referadi; nova SQL migracija nije potrebna.
