@@ -48,6 +48,7 @@ test('Staff session verifies account role and PIN before minting a token, indepe
  assert((await staffSession({...args,pin:'wrong'})).error);assert.equal(generated,0);
  role='PARENT';assert((await staffSession(args)).error);assert.equal(generated,0);
  role='EXPERT';assert((await staffSession(args)).error);assert.equal(generated,0);ready=true;assert.equal((await staffSession(args)).data.session.access_token,'example-session');generated=0;verified=0;
+ role='PRINCIPAL';ready=false;assert((await staffSession(args)).error);assert.equal(generated,0);ready=true;assert.equal((await staffSession(args)).data.session.access_token,'example-session');generated=0;verified=0;
  role='REGISTRAR';const result=await staffSession(args);assert.equal(result.data.session.access_token,'example-session');assert.equal(generated,1);assert.equal(verified,1);
  args.verifyToken=async()=>({data:{user:{id:'other-auth'},session:{access_token:'foreign-session'}},error:null});assert((await staffSession(args)).error);
 });

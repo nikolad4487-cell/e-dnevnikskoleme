@@ -5886,7 +5886,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           authUserId = newUser.user.id;
         }
 
-        const isStaff = u.roles.some(r => ['EXPERT', 'TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'REGISTRAR'].includes(r));
+        const isStaff = u.roles.some(r => ['PRINCIPAL', 'EXPERT', 'TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'REGISTRAR'].includes(r));
         const isMainAdmin = u.roles.includes('MAIN_ADMIN');
         
         let authenticatorSecret = null;
@@ -6092,7 +6092,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       if (loginType === 'STAFF') {
         const isActuallyStaff = userSchoolRoles.some((role: string) => 
-          ['EXPERT', 'TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'REGISTRAR', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
+          ['PRINCIPAL', 'EXPERT', 'TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'REGISTRAR', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
         );
 
         if (isActuallyStaff) {

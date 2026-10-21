@@ -1,3 +1,4 @@
+import { isPrincipalForSchool } from '../../lib/expertAccess';
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -18,9 +19,16 @@ import { useNavigate } from 'react-router-dom';
 
 export default function RavnateljDashboardPage() {
   const navigate = useNavigate();
-  const { selectedSchoolId } = useSelection();
-  const { user } = useAuth();
+  const { selectedSchoolId, setSelectedSchoolId } = useSelection();
+  const { user, userSchoolRoles } = useAuth();
+  const isPrincipal = isPrincipalForSchool(user, userSchoolRoles, selectedSchoolId);
   
+  useEffect(() => {
+    if (!isPrincipalForSchool(user, userSchoolRoles)) return;
+    const ownSchools = userSchoolRoles.filter(r => r.role === Role.PRINCIPAL && (!r.status || r.status === 'ACTIVE')).map(r => r.schoolId);
+    if (!ownSchools.includes(selectedSchoolId) && ownSchools[0]) setSelectedSchoolId(ownSchools[0]);
+  }, [user, userSchoolRoles, selectedSchoolId, setSelectedSchoolId]);
+
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     studentsCount: 0,
@@ -30,7 +38,7 @@ export default function RavnateljDashboardPage() {
     absencesCount: 0,
     unjustifiedAbsencesCount: 0,
     negativeGradesCount: 0,
-    schoolAverage: 0,
+    schoolAverage: null as number | null,
     activeAdjustmentsCount: 0,
     finalThesisCount: 0
   });
@@ -50,7 +58,7 @@ export default function RavnateljDashboardPage() {
       setLoading(true);
 
       // Audit Log
-      if (user?.id && selectedSchoolId) {
+      if (!isPrincipal && user?.id && selectedSchoolId) {
         await logSystemAction({
           executor_id: user.id,
           school_id: selectedSchoolId,
@@ -110,7 +118,7 @@ export default function RavnateljDashboardPage() {
 
       // 3. Fetch Grades Summary
       let negativeGradesCount = 0;
-      let schoolAverage = 0;
+      let schoolAverage: number | null = null;
       let classGrades: Record<string, { sum: number, count: number }> = {};
       classes.forEach(c => {
         classGrades[c.id] = { sum: 0, count: 0 };
@@ -138,13 +146,13 @@ export default function RavnateljDashboardPage() {
             }
           });
 
-          schoolAverage = totalCount > 0 ? parseFloat((totalSum / totalCount).toFixed(2)) : 0;
+          schoolAverage = totalCount > 0 ? parseFloat((totalSum / totalCount).toFixed(2)) : null;
         }
       }
 
       const classSuccessChart = classes.map(c => {
         const gradeStats = classGrades[c.id];
-        const avg = gradeStats && gradeStats.count > 0 ? parseFloat((gradeStats.sum / gradeStats.count).toFixed(2)) : 3.5; // fallback simulated for look and feel
+        const avg = gradeStats && gradeStats.count > 0 ? parseFloat((gradeStats.sum / gradeStats.count).toFixed(2)) : null;
         return {
           name: c.name,
           prosjek: avg
@@ -175,7 +183,7 @@ export default function RavnateljDashboardPage() {
         const s = programSuccess[pName];
         return {
           name: pName.length > 18 ? pName.substring(0, 15) + '...' : pName,
-          prosjek: s.count > 0 ? parseFloat((s.sum / s.count).toFixed(2)) : 4.1 // graceful fallback average
+          prosjek: s.count > 0 ? parseFloat((s.sum / s.count).toFixed(2)) : null
         };
       });
 
@@ -221,25 +229,22 @@ export default function RavnateljDashboardPage() {
               classConduct[cls.name].uzorno += 1;
             } else if (bh.startsWith('POOR') || bh.startsWith('LOŠ') || bh === '1') {
               classConduct[cls.name].lose += 1;
-            } else {
+            } else if (bh.startsWith('GOOD') || bh.startsWith('DOBR') || bh === '2') {
               classConduct[cls.name].dobro += 1;
             }
           }
         });
       }
 
-      // If conduct count is 0, let's create a beautiful representative model
       const conductChart = Object.keys(classConduct).map(cName => {
         const u = classConduct[cName].uzorno;
         const d = classConduct[cName].dobro;
         const l = classConduct[cName].lose;
-        // fallback distribution to make the graph rich if no summaries finalized yet
-        const totalNum = u + d + l;
         return {
           name: cName,
-          Uzorno: totalNum > 0 ? u : Math.floor(Math.random() * 12 + 10),
-          Dobro: totalNum > 0 ? d : Math.floor(Math.random() * 6 + 4),
-          Loše: totalNum > 0 ? l : Math.floor(Math.random() * 2)
+          Uzorno: u,
+          Dobro: d,
+          Loše: l
         };
       }).sort((a,b) => a.name.localeCompare(b.name));
 
@@ -251,8 +256,8 @@ export default function RavnateljDashboardPage() {
         absencesCount,
         unjustifiedAbsencesCount,
         negativeGradesCount,
-        schoolAverage: schoolAverage || 4.25,
-        activeAdjustmentsCount: adjustmentsCount || 3,
+        schoolAverage,
+        activeAdjustmentsCount: adjustmentsCount || 0,
         finalThesisCount: thesisCount || 0
       });
 
@@ -305,8 +310,8 @@ export default function RavnateljDashboardPage() {
         {/* Navigation & Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-[#dee2e6] pb-6">
           <div>
-            <div className="flex items-center gap-2 text-[#005c8d] text-xs font-black uppercase tracking-widest mb-2 cursor-pointer hover:underline" onClick={() => navigate('/admin-skole')}>
-              <ArrowLeft size={14} /> Natrag u administraciju
+            <div className="flex items-center gap-2 text-[#005c8d] text-xs font-black uppercase tracking-widest mb-2 cursor-pointer hover:underline" onClick={() => navigate(isPrincipal ? '/select-class' : '/admin-skole')}>
+              <ArrowLeft size={14} /> Natrag na pregled
             </div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none mb-2">Upravljačka ploča ravnatelja</h1>
             <p className="text-slate-500 font-medium text-sm">Strateški i operativni pregled uspjeha, izostanaka i pedagoškog rada škole</p>
@@ -336,7 +341,7 @@ export default function RavnateljDashboardPage() {
           { label: "Izostanci", value: stats.absencesCount, icon: Clock, color: "text-amber-600 bg-amber-50/50", desc: "Svi zabilježeni sati" },
           { label: "Neopravdani sati", value: stats.unjustifiedAbsencesCount, icon: AlertTriangle, color: "text-red-700 bg-red-50/50", desc: "Sankcionirani sati" },
           { label: "Nedovoljne ocjene", value: stats.negativeGradesCount, icon: ShieldAlert, color: "text-red-600 bg-red-50/50", desc: "Trenutne jedinice (1)" },
-          { label: "Prosjek škole", value: stats.schoolAverage, icon: Award, color: "text-emerald-700 bg-emerald-50/50", desc: "Prosjek svih ocjena" },
+          { label: "Prosjek škole", value: stats.schoolAverage ?? 'Nema ocjena', icon: Award, color: "text-emerald-700 bg-emerald-50/50", desc: "Prosjek svih ocjena" },
           { label: "Aktivne prilagodbe", value: stats.activeAdjustmentsCount, icon: Sparkles, color: "text-yellow-700 bg-yellow-50/50", desc: "Pedagoške prilagodbe" },
           { label: "Završni radovi", value: stats.finalThesisCount, icon: BookOpen, color: "text-purple-600 bg-purple-50/50", desc: "Pregled obrana" },
         ].map((m, idx) => (

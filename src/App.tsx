@@ -224,6 +224,11 @@ export default function App() {
                     </ProtectedRoute>
                   } />
 
+                  <Route path="/ravnatelj" element={
+                    <ProtectedRoute allowedRoles={[Role.PRINCIPAL, Role.SCHOOL_ADMIN, Role.ADMIN]}>
+                      <BasicLayout><RavnateljDashboardPage /></BasicLayout>
+                    </ProtectedRoute>
+                  } />
                   {/* Admin Routes */}
                   <Route path="/admin-skole/*" element={
                     <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.ADMIN]}>

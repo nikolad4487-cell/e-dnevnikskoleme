@@ -1,5 +1,5 @@
 import { expertPedagogicalFetch } from '../../lib/expertPedagogicalFetch';
-import { isExpertForSchool } from '../../lib/expertAccess';
+import { isSchoolObserver } from '../../lib/expertAccess';
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -54,7 +54,7 @@ export default function PedagoskaDokumentacijaPage() {
   const { selectedClassId, selectedSchoolId } = useSelection();
 
   const effectiveClassId = classId || selectedClassId;
-  const isExpert = isExpertForSchool(user, userSchoolRoles, selectedSchoolId);
+  const isExpert = isSchoolObserver(user, userSchoolRoles, selectedSchoolId);
   const pedagogicalFetch = isExpert ? expertPedagogicalFetch : fetch;
 
   // State

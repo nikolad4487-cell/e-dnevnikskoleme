@@ -1,4 +1,4 @@
-import { isExpertForSchool, isHomeroomPeriod } from '../../lib/expertAccess';
+import { isSchoolObserver, isPrincipalForSchool, isHomeroomPeriod } from '../../lib/expertAccess';
 import { PlanningWeekSchedule } from '../../components/PlanningWeekSchedule';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -84,7 +84,8 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
   
   const selectedSchoolId = contextSchoolId || sessionStorage.getItem('selectedSchoolId') || localStorage.getItem('selectedSchoolId');
   const effectiveClassId = routeClassId || contextClassId;
-  const isExpert = isExpertForSchool(user, userSchoolRoles, selectedSchoolId);
+  const isPrincipal = isPrincipalForSchool(user, userSchoolRoles, selectedSchoolId);
+  const isExpert = isSchoolObserver(user, userSchoolRoles, selectedSchoolId);
   
   const [classes, setClasses] = useState<Class[]>([]);
   const selectedClass = classes.find(c => c.id === effectiveClassId);
@@ -392,7 +393,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
 
   const canTeachSubjectInClass = useMemo(() => {
     return (subjectId?: string) => {
-      if (!subjectId || !effectiveClassId || !user) return false;
+      if (isPrincipal || !subjectId || !effectiveClassId || !user) return false;
       if (isExpert) return isHomeroomPeriod(allSubjects.find(s => s.id === subjectId)?.name);
       if (isAdminUser) return true;
       return subjectAssignments.some(a =>
@@ -401,10 +402,10 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
         a.teacherId === user.id
       );
     };
-  }, [effectiveClassId, isAdminUser, isExpert, allSubjects, subjectAssignments, user]);
+  }, [effectiveClassId, isAdminUser, isExpert, isPrincipal, allSubjects, subjectAssignments, user]);
 
   const lessonSubjectOptions = useMemo(() => {
-    if (!effectiveClassId) return [];
+    if (isPrincipal || !effectiveClassId) return [];
     return allSubjects.filter(s =>
       isExpert ? (isHomeroomPeriod(s.name) && classSubjects.some(cs => (cs.class_id || cs.classId) === effectiveClassId && (cs.subject_id || cs.subjectId) === s.id)) : subjectAssignments.some(a =>
         a.subjectId === s.id &&
@@ -412,7 +413,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
         (isAdminUser || a.teacherId === user?.id)
       )
     );
-  }, [allSubjects, classSubjects, effectiveClassId, isAdminUser, isExpert, subjectAssignments, user?.id]);
+  }, [allSubjects, classSubjects, effectiveClassId, isAdminUser, isExpert, isPrincipal, subjectAssignments, user?.id]);
 
   const examSubjectOptions = useMemo(() => {
     if (!effectiveClassId) return [];
@@ -1714,6 +1715,7 @@ setStudents(uniqueStudents);
   };
 
   const openLessonModal = async (hour: number, lesson?: Lesson, defaultValues?: { subjectId: string, teacherId: string }) => {
+      if (isPrincipal) return;
       if (selectedWeek?.weekType === 'SCHOOL_HOLIDAY') {
         toast.error('Unos i uređivanje nastave nije moguće u tjednu označenom kao školski praznici.');
         return;
@@ -1773,7 +1775,7 @@ setStudents(uniqueStudents);
     const lesson = dailyLessons.find(l => l.id === lessonId);
     if (!lesson) return;
 
-    const canDeleteOwnLesson = lesson.teacherId === user?.id;
+    const canDeleteOwnLesson = !isPrincipal && lesson.teacherId === user?.id;
     const canDeleteAsAdmin = isAdminUser;
 
     if (!canDeleteAsAdmin && !canDeleteOwnLesson) {
@@ -1915,6 +1917,7 @@ setStudents(uniqueStudents);
       return;
     }
 
+    if (isPrincipal) { toast.error('Ravnatelj ima pregled nastave bez izmjena.'); return; }
     const expertHomeroom = isExpert && isHomeroomPeriod(allSubjects.find(s => s.id === lessonForm.subjectId)?.name);
     if (isExpert && !expertHomeroom) { toast.error('Stručni suradnik može uređivati samo sat razrednika.'); return; }
     const assignment = subjectAssignments.find(a =>
@@ -3935,7 +3938,7 @@ setStudents(uniqueStudents);
                                 lessons.map((lesson, idx) => {
                                   const sub = allSubjects.find(s => s.id === lesson.subjectId);
                                   const teacher = teachers.find(t => t.id === lesson.teacherId);
-                                  const canEdit = isAdminUser || lesson.teacherId === user?.id;
+                                  const canEdit = !isPrincipal && (isAdminUser || lesson.teacherId === user?.id);
                                   const lessonAbsences = dailyAbsences.filter(a => a.lessonId === lesson.id);
                                   
                                   return (
@@ -4058,7 +4061,7 @@ setStudents(uniqueStudents);
                 <div className="space-y-3">
                   {dailyNotes.map((note) => {
                     const isAuthor = note.created_by === user?.id || note.createdBy === user?.id;
-                    const canEdit = isAuthor || isMainAdmin || selectedClass?.homeroomTeacherId === user?.id || selectedClass?.deputyTeacherId === user?.id;
+                    const canEdit = !isPrincipal && (isAuthor || isMainAdmin || selectedClass?.homeroomTeacherId === user?.id || selectedClass?.deputyTeacherId === user?.id);
                     const isEditing = editingNoteId === note.id;
 
                     return (
