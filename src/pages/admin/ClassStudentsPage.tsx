@@ -66,7 +66,7 @@ export default function ClassStudentsPage() {
       // Fetch Students in this class
       const { data: enrollments, error: sicError } = await supabase
         .from('student_class_enrollments')
-        .select('*, student:user_profiles(*)')
+        .select('*, student:user_profiles!student_class_enrollments_student_id_fkey(*)')
         .eq('class_id', classId)
         .eq('status', 'ACTIVE');
       if (sicError) throw sicError;

@@ -588,7 +588,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
     try {
       const { data, error } = await supabase
         .from('student_class_enrollments')
-        .select('*, student:user_profiles(*)')
+        .select('*, student:user_profiles!student_class_enrollments_student_id_fkey(*)')
         .eq('class_id', effectiveClassId);
 
       console.log("[IMENIK] fetchStudentsData data:", data);

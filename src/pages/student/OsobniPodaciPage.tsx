@@ -122,7 +122,7 @@ export default function OsobniPodaciPage() {
       try {
         const { data: classEnrollments } = await supabase
           .from('student_class_enrollments')
-          .select('student:user_profiles(id, name)')
+          .select('student:user_profiles!student_class_enrollments_student_id_fkey(id, name)')
           .eq('class_id', cls.id)
           .eq('status', 'ACTIVE');
 
