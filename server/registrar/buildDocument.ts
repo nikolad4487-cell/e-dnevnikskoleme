@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { PDFDocument, PDFCheckBox, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import monthCoordinates from "./monthCoordinates.js";
+import { trimEndorsementImage } from "./endorsementImage.js";
 import { printableSchoolAddress } from "./schoolAddress.js";
 import {
   boxCharacters,
@@ -412,6 +413,14 @@ export async function buildRegistrarDocument(
       end: { x: 535, y: 72 },
       thickness: 0.6,
     });
+    if (template.stampMark) {
+      last.drawText("M.P.", {
+        font,
+        size: 8,
+        x: template.stampMark.x,
+        y: last.getHeight() - template.stampMark.top - 8,
+      });
+    }
     last.drawText("Potpis ovlaštene osobe škole", {
       font,
       size: 8,
@@ -431,13 +440,15 @@ export async function buildRegistrarDocument(
       (!assets.signature && !historical)
     )
       throw new Error("Nedostaje odobreni pečat ili potpis škole.");
-    for (const [bytes, area] of [
-      [assets.stamp, template.stamp],
-      [assets.signature, template.signature],
-    ] as [Uint8Array | undefined, Rect][]) {
+    // Draw the handwriting first, then the transparent stamp over its M.P.
+    // anchor, or over the handwriting when the original has no M.P. mark.
+    for (const [bytes, area, isSignature] of [
+      [assets.signature, template.signature, true],
+      [assets.stamp, template.stamp, false],
+    ] as [Uint8Array | undefined, Rect, boolean][]) {
       if (!bytes) continue;
       assertAllowed(template, area);
-      const img = await pdf.embedPng(bytes);
+      const img = await pdf.embedPng(await trimEndorsementImage(bytes));
       const scale = Math.min(area.width / img.width, area.height / img.height);
       const page =
         kind === "transcript" ? pdf.getPages().at(-1)! : pdf.getPage(area.page);
@@ -447,7 +458,7 @@ export async function buildRegistrarDocument(
           page.getHeight() -
           area.top -
           area.height +
-          (area.height - img.height * scale) / 2,
+          (isSignature ? 0 : (area.height - img.height * scale) / 2),
         width: img.width * scale,
         height: img.height * scale,
       });
