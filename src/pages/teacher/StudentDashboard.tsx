@@ -1,3 +1,4 @@
+import { isExpertForSchool } from '../../lib/expertAccess';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -128,7 +129,7 @@ export default function StudentDashboard() {
           const isHomeroom = classDetails?.homeroom_teacher_id === user?.id;
           const isDeputy = classDetails?.deputy_teacher_id === user?.id;
 
-          const hasFullClassView = isTeacherAdmin || isHomeroom || isDeputy;
+          const hasFullClassView = isTeacherAdmin || isHomeroom || isDeputy || isExpertForSchool(user, userSchoolRoles, classDetails?.school_id);
 
           const seenSubjectIds = new Set<string>();
           classSubs.forEach((cs: any) => {
@@ -163,7 +164,7 @@ export default function StudentDashboard() {
           mappedSubjects.sort((a, b) => a.name.localeCompare(b.name));
         }
 
-        if (mappedSubjects.length === 0 && (!classSubs || classSubs.length === 0)) {
+        if (mappedSubjects.length === 0 && (!classSubs || classSubs.length === 0) && !isExpertForSchool(user, userSchoolRoles)) {
           // Fallback to defaults so the teacher doesn't see a blank page if no DB config
           mappedSubjects = defaultSubjectsList;
         }

@@ -1,3 +1,4 @@
+import { isExpertForSchool } from '../../lib/expertAccess';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -442,7 +443,7 @@ export default function StudentSubjectDetail() {
         [Role.ADMIN, Role.SCHOOL_ADMIN].includes(r.role as Role)
       );
 
-      const computedCanEdit = !!(isMainAdmin || schoolAdmin || isTeacherAssigned);
+      const computedCanEdit = !!(!isExpertForSchool(user, userSchoolRoles, classData?.school_id) && (isMainAdmin || schoolAdmin || isTeacherAssigned));
       setCanEdit(computedCanEdit);
       console.log("LOAD CRITICAL COMPLETED. CAN EDIT:", computedCanEdit);
 

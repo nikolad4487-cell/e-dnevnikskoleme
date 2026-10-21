@@ -1,3 +1,5 @@
+import { expertPedagogicalFetch } from '../../lib/expertPedagogicalFetch';
+import { isExpertForSchool } from '../../lib/expertAccess';
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -52,6 +54,8 @@ export default function PedagoskaDokumentacijaPage() {
   const { selectedClassId, selectedSchoolId } = useSelection();
 
   const effectiveClassId = classId || selectedClassId;
+  const isExpert = isExpertForSchool(user, userSchoolRoles, selectedSchoolId);
+  const pedagogicalFetch = isExpert ? expertPedagogicalFetch : fetch;
 
   // State
   const [loading, setLoading] = useState(true);
@@ -134,9 +138,10 @@ export default function PedagoskaDokumentacijaPage() {
   });
 
   // Permissions Check (Stručna služba, ravnatelj, administracija)
-  const roles = userSchoolRoles.map(r => r.role);
+  const roles = userSchoolRoles.filter(r => r.schoolId === selectedSchoolId && (!r.status || r.status === 'ACTIVE')).map(r => r.role);
   const hasFullAccess = React.useMemo(() => {
     const isSpecialPrivileged = isMainAdmin || roles.some(r => [
+      'EXPERT',
       'MAIN_ADMIN', 
       'ADMIN', 
       'SCHOOL_ADMIN', 
@@ -149,14 +154,7 @@ export default function PedagoskaDokumentacijaPage() {
       'RAVNATELJ'
     ].includes(r as any));
     
-    const emailMatches = user?.email?.toLowerCase().includes('pedagog') ||
-                         user?.email?.toLowerCase().includes('psiholog') ||
-                         user?.email?.toLowerCase().includes('ravnatelj');
-                         
-    const nameMatches = user?.name?.toLowerCase().includes('pedagog') ||
-                        user?.name?.toLowerCase().includes('psiholog');
-
-    return isSpecialPrivileged || emailMatches || nameMatches;
+    return isSpecialPrivileged;
   }, [isMainAdmin, roles, user]);
 
   // Load class on mount or context change
@@ -268,7 +266,7 @@ export default function PedagoskaDokumentacijaPage() {
   const loadStudentPedagogicalData = async (studentId: string, cId: string, syId: string) => {
     try {
       // A. Load permanent Profile
-      const profileRes = await fetch(`/api/student-pedagogical-profile?studentId=${studentId}`);
+      const profileRes = await pedagogicalFetch(`/api/student-pedagogical-profile?studentId=${studentId}`);
       if (!profileRes.ok) {
         throw new Error(await profileRes.text());
       }
@@ -279,7 +277,7 @@ export default function PedagoskaDokumentacijaPage() {
       console.log("LOADED PROGRAM ADJUSTMENT", profile?.program_adjustment);
 
       // B. Load yearly Notes
-      const notesRes = await fetch(`/api/student-pedagogical-year-notes?studentId=${studentId}&classId=${cId}&schoolYearId=${syId}`);
+      const notesRes = await pedagogicalFetch(`/api/student-pedagogical-year-notes?studentId=${studentId}&classId=${cId}&schoolYearId=${syId}`);
       if (!notesRes.ok) {
         throw new Error(await notesRes.text());
       }
@@ -552,7 +550,7 @@ export default function PedagoskaDokumentacijaPage() {
     try {
       const updatedObservations = yearNotes.yearly_observations.filter(o => o.id !== entry.id);
       
-      const response = await fetch('/api/student-pedagogical-year-notes', {
+      const response = await pedagogicalFetch('/api/student-pedagogical-year-notes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -595,7 +593,7 @@ export default function PedagoskaDokumentacijaPage() {
         try {
           const method = profile?.id ? 'PUT' : 'POST';
           const [resUpdate, dbUpdate] = await Promise.all([
-            fetch('/api/student-pedagogical-profile', {
+            pedagogicalFetch('/api/student-pedagogical-profile', {
               method: method,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -663,7 +661,7 @@ export default function PedagoskaDokumentacijaPage() {
         const field = editSingleTextField.fieldName;
         
         const method = profile?.id ? 'PUT' : 'POST';
-        const response = await fetch('/api/student-pedagogical-profile', {
+        const response = await pedagogicalFetch('/api/student-pedagogical-profile', {
           method: method,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -685,7 +683,7 @@ export default function PedagoskaDokumentacijaPage() {
 
       // 3. SAVE RECOMMENDATIONS (YEAR NOTES)
       else if (modalType === 'RECOMMENDATIONS') {
-        const response = await fetch('/api/student-pedagogical-year-notes', {
+        const response = await pedagogicalFetch('/api/student-pedagogical-year-notes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -734,7 +732,7 @@ export default function PedagoskaDokumentacijaPage() {
           updatedLogs.push(newEntry);
         }
 
-        const response = await fetch('/api/student-pedagogical-year-notes', {
+        const response = await pedagogicalFetch('/api/student-pedagogical-year-notes', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

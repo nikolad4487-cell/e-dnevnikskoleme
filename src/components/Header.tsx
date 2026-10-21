@@ -395,7 +395,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
               onClick={() => {
                 setIsMenuOpen(false);
                 const isStudentOrParent = !userSchoolRoles.some(r => 
-                  [Role.MAIN_ADMIN, Role.ADMIN, Role.SCHOOL_ADMIN, Role.TEACHER, Role.HOMEROOM, Role.DEPUTY].includes(r.role as Role)
+                  [Role.EXPERT, Role.MAIN_ADMIN, Role.ADMIN, Role.SCHOOL_ADMIN, Role.TEACHER, Role.HOMEROOM, Role.DEPUTY].includes(r.role as Role)
                 );
                 if (isStudentOrParent) {
                   navigate('/student/postavke');

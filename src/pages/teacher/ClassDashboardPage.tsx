@@ -1,3 +1,4 @@
+import { isExpertForSchool } from '../../lib/expertAccess';
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { useParams, useNavigate, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -181,7 +182,7 @@ export default function ClassDashboardPage() {
         [Role.ADMIN, Role.SCHOOL_ADMIN].includes(r.role as Role)
       );
 
-      if (isMainAdmin || isSchoolAdmin) {
+      if (isMainAdmin || isSchoolAdmin || isExpertForSchool(user, userSchoolRoles, mappedClass.schoolId)) {
         // Admin has full access
         allowAccess(mappedClass);
         return;

@@ -5,7 +5,7 @@ import {creationCredentials,canManageSchool,userManagementScope} from '../server
 import {staffSession} from '../server/auth/staffSession';
 
 test('Entered Auth password is preserved for every role and is never replaced with a PIN',()=>{
- for(const role of ['TEACHER','REGISTRAR','SCHOOL_ADMIN','MAIN_ADMIN','SUPER_ADMIN','STUDENT','PARENT']){
+ for(const role of ['EXPERT','TEACHER','REGISTRAR','SCHOOL_ADMIN','MAIN_ADMIN','SUPER_ADMIN','STUDENT','PARENT']){
   const result=creationCredentials('Example8',[role],()=>{throw new Error('Must not replace supplied password');});
   assert.equal(result.password,'Example8');
  }
@@ -42,11 +42,12 @@ test('User creation/update scope rejects cross-school class, privileged role and
 });
 
 test('Staff session verifies account role and PIN before minting a token, independent of Auth password',async()=>{
- let generated=0,verified=0;let role='REGISTRAR';
- const db:any={from:(table:string)=>{const q:any={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:{id:'profile',auth_user_id:'auth',role,pin_hash:'pin-hash'}}),then:(resolve:any)=>resolve({data:[{role,status:'ACTIVE'}]})};return q;},auth:{admin:{generateLink:async()=>{generated++;return {data:{properties:{hashed_token:'private-token'}}};}}}};
+ let generated=0,verified=0;let role='REGISTRAR';let ready=false;
+ const db:any={rpc:async()=>({data:ready,error:null}),from:(table:string)=>{const q:any={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:{id:'profile',auth_user_id:'auth',role,pin_hash:'pin-hash'}}),then:(resolve:any)=>resolve({data:[{role,status:'ACTIVE'}]})};return q;},auth:{admin:{generateLink:async()=>{generated++;return {data:{properties:{hashed_token:'private-token'}}};}}}};
  const args={database:db,email:'example@example.test',pin:'1234',verifyPin:async(pin:string,hash:string)=>pin==='1234'&&hash==='pin-hash',verifyToken:async(hash:string)=>{assert.equal(hash,'private-token');verified++;return {data:{user:{id:'auth'},session:{access_token:'example-session'}},error:null};}};
  assert((await staffSession({...args,pin:'wrong'})).error);assert.equal(generated,0);
  role='PARENT';assert((await staffSession(args)).error);assert.equal(generated,0);
+ role='EXPERT';assert((await staffSession(args)).error);assert.equal(generated,0);ready=true;assert.equal((await staffSession(args)).data.session.access_token,'example-session');generated=0;verified=0;
  role='REGISTRAR';const result=await staffSession(args);assert.equal(result.data.session.access_token,'example-session');assert.equal(generated,1);assert.equal(verified,1);
  args.verifyToken=async()=>({data:{user:{id:'other-auth'},session:{access_token:'foreign-session'}},error:null});assert((await staffSession(args)).error);
 });

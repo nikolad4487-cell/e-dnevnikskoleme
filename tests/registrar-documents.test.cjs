@@ -19,6 +19,7 @@ for (const gradeRelation of ['view','table']) require('node:test').test(`Registr
   assert.equal((await db.query("SELECT to_regclass('public.school_registry_sections') AS relation")).rows[0].relation,null,'A failed activation must roll back earlier migrations');
  }
  await db.exec(activationSql());
+ await db.exec(read('../migrations/20260603000000_audit_logs_and_triggers.sql').split('-- 3. Triggers for Grades')[0]);await db.exec(read('../migrations/20260524000007_pedagogical_restructure.sql'));await db.exec(read('../migrations/20260603000005_pedagogical_measures_and_expert_services.sql'));await db.exec(read('../migrations/20261021000000_expert_role.sql'));
  const relation=await db.query("SELECT relkind,reloptions FROM pg_class WHERE oid='public.enrollment_final_grades'::regclass");
  assert.equal(relation.rows[0].relkind,gradeRelation==='view'?'v':'r');
  const triggers=await db.query("SELECT c.relkind FROM pg_trigger t JOIN pg_class c ON c.oid=t.tgrelid WHERE t.tgname='registry_write_scope'");assert(triggers.rows.every(t=>['r','p'].includes(t.relkind)));

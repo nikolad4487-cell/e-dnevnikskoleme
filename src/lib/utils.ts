@@ -272,6 +272,7 @@ export const finalGradeLabels: Record<string, string> = {
 
 export const getRoleLabel = (role: string) => {
   const labels: Record<string, string> = {
+    'EXPERT': 'Stručni suradnik',
     'TEACHER': 'Nastavnik',
     'STUDENT': 'Učenik',
     'ADMIN': 'Administrator',

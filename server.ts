@@ -557,7 +557,7 @@ async function startServer() {
     }
 
     app.use(provisioningCors);
-    app.use(apiAccessGuard(resolveAuthenticatedUser));
+    app.use(apiAccessGuard(resolveAuthenticatedUser, supabaseAdmin));
 
     app.post('/api/auth/complete-authenticator', async (req,res) => {
       try {
@@ -5886,7 +5886,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           authUserId = newUser.user.id;
         }
 
-        const isStaff = u.roles.some(r => ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'REGISTRAR'].includes(r));
+        const isStaff = u.roles.some(r => ['EXPERT', 'TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'REGISTRAR'].includes(r));
         const isMainAdmin = u.roles.includes('MAIN_ADMIN');
         
         let authenticatorSecret = null;
@@ -6092,7 +6092,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       if (loginType === 'STAFF') {
         const isActuallyStaff = userSchoolRoles.some((role: string) => 
-          ['TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'REGISTRAR', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
+          ['EXPERT', 'TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'REGISTRAR', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'].includes(role)
         );
 
         if (isActuallyStaff) {

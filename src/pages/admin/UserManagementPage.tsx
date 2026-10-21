@@ -201,6 +201,8 @@ export default function UserManagementPage() {
   };
 
   const toggleRole = (role: Role) => {
+    if (role === Role.EXPERT) { setSelectedRoles([Role.EXPERT]); return; }
+    if (selectedRoles.includes(Role.EXPERT)) { setSelectedRoles([role]); return; }
     if (role === Role.REGISTRAR) { setSelectedRoles([Role.REGISTRAR]); return; }
     if (selectedRoles.includes(Role.REGISTRAR)) { setSelectedRoles([role]); return; }
     setSelectedRoles(prev => 
@@ -722,6 +724,7 @@ export default function UserManagementPage() {
             <option value={Role.TEACHER}>Nastavnici</option>
             <option value={Role.STUDENT}>Učenici</option>
             <option value={Role.PARENT}>Roditelji</option>
+            <option value={Role.EXPERT}>Stručni suradnici</option>
             <option value={Role.REGISTRAR}>Školska referada</option>
           </select>
         </div>
@@ -1038,7 +1041,7 @@ export default function UserManagementPage() {
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">Uloga za sve unesene korisnike</label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[Role.ADMIN, Role.TEACHER, Role.REGISTRAR, Role.STUDENT, Role.PARENT].map((role) => (
+                  {[Role.ADMIN, Role.TEACHER, Role.EXPERT, Role.REGISTRAR, Role.STUDENT, Role.PARENT].map((role) => (
                     <button
                       key={role}
                       type="button"
@@ -1049,7 +1052,7 @@ export default function UserManagementPage() {
                         : 'bg-[#f8f9fa] border-[#dee2e6] text-[#868e96] hover:border-[#ced4da]'
                       }`}
                     >
-                      {role === Role.TEACHER ? 'Nastavnik' : 
+                      {role === Role.EXPERT ? 'Stručni suradnik' : role === Role.TEACHER ? 'Nastavnik' :
                        role === Role.STUDENT ? 'Učenik' :
                        role === Role.REGISTRAR ? 'Školska referada' : role === Role.PARENT ? 'Roditelj' : 'Admin Škole'}
                     </button>
@@ -1155,7 +1158,7 @@ export default function UserManagementPage() {
                 </div>
               )}
 
-              {!editingUser && selectedRoles.some(role => [Role.TEACHER, Role.REGISTRAR, Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(role)) && <p className="text-sm text-slate-600">Djelatnik se prijavljuje početnim PIN-om 1234 i autentifikatorom. Privremena lozinka zasebna je od PIN-a.</p>}
+              {!editingUser && selectedRoles.some(role => [Role.TEACHER, Role.EXPERT, Role.REGISTRAR, Role.ADMIN, Role.SCHOOL_ADMIN, Role.MAIN_ADMIN, Role.SUPER_ADMIN].includes(role)) && <p className="text-sm text-slate-600">Djelatnik se prijavljuje početnim PIN-om 1234 i autentifikatorom. Privremena lozinka zasebna je od PIN-a.</p>}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -1199,7 +1202,7 @@ export default function UserManagementPage() {
               <div>
                 <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5">Uloge u školi (odaberi više)</label>
                 <div className="grid grid-cols-2 gap-2">
-                  {[Role.TEACHER, Role.REGISTRAR, Role.STUDENT, Role.PARENT, Role.SCHOOL_ADMIN].map((role) => (
+                  {[Role.TEACHER, Role.EXPERT, Role.REGISTRAR, Role.STUDENT, Role.PARENT, Role.SCHOOL_ADMIN].map((role) => (
                     <button
                       key={role}
                       type="button"
@@ -1210,7 +1213,7 @@ export default function UserManagementPage() {
                         : 'bg-[#f8f9fa] border-[#dee2e6] text-[#868e96] hover:border-[#ced4da]'
                       }`}
                     >
-                      {role === Role.TEACHER ? 'Nastavnik' : 
+                      {role === Role.EXPERT ? 'Stručni suradnik' : role === Role.TEACHER ? 'Nastavnik' :
                        role === Role.STUDENT ? 'Učenik' :
                        role === Role.REGISTRAR ? 'Školska referada' : role === Role.PARENT ? 'Roditelj' :
                        role === Role.SCHOOL_ADMIN ? 'Admin Škole' : ''}

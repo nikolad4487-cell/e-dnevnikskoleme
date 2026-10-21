@@ -1,3 +1,4 @@
+import { isExpertForSchool } from '../lib/expertAccess';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useSelection } from '../contexts/SelectionContext';
@@ -58,6 +59,7 @@ export function canManageClassAdministration(
   isMainAdmin = false
 ) {
   if (!user || !classItem) return false;
+  if (isExpertForSchool(user, userSchoolRoles, getClassSchoolId(classItem))) return false;
 
   const schoolId = getClassSchoolId(classItem);
   if (userHasAdminRoleForSchool(user, userSchoolRoles, schoolId, isMainAdmin)) {

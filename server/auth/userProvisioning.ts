@@ -1,5 +1,5 @@
 import type {Request,Response,NextFunction} from 'express';
-export const STAFF_ROLES = ['TEACHER','HOMEROOM','DEPUTY','HOMEROOM_TEACHER','STAFF','ADMIN','SCHOOL_ADMIN','MAIN_ADMIN','SUPER_ADMIN','REGISTRAR'];
+export const STAFF_ROLES = ['EXPERT','TEACHER','HOMEROOM','DEPUTY','HOMEROOM_TEACHER','STAFF','ADMIN','SCHOOL_ADMIN','MAIN_ADMIN','SUPER_ADMIN','REGISTRAR'];
 export function creationCredentials(password:unknown,roles:string[],fallback:()=>string){
  const isStaff=roles.some(role=>STAFF_ROLES.includes(role));
  const value=password===undefined||password===null||password===''?fallback():password;
@@ -24,6 +24,8 @@ export function userManagementScope(authenticate:(req:any)=>Promise<any>,databas
    const requested=[...(Array.isArray(roles)?roles:typeof roles==='string'?[roles]:[]),req.body.globalRole].filter(Boolean);
    if(requested.some(r=>typeof r!=='string'||![...STAFF_ROLES,'STUDENT','PARENT'].includes(r)))return res.status(400).json({success:false,error:'Odaberite valjanu korisničku ulogu.'});
    if(!access.global&&requested.some(r=>['MAIN_ADMIN','SUPER_ADMIN'].includes(r)))return res.status(403).json({success:false,error:'Samo glavni administrator može dodijeliti globalnu administratorsku ulogu.'});
+   if(requested.includes('EXPERT')&&requested.some(r=>r!=='EXPERT'))return res.status(400).json({success:false,error:'Ulogu Stručni suradnik dodijelite samostalno.'});
+   if(requested.includes('EXPERT')){const ready=await database.rpc('expert_role_ready');if(ready.error||ready.data!==true)return res.status(409).json({success:false,error:'Prvo primijenite SQL nadogradnju STRUCNI-SURADNIK kako bi prava nove uloge bila zaštićena.'});}
    if(requested.includes('REGISTRAR')&&requested.some(r=>r!=='REGISTRAR'))return res.status(400).json({success:false,error:'Za Školsku referadu koristite zaseban račun s jedinom ulogom Školska referada.'});
    const {data:school,error:schoolError}=await database.from('schools').select('id').eq('id',schoolId).maybeSingle();
    if(schoolError||!school)return res.status(400).json({success:false,error:'Odabrana škola nije pronađena.'});

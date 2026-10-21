@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, loading, error, userSchoolRoles, isMainAdmin, isStaff, isStudent, isParent, signOut, isStudentPortal } = useAuth();
+  const { user, loading, error, userSchoolRoles, isMainAdmin, isSchoolAdmin, isStaff, isStudent, isParent, signOut, isStudentPortal } = useAuth();
   const location = useLocation();
 
   const navigate = useNavigate();
@@ -63,8 +63,8 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     // Rely on useAuth pre-calculated booleans for common role checks
     const isAllowed = (
       (allowedRoles.includes(Role.TEACHER) && isStaff) ||
-      (allowedRoles.includes(Role.ADMIN) && isStaff) ||
-      (allowedRoles.includes(Role.SCHOOL_ADMIN) && isStaff) ||
+      (allowedRoles.includes(Role.ADMIN) && isSchoolAdmin) ||
+      (allowedRoles.includes(Role.SCHOOL_ADMIN) && isSchoolAdmin) ||
       (allowedRoles.includes(Role.STUDENT) && isStudent) ||
       (allowedRoles.includes(Role.PARENT) && isParent) ||
       userSchoolRoles.some(r => allowedRoles.includes(r.role))
