@@ -1,4 +1,4 @@
-import { isExpertForSchool } from '../lib/expertAccess';
+import { isSchoolObserver, isPrincipalForSchool } from '../lib/expertAccess';
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -23,7 +23,7 @@ interface ClassWithDetails {
   deputyTeacherId?: string;
   homeroomTeacherName?: string;
   deputyTeacherName?: string;
-  userRoleInClass?: 'EXPERT' | 'HOMEROOM' | 'DEPUTY' | 'TEACHER' | 'ADMIN' | 'STUDENT';
+  userRoleInClass?: 'PRINCIPAL' | 'EXPERT' | 'HOMEROOM' | 'DEPUTY' | 'TEACHER' | 'ADMIN' | 'STUDENT';
   programName?: string;
   program?: any;
 }
@@ -375,7 +375,7 @@ export default function ClassSelectionPage() {
 
       // 2. Get assignments if teacher (to filter if not admin)
       let assignedClassIds: string[] = [];
-      if (!isSchoolAdmin && !isExpertForSchool(user, userSchoolRoles, selectedSchoolId)) {
+      if (!isSchoolAdmin && !isSchoolObserver(user, userSchoolRoles, selectedSchoolId)) {
         const { data: assignments } = await supabase
           .from('class_subject_teachers')
           .select('class_id')
@@ -386,7 +386,7 @@ export default function ClassSelectionPage() {
 
       const classesData: ClassWithDetails[] = (allClassData || [])
         .filter(cls => {
-          if (isSchoolAdmin || isExpertForSchool(user, userSchoolRoles, selectedSchoolId)) return true;
+          if (isSchoolAdmin || isSchoolObserver(user, userSchoolRoles, selectedSchoolId)) return true;
           return cls.homeroom_teacher_id === user.id || 
                  cls.deputy_teacher_id === user.id || 
                  assignedClassIds.includes(cls.id);
@@ -395,11 +395,11 @@ export default function ClassSelectionPage() {
           const programDisplay = getProgramDisplayName(cls.program, { short: true });
           console.log("CLASS PROGRAM RAW", cls.program);
           console.log("CLASS PROGRAM DISPLAY", programDisplay);
-          let role: 'EXPERT' | 'HOMEROOM' | 'DEPUTY' | 'TEACHER' | 'ADMIN' = 'TEACHER';
+          let role: 'PRINCIPAL' | 'EXPERT' | 'HOMEROOM' | 'DEPUTY' | 'TEACHER' | 'ADMIN' = 'TEACHER';
           if (isSchoolAdmin) role = 'ADMIN';
           if (cls.homeroom_teacher_id === user.id) role = 'HOMEROOM';
           else if (cls.deputy_teacher_id === user.id) role = 'DEPUTY';
-          if (isExpertForSchool(user, userSchoolRoles, selectedSchoolId)) role = 'EXPERT';
+          if (isSchoolObserver(user, userSchoolRoles, selectedSchoolId)) role = isPrincipalForSchool(user, userSchoolRoles, selectedSchoolId) ? 'PRINCIPAL' : 'EXPERT';
 
           return {
             id: cls.id,

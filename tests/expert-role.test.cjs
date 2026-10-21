@@ -17,14 +17,16 @@ for(const schema of ['partial','complete']) test(`Specialist permissions with ${
  if(schema==='complete') await db.exec(read('../migrations/20260603000005_pedagogical_measures_and_expert_services.sql'));
  const sql=read('../migrations/20261021000000_expert_role.sql');assert.equal(sql,read('../docs/AKTIVACIJA-STRUCNI-SURADNIK.sql'));
  await db.exec(sql);
+ const principalSql=read('../migrations/20261021000001_principal_role.sql');assert.equal(principalSql,read('../docs/AKTIVACIJA-RAVNATELJ.sql'));await db.exec(principalSql);
  // Real legacy views cannot acquire BEFORE/AFTER row triggers.
  assert.equal((await db.query("SELECT count(*)::int n FROM pg_trigger WHERE tgrelid='enrollment_final_grades'::regclass AND NOT tgisinternal")).rows[0].n,0);
  const expertAuth=uid(20);
+ const principal=uid(21);
  const expert=uid(1),pupil=uid(2),foreign=uid(3),teacher=uid(4),year=uid(5);
  await db.exec("INSERT INTO schools(id,name)VALUES('a','School A'),('b','School B');");
  await db.query("INSERT INTO school_years(id,school_id,name)VALUES($1,'a','2026/2027')",[year]);
  await db.query("INSERT INTO classes(id,school_id,name,school_year_id)VALUES('ca','a','3.A',$1),('cb','b','3.B',$1)",[year]);
- for(const [id,role,school]of[[expert,'EXPERT','a'],[pupil,'STUDENT','a'],[foreign,'STUDENT','b'],[teacher,'TEACHER','a']]){
+ for(const [id,role,school]of[[principal,'PRINCIPAL','a'],[expert,'EXPERT','a'],[pupil,'STUDENT','a'],[foreign,'STUDENT','b'],[teacher,'TEACHER','a']]){
   await db.query('INSERT INTO auth.users(id)VALUES($1)',[id===expert?expertAuth:id]);
   await db.query('INSERT INTO user_profiles(id,auth_user_id,role,school_id,name)VALUES($1,$4,$2,$3,$2)',[id,role,school,id===expert?expertAuth:id]);
   await db.query("INSERT INTO user_school_roles(user_id,school_id,role,status)VALUES($1,$2,$3,'ACTIVE')",[id,school,role]);
@@ -69,6 +71,25 @@ for(const schema of ['partial','complete']) test(`Specialist permissions with ${
  assert.equal((await db.query("SELECT executor_id FROM system_audit_logs WHERE entity_type='pedagogical_measures'")).rows[0].executor_id,expert);
  await db.exec('SET ROLE authenticated');
  await db.query("UPDATE user_profiles SET program_adjustment='NONE' WHERE id=$1",[pupil]);
+ await login(principal);
+ assert.equal((await db.query('SELECT principal_role_ready() ready')).rows[0].ready,true);
+ assert.equal((await db.query('SELECT id FROM classes')).rows.length,1);
+ assert.equal((await db.query('SELECT id FROM grades')).rows.length,1);
+ assert.equal((await db.query('SELECT id FROM absences')).rows.length,1);
+ assert.equal((await db.query("SELECT expert_workspace('ca') x")).rows[0].x.students[0].id,pupil);
+ await assert.rejects(db.query("SELECT expert_workspace('cb')"));
+ await denyUpdate("UPDATE grades SET value='1' WHERE id=$1",[uid(10)]);
+ await denyUpdate("UPDATE absences SET status='JUSTIFIED' WHERE student_id=$1",[pupil]);
+ await denyUpdate("UPDATE subjects SET name='Changed' WHERE id='math'");
+ await assert.rejects(db.query('SELECT test_expert_bypass()'));
+ await assert.rejects(db.query("INSERT INTO lessons(class_id,subject_id,teacher_id)VALUES('ca','sr',$1)",[principal]));
+ await assert.rejects(db.query("SELECT expert_pedagogy($1,'ca',$2,'PROFILE',$3)",[pupil,year,JSON.stringify({visit_reason:'Forbidden'})]));
+ assert.equal((await db.query("SELECT expert_pedagogy($1,'ca',$2,'PROFILE',NULL) x",[pupil,year])).rows[0].x.visit_reason,'Razgovor');
+ await db.query("UPDATE user_profiles SET mobile='000' WHERE id=$1",[principal]);
+ await denyUpdate("UPDATE user_profiles SET role='SCHOOL_ADMIN' WHERE id=$1",[principal]);
+ await assert.rejects(db.query("SELECT registry_verify_enrollment(id,'REGULAR','Forged') FROM student_class_enrollments WHERE student_id=$1",[pupil]));
+ await db.exec("RESET ROLE;SELECT set_config('request.jwt.claim.sub','',false)");await db.query("UPDATE user_school_roles SET status='REVOKED' WHERE user_id=$1",[principal]);
+ await login(principal);assert.equal((await db.query('SELECT id FROM classes')).rows.length,0);
  await login(teacher);await db.query("UPDATE grades SET value='4' WHERE id=$1",[uid(10)]);
  await db.exec("RESET ROLE;SELECT set_config('request.jwt.claim.sub','',false)");await db.query("UPDATE user_school_roles SET status='REVOKED' WHERE user_id=$1",[expert]);
  await login(expert);assert.equal((await db.query('SELECT id FROM classes')).rows.length,0);await assert.rejects(db.query("SELECT expert_pedagogy($1,'ca',$2,'PROFILE',$3)",[pupil,year,'{}']));

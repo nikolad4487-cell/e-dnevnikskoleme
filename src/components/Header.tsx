@@ -395,7 +395,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
               onClick={() => {
                 setIsMenuOpen(false);
                 const isStudentOrParent = !userSchoolRoles.some(r => 
-                  [Role.EXPERT, Role.MAIN_ADMIN, Role.ADMIN, Role.SCHOOL_ADMIN, Role.TEACHER, Role.HOMEROOM, Role.DEPUTY].includes(r.role as Role)
+                  [Role.PRINCIPAL, Role.EXPERT, Role.MAIN_ADMIN, Role.ADMIN, Role.SCHOOL_ADMIN, Role.TEACHER, Role.HOMEROOM, Role.DEPUTY].includes(r.role as Role)
                 );
                 if (isStudentOrParent) {
                   navigate('/student/postavke');
@@ -474,12 +474,12 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
               <button
                 onClick={() => {
                   setIsMenuOpen(false);
-                  navigate('/admin-skole/postavke');
+                  navigate('/ravnatelj');
                 }}
                 className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-gray-700 hover:bg-slate-50 transition-colors border-b border-gray-100 min-h-[44px]"
               >
                 <Shield size={14} />
-                Suglasnost za obradu podataka
+                Upravljačka ploča ravnatelja
               </button>
             )}
             <button 

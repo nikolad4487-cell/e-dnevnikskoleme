@@ -10,6 +10,8 @@ export async function staffSession({database,email,pin,verifyPin,verifyToken}:{d
  if(roleError||!staff||typeof pin!=='string'||!await verifyPin(pin,profile.pin_hash||LEGACY_PIN_HASH))return denied;
  const specialist=[profile.role,profile.access_role,...(roles||[]).filter((r:any)=>r.status==='ACTIVE').map((r:any)=>r.role)].includes('EXPERT');
  if(specialist){const ready=await database.rpc('expert_role_ready');if(ready.error||ready.data!==true)return {data:null,error:{message:'Prava stručnog suradnika još nisu aktivirana. Administrator treba primijeniti SQL nadogradnju STRUCNI-SURADNIK.',status:403}};}
+ const principal=[profile.role,profile.access_role,...(roles||[]).filter((r:any)=>r.status==='ACTIVE').map((r:any)=>r.role)].includes('PRINCIPAL');
+ if(principal){const ready=await database.rpc('principal_role_ready');if(ready.error||ready.data!==true)return {data:null,error:{message:'Administrator treba primijeniti SQL nadogradnju RAVNATELJ.',status:403}};}
  const generated=await database.auth.admin.generateLink({type:'magiclink',email});
  if(generated.error||!generated.data?.properties?.hashed_token)throw new Error('Nije moguće otvoriti prijavu djelatnika.');
  const result=await verifyToken(generated.data.properties.hashed_token);

@@ -1,3 +1,4 @@
+import { isPrincipalForSchool } from '../../lib/expertAccess';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -24,9 +25,10 @@ const absenceTypeOptions = [
 export default function TeacherIzostanciPage() {
   usePageTitle("Izostanci");
   const { classId: routeClassId, studentId } = useParams<{ classId: string, studentId?: string }>();
-  const { user, isMainAdmin, highestRole } = useAuth();
+  const { user, userSchoolRoles, isMainAdmin, highestRole } = useAuth();
   const { selectedClassId: contextClassId } = useSelection();
   
+  const isPrincipal = isPrincipalForSchool(user, userSchoolRoles);
   const effectiveClassId = contextClassId || routeClassId;
 
   const [absences, setAbsences] = useState<Absence[]>([]);
@@ -153,6 +155,7 @@ export default function TeacherIzostanciPage() {
   };
 
   const canDeleteAbsence = (absence: Absence) => {
+    if (isPrincipal) return false;
     if (isAdminForAbsences || isHomeroomTeacher) return true;
     return absence.teacherId === user?.id && isWithin48Hours(absence);
   };
@@ -240,7 +243,7 @@ export default function TeacherIzostanciPage() {
             onJustify={(date: string) => setJustifyingDate(date)}
             onDelete={(id: string) => setDeleteDialog({ isOpen: true, id, loading: false })}
             canDeleteAbsence={canDeleteAbsence}
-            showJustifyButton={isAdminForAbsences || isHomeroomTeacher}
+            showJustifyButton={!isPrincipal && (isAdminForAbsences || isHomeroomTeacher)}
           />
         )}
       </div>

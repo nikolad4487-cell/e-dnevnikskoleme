@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import express from 'express';
-import { isExpertForSchool, isHomeroomPeriod } from '../src/lib/expertAccess';
+import { isExpertForSchool, isPrincipalForSchool, isSchoolObserver, isHomeroomPeriod } from '../src/lib/expertAccess';
 import { apiAccessGuard } from '../server/auth/apiAccess';
-import { userManagementScope, creationCredentials } from '../server/auth/userProvisioning';
+import { canManageSchool, userManagementScope, creationCredentials } from '../server/auth/userProvisioning';
 test('Expert access follows active school membership and actual homeroom subject names',()=>{
  const roles=[{role:'EXPERT',schoolId:'a',status:'ACTIVE'},{role:'EXPERT',schoolId:'b',status:'REVOKED'}];
  assert(isExpertForSchool({},roles,'a'));assert(!isExpertForSchool({},roles,'b'));assert(!isExpertForSchool({name:'Pedagog'},[],'a'));
@@ -28,5 +28,22 @@ test('Expert cannot use legacy service mutations or cross-school reads, and read
   assert.equal((await post('/provision',{schoolId:'a',roles:['EXPERT']})).status,409);assert.equal(next,0);
   ready=true;assert.equal((await post('/provision',{schoolId:'a',roles:['EXPERT']})).status,200);assert.equal(next,1);
   assert.equal((await post('/provision',{schoolId:'a',roles:['EXPERT','TEACHER']})).status,400);assert.equal(next,1);
+  auth.profile.role='PRINCIPAL';auth.roles[0].role='PRINCIPAL';
+  assert.equal((await post('/api/admin/create-user',{schoolId:'a'})).status,403);
+  assert.equal((await fetch(url+'/api/student-notes?classId=own&studentId=pupil')).status,200);
+  assert.equal((await fetch(url+'/api/student-notes?classId=foreign&studentId=pupil')).status,403);
+  assert.equal((await post('/api/auth/change-pin',{userId:'other'})).status,403);
+  assert(!canManageSchool(auth,'a').allowed);
+  ready=false;assert.equal((await post('/provision',{schoolId:'a',roles:['PRINCIPAL']})).status,409);
+  ready=true;assert.equal((await post('/provision',{schoolId:'a',roles:['PRINCIPAL']})).status,200);
+  assert.equal((await post('/provision',{schoolId:'a',roles:['PRINCIPAL','SCHOOL_ADMIN']})).status,400);
  }finally{await new Promise<void>(r=>server.close(()=>r()));}
+});
+
+test('Principal school membership grants review without administrators or teachers',()=>{
+ const roles=[{role:'PRINCIPAL',schoolId:'a',status:'ACTIVE'}];
+ assert(isPrincipalForSchool({},roles,'a'));assert(isSchoolObserver({},roles,'a'));
+ assert(!isSchoolObserver({},roles,'b'));assert(!isExpertForSchool({},roles,'a'));
+ assert(!isPrincipalForSchool({role:'PRINCIPAL'},[],'a'));
+ assert(creationCredentials('Example8',['PRINCIPAL'],()=> '').isStaff);
 });

@@ -1,3 +1,4 @@
+import { isPrincipalForSchool } from '../../lib/expertAccess';
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -18,9 +19,16 @@ import { useNavigate } from 'react-router-dom';
 
 export default function RavnateljDashboardPage() {
   const navigate = useNavigate();
-  const { selectedSchoolId } = useSelection();
-  const { user } = useAuth();
+  const { selectedSchoolId, setSelectedSchoolId } = useSelection();
+  const { user, userSchoolRoles } = useAuth();
+  const isPrincipal = isPrincipalForSchool(user, userSchoolRoles, selectedSchoolId);
   
+  useEffect(() => {
+    if (!isPrincipalForSchool(user, userSchoolRoles)) return;
+    const ownSchools = userSchoolRoles.filter(r => r.role === Role.PRINCIPAL && (!r.status || r.status === 'ACTIVE')).map(r => r.schoolId);
+    if (!ownSchools.includes(selectedSchoolId) && ownSchools[0]) setSelectedSchoolId(ownSchools[0]);
+  }, [user, userSchoolRoles, selectedSchoolId, setSelectedSchoolId]);
+
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     studentsCount: 0,
@@ -50,7 +58,7 @@ export default function RavnateljDashboardPage() {
       setLoading(true);
 
       // Audit Log
-      if (user?.id && selectedSchoolId) {
+      if (!isPrincipal && user?.id && selectedSchoolId) {
         await logSystemAction({
           executor_id: user.id,
           school_id: selectedSchoolId,
@@ -305,8 +313,8 @@ export default function RavnateljDashboardPage() {
         {/* Navigation & Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-[#dee2e6] pb-6">
           <div>
-            <div className="flex items-center gap-2 text-[#005c8d] text-xs font-black uppercase tracking-widest mb-2 cursor-pointer hover:underline" onClick={() => navigate('/admin-skole')}>
-              <ArrowLeft size={14} /> Natrag u administraciju
+            <div className="flex items-center gap-2 text-[#005c8d] text-xs font-black uppercase tracking-widest mb-2 cursor-pointer hover:underline" onClick={() => navigate(isPrincipal ? '/select-class' : '/admin-skole')}>
+              <ArrowLeft size={14} /> Natrag na pregled
             </div>
             <h1 className="text-3xl font-black text-slate-900 tracking-tighter uppercase leading-none mb-2">Upravljačka ploča ravnatelja</h1>
             <p className="text-slate-500 font-medium text-sm">Strateški i operativni pregled uspjeha, izostanaka i pedagoškog rada škole</p>
