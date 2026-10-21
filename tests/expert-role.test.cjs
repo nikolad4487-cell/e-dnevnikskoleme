@@ -1,0 +1,76 @@
+const { test }=require('node:test');
+const assert=require('node:assert/strict');
+const { PGlite }=require('@electric-sql/pglite');
+const fs=require('node:fs');
+const read=p=>fs.readFileSync(require('node:path').join(__dirname,p),'utf8');
+const uid=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+for(const schema of ['partial','complete']) test(`Specialist permissions with ${schema} existing pedagogical schema resist direct and SECURITY DEFINER writes`,async()=>{
+ const db=new PGlite();
+ try{
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid PRIMARY KEY);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$SELECT '{}'::jsonb$$;CREATE SCHEMA storage;CREATE TABLE storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);CREATE TABLE storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;`);
+ await db.exec(read('fixtures/family-schema.sql'));await db.exec(read('fixtures/registry-schema.sql'));await db.exec(read('fixtures/existing-enrollment-bridge.sql'));
+ await db.exec(`CREATE VIEW v_school_document_records_detailed AS SELECT * FROM school_document_records;CREATE VIEW v_weekly_assignments_detailed AS SELECT * FROM weekly_assignments;CREATE VIEW v_student_education_records_detailed AS SELECT * FROM student_education_records;CREATE VIEW v_student_transport_records_detailed AS SELECT * FROM student_transport_records;`);
+ await db.exec('GRANT USAGE ON SCHEMA public,auth,storage TO authenticated;GRANT ALL ON ALL TABLES IN SCHEMA public,storage TO authenticated;');
+ await db.exec(read('../docs/AKTIVACIJA-RODITELJI-REFERADA.sql'));
+ const {activationSql}=await import('../scripts/build-registry-activation.mjs');await db.exec(activationSql());
+ if(schema==='complete') await db.exec(read('../migrations/20260603000000_audit_logs_and_triggers.sql').split('-- 3. Triggers for Grades')[0]);await db.exec(read('../migrations/20260524000007_pedagogical_restructure.sql'));if(schema==='partial')await db.exec("ALTER TABLE student_pedagogical_year_notes ALTER COLUMN school_year_id TYPE uuid USING school_year_id::uuid");
+ if(schema==='complete') await db.exec(read('../migrations/20260603000005_pedagogical_measures_and_expert_services.sql'));
+ const sql=read('../migrations/20261021000000_expert_role.sql');assert.equal(sql,read('../docs/AKTIVACIJA-STRUCNI-SURADNIK.sql'));
+ await db.exec(sql);
+ // Real legacy views cannot acquire BEFORE/AFTER row triggers.
+ assert.equal((await db.query("SELECT count(*)::int n FROM pg_trigger WHERE tgrelid='enrollment_final_grades'::regclass AND NOT tgisinternal")).rows[0].n,0);
+ const expertAuth=uid(20);
+ const expert=uid(1),pupil=uid(2),foreign=uid(3),teacher=uid(4),year=uid(5);
+ await db.exec("INSERT INTO schools(id,name)VALUES('a','School A'),('b','School B');");
+ await db.query("INSERT INTO school_years(id,school_id,name)VALUES($1,'a','2026/2027')",[year]);
+ await db.query("INSERT INTO classes(id,school_id,name,school_year_id)VALUES('ca','a','3.A',$1),('cb','b','3.B',$1)",[year]);
+ for(const [id,role,school]of[[expert,'EXPERT','a'],[pupil,'STUDENT','a'],[foreign,'STUDENT','b'],[teacher,'TEACHER','a']]){
+  await db.query('INSERT INTO auth.users(id)VALUES($1)',[id===expert?expertAuth:id]);
+  await db.query('INSERT INTO user_profiles(id,auth_user_id,role,school_id,name)VALUES($1,$4,$2,$3,$2)',[id,role,school,id===expert?expertAuth:id]);
+  await db.query("INSERT INTO user_school_roles(user_id,school_id,role,status)VALUES($1,$2,$3,'ACTIVE')",[id,school,role]);
+ }
+ for(const [student,c]of[[pupil,'ca'],[foreign,'cb']])await db.query("INSERT INTO student_class_enrollments(student_id,class_id,status)VALUES($1,$2,'ACTIVE')",[student,c]);
+ await db.exec("INSERT INTO subjects(id,school_id,name)VALUES('sr','a','Sat razrednika'),('math','a','Matematika'),('foreign','b','Matematika');INSERT INTO class_subjects(class_id,subject_id)VALUES('ca','sr'),('ca','math'),('cb','foreign');");
+ await db.query("INSERT INTO grades(id,class_id,student_id,subject_id,value)VALUES($1,'ca',$2,'math','5'),($3,'cb',$4,'foreign','4')",[uid(10),pupil,uid(11),foreign]);
+ await db.query("INSERT INTO lessons(id,class_id,subject_id,teacher_id)VALUES($1,'ca','sr',$2)",[uid(12),teacher]);
+ await db.exec(`CREATE FUNCTION test_expert_bypass() RETURNS void LANGUAGE sql SECURITY DEFINER SET search_path=public AS $$UPDATE grades SET value='1'$$;GRANT EXECUTE ON FUNCTION test_expert_bypass() TO authenticated;`);
+ const login=async id=>{await db.exec('RESET ROLE');await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)",[id===expert?expertAuth:id]);await db.exec('SET ROLE authenticated');};
+ const denyUpdate=async(sql,args)=>{try{const r=await db.query(sql+' RETURNING id',args);assert.equal(r.rows.length,0);}catch(e){if(e instanceof assert.AssertionError)throw e;assert.match(e.message,/Stručni|row-level|permission|ovlast/i);}};
+ await login(expert);
+ assert.equal((await db.query('SELECT id FROM classes')).rows.length,1);
+ assert.equal((await db.query('SELECT id FROM grades')).rows.length,1);
+ assert.equal((await db.query("SELECT id FROM user_profiles WHERE id=$1",[foreign])).rows.length,0);
+ assert.equal((await db.query('SELECT expert_workspace() x')).rows[0].x.schools.length,1);
+ const workspace=(await db.query("SELECT expert_workspace('ca') x")).rows[0].x;
+ assert.equal(workspace.students[0].id,pupil);assert.equal(workspace.subjects.length,2);assert(!JSON.stringify(workspace).includes('pin_hash'));
+ await assert.rejects(db.query("SELECT expert_workspace('cb')"));
+ await denyUpdate("UPDATE grades SET value='1' WHERE id=$1",[uid(10)]);
+ await assert.rejects(db.query('SELECT test_expert_bypass()'));
+ await denyUpdate("UPDATE subjects SET name='Changed' WHERE id='math'");
+ await db.query("UPDATE user_profiles SET name='Ogledni suradnik',mobile='000' WHERE id=$1",[expert]);
+ await denyUpdate("UPDATE user_profiles SET role='SCHOOL_ADMIN' WHERE id=$1",[expert]);
+ await denyUpdate("UPDATE lessons SET topic='Changed' WHERE id=$1",[uid(12)]);
+ await assert.rejects(db.query("INSERT INTO lessons(class_id,subject_id,teacher_id)VALUES('ca','math',$1)",[expert]));
+ await db.query("INSERT INTO lessons(id,class_id,subject_id,teacher_id,topic,created_at)VALUES($1,'ca','sr',$2,'Razredni razgovor',now())",[uid(13),expert]);
+ await db.query("UPDATE lessons SET topic='Podrška učenicima' WHERE id=$1",[uid(13)]);
+ await assert.rejects(db.query("UPDATE lessons SET subject_id='math' WHERE id=$1",[uid(13)]));
+ await db.query("INSERT INTO absences(student_id,class_id,lesson_id,teacher_id,status)VALUES($1,'ca',$2,$3,'PENDING')",[pupil,uid(13),expert]);
+ await assert.rejects(db.query("UPDATE absences SET status='JUSTIFIED' WHERE student_id=$1",[pupil]));
+ const save=await db.query("SELECT expert_pedagogy($1,'ca',$2,'PROFILE',$3) x",[pupil,year,JSON.stringify({visit_reason:'Razgovor',documentation:'Dokumentacija',program_adjustment:'REGULAR_WITH_INDIVIDUALIZATION'})]);
+ assert.equal(save.rows[0].x.visit_reason,'Razgovor');
+ await db.query("SELECT expert_pedagogy($1,'ca',$2,'YEAR',$3)",[pupil,year,JSON.stringify({recommendations:'Podrška',counselor_notes:'Provjeren razgovor'})]);
+ assert.equal((await db.query("SELECT count(*)::int n FROM registry_change_log WHERE entity='PEDAGOGY' AND actor_id=$1",[expert])).rows[0].n,2);
+ await assert.rejects(db.query("SELECT expert_pedagogy($1,NULL,NULL,'PROFILE',$2)",[foreign,JSON.stringify({visit_reason:'Forbidden'})]));
+ await assert.rejects(db.query("SELECT expert_pedagogy($1,'ca',$2,'PROFILE',$3)",[pupil,year,JSON.stringify({role:'ADMIN'})]));
+ await assert.rejects(db.query("SELECT expert_pedagogy($1,'cb',$2,'YEAR',$3)",[pupil,year,JSON.stringify({recommendations:'Forged class'})]));
+ await assert.rejects(db.query("SELECT registry_verify_enrollment(id,'REGULAR','Forged') FROM student_class_enrollments WHERE student_id=$1",[pupil]));
+ await db.query("INSERT INTO pedagogical_measures(school_id,student_id,class_id,school_year,measure_type,date,explanation,issuer)VALUES('a',$1,'ca','2026/2027','Pohvala',current_date,'Provjeren unos','Stručna služba')",[pupil]);
+ await db.exec('RESET ROLE');
+ assert.equal((await db.query("SELECT executor_id FROM system_audit_logs WHERE entity_type='pedagogical_measures'")).rows[0].executor_id,expert);
+ await db.exec('SET ROLE authenticated');
+ await db.query("UPDATE user_profiles SET program_adjustment='NONE' WHERE id=$1",[pupil]);
+ await login(teacher);await db.query("UPDATE grades SET value='4' WHERE id=$1",[uid(10)]);
+ await db.exec("RESET ROLE;SELECT set_config('request.jwt.claim.sub','',false)");await db.query("UPDATE user_school_roles SET status='REVOKED' WHERE user_id=$1",[expert]);
+ await login(expert);assert.equal((await db.query('SELECT id FROM classes')).rows.length,0);await assert.rejects(db.query("SELECT expert_pedagogy($1,'ca',$2,'PROFILE',$3)",[pupil,year,'{}']));
+ }catch(e){e.message += ' Query: '+String(e.query).slice(0,300);delete e.query;throw e;}finally{await db.close();}
+});

@@ -1,3 +1,4 @@
+import { isExpertForSchool, isHomeroomPeriod } from '../../lib/expertAccess';
 import { PlanningWeekSchedule } from '../../components/PlanningWeekSchedule';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -83,6 +84,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
   
   const selectedSchoolId = contextSchoolId || sessionStorage.getItem('selectedSchoolId') || localStorage.getItem('selectedSchoolId');
   const effectiveClassId = routeClassId || contextClassId;
+  const isExpert = isExpertForSchool(user, userSchoolRoles, selectedSchoolId);
   
   const [classes, setClasses] = useState<Class[]>([]);
   const selectedClass = classes.find(c => c.id === effectiveClassId);
@@ -91,18 +93,20 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
   const isAdminUser = isMainAdmin || isSchoolAdmin || highestRole === Role.ADMIN || highestRole === Role.MAIN_ADMIN;
 
   const canManageClass = React.useMemo(() => {
+    if (isExpert) return false;
     return isAdminUser || 
            user?.id === (selectedClass as any)?.homeroom_teacher_id || 
            user?.id === selectedClass?.homeroomTeacherId || 
            user?.id === (selectedClass as any)?.deputy_teacher_id ||
            user?.id === selectedClass?.deputyTeacherId;
-  }, [isAdminUser, user?.id, selectedClass]);
+  }, [isAdminUser, isExpert, user?.id, selectedClass]);
 
   const canManageAbsencesForClass = React.useMemo(() => {
+    if (isExpert) return false;
     return isAdminUser ||
            user?.id === (selectedClass as any)?.homeroom_teacher_id ||
            user?.id === selectedClass?.homeroomTeacherId;
-  }, [isAdminUser, user?.id, selectedClass]);
+  }, [isAdminUser, isExpert, user?.id, selectedClass]);
 
   const [students, setStudents] = useState<User[]>([]);
   const [allSubjects, setAllSubjects] = useState<any[]>([]);
@@ -380,14 +384,16 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
   const canAccessLektira = isAdminUser || teachesCroatian;
 
   const canCreateExam = useMemo(() => {
+    if (isExpert) return false;
     if (!user || !effectiveClassId) return false;
     if (isAdminUser) return true;
     return subjectAssignments.some(a => a.classId === effectiveClassId && a.teacherId === user.id);
-  }, [user, isAdminUser, effectiveClassId, subjectAssignments]);
+  }, [user, isAdminUser, isExpert, effectiveClassId, subjectAssignments]);
 
   const canTeachSubjectInClass = useMemo(() => {
     return (subjectId?: string) => {
       if (!subjectId || !effectiveClassId || !user) return false;
+      if (isExpert) return isHomeroomPeriod(allSubjects.find(s => s.id === subjectId)?.name);
       if (isAdminUser) return true;
       return subjectAssignments.some(a =>
         a.classId === effectiveClassId &&
@@ -395,18 +401,18 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
         a.teacherId === user.id
       );
     };
-  }, [effectiveClassId, isAdminUser, subjectAssignments, user]);
+  }, [effectiveClassId, isAdminUser, isExpert, allSubjects, subjectAssignments, user]);
 
   const lessonSubjectOptions = useMemo(() => {
     if (!effectiveClassId) return [];
     return allSubjects.filter(s =>
-      subjectAssignments.some(a =>
+      isExpert ? (isHomeroomPeriod(s.name) && classSubjects.some(cs => (cs.class_id || cs.classId) === effectiveClassId && (cs.subject_id || cs.subjectId) === s.id)) : subjectAssignments.some(a =>
         a.subjectId === s.id &&
         a.classId === effectiveClassId &&
         (isAdminUser || a.teacherId === user?.id)
       )
     );
-  }, [allSubjects, effectiveClassId, isAdminUser, subjectAssignments, user?.id]);
+  }, [allSubjects, classSubjects, effectiveClassId, isAdminUser, isExpert, subjectAssignments, user?.id]);
 
   const examSubjectOptions = useMemo(() => {
     if (!effectiveClassId) return [];
@@ -439,30 +445,32 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
 
   const canEditExam = useMemo(() => {
     return (exam: any) => {
-      if (!user) return false;
+      if (isExpert || !user) return false;
       if (isAdminUser) return true;
       const isCreator = exam.createdBy === user.id || exam.teacherId === user.id;
       return isCreator;
     };
-  }, [user, isAdminUser]);
+  }, [user, isAdminUser, isExpert]);
 
   const canDeleteExam = useMemo(() => {
     return (exam: any) => {
-      if (!user) return false;
+      if (isExpert || !user) return false;
       if (isAdminUser) return true;
       const isCreator = exam.createdBy === user.id || exam.teacherId === user.id;
       return isCreator;
     };
-  }, [user, isAdminUser]);
+  }, [user, isAdminUser, isExpert]);
 
   const canDeleteWeek = useMemo(() => {
+    if (isExpert) return false;
     if (!user || !effectiveClassId) return false;
     if (isAdminUser) return true;
     const isHomeroom = selectedClass ? (selectedClass.homeroomTeacherId === user.id || (selectedClass as any).homeroom_teacher_id === user.id) : false;
     return isHomeroom;
-  }, [user, isAdminUser, selectedClass, effectiveClassId]);
+  }, [user, isAdminUser, isExpert, selectedClass, effectiveClassId]);
 
   const canManageWeeks = useMemo(() => {
+    if (isExpert) return false;
     if (!user || !effectiveClassId) return false;
     if (isMainAdmin || highestRole === Role.ADMIN || isSchoolAdmin) return true;
     
@@ -473,7 +481,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
     );
 
     return isHomeroom || isDeputy || isTeachingThisClass;
-  }, [user, isMainAdmin, isSchoolAdmin, highestRole, selectedClass, effectiveClassId, subjectAssignments]);
+  }, [user, isMainAdmin, isSchoolAdmin, isExpert, highestRole, selectedClass, effectiveClassId, subjectAssignments]);
 
   const getAutoDutyStudents = (weekNum: number) => {
     if (!students || students.length === 0) return [];
@@ -874,7 +882,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
         const mappedClasses = mapList(classesData || [], mappers.class);
         
         let filteredClasses = mappedClasses;
-        if (!isAdminUser) {
+        if (!isAdminUser && !isExpert) {
           const teachingClassIds = formattedAssignments
             .filter((a: any) => a.teacherId === user.id)
             .map((a: any) => a.classId);
@@ -1751,7 +1759,7 @@ setStudents(uniqueStudents);
           topic: '',
           notes: '',
           materials: '',
-          teacherId: defaultValues?.teacherId || (user?.id || '')
+          teacherId: isExpert ? (user?.id || '') : defaultValues?.teacherId || (user?.id || '')
         });
       }
     setActiveLessonTab('SADRZAJ');
@@ -1907,13 +1915,15 @@ setStudents(uniqueStudents);
       return;
     }
 
+    const expertHomeroom = isExpert && isHomeroomPeriod(allSubjects.find(s => s.id === lessonForm.subjectId)?.name);
+    if (isExpert && !expertHomeroom) { toast.error('Stručni suradnik može uređivati samo sat razrednika.'); return; }
     const assignment = subjectAssignments.find(a =>
       a.subjectId === lessonForm.subjectId &&
       a.classId === effectiveClassId &&
       (isAdminUser || a.teacherId === user.id)
     );
 
-    if (!assignment && !isAdminUser) {
+    if (!assignment && !isAdminUser && !expertHomeroom) {
        toast.error('Možete unositi sate samo za predmete koje predajete ovom razredu.');
        return;
     }
@@ -1960,7 +1970,7 @@ setStudents(uniqueStudents);
           topic: lessonForm.topic || '',
           notes: lessonForm.notes || '',
           materials: lessonForm.materials || '',
-          teacher_id: lessonForm.teacherId || user.id,
+          teacher_id: isExpert ? user.id : lessonForm.teacherId || user.id,
           created_by_user_id: user.id,
           teacher_display_name: formatPersonName(user),
           updated_at: new Date().toISOString()

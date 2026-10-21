@@ -1,3 +1,4 @@
+import { isExpertForSchool } from '../../lib/expertAccess';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -210,7 +211,7 @@ function GroupFinalGradeModal({ isOpen, onClose, students, activeSubject, effect
 
 export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' | 'SUBJECTS' | 'GRADES' | 'NOTES' }) {
   const { classId: routeClassId } = useParams<{ classId: string }>();
-  const { user, isMainAdmin, highestRole } = useAuth();
+  const { user, isMainAdmin, highestRole, userSchoolRoles } = useAuth();
   const { selectedSchoolId, selectedClassId: contextClassId, isArchived } = useSelection();
   const location = useLocation();
   
@@ -468,7 +469,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         const mappedClasses = mapList(classesRaw || [], mappers.class);
         let filteredClasses = mappedClasses;
 
-        if (!isMainAdmin) {
+        if (!isMainAdmin && !isExpertForSchool(user, userSchoolRoles, selectedSchoolId)) {
           const teachingClassIds = (assignmentsRaw || [])
             .filter(a => a.teacher_id === user.id)
             .map(a => a.class_id);
@@ -975,6 +976,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
   }, [activeStudent?.id, activeSubject?.id, effectiveClassId, classes]);
 
   const canEditGrades = (subjectId: string) => {
+    if (isExpertForSchool(user, userSchoolRoles, selectedSchoolId)) return false;
     if (isArchived) return false;
     if (isMainAdmin) return true;
     const assignment = subjectAssignments.find(a => a.classId === effectiveClassId && a.subjectId === subjectId);
@@ -1957,7 +1959,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
       const visibleSubjects = allSubjects.filter(sub => {
         if (!studentSubjectIds.includes(sub.id)) return false;
         
-        if (isMainAdmin) return true;
+        if (isMainAdmin || isExpertForSchool(user, userSchoolRoles, selectedSchoolId)) return true;
         const activeClass = classes.find(c => c.id === effectiveClassId);
         const isHomeroomOrDeputy = activeClass?.homeroomTeacherId === user?.id || activeClass?.deputyTeacherId === user?.id;
         if (isHomeroomOrDeputy) return true;
@@ -2059,7 +2061,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
             const isClassSubject = classSubjects.some(cs => cs.subjectId === sub.id && cs.classId === effectiveClassId);
             if (!isClassSubject) return false;
             
-            if (isMainAdmin) return true;
+            if (isMainAdmin || isExpertForSchool(user, userSchoolRoles, selectedSchoolId)) return true;
             const activeClass = classes.find(c => c.id === effectiveClassId);
             const isHomeroomOrDeputy = activeClass?.homeroomTeacherId === user?.id || activeClass?.deputyTeacherId === user?.id;
             if (isHomeroomOrDeputy) return true;
@@ -2118,7 +2120,7 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
                 const isClassSubject = classSubjects.some(cs => cs.subjectId === sub.id && cs.classId === effectiveClassId);
                 if (!isClassSubject) return false;
                 
-                if (isMainAdmin) return true;
+                if (isMainAdmin || isExpertForSchool(user, userSchoolRoles, selectedSchoolId)) return true;
                 const activeClass = classes.find(c => c.id === effectiveClassId);
                 const isHomeroomOrDeputy = activeClass?.homeroomTeacherId === user?.id || activeClass?.deputyTeacherId === user?.id;
                 if (isHomeroomOrDeputy) return true;

@@ -175,7 +175,7 @@ export default function LoginPage() {
 
       // Enforce domain/portal-based role checks
       console.log("[LOGIN] Enforcing domain role check with roles:", roles);
-      const staffRoles = ['REGISTRAR', 'TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'];
+      const staffRoles = ['EXPERT', 'REGISTRAR', 'TEACHER', 'ADMIN', 'MAIN_ADMIN', 'SCHOOL_ADMIN', 'HOMEROOM', 'DEPUTY', 'HOMEROOM_TEACHER', 'STAFF'];
       const studentRoles = ['STUDENT', 'PARENT'];
 
       if (isTeacherDomain) {

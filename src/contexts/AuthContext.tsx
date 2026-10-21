@@ -42,6 +42,7 @@ const ROLE_PRIORITY: Record<Role, number> = {
   [Role.TEACHER]: 4,
   [Role.STUDENT]: 5,
   [Role.PARENT]: 6,
+  [Role.EXPERT]: 4,
   [Role.REGISTRAR]: 4
 };
 
@@ -55,6 +56,7 @@ const ROLE_DISPLAY_NAMES: Record<Role, string> = {
   [Role.DEPUTY]: 'Zamjenik razrednika',
   [Role.STUDENT]: 'Učenik',
   [Role.PARENT]: 'Roditelj',
+  [Role.EXPERT]: 'Stručni suradnik',
   [Role.REGISTRAR]: 'Školska referada'
 };
 
@@ -566,7 +568,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isStaff = React.useMemo(() => 
     isSchoolAdmin || 
     isSuperAdmin ||
-    effectiveSchoolRoles.some(r => [Role.TEACHER, Role.SCHOOL_ADMIN, Role.ADMIN, Role.SUPER_ADMIN, Role.MAIN_ADMIN, Role.HOMEROOM, Role.DEPUTY].includes(r.role))
+    effectiveSchoolRoles.some(r => [Role.EXPERT, Role.TEACHER, Role.SCHOOL_ADMIN, Role.ADMIN, Role.SUPER_ADMIN, Role.MAIN_ADMIN, Role.HOMEROOM, Role.DEPUTY].includes(r.role))
   , [isSchoolAdmin, isSuperAdmin, effectiveSchoolRoles]);
 
   const isTeacher = React.useMemo(() => 
