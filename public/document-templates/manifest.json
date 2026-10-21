@@ -1,0 +1,58 @@
+[
+  {
+    "template": "hzpp-pupil",
+    "file": "hzpp-pupil.pdf",
+    "source": "Zahtjev za pametnu karticu - učenici.pdf",
+    "sha256": "b4eb68b0b5ed73636796bfc7b98149dd4e31542b9f72fe744299d035eaa3d791",
+    "pages": 2,
+    "widgets": 0
+  },
+  {
+    "template": "hzpp-student",
+    "file": "hzpp-student.pdf",
+    "source": "Zahtjev za pametnu karticu - studenti.pdf",
+    "sha256": "1d0a15d4a26d36cb7c333f7e1779ec5823ff20c61b4e1e4a05ef3d032d03d2ec",
+    "pages": 2,
+    "widgets": 0
+  },
+  {
+    "template": "transport-100-social-2026-2027",
+    "file": "transport-100-social-2026-2027.pdf",
+    "source": "Potvrda-100-sufinanciranje-medumjesnoga-javnog-prijevoza-ucenika-ss-2026-2027.pdf",
+    "sha256": "4a73576d98e24ca7ff579a90859cd53dac005f3c26f4e913070781472f31a397",
+    "pages": 2,
+    "widgets": 0
+  },
+  {
+    "template": "transport-100-veterans-2026-2027",
+    "file": "transport-100-veterans-2026-2027.pdf",
+    "source": "Potvrda-100-sufinanciranje-medumjesnoga-javnog-prijevoza-ucenika-ss-2026-2027-branitelji.pdf",
+    "sha256": "858836b057ca0149758c68d522d2e48ca7f0d92e5f58af21c0386f963f7428bd",
+    "pages": 2,
+    "widgets": 0
+  },
+  {
+    "template": "transport-75-2026-2027",
+    "file": "transport-75-2026-2027.pdf",
+    "source": "Potvrda-75-sufinanciranje-medumjesnoga-javnog-prijevoza-ucenika-ss-2026-2027.pdf",
+    "sha256": "a8bed13ebf1313bfb24114091e9df28de0f2b5cd2cf7988c3e01850474259567",
+    "pages": 2,
+    "widgets": 0
+  },
+  {
+    "template": "zet-general",
+    "file": "zet-general.pdf",
+    "source": "Zahtjev za opću pretplatnu kartu.pdf",
+    "sha256": "49c083c78e69b8caf406ed8164c11f5757b22cf3be81587919d73482166a59a0",
+    "pages": 2,
+    "widgets": 14
+  },
+  {
+    "template": "zet-regular-2026-2027",
+    "file": "zet-regular-2026-2027.pdf",
+    "source": "Zahtjev za redovite učenike i studente_2026-2027.pdf",
+    "sha256": "f46b2d64a7c3fd4fae06c58d0a9a0d9e786f0ada4c499e708eb84b03f9ee2b26",
+    "pages": 2,
+    "widgets": 23
+  }
+]

@@ -223,3 +223,23 @@ html.student-dark [class*="bg-[#005c8d]"] {
     padding: 0.75rem 1rem;
   }
 }
+.registrar-workspace input:not([type="checkbox"]):not([type="file"]),
+.registrar-workspace select,
+.registrar-workspace textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  margin-top: 5px;
+  padding: 9px 12px;
+  border: 1px solid #d7e1eb;
+  border-radius: 7px;
+  background: white;
+  color: #1e293b;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.registrar-workspace label { min-width: 0; }
+.registrar-workspace input:focus, .registrar-workspace textarea:focus { outline: 2px solid #005c8d; outline-offset: 1px; }

@@ -12,6 +12,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/registrar/documents",
+      "destination": "/api/registrar"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/api/index"
     },
@@ -21,6 +25,10 @@
     }
   ],
   "functions": {
+    "api/registrar.ts": {
+      "maxDuration": 60,
+      "includeFiles": "public/{document-templates,fonts,stamps}/**"
+    },
     "api/index.ts": {
       "maxDuration": 60
     }

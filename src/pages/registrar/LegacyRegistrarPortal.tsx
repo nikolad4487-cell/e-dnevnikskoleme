@@ -1,0 +1,301 @@
+import { Navigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { useAuth } from "../../contexts/AuthContext";
+import { familyRpc, familyDate } from "../../lib/familyPortal";
+import {
+  buildAttendancePdf,
+  type AttendanceRecord,
+} from "../../lib/attendancePdf";
+import { CERTIFICATE_PURPOSES } from "../../lib/certificatePurposes";
+import { supabase } from "../../lib/supabase";
+import toast from "react-hot-toast";
+export default function RegistrarPortal() {
+  const { user, loading, signOut } = useAuth();
+  const [context, setContext] = useState<any>(null),
+    [error, setError] = useState(""),
+    [tab, setTab] = useState("STUDENTS"),
+    [students, setStudents] = useState<any[]>([]),
+    [records, setRecords] = useState<AttendanceRecord[]>([]),
+    [search, setSearch] = useState(""),
+    [selected, setSelected] = useState(""),
+    [purpose, setPurpose] = useState(""),
+    [busy, setBusy] = useState(false),
+    [name, setName] = useState(""),
+    [file, setFile] = useState<File | null>(null);
+  const load = async () => {
+    setError("");
+    try {
+      const ctx = await familyRpc("registrar_context");
+      setContext(ctx);
+      setName(ctx.signer?.signer_name || "");
+      setStudents(await familyRpc("registrar_students"));
+      setRecords(await familyRpc("registrar_certificates"));
+    } catch (e: any) {
+      setContext(null);
+      setError(e.message);
+    }
+  };
+  useEffect(() => {
+    if (user && !user.requiresAuthenticatorSetup) load();
+  }, [user?.id, user?.requiresAuthenticatorSetup]);
+  const pdf = async (record: AttendanceRecord) => {
+    const doc = await buildAttendancePdf(record);
+    doc.save(
+      `Potvrda-${record.snapshot.student.name.replace(/\s+/g, "-")}-${record.issued_at.slice(0, 10)}.pdf`,
+    );
+  };
+  const issue = async () => {
+    const enrollment = students.find((s) => s.id === selected);
+    if (!enrollment || !purpose) return;
+    setBusy(true);
+    try {
+      const record = await familyRpc("registrar_issue_certificate", {
+        _student: enrollment.student_id,
+        _class: enrollment.class_id,
+        _purpose: purpose,
+      });
+      await pdf(record);
+      setRecords(await familyRpc("registrar_certificates"));
+      toast.success("Potvrda referade je izdana i evidentirana.");
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const saveSignature = async () => {
+    if (!file || !context || !name.trim()) return;
+    setBusy(true);
+    try {
+      const bytes = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+      if (
+        file.size > 2 * 1024 * 1024 ||
+        ![137, 80, 78, 71, 13, 10, 26, 10].every((x, i) => bytes[i] === x)
+      )
+        throw new Error("Odaberite izvorni PNG potpisa do 2 MB.");
+      const path = `${context.school.id}/${crypto.randomUUID()}.png`;
+      const r = await supabase.storage
+        .from("registrar-assets")
+        .upload(path, file, { contentType: "image/png", upsert: false });
+      if (r.error) throw r.error;
+      await familyRpc("registrar_set_signature", { _path: path, _name: name });
+      setFile(null);
+      await load();
+      toast.success("Potpis je spremljen samo za vašu školu.");
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (user?.requiresAuthenticatorSetup)
+    return <Navigate to="/auth/setup-authenticator" replace />;
+  if (loading) return <p className="p-6">Učitavanje prijave…</p>;
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <header className="bg-[#005c8d] text-white p-4 md:px-8 flex flex-wrap justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold">Školska referada</h1>
+          <p className="text-sm">
+            {context?.school?.name || "Pristup prema korisničkom računu"}
+          </p>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="text-sm">{user?.name}</span>
+          <button onClick={signOut} className="border rounded px-3 py-2">
+            Odjava
+          </button>
+        </div>
+      </header>
+      {error ? (
+        <main className="max-w-2xl mx-auto p-6 space-y-4">
+          <div role="alert" className="bg-white border rounded p-5">
+            {error}
+          </div>
+          <button className="underline" onClick={load}>
+            Provjeri pristup ponovno
+          </button>
+        </main>
+      ) : !context ? (
+        <p className="p-6">Provjera škole…</p>
+      ) : (
+        <>
+          <nav className="flex flex-wrap gap-2 px-4 md:px-8 py-3 bg-white border-b">
+            {[
+              ["STUDENTS", "Učenici i potvrde"],
+              ["HISTORY", "Izdane potvrde"],
+              ["SIGNATURE", "Potpis referade"],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                onClick={() => setTab(value)}
+                className={`px-4 py-2 rounded ${tab === value ? "bg-blue-50 text-[#005c8d] font-bold" : "text-slate-600"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+          <main className="max-w-6xl mx-auto p-4 md:p-8 space-y-5">
+            {tab === "STUDENTS" && (
+              <>
+                <h2 className="text-xl font-bold">
+                  Učenici i potvrde o redovnom školovanju
+                </h2>
+                <form
+                  className="flex gap-3"
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    setBusy(true);
+                    try {
+                      setStudents(
+                        await familyRpc("registrar_students", {
+                          _search: search,
+                        }),
+                      );
+                      setSelected("");
+                    } catch (e: any) {
+                      toast.error(e.message);
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  <input
+                    aria-label="Pretraži učenike"
+                    placeholder="Ime, prezime ili OIB"
+                    value={search}
+                    maxLength={100}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  <button
+                    disabled={busy}
+                    className="bg-[#005c8d] text-white rounded px-4"
+                  >
+                    Pretraži
+                  </button>
+                </form>
+                <label>
+                  Učenik i razred
+                  <select
+                    value={selected}
+                    onChange={(e) => setSelected(e.target.value)}
+                  >
+                    <option value="">Odaberite učenika</option>
+                    {students.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} — {s.class_name} ({s.school_year})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-xs text-slate-500">
+                  Prikazuje se do 200 rezultata. Za precizniji odabir upišite
+                  ime ili OIB.
+                </p>
+                <label>
+                  Svrha potvrde
+                  <select
+                    value={purpose}
+                    onChange={(e) => setPurpose(e.target.value)}
+                  >
+                    <option value="">Odaberite svrhu</option>
+                    {CERTIFICATE_PURPOSES.map((p) => (
+                      <option key={p}>{p}</option>
+                    ))}
+                  </select>
+                </label>
+                <p className="text-sm">
+                  Potvrda referade sadrži pečat škole i{" "}
+                  {context.signer?.signature_path
+                    ? "spremljeni potpis odgovorne osobe."
+                    : "mjesto za vlastoručni potpis. Potpis možete dodati u kartici Potpis referade."}
+                </p>
+                <button
+                  disabled={busy || !selected || !purpose}
+                  onClick={issue}
+                  className="bg-[#005c8d] text-white rounded px-5 py-3 font-bold disabled:opacity-50"
+                >
+                  {busy ? "Priprema…" : "Izdaj potvrdu PDF"}
+                </button>
+              </>
+            )}
+            {tab === "HISTORY" && (
+              <>
+                <h2 className="text-xl font-bold">Izdane potvrde škole</h2>
+                {records.length === 0 && <p>Nema izdanih potvrda.</p>}
+                {records.map((r) => (
+                  <article
+                    key={r.id}
+                    className="bg-white border rounded p-4 flex flex-wrap gap-3 justify-between"
+                  >
+                    <div>
+                      <strong>{r.snapshot.student.name}</strong>
+                      <p className="text-sm">
+                        {familyDate(r.issued_at)} — {r.purpose}
+                      </p>
+                    </div>
+                    <button
+                      disabled={busy}
+                      className="underline text-[#005c8d]"
+                      onClick={async () => {
+                        setBusy(true);
+                        try {
+                          await pdf(r);
+                        } catch (e: any) {
+                          toast.error(e.message);
+                        } finally {
+                          setBusy(false);
+                        }
+                      }}
+                    >
+                      Preuzmi PDF
+                    </button>
+                  </article>
+                ))}
+              </>
+            )}
+            {tab === "SIGNATURE" && (
+              <>
+                <h2 className="text-xl font-bold">
+                  Potpis odgovorne osobe referade
+                </h2>
+                <p>
+                  Spremite izvorni prozirni PNG potpisa. Veličina na potvrdi
+                  prilagođava se automatski.
+                </p>
+                <label>
+                  Ime i prezime potpisnika
+                  <input
+                    value={name}
+                    maxLength={150}
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                </label>
+                <label>
+                  Potpis — PNG do 2 MB
+                  <input
+                    type="file"
+                    accept="image/png"
+                    onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  />
+                </label>
+                {context.signer?.signature_path && (
+                  <p className="text-sm text-green-800">
+                    Spremljen potpis: {context.signer.signer_name}
+                  </p>
+                )}
+                <button
+                  disabled={busy || !file || !name.trim()}
+                  onClick={saveSignature}
+                  className="bg-[#005c8d] text-white rounded px-4 py-2 disabled:opacity-50"
+                >
+                  Spremi potpis škole
+                </button>
+              </>
+            )}
+          </main>
+        </>
+      )}
+    </div>
+  );
+}
