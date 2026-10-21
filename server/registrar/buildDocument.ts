@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { PDFDocument, PDFCheckBox, rgb } from "pdf-lib";
 import fontkit from "@pdf-lib/fontkit";
 import monthCoordinates from "./monthCoordinates.js";
+import { printableSchoolAddress } from "./schoolAddress.js";
 import {
   boxCharacters,
   boxedBirthDate,
@@ -52,7 +53,7 @@ export async function buildRegistrarDocument(
     { subset: true },
   );
   const student = snapshot.student,
-    school = snapshot.school,
+    school = { ...snapshot.school, address: printableSchoolAddress(snapshot.school.address) },
     inputs = snapshot.inputs || {},
     cls = snapshot.class,
     year = snapshot.year.name;
@@ -131,6 +132,16 @@ export async function buildRegistrarDocument(
           text_11bwvm: inputs.pass_number,
           text_12fnqh: inputs.account_email,
         };
+    const fieldLabels: Record<string, string> = {
+      text_11bwvm: "Broj pretplatne karte",
+      text_12fnqh: "E-pošta za izradu pretplatne karte",
+      text_18ttpn: "Kontakt telefon",
+      text_19indx: "Naziv škole ili fakulteta",
+      text_20roib: "Adresa škole ili fakulteta",
+      text_26ytao: "Razred",
+      text_23cufb: "Mjesto i datum",
+      text_16cysw: "Mjesto i datum",
+    };
     for (const [key, value] of Object.entries(values)) {
       const field = form.getTextField(key);
       let text = clean(value);
@@ -158,7 +169,9 @@ export async function buildRegistrarDocument(
         while (size > 5.5 && font.widthOfTextAtSize(text, size) > width)
           size -= 0.25;
         if (font.widthOfTextAtSize(text, size) > width)
-          throw new Error("Podatak je predug za ZET rubriku.");
+          throw new Error(
+            `${fieldLabels[key] || "ZET rubrika"}: podatak ne stane u predviđeno polje izvornog obrasca. Provjerite unos; podatak nije skraćen.`,
+          );
       }
       field.setText(text);
       field.setFontSize(size);
