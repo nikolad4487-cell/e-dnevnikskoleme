@@ -13,6 +13,7 @@ export type Template = {
   year?: string;
   stamp?: Rect;
   signature?: Rect;
+  stampMark?: Rect; // Explicit M.P. label on our own generated documents only.
   forbidden: Rect[];
 };
 const rect = (
@@ -25,22 +26,24 @@ const rect = (
 export const templateCatalog: Record<string, Template> = {
   attendance: {
     pages: 1,
-    stamp: rect(0, 270, 670, 82, 82),
-    signature: rect(0, 370, 710, 140, 35),
+    stamp: rect(0, 270, 700, 100, 100),
+    signature: rect(0, 365, 727, 170, 43),
+    stampMark: rect(0, 310, 744, 24, 12),
     forbidden: [],
   },
   transcript: {
     pages: 1,
-    stamp: rect(0, 270, 700, 72, 72),
-    signature: rect(0, 370, 733, 140, 30),
+    stamp: rect(0, 270, 700, 100, 100),
+    signature: rect(0, 365, 727, 170, 43),
+    stampMark: rect(0, 310, 744, 24, 12),
     forbidden: [],
   },
   "zet-regular-2026-2027": {
     file: "zet-regular-2026-2027.pdf",
     pages: 2,
     year: "2026/2027",
-    stamp: rect(0, 90, 721, 45, 22),
-    signature: rect(0, 150, 721, 75, 22),
+    stamp: rect(0, 100, 708, 70, 70),
+    signature: rect(0, 90, 719, 140, 24),
     forbidden: [
       rect(0, 250, 690, 150, 90),
       rect(0, 405, 690, 140, 90),
@@ -60,8 +63,8 @@ export const templateCatalog: Record<string, Template> = {
   "hzpp-pupil": {
     file: "hzpp-pupil.pdf",
     pages: 2,
-    stamp: rect(1, 280, 465, 82, 65),
-    signature: rect(1, 370, 487, 150, 32),
+    stamp: rect(1, 365, 412, 90, 90),
+    signature: rect(1, 350, 414, 180, 37),
     forbidden: [
       rect(0, 20, 448, 525, 64),
       rect(0, 20, 585, 530, 200),
@@ -71,8 +74,8 @@ export const templateCatalog: Record<string, Template> = {
   "hzpp-student": {
     file: "hzpp-student.pdf",
     pages: 2,
-    stamp: rect(1, 280, 465, 82, 65),
-    signature: rect(1, 370, 487, 150, 32),
+    stamp: rect(1, 365, 412, 90, 90),
+    signature: rect(1, 350, 414, 180, 37),
     forbidden: [
       rect(0, 20, 448, 525, 64),
       rect(0, 20, 585, 530, 200),
@@ -83,24 +86,24 @@ export const templateCatalog: Record<string, Template> = {
     file: "transport-75-2026-2027.pdf",
     pages: 2,
     year: "2026/2027",
-    stamp: rect(0, 355, 463, 52, 29),
-    signature: rect(0, 425, 472, 100, 20),
+    stamp: rect(0, 435, 461.7, 48, 48),
+    signature: rect(0, 385, 465.8, 150, 27),
     forbidden: [rect(0, 50, 510, 500, 225), rect(1, 0, 0, 595.28, 841.89)],
   },
   "transport-100-social-2026-2027": {
     file: "transport-100-social-2026-2027.pdf",
     pages: 2,
     year: "2026/2027",
-    stamp: rect(0, 340, 449, 45, 20),
-    signature: rect(0, 405, 449, 100, 20),
+    stamp: rect(0, 423, 451.1, 34, 34),
+    signature: rect(0, 370, 451.1, 140, 18),
     forbidden: [rect(0, 50, 486, 495, 170), rect(1, 0, 0, 595.28, 841.89)],
   },
   "transport-100-veterans-2026-2027": {
     file: "transport-100-veterans-2026-2027.pdf",
     pages: 2,
     year: "2026/2027",
-    stamp: rect(0, 355, 470, 45, 21),
-    signature: rect(0, 425, 470, 100, 21),
+    stamp: rect(0, 433, 472.9, 41, 41),
+    signature: rect(0, 385, 473.1, 150, 18),
     forbidden: [rect(0, 50, 514, 500, 215), rect(1, 0, 0, 595.28, 841.89)],
   },
 };
