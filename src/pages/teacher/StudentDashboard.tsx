@@ -37,7 +37,7 @@ export default function StudentDashboard() {
         // 2. Fetch all student enrollments in class, sort alphabetically, and find index
         const { data: enrollments } = await supabase
           .from('student_class_enrollments')
-          .select('student_id, student:user_profiles(*)')
+          .select('student_id, student:user_profiles!student_class_enrollments_student_id_fkey(*)')
           .eq('class_id', classId);
 
         if (enrollments && enrollments.length > 0) {

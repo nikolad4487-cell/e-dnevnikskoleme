@@ -935,7 +935,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
       try {
         const { data: studentsData, error: se } = await supabase
           .from('student_class_enrollments')
-          .select('*, student:user_profiles(*)')
+          .select('*, student:user_profiles!student_class_enrollments_student_id_fkey(*)')
           .eq('class_id', effectiveClassId)
           .eq('status', 'ACTIVE');
         if (se) throw se;

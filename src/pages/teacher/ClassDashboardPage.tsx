@@ -140,7 +140,7 @@ export default function ClassDashboardPage() {
       // 2. Fetch Students (Učenici)
       const { data: studentsData, error: studentsError } = await supabase
         .from('student_class_enrollments')
-        .select('*, student:user_profiles(*)')
+        .select('*, student:user_profiles!student_class_enrollments_student_id_fkey(*)')
         .eq('class_id', classId);
       
       console.log("STUDENTS result", studentsData, studentsError);

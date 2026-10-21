@@ -25,3 +25,9 @@ Nakon objave aplikacija i ove migracije administrator u e-Dnevniku ili e-Matici 
 ## Provjere
 
 Testovi pokrivaju različite Auth/profil identifikatore, vlastitu i stranu školu, izravne izmjene i pokušaj preko SECURITY DEFINER funkcije, zabranu promjene ocjene/uloge/predmeta, vlastiti Sat razrednika i njegovo prisustvo, pedagoško spremanje i audit, pogrešnog učenika/razred/godinu, opoziv uloge, te nastavak rada postojećih ovlasti i enrollment_final_grades kao tablice/pogleda. Browser test e-Matice provjerava izmjenu kartona, godišnje dokumentacije, promjenu učenika, pogreške i uski prikaz.
+
+## Provjera dohvaćanja učenika
+
+Nakon dodavanja `status_verified_by` upis ima dvije veze prema `user_profiles`. Svi prikazi učenika moraju izričito koristiti `student_class_enrollments_student_id_fkey`; neodređeni join vraća PostgREST `PGRST201` i može prekinuti učitavanje cijelog konteksta razreda prije radnih tjedana.
+
+`NODE_USE_ENV_PROXY=1 node scripts/check-enrollment-relations.mjs` provjerava stvarne select upite iz aplikacije prema konfiguriranoj bazi s `limit(0)`, bez preuzimanja učenika. Potrebne su postojeće Supabase varijable na poslužitelju. Ovaj popravak ne zahtijeva novu SQL aktivaciju niti promjenu ovlasti.

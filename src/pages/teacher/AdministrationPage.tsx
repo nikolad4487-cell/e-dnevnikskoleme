@@ -975,7 +975,7 @@ export default function AdministrationPage() {
     try {
       const { data, error } = await supabase
         .from('student_class_enrollments')
-        .select('*, student:user_profiles(*)')
+        .select('*, student:user_profiles!student_class_enrollments_student_id_fkey(*)')
         .eq('class_id', classId);
       
       if (error) throw error;
@@ -1385,7 +1385,7 @@ setStudents(uniqueMapped as any);
 
       const { data: enrollments, error: err } = await supabase
         .from('student_class_enrollments')
-        .select('*, student:user_profiles(*)')
+        .select('*, student:user_profiles!student_class_enrollments_student_id_fkey(*)')
         .eq('class_id', classToFetch)
         .eq('status', 'ACTIVE');
       

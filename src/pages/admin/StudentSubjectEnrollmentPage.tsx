@@ -94,7 +94,7 @@ export default function StudentSubjectEnrollmentPage() {
 
       const { data: enrolls } = await supabase
         .from('student_class_enrollments')
-        .select('student:user_profiles(*)')
+        .select('student:user_profiles!student_class_enrollments_student_id_fkey(*)')
         .eq('class_id', selectedClassId)
         .eq('status', 'ACTIVE');
       

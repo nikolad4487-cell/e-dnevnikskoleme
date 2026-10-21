@@ -78,7 +78,7 @@ export default function BiljeskePage() {
       // 2. Fetch Students
       const { data: enrollData } = await supabase
         .from('student_class_enrollments')
-        .select('student:user_profiles(*)')
+        .select('student:user_profiles!student_class_enrollments_student_id_fkey(*)')
         .eq('class_id', effectiveClassId)
         .eq('status', 'ACTIVE');
 

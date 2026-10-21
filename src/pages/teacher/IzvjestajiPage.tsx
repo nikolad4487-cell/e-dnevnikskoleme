@@ -70,7 +70,7 @@ export default function IzvjestajiPage() {
           });
       } else if (activeTab === 'STUDENTS') {
           // fetch students stats
-          let studentsQ = supabase.from('student_class_enrollments').select('student_id, user_profiles(name, email)').eq('status', 'ACTIVE');
+          let studentsQ = supabase.from('student_class_enrollments').select('student_id, user_profiles:user_profiles!student_class_enrollments_student_id_fkey(name, email)').eq('status', 'ACTIVE');
           if (effectiveClassId) studentsQ = studentsQ.eq('class_id', effectiveClassId);
           
           const { data: stdData } = await studentsQ;
