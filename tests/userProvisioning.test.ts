@@ -52,3 +52,15 @@ test('Staff session verifies account role and PIN before minting a token, indepe
  role='REGISTRAR';const result=await staffSession(args);assert.equal(result.data.session.access_token,'example-session');assert.equal(generated,1);assert.equal(verified,1);
  args.verifyToken=async()=>({data:{user:{id:'other-auth'},session:{access_token:'foreign-session'}},error:null});assert((await staffSession(args)).error);
 });
+
+test('School credential resets exclude shared and global identities while owners retain access',async()=>{
+ const {canManageProfileIdentity}=await import('../server/auth/userProvisioning');
+ let links:any[]=[{school_id:'a',role:'TEACHER',status:'ACTIVE'}];let targetRole='TEACHER';
+ const db={from:(table:string)=>{const q:any={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:{id:'target',school_id:'a',role:targetRole},error:null}),then:(resolve:any)=>resolve({data:links,error:null})};return q;}};
+ const admin={userId:'admin',profile:{role:'SCHOOL_ADMIN',school_id:'a'},roles:[{role:'SCHOOL_ADMIN',school_id:'a',status:'ACTIVE'}]};
+ assert.equal(await canManageProfileIdentity(admin,db,'target'),true);
+ links.push({school_id:'b',role:'TEACHER',status:'ACTIVE'});assert.equal(await canManageProfileIdentity(admin,db,'target'),false);
+ assert.equal(await canManageProfileIdentity({...admin,userId:'target'},db,'target'),true);
+ links=[];targetRole='MAIN_ADMIN';assert.equal(await canManageProfileIdentity(admin,db,'target'),false);
+ assert.equal(await canManageProfileIdentity({profile:{role:'MAIN_ADMIN'},roles:[]},db,'target'),true);
+});

@@ -1,3 +1,4 @@
+import {fetchClassStaffProfiles} from '../../lib/schoolDirectory';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -103,10 +104,7 @@ export default function StudentIspitiPage() {
         const teacherIds = [...new Set(csts.map(c => c.teacherId))];
         const teacherMap = new Map<string, User>();
         if (teacherIds.length > 0) {
-          const { data: teacherProfiles } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .in('id', teacherIds);
+          const { data: teacherProfiles } = await fetchClassStaffProfiles(selectedClassId);
           (teacherProfiles || []).forEach(tp => {
             const u = mappers.user(tp) as User;
             teacherMap.set(u.id, u);

@@ -1,3 +1,4 @@
+import WorkQueue from '../../components/workflows/WorkQueue';
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -112,6 +113,7 @@ export default function SchoolAdminDashboard() {
 
   return (
     <div className="flex flex-col h-full bg-white font-sans">
+      <WorkQueue schoolId={selectedSchoolId} />
       <div className="ed-header">
         <div className="flex items-center gap-2">
           <Building2 size={16} className="text-[#005c8d]" />

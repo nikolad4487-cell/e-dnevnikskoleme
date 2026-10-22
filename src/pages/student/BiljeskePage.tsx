@@ -1,3 +1,4 @@
+import {fetchStaffProfiles} from '../../lib/schoolDirectory';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -71,12 +72,13 @@ export default function BiljeskePage() {
           if (cData) {
             setClassData(cData as Class);
 
+            const directory=await fetchStaffProfiles(cData.school_id);
             if (cData.homeroom_teacher_id) {
-              const { data: tData } = await supabase.from('user_profiles').select('id, name, email').eq('id', cData.homeroom_teacher_id).maybeSingle();
+              const { data: tData } = {data:directory.data.find(p=>p.id===cData.homeroom_teacher_id)};
               if (tData) setHomeroomTeacher(tData as any);
             }
             if (cData.deputy_teacher_id) {
-              const { data: dData } = await supabase.from('user_profiles').select('id, name, email').eq('id', cData.deputy_teacher_id).maybeSingle();
+              const { data: dData } = {data:directory.data.find(p=>p.id===cData.deputy_teacher_id)};
               if (dData) setDeputyTeacher(dData as any);
             }
 

@@ -1,3 +1,4 @@
+import {fetchClassStaffProfiles} from '../../lib/schoolDirectory';
 import { visibleParentGrades } from '../../lib/familyPortal';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -205,10 +206,7 @@ export default function OcjenePage() {
         // 4. Get teacher profiles
         const teacherIds = [...new Set(csts.map(c => c.teacherId))];
         if (teacherIds.length > 0) {
-          const { data: teacherProfiles } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .in('id', teacherIds);
+          const { data: teacherProfiles } = await fetchClassStaffProfiles(selectedClassId);
           
           const teacherMap: Record<string, User> = {};
           (teacherProfiles || []).forEach(tp => {

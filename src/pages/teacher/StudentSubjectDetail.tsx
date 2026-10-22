@@ -1,3 +1,4 @@
+import {fetchStaffProfiles} from '../../lib/schoolDirectory';
 import { isSchoolObserver } from '../../lib/expertAccess';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -274,7 +275,7 @@ export default function StudentSubjectDetail() {
 
   const currentUserDisplayName = getProfileDisplayName(user);
 
-  const getTeacherNamesById = async (teacherIds: string[]) => {
+  const getTeacherNamesById = async (teacherIds: string[],schoolId?:string) => {
     const uniqueTeacherIds = Array.from(new Set(teacherIds.filter(Boolean)));
     if (uniqueTeacherIds.length === 0) return new Map<string, string>();
 
@@ -286,38 +287,8 @@ export default function StudentSubjectDetail() {
       }
     });
 
-    const { data: profilesById, error: profileIdError } = await supabase
-      .from('user_profiles')
-      .select('id, auth_user_id, name, surname, first_name, last_name, full_name')
-      .in('id', uniqueTeacherIds);
-
-    if (profileIdError) {
-      console.warn('Teacher profile fetch by id failed:', profileIdError);
-    }
-
-    (profilesById || []).forEach((profile: any) => {
-      const displayName = getProfileDisplayName(profile);
-      if (profile.id) names.set(profile.id, displayName);
-      if (profile.auth_user_id) names.set(profile.auth_user_id, displayName);
-    });
-
-    const missingIds = uniqueTeacherIds.filter(id => !names.has(id));
-    if (missingIds.length > 0) {
-      const { data: profilesByAuthId, error: authIdError } = await supabase
-        .from('user_profiles')
-        .select('id, auth_user_id, name, surname, first_name, last_name, full_name')
-        .in('auth_user_id', missingIds);
-
-      if (authIdError) {
-        console.warn('Teacher profile fetch by auth_user_id failed:', authIdError);
-      }
-
-      (profilesByAuthId || []).forEach((profile: any) => {
-        const displayName = getProfileDisplayName(profile);
-        if (profile.id) names.set(profile.id, displayName);
-        if (profile.auth_user_id) names.set(profile.auth_user_id, displayName);
-      });
-    }
+    const directory=await fetchStaffProfiles(schoolId);
+    directory.data.forEach((profile:any)=>{const name=getProfileDisplayName(profile);if(profile.id)names.set(profile.id,name);if(profile.auth_user_id)names.set(profile.auth_user_id,name);});
 
     return names;
   };
@@ -413,7 +384,7 @@ export default function StudentSubjectDetail() {
         setNewGradeElement(elementNames[0]);
       }
 
-      const teacherNames = await getTeacherNamesById((grData || []).map((g: any) => g.teacher_id || g.teacherId));
+      const teacherNames = await getTeacherNamesById((grData || []).map((g: any) => g.teacher_id || g.teacherId),classData?.school_id);
       setGrades((grData || []).map((grade: any) => ({
         ...grade,
         teacher_name: teacherNames.get(grade.teacher_id || grade.teacherId) || 'Nepoznato'

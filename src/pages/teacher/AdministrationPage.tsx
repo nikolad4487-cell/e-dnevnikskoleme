@@ -1356,7 +1356,7 @@ setAllSubjects(uniqueSub);
             .select('student_id, class_id, program_id, status')
             .eq('status', 'ACTIVE');
 
-          const mapped = allSchoolEnrollments.map(row => {
+          const mapped = allSchoolEnrollments.filter(row=>row.user).map(row => {
             const profile = row.user;
             const enrollment = currentEnrollments?.find(e => e.student_id === profile.id);
             return {

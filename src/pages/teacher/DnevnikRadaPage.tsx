@@ -1,3 +1,4 @@
+import {fetchSchoolStaff} from '../../lib/schoolDirectory';
 import { isSchoolObserver, isPrincipalForSchool, isHomeroomPeriod } from '../../lib/expertAccess';
 import { PlanningWeekSchedule } from '../../components/PlanningWeekSchedule';
 import React, { useState, useEffect, useMemo } from 'react';
@@ -904,10 +905,7 @@ export default function DnevnikRadaPage({ initialView }: { initialView?: Dnevnik
         if (se) throw se;
         setRawSubjects(mapList(subjectsData || [], mappers.subject));
 
-        const { data: rolesData, error: re } = await supabase
-          .from('user_school_roles')
-          .select('*, user:user_profiles(*)')
-          .eq('school_id', selectedSchoolId);
+        const { data: rolesData, error: re } = await fetchSchoolStaff(selectedSchoolId);
         if (re) throw re;
 
         const staffRoles = (rolesData || []).filter(r => 

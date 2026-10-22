@@ -17,7 +17,7 @@ export function hasAnyRole(userRoles: any[], rolesToCheck: string[]): boolean {
   const normalized = (userRoles || []).map(r => {
     if (!r) return '';
     if (typeof r === 'string') return r.toUpperCase();
-    if (typeof r === 'object' && r.role) return String(r.role).toUpperCase();
+    if (typeof r === 'object' && r.role) return (!r.status || String(r.status).toUpperCase() === 'ACTIVE') ? String(r.role).toUpperCase() : '';
     return String(r).toUpperCase();
   }).filter(Boolean);
 
@@ -26,6 +26,8 @@ export function hasAnyRole(userRoles: any[], rolesToCheck: string[]): boolean {
 }
 
 export function isSchoolAdminUser(profile: any, roles: any[] = []): boolean {
+  const adminMemberships = roles.filter(r => ["ADMIN","SCHOOL_ADMIN","SUPER_ADMIN","MAIN_ADMIN"].includes(String(r?.role || "").toUpperCase()));
+  if (adminMemberships.length) return hasAnyRole(adminMemberships, ["ADMIN","SCHOOL_ADMIN","SUPER_ADMIN","MAIN_ADMIN"]);
   return (
     hasAnyRole(roles, ["ADMIN", "SCHOOL_ADMIN", "SUPER_ADMIN", "MAIN_ADMIN"]) ||
     profile?.role === "ADMIN" ||

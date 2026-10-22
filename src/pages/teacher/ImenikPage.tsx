@@ -1,3 +1,4 @@
+import {fetchSchoolStaff} from '../../lib/schoolDirectory';
 import { isSchoolObserver } from '../../lib/expertAccess';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
@@ -497,14 +498,10 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
         if (pe) throw pe;
         setPrograms(programsRaw || []);
 
-        const { data: teachersRaw, error: te } = await supabase
-          .from('user_school_roles')
-          .select('*, user:user_profiles(*)')
-          .eq('school_id', selectedSchoolId)
-          .in('role', [Role.TEACHER, Role.HOMEROOM]);
+        const { data: teachersRaw, error: te } = await fetchSchoolStaff(selectedSchoolId);
         if (te) throw te;
 
-        const mappedTeachers = (teachersRaw || []).map(r => {
+        const mappedTeachers = (teachersRaw || []).filter(r=>[Role.TEACHER,Role.HOMEROOM].includes(r.role)).map(r => {
           const u = mappers.user(r.user);
           return {
             ...u,
@@ -976,8 +973,9 @@ export default function ImenikPage({ initialView }: { initialView?: 'STUDENTS' |
   }, [activeStudent?.id, activeSubject?.id, effectiveClassId, classes]);
 
   const canEditGrades = (subjectId: string) => {
+    const selectedClass=classes.find(c=>c.id===effectiveClassId);
     if (isSchoolObserver(user, userSchoolRoles, selectedSchoolId)) return false;
-    if (isArchived) return false;
+    if (isArchived || selectedClass?.isLocked || (selectedClass as any)?.is_locked) return false;
     if (isMainAdmin) return true;
     const assignment = subjectAssignments.find(a => a.classId === effectiveClassId && a.subjectId === subjectId);
     return assignment?.teacherId === user?.id;

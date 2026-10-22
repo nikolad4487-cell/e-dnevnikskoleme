@@ -1,4 +1,4 @@
-import { isSchoolObserver } from '../../lib/expertAccess';
+import { isSchoolObserver, isPrincipalForSchool } from '../../lib/expertAccess';
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { useParams, useNavigate, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
@@ -10,6 +10,7 @@ import { mappers } from '../../lib/mappers';
 import { ImenikTable } from '../../components/ImenikTable';
 import { canManageClassAdministration } from '../../hooks/useClassAdminAccess';
 
+const SchoolHistoryPage = lazy(() => import('../shared/SchoolHistoryPage'));
 const TeacherIzostanciPage = lazy(() => import('./IzostanciPage'));
 const BiljeskePage = lazy(() => import('./BiljeskePage'));
 const DnevnikRadaPage = lazy(() => import('./DnevnikRadaPage'));
@@ -272,6 +273,7 @@ export default function ClassDashboardPage() {
 
   return (
     <div className="flex flex-col h-full bg-white">
+      {(canAccessClassAdmin || isPrincipalForSchool(user,userSchoolRoles,currentClass?.schoolId)) && <button className="self-end px-4 py-2 text-sm underline" onClick={()=>navigate(`/class/${classId}/povijest-promjena`)}>Povijest promjena razreda</button>}
       {isArchived && (
         <div className="bg-amber-100 border-b border-amber-200 px-6 py-2 flex items-center gap-3 shrink-0">
           <div className="w-5 h-5 bg-amber-500 text-white rounded-full flex items-center justify-center shrink-0">
@@ -316,6 +318,7 @@ export default function ClassDashboardPage() {
               <Route path="absences" element={<TeacherIzostanciPage />} />
               
               <Route path="pedagoska-dokumentacija" element={<PedagoskaDokumentacijaPage />} />
+              <Route path="povijest-promjena" element={<SchoolHistoryPage />} />
               <Route path="pedagogical" element={<PedagoskaDokumentacijaPage />} />
               <Route path="dosje" element={<DigitalniDosjePage />} />
               
