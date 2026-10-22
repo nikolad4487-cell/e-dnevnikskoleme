@@ -1,3 +1,4 @@
+import {fetchSchoolStaff} from '../lib/schoolDirectory';
 import React, { useEffect, useState, useRef } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { User, LogOut, Settings, Repeat, Bell, Building2, Shield, Menu, X, Home, Moon, FileText, BookOpen } from 'lucide-react';
@@ -88,7 +89,8 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
   }, [user?.id]);
 
   const markAsRead = async (id: string) => {
-    const { error } = await supabase.from('portal_notifications').update({ is_read: true }).eq('id', id).eq('user_id', user?.id);
+    let { error } = await supabase.rpc('portal_mark_notification', { _id: id });
+    if(error && ['PGRST202','42883'].includes(error.code)){const fallback=await supabase.from('portal_notifications').update({is_read:true}).eq('id',id).eq('user_id',user?.id);error=fallback.error;}
     if (!error) setNotifications(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
   };
 
@@ -111,7 +113,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
       if (selectedClassId && !hideContextLabels && !isClassSelectionPage) {
          const { data: cData } = await supabase
            .from('classes')
-           .select('name, school_year, homeroom:homeroom_teacher_id(name)')
+           .select('name, school_year, homeroom_teacher_id, homeroom:homeroom_teacher_id(name)')
            .eq('id', selectedClassId)
            .single();
          if (cData && isMounted) {
@@ -122,6 +124,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
            const rawHomeroom = (cData as any).homeroom;
            const homeroom = Array.isArray(rawHomeroom) ? rawHomeroom[0] : rawHomeroom;
            hLabel = homeroom?.name || '';
+           if(!hLabel && selectedSchoolId && cData.homeroom_teacher_id){const directory=await fetchSchoolStaff(selectedSchoolId);hLabel=directory.data.find(r=>r.user.id===cData.homeroom_teacher_id)?.user.name||'';}
          }
       }
 
@@ -470,6 +473,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
               <Settings size={14} />
               Promijeni PIN
             </button>
+            {(isPrincipal || canUseSchoolAdmin) && <button onClick={()=>{setIsMenuOpen(false);navigate('/povijest-promjena');}} className="w-full text-left px-4 py-2 text-xs font-bold">Povijest promjena</button>}
             {isPrincipal && (
               <button
                 onClick={() => {

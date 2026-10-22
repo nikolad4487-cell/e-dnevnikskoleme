@@ -1,3 +1,4 @@
+import {fetchClassStaffProfiles} from '../../lib/schoolDirectory';
 import { isSchoolObserver } from '../../lib/expertAccess';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -75,9 +76,7 @@ export default function StudentDashboard() {
           .select('subject_id, teacher_id')
           .eq('class_id', classId);
 
-        const { data: teachers } = await supabase
-          .from('user_profiles')
-          .select('id, name');
+        const { data: teachers } = await fetchClassStaffProfiles(classId);
 
         // Map assignments to a teacher map
         const teacherMap: Record<string, string[]> = {};

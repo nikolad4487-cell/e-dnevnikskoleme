@@ -1,3 +1,5 @@
+import {fetchSchoolStaff} from '../lib/schoolDirectory';
+import WorkQueue from '../components/workflows/WorkQueue';
 import { isSchoolObserver, isPrincipalForSchool } from '../lib/expertAccess';
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
@@ -384,6 +386,8 @@ export default function ClassSelectionPage() {
         assignedClassIds = (assignments || []).map(a => a.class_id);
       }
 
+      const directory=await fetchSchoolStaff(selectedSchoolId);
+      const staffById=new Map(directory.data.map(r=>[r.user.id,r.user.name]));
       const classesData: ClassWithDetails[] = (allClassData || [])
         .filter(cls => {
           if (isSchoolAdmin || isSchoolObserver(user, userSchoolRoles, selectedSchoolId)) return true;
@@ -412,8 +416,8 @@ export default function ClassSelectionPage() {
             status: cls.status,
             homeroomTeacherId: cls.homeroom_teacher_id,
             deputyTeacherId: cls.deputy_teacher_id,
-            homeroomTeacherName: (cls.homeroom as any)?.name,
-            deputyTeacherName: (cls.deputy as any)?.name,
+            homeroomTeacherName: (cls.homeroom as any)?.name || staffById.get(cls.homeroom_teacher_id),
+            deputyTeacherName: (cls.deputy as any)?.name || staffById.get(cls.deputy_teacher_id),
             userRoleInClass: role as any,
             program: cls.program,
             programName: programDisplay || `${cls.grade_level}. razred`
@@ -478,6 +482,11 @@ export default function ClassSelectionPage() {
         setSummaries(summariesData || []);
       }
 
+      // Resolve staff labels without reading their private login profiles.
+      const directorySchools = [...new Set<string>((enrollments || []).map((e: any) => e.classes?.school_id).filter(Boolean))];
+      const directories = await Promise.all(directorySchools.map(id => fetchSchoolStaff(id)));
+      const staffNames = new Map<string, string>(directories.flatMap(r => r.data.map(entry => [entry.user.id, entry.user.name] as [string, string])));
+
       // Group by class_id to get only unique classes student is enrolled in
       const classesData: ClassWithDetails[] = [];
       const seenClasses = new Set<string>();
@@ -499,8 +508,8 @@ export default function ClassSelectionPage() {
             status: env.status,
             homeroomTeacherId: env.classes.homeroom_teacher_id,
             deputyTeacherId: env.classes.deputy_teacher_id,
-            homeroomTeacherName: env.classes.homeroom?.name,
-            deputyTeacherName: env.classes.deputy?.name,
+            homeroomTeacherName: env.classes.homeroom?.name || staffNames.get(env.classes.homeroom_teacher_id),
+            deputyTeacherName: env.classes.deputy?.name || staffNames.get(env.classes.deputy_teacher_id),
             userRoleInClass: 'STUDENT',
             program: env.classes.program,
             programName: programDisplay || `${env.classes.grade_level}. razred`
@@ -689,6 +698,7 @@ export default function ClassSelectionPage() {
     <div className="min-h-screen bg-[#f8f9fa] font-sans flex flex-col">
       <Header showNav={false} />
       <div className="flex-1 max-w-5xl mx-auto py-12 px-6 w-full">
+        {isStaff && <WorkQueue schoolId={selectedSchoolId} />}
         <div className="flex justify-between items-center mb-8 gap-3">
           {schoolsCount > 0 ? (
             <div className="relative">

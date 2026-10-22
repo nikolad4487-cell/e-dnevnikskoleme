@@ -1,3 +1,4 @@
+import {fetchClassNames} from '../../lib/schoolDirectory';
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -120,16 +121,10 @@ export default function OsobniPodaciPage() {
 
       // Fetch ordinal position sorted alphabetically in real-time
       try {
-        const { data: classEnrollments } = await supabase
-          .from('student_class_enrollments')
-          .select('student:user_profiles!student_class_enrollments_student_id_fkey(id, name)')
-          .eq('class_id', cls.id)
-          .eq('status', 'ACTIVE');
+        const { data: classEnrollments } = await fetchClassNames(cls.id);
 
         if (classEnrollments) {
-          const rawList = classEnrollments
-            .map((e: any) => e.student)
-            .filter(Boolean);
+          const rawList = classEnrollments.filter(Boolean);
           const studentsList = sortStudentsBySurname(rawList);
 
           const index = studentsList.findIndex((s: any) => s.id === targetStudentId);

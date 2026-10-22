@@ -1,0 +1,71 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite'),fs=require('node:fs'),path=require('node:path');
+const read=p=>fs.readFileSync(path.join(__dirname,p),'utf8'),uid=n=>`00000000-0000-4000-8000-${String(n).padStart(12,'0')}`;
+test('Ordered workflows preserve school scope, rejected requests, audit and controlled year closure',async()=>{
+ const db=new PGlite();try{
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;CREATE SCHEMA auth;CREATE TABLE auth.users(id uuid PRIMARY KEY);CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$SELECT '{}'::jsonb$$;CREATE SCHEMA storage;CREATE TABLE storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);CREATE TABLE storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);ALTER TABLE storage.objects ENABLE ROW LEVEL SECURITY;`);
+ for(const file of ['fixtures/family-schema.sql','fixtures/registry-schema.sql','fixtures/existing-enrollment-bridge.sql','../docs/AKTIVACIJA-RODITELJI-REFERADA.sql'])await db.exec(read(file));
+ await db.exec('GRANT USAGE ON SCHEMA public,auth,storage TO authenticated;GRANT ALL ON ALL TABLES IN SCHEMA public,storage TO authenticated;');
+ await db.exec(`CREATE VIEW v_school_document_records_detailed AS SELECT * FROM school_document_records;CREATE VIEW v_weekly_assignments_detailed AS SELECT * FROM weekly_assignments;CREATE VIEW v_student_education_records_detailed AS SELECT * FROM student_education_records;CREATE VIEW v_student_transport_records_detailed AS SELECT * FROM student_transport_records;`);
+ const {activationSql}=await import('../scripts/build-registry-activation.mjs');await db.exec(activationSql());
+ for(const file of ['../migrations/20261021000000_expert_role.sql','../migrations/20261021000001_principal_role.sql'])await db.exec(read(file));
+ await db.exec('CREATE POLICY existing_absence_access ON absences FOR ALL TO authenticated USING(true) WITH CHECK(true);CREATE POLICY existing_grade_access ON grades FOR ALL TO authenticated USING(true) WITH CHECK(true)');
+ const sql=read('../migrations/20261022000000_school_workflows.sql');assert.equal(sql,read('../docs/AKTIVACIJA-RADNI-TIJEKOVI.sql'));await db.exec(sql);await db.exec(sql); // Safe activation retry.
+ const admin=uid(1),teacher=uid(2),parent=uid(3),student=uid(4),principal=uid(5),foreign=uid(6),year=uid(7);
+ await db.exec("INSERT INTO schools(id,name)VALUES('a','A'),('b','B')");
+ for(const [id,role,school]of[[admin,'SCHOOL_ADMIN','a'],[teacher,'HOMEROOM','a'],[parent,'PARENT','a'],[student,'STUDENT','a'],[principal,'PRINCIPAL','a'],[foreign,'SCHOOL_ADMIN','b']]){await db.query('INSERT INTO user_profiles(id,auth_user_id,role,school_id,name)VALUES($1,$1,$2,$3,$2)',[id,role,school]);await db.query("INSERT INTO user_school_roles(user_id,role,school_id,status)VALUES($1,$2,$3,'ACTIVE')",[id,role,school]);}
+ await db.query("INSERT INTO school_years(id,school_id,name)VALUES($1,'a','2026/2027')",[year]);
+ await db.query("INSERT INTO classes(id,school_id,school_year_id,name,homeroom_teacher_id)VALUES('ca','a',$1,'3.A',$2)",[year,teacher]);
+ await db.query("INSERT INTO classes(id,school_id,school_year_id,name,is_locked)VALUES('prelocked','a',$1,'3.B',true)",[year]);
+ await db.query("INSERT INTO student_class_enrollments(student_id,class_id,status)VALUES($1,'ca','ACTIVE')",[student]);
+ await db.exec("INSERT INTO subjects(id,school_id,name)VALUES('math','a','Matematika');INSERT INTO class_subjects(class_id,subject_id)VALUES('ca','math')");
+ await db.query("INSERT INTO class_subject_teachers(class_id,subject_id,teacher_id)VALUES('ca','math',$1)",[teacher]);
+ await db.query("INSERT INTO parent_child_relationships(parent_id,child_id,school_id)VALUES($1,$2,'a')",[parent,student]);
+ const login=async id=>{await db.exec('RESET ROLE');await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)",[id]);await db.exec('SET ROLE authenticated');};
+ await db.query("INSERT INTO absences(id,student_id,class_id,date,status)VALUES($1,$2,'ca','2026-10-22','PENDING')",[uid(8),student]);
+ await login(parent);
+ await assert.rejects(db.query("UPDATE user_profiles SET role='MAIN_ADMIN' WHERE id=$1",[parent]));
+ await assert.rejects(db.query("INSERT INTO user_school_roles(user_id,school_id,role,status)VALUES($1,'a','MAIN_ADMIN','ACTIVE')",[parent]));
+ assert.equal((await db.query("UPDATE user_profiles SET authenticator_secret='forged' WHERE id=$1 RETURNING id",[teacher])).rows.length,0);
+ assert.equal((await db.query('SELECT id FROM user_profiles WHERE id=$1',[teacher])).rows.length,0);
+ const directory=(await db.query("SELECT portal_staff_directory('a') x")).rows[0].x;assert(directory.some(r=>r.user.id===teacher));assert(!JSON.stringify(directory).includes('authenticator_secret'));assert(!JSON.stringify(directory).includes('pin_hash'));
+ await assert.rejects(db.query("SELECT portal_staff_directory('b')"));
+ assert.equal((await db.query("SELECT portal_class_names('ca') x")).rows[0].x[0].id,student);
+ const days=JSON.stringify([{date:'2026-10-22',absenceIds:[uid(8)],status:'JUSTIFIED',type:'Bolest - roditelj'}]);
+ await db.query("SELECT family_save_request($1,$2,'ca',$3,'Napomena')",[uid(9),student,days]);
+ await assert.rejects(db.query("SELECT family_reject_request($1,1,'Razlog')",[uid(9)]));
+ await login(teacher);const tasks=(await db.query("SELECT portal_work_queue('a') x")).rows[0].x;assert(tasks.some(t=>t.count===1&&t.key==='absence-ca'));
+ await assert.rejects(db.query("SELECT family_reject_request($1,1,'')",[uid(9)]));
+ await db.query("SELECT family_reject_request($1,1,'Potrebno je dopuniti dokumentaciju.')",[uid(9)]);
+ assert.equal((await db.query('SELECT status FROM absences WHERE id=$1',[uid(8)])).rows[0].status,'PENDING');
+ await assert.rejects(db.query("SELECT family_reject_request($1,1,'Ponovno')",[uid(9)]));
+ await login(parent);assert.equal((await db.query('SELECT status FROM family_absence_requests WHERE id=$1',[uid(9)])).rows[0].status,'REJECTED');
+ await assert.rejects(db.query("SELECT portal_history('a')"));await assert.rejects(db.query("SELECT portal_work_queue('a')"));
+ await login(foreign);await assert.rejects(db.query("SELECT portal_work_queue('a')"));await assert.rejects(db.query("SELECT portal_year_readiness('a',$1)",[year]));
+ await login(admin);let ready=(await db.query("SELECT portal_year_readiness('a',$1) x",[year])).rows[0].x;assert.equal(ready.canClose,false);assert.equal(ready.classes.find(c=>c.id==='ca').missingSubjects,1);
+ await assert.rejects(db.query("SELECT portal_close_year('a',$1,'Zaključivanje')",[year]));
+ await assert.rejects(db.query("SELECT portal_close_year('a',$1,'Zaključivanje',NULL)",[year]));
+ await assert.rejects(db.query("UPDATE school_years SET workflow_closed_at=now(),workflow_closure_reason='Zaobilazak' WHERE id=$1",[year]));
+ await login(teacher);await db.query("UPDATE absences SET status='JUSTIFIED' WHERE id=$1",[uid(8)]);
+ await db.exec("RESET ROLE;SELECT set_config('request.jwt.claim.sub','',false)");
+ await db.query("INSERT INTO student_subject_enrollments(student_id,class_id,subject_id,status)VALUES($1,'ca','math','ACTIVE')",[student]);
+ await db.query("INSERT INTO final_grades(student_id,class_id,subject_id,value,term)VALUES($1,'ca','math','4','FINAL')",[student]);
+ await login(admin);const check=(await db.query("SELECT portal_year_readiness('a',$1) x",[year])).rows[0].x;assert.equal(check.canClose,true,JSON.stringify(check));ready=(await db.query("SELECT portal_close_year('a',$1,'Provjereni završni podaci') x",[year])).rows[0].x;assert(ready.closedAt);assert.equal(ready.canClose,true);
+ await assert.rejects(db.query("UPDATE classes SET school_year_id=NULL WHERE id='ca'"));
+ await assert.rejects(db.query("UPDATE school_years SET workflow_closed_at=NULL,workflow_closure_reason='' WHERE id=$1",[year]));
+ await login(teacher);await assert.rejects(db.query("INSERT INTO grades(student_id,class_id,subject_id,teacher_id,value)VALUES($1,'ca','math',$2,5)",[student,teacher]));
+ await login(principal);await assert.rejects(db.query("SELECT portal_close_year('a',$1,'Ponovno otvaranje',true)",[year]));
+ const history=(await db.query("SELECT portal_history('a') x")).rows[0].x;assert(history.some(e=>e.action==='CLOSE'));assert(history.some(e=>e.entity==='absences'&&e.before_data.status==='PENDING'&&e.after_data.status==='JUSTIFIED'));
+ await assert.rejects(db.query("SELECT portal_history('b')"));
+ await login(admin);await db.query("SELECT portal_close_year('a',$1,'Ispravak uz obrazloženje',true)",[year]);
+ assert.equal((await db.query("SELECT is_locked FROM classes WHERE id='prelocked'")).rows[0].is_locked,true);
+ await login(teacher);await db.query("INSERT INTO grades(student_id,class_id,subject_id,teacher_id,value)VALUES($1,'ca','math',$2,5)",[student,teacher]);
+ // Observer roles can mark only their own notification read, without changing its content.
+ await db.exec("RESET ROLE;SELECT set_config('request.jwt.claim.sub','',false)");await db.query("INSERT INTO portal_notifications(id,user_id,title,body,link)VALUES($1,$2,'Obavijest','Tekst','/ravnatelj')",[uid(10),principal]);
+ await login(principal);await db.query('SELECT portal_mark_notification($1)',[uid(10)]);assert.equal((await db.query('SELECT is_read FROM portal_notifications WHERE id=$1',[uid(10)])).rows[0].is_read,true);
+ await assert.rejects(db.query("UPDATE portal_notifications SET body='Krivotvoreno' WHERE id=$1",[uid(10)]));
+ await db.exec("RESET ROLE;SELECT set_config('request.jwt.claim.sub','',false)");
+ await db.exec("INSERT INTO registry_change_log(school_id,entity,entity_id,action)SELECT 'a','PAGE',n::text,'INSERT' FROM generate_series(1,105)n");
+ await login(principal);const first=(await db.query("SELECT portal_history('a') x")).rows[0].x,last=first.at(-1);const second=(await db.query("SELECT portal_history('a',NULL,$1,$2) x",[last.changed_at,last.id])).rows[0].x;
+ assert.equal(first.filter(r=>r.entity==='PAGE').length+second.filter(r=>r.entity==='PAGE').length,105);assert.equal(new Set([...first,...second].map(r=>r.id)).size,first.length+second.length);
+ }finally{await db.close();}
+});

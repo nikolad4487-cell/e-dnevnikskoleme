@@ -10,7 +10,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
-  const { user, loading, error, userSchoolRoles, isMainAdmin, isSchoolAdmin, isStaff, isStudent, isParent, signOut, isStudentPortal } = useAuth();
+  const { user, loading, error, userSchoolRoles, isSuperAdmin, isSchoolAdmin, isStaff, isStudent, isParent, signOut, isStudentPortal } = useAuth();
   const location = useLocation();
 
   const navigate = useNavigate();
@@ -57,7 +57,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
   }
 
   // If Main Admin, allow everything
-  if (isMainAdmin) return <>{children}</>;
+  if (isSuperAdmin) return <>{children}</>;
 
   if (allowedRoles) {
     // Rely on useAuth pre-calculated booleans for common role checks
@@ -67,7 +67,7 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
       (allowedRoles.includes(Role.SCHOOL_ADMIN) && isSchoolAdmin) ||
       (allowedRoles.includes(Role.STUDENT) && isStudent) ||
       (allowedRoles.includes(Role.PARENT) && isParent) ||
-      userSchoolRoles.some(r => allowedRoles.includes(r.role))
+      userSchoolRoles.some(r => (!r.status || r.status === 'ACTIVE') && allowedRoles.includes(r.role))
     );
 
     if (!isAllowed) {

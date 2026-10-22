@@ -1,3 +1,4 @@
+import WorkQueue from '../../components/workflows/WorkQueue';
 import PdfPreview from "./PdfPreview";
 import React, { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
@@ -255,6 +256,7 @@ export default function RegistrarPortal() {
           </button>
         </div>
       </header>
+      <div className="px-4 md:px-8"><WorkQueue schoolId={ctx?.school.id} /></div>
       <main className="max-w-6xl mx-auto p-4 md:p-6 space-y-5">
         {error ? (
           <div role="alert" className="bg-white border p-5 rounded">

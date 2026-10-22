@@ -1,3 +1,4 @@
+import {fetchStaffProfiles,fetchClassNames} from '../../lib/schoolDirectory';
 import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../contexts/AuthContext';
@@ -27,7 +28,7 @@ interface ChatGroupWithMeta extends ChatGroup {
 
 export default function InformativkaPage() {
   const { user, userSchoolRoles } = useAuth();
-  const { selectedClassId, selectedChildId } = useSelection();
+  const { selectedClassId, selectedChildId, selectedSchoolId } = useSelection();
   
   // Core State
   const [activeTab, setActiveTab] = useState<'PERSONAL' | 'CHANNELS'>('PERSONAL');
@@ -495,13 +496,13 @@ export default function InformativkaPage() {
       const contacts: RecipientDetails[] = [];
 
       // Unified base profiles fetch
-      const { data: allProfiles } = await supabase.from('user_profiles').select('*');
-      const profiles = allProfiles || [];
+      const [directory,classmatesList] = await Promise.all([fetchStaffProfiles(selectedSchoolId),selectedClassId?fetchClassNames(selectedClassId):Promise.resolve({data:[]})]);
+      const profiles = [...directory.data,...classmatesList.data.map((p:any)=>({...p,role:'STUDENT',class_id:selectedClassId}))];
 
       if (isTeacher) {
         // Teacher view: all students in class, plus other teachers
         const classStudents = profiles.filter(p => p.role === 'STUDENT' && p.class_id === selectedClassId);
-        const otherTeachers = profiles.filter(p => p.role === 'NASTAVNIK' && p.id !== user.id);
+        const otherTeachers = profiles.filter(p => ['TEACHER','HOMEROOM','DEPUTY','PRINCIPAL','EXPERT','SCHOOL_ADMIN','ADMIN'].includes(p.role) && p.id !== user.id);
 
         classStudents.forEach(p => {
           contacts.push({ id: p.id, name: formatPersonName(p as any), role: 'STUDENT', classId: p.class_id });
@@ -517,10 +518,10 @@ export default function InformativkaPage() {
         // Fetch teachers
         const { data: teachersData } = await supabase
           .from('class_subject_teachers')
-          .select('teacher:user_profiles(*)')
+          .select('teacher_id')
           .eq('class_id', selectedClassId);
 
-        const teacherProfiles = (teachersData || []).map(t => t.teacher as any).filter(Boolean);
+        const teacherProfiles = (teachersData || []).map(t => directory.data.find(p=>p.id===t.teacher_id)).filter(Boolean);
         
         classmates.forEach(p => {
           contacts.push({ id: p.id, name: formatPersonName(p as any), role: 'STUDENT', classId: p.class_id });

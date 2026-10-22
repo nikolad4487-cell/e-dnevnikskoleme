@@ -1,0 +1,53 @@
+name: Encrypted database and document backup
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 1 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: encrypted-project-backup
+  cancel-in-progress: false
+jobs:
+  backup:
+    if: github.event_name == 'workflow_dispatch' || vars.BACKUP_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+      SUPABASE_URL: ${{ secrets.BACKUP_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.BACKUP_SUPABASE_SERVICE_ROLE_KEY }}
+      BACKUP_ENCRYPTION_KEY: ${{ secrets.BACKUP_ENCRYPTION_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Check configuration
+        shell: bash
+        run: |
+          test -n "$DATABASE_URL" && test -n "$SUPABASE_URL" && test -n "$SUPABASE_SERVICE_ROLE_KEY" && test -n "$BACKUP_ENCRYPTION_KEY" || { echo 'Configure the four BACKUP secrets described in docs/SIGURNOSNE-KOPIJE.md'; exit 1; }
+      - name: Snapshot and encrypt
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          backup_dir=$(mktemp -d)
+          trap 'rm -rf "$backup_dir"' EXIT
+          mkdir "$backup_dir/payload"
+          docker run --rm --network host --env DATABASE_URL postgres:17 sh -c 'pg_dump --format=custom --no-owner "$DATABASE_URL"' > "$backup_dir/payload/database.dump"
+          docker run --rm -v "$backup_dir/payload:/snapshot:ro" postgres:17 pg_restore --list /snapshot/database.dump > /dev/null
+          node scripts/backup/storage.mjs "$backup_dir/payload"
+          node scripts/backup/verify.mjs "$backup_dir/payload"
+          tar -C "$backup_dir/payload" -cf "$backup_dir/snapshot.tar" .
+          node scripts/backup/archive.mjs encrypt "$backup_dir/snapshot.tar" skolehr-backup.enc
+          node scripts/backup/archive.mjs decrypt skolehr-backup.enc "$backup_dir/verified.tar"
+          cmp "$backup_dir/snapshot.tar" "$backup_dir/verified.tar"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skolehr-encrypted-${{ github.run_id }}
+          path: skolehr-backup.enc
+          retention-days: 14
+          if-no-files-found: error

@@ -47,6 +47,7 @@ const PotvrdePage = lazy(() => import('./pages/student/PotvrdePage'));
 const FinalThesisTeacherPage = lazy(() => import('./pages/teacher/FinalThesisTeacherPage'));
 const MaturaTeacherPage = lazy(() => import('./pages/teacher/MaturaTeacherPage'));
 
+const SchoolHistoryPage = lazy(() => import('./pages/shared/SchoolHistoryPage'));
 const RavnateljDashboardPage = lazy(() => import('./pages/admin/RavnateljDashboardPage'));
 const MaticnaKnjigaPage = lazy(() => import('./pages/admin/MaticnaKnjigaPage'));
 const ArhivaPage = lazy(() => import('./pages/admin/ArhivaPage'));
@@ -229,6 +230,7 @@ export default function App() {
                       <BasicLayout><RavnateljDashboardPage /></BasicLayout>
                     </ProtectedRoute>
                   } />
+                  <Route path="/povijest-promjena" element={<ProtectedRoute allowedRoles={[Role.PRINCIPAL,Role.SCHOOL_ADMIN,Role.ADMIN]}><BasicLayout><SchoolHistoryPage /></BasicLayout></ProtectedRoute>} />
                   {/* Admin Routes */}
                   <Route path="/admin-skole/*" element={
                     <ProtectedRoute allowedRoles={[Role.MAIN_ADMIN, Role.SCHOOL_ADMIN, Role.ADMIN]}>

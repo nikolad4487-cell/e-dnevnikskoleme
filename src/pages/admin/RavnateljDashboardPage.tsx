@@ -1,3 +1,4 @@
+import WorkQueue from '../../components/workflows/WorkQueue';
 import { isPrincipalForSchool } from '../../lib/expertAccess';
 import React, { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -307,6 +308,7 @@ export default function RavnateljDashboardPage() {
   return (
     <div className="p-6 font-sans bg-[#f8f9fa] min-h-screen">
       <div className="max-w-7xl mx-auto space-y-6">
+      <WorkQueue schoolId={selectedSchoolId} />
         {/* Navigation & Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8 border-b border-[#dee2e6] pb-6">
           <div>

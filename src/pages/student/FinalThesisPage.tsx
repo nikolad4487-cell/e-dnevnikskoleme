@@ -1,3 +1,4 @@
+import {fetchStaffProfiles} from '../../lib/schoolDirectory';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSelection } from '../../contexts/SelectionContext';
@@ -76,11 +77,8 @@ export default function FinalThesisPage() {
     if (!studentId) return;
     setLoading(true);
     try {
-      const { data: mentorsData } = await supabase
-        .from('user_profiles')
-        .select('id, name, role')
-        .in('role', ['TEACHER', 'HOMEROOM', 'ADMIN', 'SCHOOL_ADMIN']);
-      setMentors(mentorsData || []);
+      const { data: mentorsData } = await fetchStaffProfiles(selectedSchoolId);
+      setMentors((mentorsData || []).filter(p=>['TEACHER','HOMEROOM','ADMIN','SCHOOL_ADMIN'].includes(p.role)));
 
       const response = await fetch(`/api/final-thesis?studentId=${studentId}`);
       if (response.ok) {

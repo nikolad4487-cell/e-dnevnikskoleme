@@ -9,7 +9,7 @@ export function creationCredentials(password:unknown,roles:string[],fallback:()=
 const normalizedRole=(value:unknown)=>String(value||'').toUpperCase();
 export function canManageSchool(auth:any,schoolId:string){
  const global=[auth?.profile?.role,auth?.profile?.access_role].some(r=>['MAIN_ADMIN','SUPER_ADMIN'].includes(normalizedRole(r))) || (auth.roles||[]).some((r:any)=>r.status==='ACTIVE'&&!r.school_id&&['MAIN_ADMIN','SUPER_ADMIN'].includes(r.role));
- const schoolAdmin=[auth?.profile?.role,auth?.profile?.access_role].some(r=>['ADMIN','SCHOOL_ADMIN'].includes(normalizedRole(r)))&&auth?.profile?.school_id===schoolId;
+ const schoolAdmin=[auth?.profile?.role,auth?.profile?.access_role].some(r=>['ADMIN','SCHOOL_ADMIN'].includes(normalizedRole(r)))&&auth?.profile?.school_id===schoolId&&! (auth.roles||[]).some((r:any)=>r.school_id===schoolId&&['ADMIN','SCHOOL_ADMIN'].includes(r.role)&&r.status&&r.status!=='ACTIVE');
  const schoolRole=(auth.roles||[]).some((r:any)=>r.school_id===schoolId&&r.status==='ACTIVE'&&['ADMIN','SCHOOL_ADMIN','MAIN_ADMIN','SUPER_ADMIN'].includes(r.role));
  return {allowed:!!schoolId&&(global||schoolAdmin||schoolRole),global};
 }
@@ -50,4 +50,14 @@ export function userManagementScope(authenticate:(req:any)=>Promise<any>,databas
    next();
   }catch{return res.status(503).json({success:false,error:'Provjera ovlasti za upravljanje korisnicima nije uspjela.'});}
  };
+}
+
+/** A shared account's credentials affect every institution; only its owner or global admin resets them. */
+export async function canManageProfileIdentity(auth:any,database:any,profileId:string){
+ if(profileId===auth.userId||canManageSchool(auth,'__global_check__').global)return true;
+ if(!database)return false;
+ const p=await database.from('user_profiles').select('id,school_id,role,access_role').eq('id',profileId).maybeSingle();
+ if(p.error||!p.data||[p.data.role,p.data.access_role].some(r=>['MAIN_ADMIN','SUPER_ADMIN'].includes(String(r||'').toUpperCase()))||!canManageSchool(auth,p.data.school_id).allowed)return false;
+ const roles=await database.from('user_school_roles').select('school_id,role,status').eq('user_id',profileId);
+ return !roles.error&&!(roles.data||[]).some((r:any)=>r.status==='ACTIVE'&&(r.school_id!==p.data.school_id||['MAIN_ADMIN','SUPER_ADMIN'].includes(r.role)));
 }

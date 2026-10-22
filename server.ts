@@ -1,5 +1,5 @@
 import {provisioningCors} from './server/auth/provisioningCors.js';
-import {creationCredentials, userManagementScope, STAFF_ROLES} from './server/auth/userProvisioning.js';
+import {creationCredentials, userManagementScope, canManageSchool, STAFF_ROLES} from './server/auth/userProvisioning.js';
 import {staffSession} from './server/auth/staffSession.js';
 import {apiAccessGuard} from './server/auth/apiAccess.js';
 import { schoolCalendarRoutes, legacyCalendarGuard } from './server/calendar/routes.js';
@@ -6210,7 +6210,8 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
 
       const { schoolId } = req.body || {};
-      const staffRoles = ['TEACHER', 'HOMEROOM', 'DEPUTY', 'SCHOOL_ADMIN', 'ADMIN', 'MAIN_ADMIN'];
+      const globalAdmin=canManageSchool((req as any).workflowActor,'__global_check__').global;
+      const staffRoles=STAFF_ROLES.filter(r=>r!=='REGISTRAR'&&(globalAdmin||!['MAIN_ADMIN','SUPER_ADMIN'].includes(r)));
       const profileIds = new Set<string>();
 
       if (schoolId) {
@@ -6224,7 +6225,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
         (roleRows || []).forEach((row: any) => {
           const status = String(row.status || 'ACTIVE').toUpperCase();
-          if (row.user_id && status !== 'INACTIVE') {
+          if (row.user_id && status === 'ACTIVE') {
             profileIds.add(row.user_id);
           }
         });
@@ -6247,14 +6248,16 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       const { data: profiles, error: profilesError } = await supabaseAdmin
         .from('user_profiles')
-        .select('id, name, email, role, authenticator_secret, requires_authenticator_setup, password_type')
+        .select('id, name, email, role, school_id, authenticator_secret, requires_authenticator_setup, password_type')
         .in('id', ids);
 
       if (profilesError) throw profilesError;
 
+      const shared=new Set<string>();
+      if(!globalAdmin&&ids.length){const links=await supabaseAdmin.from('user_school_roles').select('user_id,school_id,role,status').in('user_id',ids).eq('status','ACTIVE');if(links.error)throw links.error;for(const row of links.data||[])if(row.school_id!==schoolId||['MAIN_ADMIN','SUPER_ADMIN'].includes(row.role))shared.add(row.user_id);}
       const activeProfiles = (profiles || []).filter((profile: any) => {
         const role = String(profile.role || '').toUpperCase();
-        return staffRoles.includes(role) || ids.includes(profile.id);
+        return staffRoles.includes(role) && !shared.has(profile.id);
       });
       const profilesNeedingAuthenticator = activeProfiles.filter((profile: any) => {
         return !profile.authenticator_secret || profile.requires_authenticator_setup === true || profile.password_type === 'staff_with_authenticator';
@@ -6354,6 +6357,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
 
       if (!profile) throw new Error("Profil nije pronađen.");
 
+      if(profile.role!=='STUDENT')return res.status(400).json({error:'Ovaj postupak služi samo za učeničke račune.'});
       let newPassword = 'yupu8Ev4';
       if (type === 'GENERATE') {
         const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
