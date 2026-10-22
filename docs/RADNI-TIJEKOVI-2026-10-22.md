@@ -10,7 +10,7 @@ Zaštita rute više ne tretira školskog administratora kao glavnog administrato
 
 Administracijski API-ji i ključne školske izmjene zahtijevaju ovlasti za ustanovu, uključujući ustanovu zapisa iz URL-a. Administraciji bez odabrane škole automatski se primjenjuje aktivna vlastita škola. Grupni autentifikatori obrađuju aktivne djelatnike odgovarajuće škole; zajedničke račune i globalne račune obrađuje glavni administrator. Reset učeničke lozinke služi samo učeničkim računima.
 
-Imenici nastavnika koriste izričito ograničen RPC s imenima, ulogama i identifikatorima; ne preuzimaju tuđi PIN ili tajnu autentifikatora. Obični računi ne čitaju tuđe djelatničke profile. Imena nastavnika uz ocjene, ispite, završne radove i kontakte dohvaćaju se kroz taj imenik. Učenici za redni broj i kontakte koriste popis imena vlastitog razreda, bez osobnih podataka svih drugih učenika. Postojeća prijava PIN-om i TOTP-om ostaje.
+Imenici nastavnika koriste izričito ograničen RPC s imenima, ulogama i identifikatorima; ne preuzimaju tuđi PIN ili tajnu autentifikatora. Obični računi ne čitaju tuđe djelatničke profile. Školski administrator također ne može čitati vjerodajnice globalnih ni zajedničkih računa s aktivnim članstvima izvan svojih ovlasti. Imena nastavnika uz ocjene, ispite, završne radove i kontakte dohvaćaju se kroz taj imenik. Učenici za redni broj i kontakte koriste popis imena vlastitog razreda, bez osobnih podataka svih drugih učenika. Postojeća prijava PIN-om i TOTP-om ostaje.
 
 ## 2. Opravdavanje izostanaka
 

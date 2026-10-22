@@ -22,6 +22,10 @@ test('Ordered workflows preserve school scope, rejected requests, audit and cont
  await db.query("INSERT INTO parent_child_relationships(parent_id,child_id,school_id)VALUES($1,$2,'a')",[parent,student]);
  const login=async id=>{await db.exec('RESET ROLE');await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)",[id]);await db.exec('SET ROLE authenticated');};
  await db.query("INSERT INTO absences(id,student_id,class_id,date,status)VALUES($1,$2,'ca','2026-10-22','PENDING')",[uid(8),student]);
+ await db.query("INSERT INTO user_profiles(id,auth_user_id,role,school_id,name)VALUES($1,$1,'MAIN_ADMIN','a','Global'),($2,$2,'TEACHER','a','Shared')",[uid(11),uid(12)]);
+ await db.query("INSERT INTO user_school_roles(user_id,school_id,role,status)VALUES($1,'a','TEACHER','ACTIVE'),($1,'b','TEACHER','ACTIVE')",[uid(12)]);
+ await login(admin);
+ assert.equal((await db.query('SELECT id FROM user_profiles WHERE id IN ($1,$2)',[uid(11),uid(12)])).rows.length,0,'school admin cannot read global or shared credentials');
  await login(parent);
  await assert.rejects(db.query("UPDATE user_profiles SET role='MAIN_ADMIN' WHERE id=$1",[parent]));
  await assert.rejects(db.query("INSERT INTO user_school_roles(user_id,school_id,role,status)VALUES($1,'a','MAIN_ADMIN','ACTIVE')",[parent]));

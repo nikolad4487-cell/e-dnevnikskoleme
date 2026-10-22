@@ -258,7 +258,10 @@ DROP TRIGGER IF EXISTS workflow_identity ON user_school_roles;
 CREATE TRIGGER workflow_identity BEFORE INSERT OR UPDATE OR DELETE ON user_school_roles FOR EACH ROW EXECUTE FUNCTION workflow_identity_guard();
 -- Directory reads expose names and roles, never another staff member's PIN/TOTP.
 CREATE OR REPLACE FUNCTION public.workflow_profile_visible(_person uuid) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
- SELECT _person=portal_profile_id() OR EXISTS(SELECT 1 FROM user_profiles p WHERE p.id=_person AND portal_admin(p.school_id))
+ SELECT _person=portal_profile_id() OR registry_global_admin()
+ OR EXISTS(SELECT 1 FROM user_profiles p WHERE p.id=_person AND portal_admin(p.school_id)
+  AND upper(coalesce(p.role,'')) NOT IN ('MAIN_ADMIN','SUPER_ADMIN') AND upper(coalesce(p.access_role,'')) NOT IN ('MAIN_ADMIN','SUPER_ADMIN')
+  AND NOT EXISTS(SELECT 1 FROM user_school_roles r WHERE r.user_id=p.id AND r.status='ACTIVE' AND (r.role IN ('MAIN_ADMIN','SUPER_ADMIN') OR NOT portal_admin(r.school_id))))
  OR EXISTS(SELECT 1 FROM user_profiles p JOIN student_class_enrollments e ON e.student_id=p.id WHERE p.id=_person AND (p.role='STUDENT' OR EXISTS(SELECT 1 FROM user_school_roles WHERE user_id=p.id AND role='STUDENT' AND status='ACTIVE')) AND NOT EXISTS(SELECT 1 FROM user_school_roles WHERE user_id=p.id AND status='ACTIVE' AND role NOT IN ('STUDENT','PARENT')) AND e.status='ACTIVE' AND portal_student_reader(p.id,e.class_id))
 $$;
 DROP POLICY IF EXISTS workflow_profile_read ON user_profiles;
