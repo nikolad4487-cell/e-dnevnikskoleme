@@ -1,3 +1,4 @@
+import SchoolServicesPage from './components/services/SchoolServicesPage';
 import {resolvePortal} from './lib/portal';
 import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
@@ -341,6 +342,7 @@ export default function App() {
                           <Route path="matura" element={<MaturaPage />} />
                           <Route path="izostanci" element={<IzostanciPage />} />
                           <Route path="opravdavanje" element={<FamilyAbsencePage />} />
+                          <Route path="skolske-usluge" element={<SchoolServicesPage />} />
                           <Route path="raspored" element={<RasporedPage />} />
                           <Route path="osobni-podaci" element={<OsobniPodaciPage />} />
                           <Route path="potvrde" element={<PotvrdePage />} />

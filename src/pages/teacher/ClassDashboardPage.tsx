@@ -1,3 +1,4 @@
+import SchoolServicesPage from '../../components/services/SchoolServicesPage';
 import { isSchoolObserver, isPrincipalForSchool } from '../../lib/expertAccess';
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { useParams, useNavigate, Routes, Route, Navigate, useLocation } from 'react-router-dom';
@@ -315,6 +316,7 @@ export default function ClassDashboardPage() {
               <Route path="izostanci" element={<TeacherIzostanciPage />} />
               <Route path="zahtjevi-izostanaka" element={<FamilyAbsencePage review />} />
               <Route path="roditeljski-pristup" element={<FamilyLinksPage />} />
+              <Route path="skolske-usluge" element={<SchoolServicesPage />} />
               <Route path="absences" element={<TeacherIzostanciPage />} />
               
               <Route path="pedagoska-dokumentacija" element={<PedagoskaDokumentacijaPage />} />

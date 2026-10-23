@@ -243,3 +243,11 @@ html.student-dark [class*="bg-[#005c8d]"] {
 }
 .registrar-workspace label { min-width: 0; }
 .registrar-workspace input:focus, .registrar-workspace textarea:focus { outline: 2px solid #005c8d; outline-offset: 1px; }
+
+/* Keyboard and narrow-screen support for school service forms and PDF previews. */
+.school-services :is(button,a,input,select,textarea):focus-visible { outline: 3px solid #007ea8; outline-offset: 3px; }
+.school-services :is(input,select,textarea,iframe) { max-width: 100%; min-width: 0; }
+.school-services :is(p,article,label) { overflow-wrap: anywhere; }
+.school-services button { min-height: 40px; }
+.school-services iframe { width: 100%; }
+@media (prefers-reduced-motion: reduce) { .school-services * { scroll-behavior: auto; animation: none; transition: none; } }

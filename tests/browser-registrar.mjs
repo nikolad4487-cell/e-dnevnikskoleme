@@ -46,7 +46,7 @@ const person = {
 const entry = `import React from 'react';import{createRoot}from'react-dom/client';import{BrowserRouter}from'react-router-dom';import{Toaster}from'react-hot-toast';import RegistrarPortal from '${root}/src/pages/registrar/RegistrarPortal.tsx';window.__calls=[];window.__context=${JSON.stringify(context)};window.__person=${JSON.stringify(person)};createRoot(document.getElementById('root')).render(<BrowserRouter><RegistrarPortal/><Toaster/></BrowserRouter>);`;
 const mocks = {
   auth: `export const useAuth=()=>({user:{id:'test-office',name:'Test Referent'},loading:false,signOut:async()=>{}});`,
-  supabase: `export const supabase={auth:{getSession:async()=>({data:{session:{access_token:'test-only-token'}}})},rpc:async(name,args)=>{window.__calls.push({name,args});let data=null;if(name==='registrar_workspace')data=window.__context;else if(name==='registrar_class_students')data=[window.__person];else if(name==='registrar_document_archive')data=[{id:'${doc}',document_type:'zet-regular-2026-2027',student_name:'Testna Učenica',status:'IZDANO',school_year_id:'${year}',year_name:'2026./2027.',issued_on:'2026-10-20',created_at:'2026-10-20',purpose:'Prijevoz'}];else if(name==='registrar_theses')data=[{id:'${thesis}',student_id:'${student}',name:'Testna Učenica',thesis_title:'Ogledni završni rad'}];else if(name==='registrar_registry_log'||name==='registrar_transport_review')data=[];else if(name==='registrar_register_entry')data='${doc}';return {data,error:null}},storage:{from:()=>({upload:async()=>({error:null})})}};`,
+  supabase: `export const supabase={auth:{getSession:async()=>({data:{session:{access_token:'test-only-token'}}})},rpc:async(name,args)=>{window.__calls.push({name,args});let data=null;if(name==='portal_work_queue')data=[{key:'documents',title:'Dokumenti čekaju izdavanje',count:12,link:'https://referada.skolehr.xyz/'}];else if(name==='registrar_document')data={id:args._id,pdf_sha256:'test-sha',status:'SPREMNO',attestation_status:'VISUAL'};else if(name==='registrar_workspace')data=window.__context;else if(name==='registrar_class_students')data=[window.__person];else if(name==='registrar_document_archive')data=[{id:'${doc}',document_type:'zet-regular-2026-2027',student_name:'Testna Učenica',status:'IZDANO',school_year_id:'${year}',year_name:'2026./2027.',issued_on:'2026-10-20',created_at:'2026-10-20',purpose:'Prijevoz'}];else if(name==='registrar_theses')data=[{id:'${thesis}',student_id:'${student}',name:'Testna Učenica',thesis_title:'Ogledni završni rad'}];else if(name==='registrar_registry_log'||name==='registrar_transport_review')data=[];else if(name==='registrar_register_entry')data='${doc}';return {data,error:null}},storage:{from:()=>({upload:async()=>({error:null})})}};`,
 };
 const bundle = await build({
   stdin: { contents: entry, resolveDir: root, loader: "tsx" },
@@ -96,6 +96,7 @@ const server = createServer(async (req, res) => {
     for await (const part of req) body += part;
     const value = JSON.parse(body);
     requests.push(value);
+    if(value.action==='pending') {res.setHeader('Content-Type','application/json');return res.end(JSON.stringify([{id:'00000000-0000-4000-8000-000000000006',document_type:'attendance',student_name:'Učenik za nastavak',status:'SPREMNO',school_year_id:year,created_at:'2026-10-22'}]));}
     if (value.action === "download") {
       res.setHeader("Content-Type", "application/pdf");
       return res.end(pdf);
@@ -127,6 +128,7 @@ const browser = await chromium.launch({
   args: ["--no-sandbox", "--disable-dev-shm-usage"],
 });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+let navigations=0;page.on('framenavigated',frame=>{if(frame===page.mainFrame())navigations++;});
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 await page.route("**/*", (route) =>
@@ -232,6 +234,7 @@ try {
       "school-only attestation request",
       "real thesis id and manual official number preserved",
       "archive visible",
+      "pending task opens filtered queue without reload, resumes preview and issue, direct link survives reload",
       "year change clears previous class",
       "no horizontal overflow at 1280,1366,1920,390",
       "no React runtime errors",
@@ -242,6 +245,16 @@ try {
     dir + "/registrar-report.json",
     JSON.stringify(report, null, 2),
   );
+  const documentTimeOrigin=await page.evaluate(()=>performance.timeOrigin);
+  await page.getByRole('link',{name:'Dokumenti čekaju izdavanje (12)',exact:true}).click();
+  await page.getByRole('heading',{name:'Dokumenti čekaju izdavanje',exact:true}).waitFor();
+  await page.getByText('Učenik za nastavak',{exact:true}).waitFor();assert.equal(await page.evaluate(()=>performance.timeOrigin),documentTimeOrigin,'task must switch view without page reload');
+  await page.getByRole('button',{name:'Nastavi izdavanje',exact:true}).click();
+  const resumeIssue=page.getByRole('button',{name:'Izdaj pregledani dokument',exact:true});await resumeIssue.waitFor();
+  await page.waitForFunction(()=>Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='Izdaj pregledani dokument'&&!b.disabled));
+  await resumeIssue.click();await page.getByText('Dokument je izdan i evidentiran.',{exact:true}).waitFor();
+  assert(requests.some(r=>r.action==='pending'));assert(requests.some(r=>r.action==='issue'&&r.id==='00000000-0000-4000-8000-000000000006'));
+  await page.goto('http://127.0.0.1:'+server.address().port+'/?task=documents');await page.getByRole('heading',{name:'Dokumenti čekaju izdavanje',exact:true}).waitFor();await page.getByText('Učenik za nastavak',{exact:true}).waitFor();
   console.log(JSON.stringify(report));
 } catch (e) {
   console.log(
