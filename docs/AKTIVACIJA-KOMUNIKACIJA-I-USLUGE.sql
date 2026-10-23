@@ -520,6 +520,12 @@ CREATE POLICY services_substitution_reader ON teacher_substitutions FOR SELECT T
 DROP POLICY IF EXISTS services_substitution_scope ON teacher_substitutions;
 CREATE POLICY services_substitution_scope ON teacher_substitutions AS RESTRICTIVE FOR SELECT TO authenticated USING(portal_admin(school_id) OR EXISTS(SELECT 1 FROM user_school_roles WHERE user_id=portal_profile_id() AND school_id=teacher_substitutions.school_id AND status='ACTIVE'));
 
+-- Preserve the same restricted support scope under permissive legacy policies.
+CREATE OR REPLACE FUNCTION services_support_scope(_student uuid,_class text,_school text) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
+ SELECT EXISTS(SELECT 1 FROM student_class_enrollments e JOIN classes c ON c.id=e.class_id WHERE e.student_id=_student AND e.status='ACTIVE' AND (_class IS NULL OR e.class_id=_class) AND c.school_id=_school AND (services_manager(c.id) OR expert_class(c.id)))
+$$;
+DROP POLICY IF EXISTS services_support_private ON expert_service_activities;
+CREATE POLICY services_support_private ON expert_service_activities AS RESTRICTIVE FOR ALL TO authenticated USING(services_support_scope(student_id,class_id,school_id)) WITH CHECK(services_support_scope(student_id,class_id,school_id));
 -- Private files; no public download URLs are generated.
 INSERT INTO storage.buckets(id,name,public,file_size_limit,allowed_mime_types) VALUES('family-files','family-files',false,10485760,ARRAY['application/pdf','image/png','image/jpeg']) ON CONFLICT(id) DO UPDATE SET public=false,file_size_limit=EXCLUDED.file_size_limit,allowed_mime_types=EXCLUDED.allowed_mime_types;
 CREATE OR REPLACE FUNCTION services_file_reader(_path text) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$ SELECT EXISTS(SELECT 1 FROM message_attachments a JOIN messages m ON m.id=a.message_id WHERE a.file_url='family-files/'||_path AND services_chat_access(m.group_id)) $$;
