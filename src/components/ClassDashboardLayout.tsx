@@ -36,6 +36,7 @@ const STUDENT_NAV: NavItem[] = [
   { label: 'Raspored', path: '/student/raspored' },
   { label: 'Kalendar škole', path: '/student/kalendar' },
   { label: 'Informativka', path: '/student/informativka' },
+  { label: 'Školske usluge', path: '/student/skolske-usluge' },
   { label: 'Završni rad', path: '/student/zavrsni-rad' },
 ];
 
@@ -225,6 +226,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
         { id: 'pregled-rada', label: 'Pregled rada', path: `${classPathPrefix}/dnevnik-rada/pregled-rada`, icon: <List size={14} /> },
         { id: 'radni-tjedni', label: 'Radni tjedni', path: `${classPathPrefix}/dnevnik-rada/weeks`, icon: <List size={14} /> },
         { id: 'ispiti', label: 'Ispiti', path: `${classPathPrefix}/ispiti`, icon: <Calendar size={14} /> },
+        { id: 'skolske-usluge', label: 'Školske usluge', path: `${classPathPrefix}/skolske-usluge`, icon: <Users size={14} /> },
         { id: 'izostanci', label: 'Izostanci', path: `${classPathPrefix}/dnevnik-rada/izostanci`, icon: <Clock size={14} /> },
         ...(canAccessClassAdmin ? [{id:'zahtjevi-izostanaka',label:'Zahtjevi za opravdavanje',path:`${classPathPrefix}/zahtjevi-izostanaka`,icon:<Clock size={14}/>} ,{id:'roditeljski-pristup',label:'Roditelji i skrbnici',path:`${classPathPrefix}/roditeljski-pristup`,icon:<Users size={14}/>}]:[]),
         { id: 'raspored', label: 'Raspored sati', path: `${classPathPrefix}/raspored`, icon: <Calendar size={14} /> },
@@ -322,6 +324,7 @@ export function ClassDashboardLayout({ children }: { children: React.ReactNode }
     { label: 'Izostanci', path: '/student/izostanci', icon: <Clock size={18} /> },
     { label: 'Raspored', path: '/student/raspored', icon: <Calendar size={18} /> },
     { label: 'Informativka', path: '/student/informativka', icon: <List size={18} /> },
+    { label: 'Školske usluge', path: '/student/skolske-usluge', icon: <Users size={18} /> },
   ];
 
   const isStudentSidebarActive = (path: string) => location.pathname.startsWith(path);

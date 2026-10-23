@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -14,6 +14,7 @@ export function registrarHandler(
       throw new Error("Usluga dokumenata nije konfigurirana.");
     return { url, anon, service };
   },
+  renderDocument = buildRegistrarDocument,
 ) {
   return async (req: any, res: any) => {
     res.setHeader("Cache-Control", "private, no-store");
@@ -73,8 +74,53 @@ export function registrarHandler(
             : undefined;
         return { stamp, signature };
       };
-      if (action === "prepare") {
-        const { year, classId, student, template, inputs } = req.body;
+      if (action === "pending") {
+        const records: any[] = [];
+        for (let offset = 0; ; offset += 500) {
+          const result = await admin
+            .from("school_document_records")
+            .select(
+              "id,document_type,document_number,issued_on,status,school_year_id,attestation_status,created_at,snapshot",
+            )
+            .eq("school_id", school)
+            .in("status", ["NACRT", "SPREMNO", "PRIPREMLJENO"])
+            .order("created_at", { ascending: false })
+            .order("id")
+            .range(offset, offset + 499);
+          if (result.error)
+            throw new Error(
+              "Popis pripremljenih dokumenata nije moguće učitati.",
+            );
+          records.push(
+            ...(result.data || []).map((r: any) => ({
+              ...r,
+              snapshot: undefined,
+              student_name: r.snapshot?.student?.name,
+              year_name: r.snapshot?.year?.name,
+              purpose: r.snapshot?.inputs?.purpose,
+            })),
+          );
+          if (!result.data || result.data.length < 500) break;
+        }
+        return res.json(records);
+      }
+      if (action === "prepare" || action === "retry") {
+        let { year, classId, student, template, inputs } = req.body;
+        let previous: any = null;
+        if (action === "retry") {
+          if (!uuid.test(req.body?.id || ""))
+            return res
+              .status(400)
+              .json({ error: "Neispravan identifikator dokumenta." });
+          previous = await rpc("registrar_document", { _id: req.body.id });
+          if (previous.school_id !== school || previous.status !== "NACRT")
+            throw new Error("Nacrt više nije dostupan za ponovnu pripremu.");
+          year = previous.school_year_id;
+          classId = previous.class_id;
+          student = previous.registry_student_id || previous.student_id;
+          template = previous.document_type;
+          inputs = previous.snapshot?.inputs;
+        }
         if (
           !uuid.test(year) ||
           typeof classId !== "string" ||
@@ -87,18 +133,30 @@ export function registrarHandler(
           return res
             .status(400)
             .json({ error: "Provjerite godinu, razred, učenika i obrazac." });
-        const record = await rpc("registrar_prepare_document", {
+        const parameters = {
           _year: year,
           _class: classId,
           _student: student,
           _template: template,
           _inputs: inputs,
-        });
-        const output = await buildRegistrarDocument(
+        };
+        const record = previous
+          ? {
+              ...previous,
+              snapshot: await rpc("registrar_document_snapshot", parameters),
+            }
+          : await rpc("registrar_prepare_document", {
+              _year: year,
+              _class: classId,
+              _student: student,
+              _template: template,
+              _inputs: inputs,
+            });
+        const output = await renderDocument(
           record.snapshot,
           await attestationAssets(record.snapshot),
         );
-        const path = `${school}/${record.id}/document.pdf`;
+        const path = `${school}/${record.id}/${randomUUID()}.pdf`;
         const upload = await admin.storage
           .from("registrar-documents")
           .upload(path, output.bytes, {
@@ -110,6 +168,8 @@ export function registrarHandler(
         const update = await admin
           .from("school_document_records")
           .update({
+            snapshot: record.snapshot,
+            updated_at: new Date().toISOString(),
             pdf_path: path,
             pdf_sha256: output.sha256,
             status: "SPREMNO",
@@ -151,7 +211,7 @@ export function registrarHandler(
           record.snapshot?.legacy_certificate_id ===
             record.legacy_certificate_id
         ) {
-          const output = await buildRegistrarDocument(
+          const output = await renderDocument(
             record.snapshot,
             await attestationAssets(record.snapshot, true),
           );

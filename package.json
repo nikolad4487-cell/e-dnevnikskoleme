@@ -14,7 +14,8 @@
     "test:browser": "node tests/browser-registrar.mjs",
     "test:principal": "node tests/browser-principal.mjs",
     "test:family": "node tests/browser-family.mjs",
-    "test:roles": "node tests/browser-role-routes.mjs"
+    "test:roles": "node tests/browser-role-routes.mjs",
+    "test:services": "node tests/browser-school-services.mjs"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

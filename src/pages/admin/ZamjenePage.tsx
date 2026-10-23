@@ -45,6 +45,7 @@ export default function ZamjenePage() {
                 substitute_teacher:user_profiles!substitute_teacher_id(name)
             `)
             .eq('school_id', selectedSchoolId)
+            .is('cancelled_at',null)
             .order('date', { ascending: false });
 
           setSubstitutions(subsData || []);
@@ -80,15 +81,10 @@ export default function ZamjenePage() {
           return;
       }
       try {
-         const { error } = await supabase.from('teacher_substitutions').insert({
-             school_id: selectedSchoolId,
-             class_id: formData.class_id,
-             subject_id: formData.subject_id,
-             original_teacher_id: formData.original_teacher_id,
-             substitute_teacher_id: formData.substitute_teacher_id,
-             date: formData.date,
-             hour: formData.hour ? parseInt(formData.hour) : null,
-             notes: formData.notes
+         const { error } = await supabase.rpc('services_substitution', {
+             _class:formData.class_id,_subject:formData.subject_id,_original:formData.original_teacher_id,
+             _substitute:formData.substitute_teacher_id,_date:formData.date,_hour:formData.hour?parseInt(formData.hour):null,
+             _room:'',_note:formData.notes
          });
          if (error) throw error;
          toast.success("Zamjena uspješno evidentirana");
@@ -103,7 +99,7 @@ export default function ZamjenePage() {
   const handleDelete = async (id: string) => {
       if (!confirm("Jeste li sigurni?")) return;
       try {
-          const { error } = await supabase.from('teacher_substitutions').delete().eq('id', id);
+          const { error } = await supabase.rpc('services_cancel_substitution', {_id:id});
           if (error) throw error;
           toast.success("Zamjena obrisana");
           fetchData();

@@ -1,4 +1,5 @@
-import WorkQueue from '../../components/workflows/WorkQueue';
+import SchoolServicesPage from "../../components/services/SchoolServicesPage";
+import WorkQueue from "../../components/workflows/WorkQueue";
 import PdfPreview from "./PdfPreview";
 import React, { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
@@ -71,13 +72,21 @@ const INITIAL = {
 const button = "px-4 py-2 rounded border disabled:opacity-40";
 export default function RegistrarPortal() {
   const { user, loading, signOut } = useAuth();
+  const task = new URLSearchParams(window.location.search).get("task");
+  const [queueRevision, setQueueRevision] = useState(0);
   const [ctx, setCtx] = useState<any>(null),
     [legacy, setLegacy] = useState(false),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [year, setYear] = useState(""),
     [cls, setCls] = useState(""),
-    [activity, setActivity] = useState(""),
+    [activity, setActivity] = useState(
+      task === "documents"
+        ? "archive"
+        : task === "requests"
+          ? "administrative"
+          : "",
+    ),
     [students, setStudents] = useState<any[]>([]),
     [student, setStudent] = useState(""),
     [template, setTemplate] = useState(""),
@@ -86,8 +95,11 @@ export default function RegistrarPortal() {
     [pdfUrl, setPdfUrl] = useState(""),
     [reviewed, setReviewed] = useState(false),
     [archive, setArchive] = useState<any[]>([]),
+    [archiveLoading, setArchiveLoading] = useState(false),
     [search, setSearch] = useState(""),
-    [statusFilter, setStatusFilter] = useState(""),
+    [statusFilter, setStatusFilter] = useState(
+      task === "documents" ? "PENDING" : "",
+    ),
     [transportReview, setTransportReview] = useState<any[]>([]);
   const load = async () => {
     setError("");
@@ -149,11 +161,30 @@ export default function RegistrarPortal() {
     [pdfUrl],
   );
   useEffect(() => {
-    if (activity === "archive")
-      registrarRpc("registrar_document_archive")
-        .then(setArchive)
-        .catch((e) => toast.error(e.message));
-  }, [activity]);
+    if (activity !== "archive" || !ctx) return;
+    let alive = true;
+    setArchiveLoading(true);
+    setArchive([]);
+    (statusFilter === "PENDING"
+      ? documentRequest({ action: "pending" })
+      : registrarRpc("registrar_document_archive")
+    )
+      .then((rows) => {
+        if (alive) {
+          setArchive(rows);
+          setArchiveLoading(false);
+        }
+      })
+      .catch((e) => {
+        if (alive) {
+          setError(e.message);
+          setArchiveLoading(false);
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [activity, statusFilter, ctx, queueRevision]);
   const resetPreview = () => {
     setPrepared(null);
     setPdfUrl("");
@@ -213,6 +244,7 @@ export default function RegistrarPortal() {
         sha256: prepared.sha256,
       });
       setPrepared(result);
+      setQueueRevision((v) => v + 1);
       toast.success("Dokument je izdan i spremljen u privatnu evidenciju.");
     } catch (e: any) {
       toast.error(e.message);
@@ -256,7 +288,22 @@ export default function RegistrarPortal() {
           </button>
         </div>
       </header>
-      <div className="px-4 md:px-8"><WorkQueue schoolId={ctx?.school.id} /></div>
+      <div className="px-4 md:px-8">
+        <WorkQueue
+          schoolId={ctx?.school.id}
+          refreshToken={queueRevision}
+          onTask={(key) => {
+            setYear("");
+            setCls("");
+            setStudent("");
+            setSearch("");
+            setStatusFilter(key === "documents" ? "PENDING" : "");
+            setActivity(key === "documents" ? "archive" : "administrative");
+            resetPreview();
+            window.history.replaceState(null, "", "?task=" + key);
+          }}
+        />
+      </div>
       <main className="max-w-6xl mx-auto p-4 md:p-6 space-y-5">
         {error ? (
           <div role="alert" className="bg-white border p-5 rounded">
@@ -341,6 +388,7 @@ export default function RegistrarPortal() {
             {activity === "settings" && (
               <RegistrarSettings context={ctx} onSaved={load} />
             )}
+            {activity === "administrative" && <SchoolServicesPage office />}
             {["registry", "administrative", "thesis"].includes(activity) && (
               <RegistryLog
                 activity={activity}
@@ -740,7 +788,9 @@ export default function RegistrarPortal() {
             {activity === "archive" && (
               <section className="bg-white border rounded p-4 space-y-4">
                 <h2 className="text-lg font-bold">
-                  Izdani dokumenti i priprema
+                  {statusFilter === "PENDING"
+                    ? "Dokumenti čekaju izdavanje"
+                    : "Izdani dokumenti i priprema"}
                 </h2>
                 <div className="flex flex-wrap gap-3">
                   <input
@@ -755,16 +805,50 @@ export default function RegistrarPortal() {
                     onChange={(e) => setStatusFilter(e.target.value)}
                   >
                     <option value="">Svi statusi</option>
+                    <option value="PENDING">Čekaju izdavanje</option>
                     {["NACRT", "SPREMNO", "IZDANO", "PONIŠTENO"].map((s) => (
                       <option key={s}>{s}</option>
                     ))}
                   </select>
                 </div>
+                {archiveLoading && <p role="status">Učitavanje dokumenata…</p>}
+                {!archiveLoading && !archive.length && (
+                  <p>Nema dokumenata za odabrani prikaz.</p>
+                )}
+                {prepared && pdfUrl && (
+                  <section
+                    className="border p-3 rounded space-y-3"
+                    aria-label="Nastavak izdavanja dokumenta"
+                  >
+                    <h3 className="font-bold">Pregled prije izdavanja</h3>
+                    <PdfPreview
+                      url={pdfUrl}
+                      onReady={() => setReviewed(true)}
+                    />
+                    <button
+                      className={button}
+                      disabled={
+                        busy || !reviewed || prepared.status === "IZDANO"
+                      }
+                      onClick={issue}
+                    >
+                      Izdaj pregledani dokument
+                    </button>
+                    {prepared.status === "IZDANO" && (
+                      <p>Dokument je izdan i evidentiran.</p>
+                    )}
+                  </section>
+                )}
                 {archive
                   .filter(
                     (r) =>
                       (!year || r.school_year_id === year) &&
-                      (!statusFilter || r.status === statusFilter) &&
+                      (!statusFilter ||
+                        (statusFilter === "PENDING"
+                          ? ["NACRT", "SPREMNO", "PRIPREMLJENO"].includes(
+                              r.status,
+                            )
+                          : r.status === statusFilter)) &&
                       JSON.stringify(r)
                         .toLocaleLowerCase("hr")
                         .includes(search.toLocaleLowerCase("hr")),
@@ -787,6 +871,47 @@ export default function RegistrarPortal() {
                         </p>
                       </div>
                       <div className="flex gap-2">
+                        {["NACRT", "SPREMNO", "PRIPREMLJENO"].includes(
+                          r.status,
+                        ) && (
+                          <button
+                            className={button}
+                            disabled={busy}
+                            onClick={async () => {
+                              setBusy(true);
+                              resetPreview();
+                              try {
+                                let record;
+                                if (r.status === "NACRT")
+                                  record = await documentRequest({
+                                    action: "retry",
+                                    id: r.id,
+                                  });
+                                else {
+                                  const stored = await registrarRpc(
+                                    "registrar_document",
+                                    { _id: r.id },
+                                  );
+                                  record = {
+                                    id: stored.id,
+                                    status: stored.status,
+                                    sha256: stored.pdf_sha256,
+                                    attestation_status:
+                                      stored.attestation_status,
+                                  };
+                                }
+                                setPrepared(record);
+                                await open(record.id);
+                              } catch (e: any) {
+                                toast.error(e.message);
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                          >
+                            Nastavi izdavanje
+                          </button>
+                        )}
                         <button
                           className={button}
                           disabled={busy || r.status === "NACRT"}
@@ -836,8 +961,10 @@ export default function RegistrarPortal() {
                       </div>
                     </article>
                   ))}
-                {!archive.length && <p>Nema evidentiranih dokumenata.</p>}
-                {pdfUrl && <PdfPreview title="Arhivirani PDF" url={pdfUrl} />}
+
+                {pdfUrl && !prepared && (
+                  <PdfPreview title="Arhivirani PDF" url={pdfUrl} />
+                )}
               </section>
             )}
           </>
