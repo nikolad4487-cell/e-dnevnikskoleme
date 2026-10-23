@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS family_meeting_bookings(slot_id uuid PRIMARY KEY REFE
 CREATE TABLE IF NOT EXISTS school_document_requests(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),school_id text NOT NULL REFERENCES schools(id),class_id text NOT NULL REFERENCES classes(id),student_id uuid NOT NULL REFERENCES user_profiles(id),requested_by uuid NOT NULL REFERENCES user_profiles(id),kind text NOT NULL,purpose text NOT NULL,status text NOT NULL DEFAULT 'SUBMITTED' CHECK(status IN ('SUBMITTED','PROCESSING','ISSUED','REJECTED')),note text NOT NULL DEFAULT '',document_id uuid REFERENCES school_document_records(id),handled_by uuid REFERENCES user_profiles(id),updated_at timestamptz NOT NULL DEFAULT now(),created_at timestamptz NOT NULL DEFAULT now());
 CREATE TABLE IF NOT EXISTS school_exam_sessions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),class_id text NOT NULL REFERENCES classes(id),subject_id text NOT NULL REFERENCES subjects(id),exam_type text NOT NULL CHECK(exam_type IN ('DOPUNSKI_RAD','POPRAVNI','PREDMETNI','RAZREDNI','RAZLIKOVNI','DOPUNSKI')),starts_at timestamptz NOT NULL,location text NOT NULL,commission uuid[] NOT NULL,created_by uuid REFERENCES user_profiles(id),cancelled_at timestamptz);
 CREATE TABLE IF NOT EXISTS school_exam_registrations(session_id uuid REFERENCES school_exam_sessions(id),student_id uuid REFERENCES user_profiles(id),registered_by uuid REFERENCES user_profiles(id),registered_at timestamptz NOT NULL DEFAULT now(),special_exam_id uuid REFERENCES special_exams(id),PRIMARY KEY(session_id,student_id));
+ALTER TABLE school_exam_registrations ADD COLUMN IF NOT EXISTS resolution_status text CHECK(resolution_status IN ('NO_SHOW','WITHDRAWN'));
+ALTER TABLE school_exam_registrations ADD COLUMN IF NOT EXISTS resolution_reason text;
+ALTER TABLE school_exam_registrations ADD COLUMN IF NOT EXISTS resolved_at timestamptz;
+ALTER TABLE school_exam_registrations ADD COLUMN IF NOT EXISTS resolved_by uuid REFERENCES user_profiles(id);
 -- Missing legacy substitution migration is installed without duplicating its table.
 CREATE TABLE IF NOT EXISTS teacher_substitutions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),school_id text NOT NULL REFERENCES schools(id),class_id text NOT NULL REFERENCES classes(id),subject_id text NOT NULL REFERENCES subjects(id),original_teacher_id uuid NOT NULL REFERENCES user_profiles(id),substitute_teacher_id uuid NOT NULL REFERENCES user_profiles(id),date date NOT NULL,hour integer,notes text,created_at timestamptz DEFAULT now(),updated_at timestamptz DEFAULT now());
 ALTER TABLE teacher_substitutions ADD COLUMN IF NOT EXISTS room text;
@@ -154,12 +158,24 @@ CREATE OR REPLACE FUNCTION services_register_exam(_session uuid,_student uuid,_r
 DECLARE s school_exam_sessions;
 BEGIN SELECT * INTO s FROM school_exam_sessions WHERE id=_session FOR UPDATE;
  IF s.id IS NULL OR s.cancelled_at IS NOT NULL OR s.starts_at<=now() OR _remove IS NULL OR NOT (services_manager(s.class_id) OR services_pupil(s.class_id,_student)) OR NOT EXISTS(SELECT 1 FROM student_class_enrollments WHERE class_id=s.class_id AND student_id=_student AND status='ACTIVE') OR NOT EXISTS(SELECT 1 FROM student_subject_enrollments WHERE class_id=s.class_id AND student_id=_student AND subject_id=s.subject_id AND status='ACTIVE') THEN RAISE EXCEPTION 'Ispit ili upis predmeta nije dostupan.';END IF;
+ IF EXISTS(SELECT 1 FROM school_exam_registrations WHERE session_id=_session AND student_id=_student AND resolved_at IS NOT NULL) THEN RAISE EXCEPTION 'Postupak ispitne prijave već je zaključen.';END IF;
  IF _remove THEN DELETE FROM school_exam_registrations WHERE session_id=_session AND student_id=_student AND special_exam_id IS NULL;ELSE INSERT INTO school_exam_registrations(session_id,student_id,registered_by) VALUES(_session,_student,portal_profile_id()) ON CONFLICT DO NOTHING;END IF;
+END $$;
+CREATE OR REPLACE FUNCTION services_resolve_exam_registration(_session uuid,_student uuid,_status text,_reason text) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
+DECLARE s school_exam_sessions;r school_exam_registrations;y uuid;
+BEGIN
+ SELECT * INTO s FROM school_exam_sessions WHERE id=_session;SELECT * INTO r FROM school_exam_registrations WHERE session_id=_session AND student_id=_student FOR UPDATE;
+ IF s.id IS NULL OR s.cancelled_at IS NOT NULL OR r.student_id IS NULL OR r.special_exam_id IS NOT NULL OR r.resolved_at IS NOT NULL OR expert_actor() OR NOT registry_admin(portal_class_school(s.class_id)) OR _status NOT IN ('NO_SHOW','WITHDRAWN') OR _status IS NULL OR length(trim(coalesce(_reason,''))) NOT BETWEEN 3 AND 2000 OR (_status='NO_SHOW' AND s.starts_at>now()) THEN RAISE EXCEPTION 'Provjerite ovlasti, termin, status i obrazloženje postupka.';END IF;
+ SELECT school_year_id INTO y FROM classes WHERE id=s.class_id;PERFORM pg_advisory_xact_lock(hashtextextended('school-year:'||y::text,0));
+ IF EXISTS(SELECT 1 FROM school_years WHERE id=y AND workflow_closed_at IS NOT NULL) THEN RAISE EXCEPTION 'Najprije ponovno otvorite školsku godinu uz obrazloženje.';END IF;
+ UPDATE school_exam_registrations SET resolution_status=_status,resolution_reason=trim(_reason),resolved_at=now(),resolved_by=portal_profile_id() WHERE session_id=_session AND student_id=_student;
+ PERFORM services_audit(s.class_id,'EXAM_REGISTRATION',_session::text,'RESOLVE',to_jsonb(r),jsonb_build_object('student_id',_student,'status',_status,'reason',trim(_reason)));
+ PERFORM services_notify(_student,'Evidentiran status ispitne prijave',s.class_id);
 END $$;
 CREATE OR REPLACE FUNCTION services_exam_result(_session uuid,_student uuid,_grade integer,_note text) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
 DECLARE s school_exam_sessions;r school_exam_registrations;e uuid;result uuid;
 BEGIN SELECT * INTO s FROM school_exam_sessions WHERE id=_session;SELECT * INTO r FROM school_exam_registrations WHERE session_id=_session AND student_id=_student FOR UPDATE;
- IF s.id IS NULL OR s.cancelled_at IS NOT NULL OR s.starts_at>now() OR r.student_id IS NULL OR r.special_exam_id IS NOT NULL OR NOT registry_admin(portal_class_school(s.class_id)) THEN RAISE EXCEPTION 'Rezultat nije dostupan za unos.';END IF;
+ IF s.id IS NULL OR s.cancelled_at IS NOT NULL OR s.starts_at>now() OR r.student_id IS NULL OR r.special_exam_id IS NOT NULL OR r.resolved_at IS NOT NULL OR expert_actor() OR NOT registry_admin(portal_class_school(s.class_id)) THEN RAISE EXCEPTION 'Rezultat nije dostupan za unos.';END IF;
  IF EXISTS(SELECT 1 FROM school_years y JOIN classes c ON c.school_year_id=y.id WHERE c.id=s.class_id AND y.workflow_closed_at IS NOT NULL) THEN RAISE EXCEPTION 'Najprije ponovno otvorite školsku godinu uz obrazloženje.';END IF;
  SELECT id INTO e FROM student_class_enrollments WHERE class_id=s.class_id AND student_id=_student AND status='ACTIVE';
  result:=registry_record_exam(e,s.subject_id,s.exam_type,(s.starts_at AT TIME ZONE 'Europe/Zagreb')::date,_grade,_note);
@@ -176,7 +192,7 @@ END $$;
 CREATE OR REPLACE FUNCTION services_substitution(_class text,_subject text,_original uuid,_substitute uuid,_date date,_hour integer,_room text,_note text) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
 DECLARE result uuid;r uuid;
 BEGIN
- IF NOT portal_admin(portal_class_school(_class)) OR _date IS NULL OR _hour IS NULL OR _hour NOT BETWEEN 1 AND 14 OR _original IS NOT DISTINCT FROM _substitute OR length(coalesce(_note,''))>2000 OR length(coalesce(_room,''))>100 OR NOT EXISTS(SELECT 1 FROM class_subject_teachers WHERE class_id=_class AND subject_id=_subject AND teacher_id=_original) OR NOT EXISTS(SELECT 1 FROM user_school_roles WHERE user_id=_substitute AND school_id=portal_class_school(_class) AND status='ACTIVE' AND role IN ('TEACHER','HOMEROOM','DEPUTY')) THEN RAISE EXCEPTION 'Provjerite dodijeljeni predmet, nastavnike, datum i sat.';END IF;
+ IF expert_actor() OR NOT portal_admin(portal_class_school(_class)) OR _date IS NULL OR _hour IS NULL OR _hour NOT BETWEEN 1 AND 14 OR _original IS NOT DISTINCT FROM _substitute OR length(coalesce(_note,''))>2000 OR length(coalesce(_room,''))>100 OR NOT EXISTS(SELECT 1 FROM class_subject_teachers WHERE class_id=_class AND subject_id=_subject AND teacher_id=_original) OR NOT EXISTS(SELECT 1 FROM user_school_roles WHERE user_id=_substitute AND school_id=portal_class_school(_class) AND status='ACTIVE' AND role IN ('TEACHER','HOMEROOM','DEPUTY')) THEN RAISE EXCEPTION 'Provjerite dodijeljeni predmet, nastavnike, datum i sat.';END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('substitution:'||_date::text||':'||_hour::text,0));
  IF EXISTS(SELECT 1 FROM teacher_substitutions WHERE date=_date AND hour=_hour AND cancelled_at IS NULL AND (class_id=_class OR substitute_teacher_id=_substitute)) THEN RAISE EXCEPTION 'Razred ili zamjenski nastavnik već ima zamjenu u tom terminu.';END IF;
  INSERT INTO teacher_substitutions(school_id,class_id,subject_id,original_teacher_id,substitute_teacher_id,date,hour,room,notes) VALUES(portal_class_school(_class),_class,_subject,_original,_substitute,_date,_hour,_room,_note) RETURNING id INTO result;
@@ -192,7 +208,7 @@ BEGIN
  END IF;
  school:=portal_class_school(_class);manager:=services_manager(_class);support_view:=manager OR expert_class(_class);staff:=support_view OR EXISTS(SELECT 1 FROM class_subject_teachers t JOIN user_school_roles r ON r.user_id=t.teacher_id AND r.school_id=school AND r.status='ACTIVE' WHERE t.class_id=_class AND t.teacher_id=portal_profile_id());support:=manager OR (expert_class(_class) AND NOT principal_actor());
  IF school IS NULL OR NOT staff AND NOT services_pupil(_class,_student) THEN RAISE EXCEPTION 'Odaberite svoj razred i povezano dijete.';END IF;
- RETURN jsonb_build_object('manager',manager,'staff',staff,'support',support,'support_view',support_view,'admin',portal_admin(school),'parent',_student IS NOT NULL AND portal_linked(_student,school),'student_id',_student,
+ RETURN jsonb_build_object('manager',manager,'staff',staff,'support',support,'support_view',support_view,'admin',portal_admin(school) AND NOT expert_actor(),'parent',_student IS NOT NULL AND portal_linked(_student,school),'student_id',_student,
  'people',(SELECT coalesce(jsonb_agg(jsonb_build_object('student_id',e.student_id,'student',p.name,'parent_id',r.parent_id,'parent',u.name)),'[]') FROM student_class_enrollments e JOIN user_profiles p ON p.id=e.student_id LEFT JOIN parent_child_relationships r ON r.child_id=p.id AND r.school_id=school LEFT JOIN user_profiles u ON u.id=r.parent_id WHERE e.class_id=_class AND e.status='ACTIVE' AND (manager OR r.parent_id=portal_profile_id() AND e.student_id=_student)),
  'staff_directory',portal_staff_directory(school),
  'subjects',(SELECT coalesce(jsonb_agg(jsonb_build_object('id',s.id,'name',s.name)),'[]') FROM class_subjects cs JOIN subjects s ON s.id=cs.subject_id WHERE cs.class_id=_class),
@@ -211,7 +227,7 @@ BEGIN SELECT * INTO s FROM family_meeting_slots WHERE id=_id FOR UPDATE;IF s.id 
 ALTER TABLE teacher_substitutions ADD COLUMN IF NOT EXISTS cancelled_at timestamptz;
 CREATE OR REPLACE FUNCTION services_cancel_substitution(_id uuid) RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$
 DECLARE s teacher_substitutions;r uuid;
-BEGIN SELECT * INTO s FROM teacher_substitutions WHERE id=_id FOR UPDATE;IF s.id IS NULL OR NOT portal_admin(s.school_id) THEN RAISE EXCEPTION 'Zamjena nije dostupna.';END IF;UPDATE teacher_substitutions SET cancelled_at=now() WHERE id=_id;FOR r IN SELECT student_id FROM student_class_enrollments WHERE class_id=s.class_id AND status='ACTIVE' UNION SELECT parent_id FROM parent_child_relationships WHERE child_id IN(SELECT student_id FROM student_class_enrollments WHERE class_id=s.class_id AND status='ACTIVE') AND school_id=s.school_id UNION SELECT s.substitute_teacher_id LOOP PERFORM services_notify(r,'Zamjena nastavnika je otkazana',s.class_id);END LOOP;PERFORM services_audit(s.class_id,'SUBSTITUTION',_id::text,'CANCEL',to_jsonb(s),jsonb_build_object('cancelled',true));END $$;
+BEGIN SELECT * INTO s FROM teacher_substitutions WHERE id=_id FOR UPDATE;IF s.id IS NULL OR expert_actor() OR NOT portal_admin(s.school_id) THEN RAISE EXCEPTION 'Zamjena nije dostupna.';END IF;UPDATE teacher_substitutions SET cancelled_at=now() WHERE id=_id;FOR r IN SELECT student_id FROM student_class_enrollments WHERE class_id=s.class_id AND status='ACTIVE' UNION SELECT parent_id FROM parent_child_relationships WHERE child_id IN(SELECT student_id FROM student_class_enrollments WHERE class_id=s.class_id AND status='ACTIVE') AND school_id=s.school_id UNION SELECT s.substitute_teacher_id LOOP PERFORM services_notify(r,'Zamjena nastavnika je otkazana',s.class_id);END LOOP;PERFORM services_audit(s.class_id,'SUBSTITUTION',_id::text,'CANCEL',to_jsonb(s),jsonb_build_object('cancelled',true));END $$;
 ALTER TABLE teacher_substitutions ENABLE ROW LEVEL SECURITY;
 REVOKE INSERT,UPDATE,DELETE ON teacher_substitutions FROM authenticated;
 GRANT SELECT ON teacher_substitutions TO authenticated;
@@ -292,7 +308,7 @@ BEGIN
   END LOOP;
   SELECT count(*) INTO pending FROM absences WHERE class_id=c.id AND upper(status) IN ('PENDING','CEKA','ČEKA','CEKA_ODLUKU','ČEKA ODLUKU');
   SELECT count(*) INTO requests FROM family_absence_requests WHERE class_id=c.id AND status='SUBMITTED';
-  SELECT count(*) INTO pending_exams FROM school_exam_registrations r JOIN school_exam_sessions scheduled ON scheduled.id=r.session_id WHERE scheduled.class_id=c.id AND scheduled.cancelled_at IS NULL AND r.special_exam_id IS NULL;
+  SELECT count(*) INTO pending_exams FROM school_exam_registrations r JOIN school_exam_sessions scheduled ON scheduled.id=r.session_id WHERE scheduled.class_id=c.id AND scheduled.cancelled_at IS NULL AND r.special_exam_id IS NULL AND r.resolved_at IS NULL;
   blockers:=blockers+missing+unassigned+pending+requests+pending_exams;
   result:=result||jsonb_build_array(jsonb_build_object('id',c.id,'name',c.name,'pupils',pupils,'missingSubjects',unassigned,'missingFinalGrades',missing,'pendingAbsences',pending,'pendingRequests',requests,'pendingExams',pending_exams,'locked',coalesce(c.is_locked,false)));
  END LOOP;

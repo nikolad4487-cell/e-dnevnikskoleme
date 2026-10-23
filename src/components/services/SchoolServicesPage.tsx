@@ -32,6 +32,10 @@ const examNames: Record<string, string> = {
   RAZLIKOVNI: "Razlikovni ispit",
   DOPUNSKI: "Dopunski ispit",
 };
+const outcomeNames: Record<string, string> = {
+  NO_SHOW: "Nije pristupio/la",
+  WITHDRAWN: "Prijava povučena",
+};
 const examKinds = [
   "DOPUNSKI_RAD",
   "POPRAVNI",
@@ -390,7 +394,7 @@ export default function SchoolServicesPage({
         head: [["Učenik", "Ocjena"]],
         body: session.registrations.map((r: any) => [
           r.student,
-          r.grade ?? "Nije unesena",
+          r.grade ?? (outcomeNames[r.resolution_status] || "Nije unesena"),
         ]),
       });
       setPdf(URL.createObjectURL(doc.output("blob")));
@@ -1211,9 +1215,50 @@ export default function SchoolServicesPage({
                   {s.registrations.map((r: any) => (
                     <div key={r.student_id} className="border-t pt-2">
                       <p>
-                        {r.student}: {r.grade ?? "Ocjena nije unesena"}
+                        {r.student}:{" "}
+                        {r.grade ??
+                          (outcomeNames[r.resolution_status] ||
+                            "Ocjena nije unesena")}
                       </p>
+                      {r.resolved_at && (
+                        <p>
+                          {r.resolution_reason} · {date(r.resolved_at)}
+                        </p>
+                      )}
+                      {data.admin &&
+                        !r.special_exam_id &&
+                        !r.resolved_at &&
+                        !s.cancelled_at && (
+                          <Form
+                            disabled={busy}
+                            label="Evidentiraj status prijave"
+                            fields={[
+                              {
+                                key: "status",
+                                label: "Status ispitne prijave",
+                                options: [
+                                  { id: "NO_SHOW", name: "Nije pristupio/la" },
+                                  { id: "WITHDRAWN", name: "Prijava povučena" },
+                                ],
+                              },
+                              {
+                                key: "reason",
+                                label: "Obrazloženje statusa prijave",
+                                type: "textarea",
+                              },
+                            ]}
+                            onSave={(v) =>
+                              act("services_resolve_exam_registration", {
+                                _session: s.id,
+                                _student: r.student_id,
+                                _status: v.status,
+                                _reason: v.reason,
+                              })
+                            }
+                          />
+                        )}
                       {!s.cancelled_at &&
+                        !r.resolved_at &&
                         new Date(s.starts_at) > new Date() && (
                           <button
                             className={button}
@@ -1231,6 +1276,7 @@ export default function SchoolServicesPage({
                         )}
                       {data.admin &&
                         !r.special_exam_id &&
+                        !r.resolved_at &&
                         new Date(s.starts_at) <= new Date() && (
                           <Form
                             disabled={busy}
