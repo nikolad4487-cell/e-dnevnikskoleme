@@ -1,3 +1,4 @@
+import {readLegacyCollection,writeLegacyCollection,durableLegacyMiddleware,userStorageClient} from './server/storage/legacyStore.js';
 import {provisioningCors} from './server/auth/provisioningCors.js';
 import {creationCredentials, userManagementScope, canManageSchool, STAFF_ROLES} from './server/auth/userProvisioning.js';
 import {staffSession} from './server/auth/staffSession.js';
@@ -5,7 +6,6 @@ import {apiAccessGuard} from './server/auth/apiAccess.js';
 import { schoolCalendarRoutes, legacyCalendarGuard } from './server/calendar/routes.js';
 import express from "express";
 import path from "path";
-import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
 import { authenticator } from "otplib";
@@ -18,80 +18,12 @@ import { TEMPLATE_BY_SUBJECT, normalizeGradingTemplateSubjectName } from "./src/
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
-// Flat file JSON DB for fallback / guaranteed local persistence
+// Only bundled reference catalogues are read from disk. Operational data is transactional.
 const isVercel = process.env.VERCEL === "1";
-const DATA_DIR = isVercel 
-  ? path.join("/tmp", "data")
-  : path.join(__dirname, "data");
 const SOURCE_DATA_DIR = path.join(process.cwd(), "data");
-
-try {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
-} catch (err: any) {
-  console.warn(`[SERVER] Warning: Failed to create DATA_DIR at ${DATA_DIR}:`, err.message);
-}
-
-function initJsonFile(filename: string) {
-  const filePath = path.join(DATA_DIR, filename);
-  try {
-    if (!fs.existsSync(filePath)) {
-      fs.writeFileSync(filePath, JSON.stringify([], null, 2), "utf-8");
-    }
-  } catch (err: any) {
-    console.warn(`[SERVER] Warning: Failed to initialize JSON file ${filename}:`, err.message);
-  }
-}
-
-initJsonFile("lektire.json");
-initJsonFile("pedagoska_dokumentacija.json");
-initJsonFile("student_pedagogical_profiles.json");
-initJsonFile("student_pedagogical_year_notes.json");
-initJsonFile("daily_notes.json");
-initJsonFile("overall_success_audit_logs.json");
-initJsonFile("final_thesis.json");
-initJsonFile("practicum_placements.json");
-initJsonFile("practicum_logs.json");
-initJsonFile("practicum_evaluations.json");
-initJsonFile("student_registrations.json");
-initJsonFile("student_transfers.json");
-initJsonFile("competitions.json");
-initJsonFile("payments.json");
-initJsonFile("final_exam_defense_schedule.json");
-initJsonFile("final_exam_defense_commission_members.json");
-initJsonFile("matura_registrations.json");
-initJsonFile("matura_settings.json");
-initJsonFile("matura_exam_schedule.json");
-initJsonFile("matura_results.json");
-initJsonFile("matura_objections.json");
-initJsonFile("matura_study_applications.json");
-initJsonFile("matura_study_programs.json");
-initJsonFile("ematica_sync_runs.json");
-initJsonFile("ematica_student_records.json");
-
-function readJsonFile(filename: string): any[] {
-  try {
-    const filePath = path.join(DATA_DIR, filename);
-    const content = fs.readFileSync(filePath, "utf-8");
-    return JSON.parse(content);
-  } catch (error) {
-    console.error(`Error reading flat JSON file ${filename}:`, error);
-    return [];
-  }
-}
-
-function writeJsonFile(filename: string, data: any[]) {
-  try {
-    const filePath = path.join(DATA_DIR, filename);
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
-  } catch (error) {
-    console.error(`Error writing flat JSON file ${filename}:`, error);
-  }
-}
+const readJsonFile=readLegacyCollection;
+const writeJsonFile=writeLegacyCollection;
 
 function normalizeSupabaseUrl(value: string | undefined): string {
   const cleaned = String(value || "").trim().replace(/^['"]|['"]$/g, "");
@@ -117,7 +49,7 @@ const FALLBACK_SUPABASE_URL = "https://hkqlbeetlvrplaeubncc.supabase.co";
 const configuredSupabaseUrl = normalizeSupabaseUrl(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL);
 const configuredSupabaseUrlLooksValid = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(configuredSupabaseUrl);
 const supabaseUrl = configuredSupabaseUrlLooksValid ? configuredSupabaseUrl : FALLBACK_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || "";
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
 
 // Supabase Admin Client (Service Role)
@@ -243,160 +175,12 @@ async function startServer() {
       }
     });
 
-    async function repairGradingElementsForSchool(schoolId: string) {
-      if (!supabaseAdmin || !schoolId) return { deleted: 0, reordered: 0 };
-
-      const [{ data: elements, error: elementsError }, { data: subjects, error: subjectsError }, { data: templates, error: templatesError }] = await Promise.all([
-        supabaseAdmin
-          .from("grading_elements")
-          .select("id, school_id, class_id, subject_id, name, display_order, created_at")
-          .eq("school_id", schoolId)
-          .order("display_order", { ascending: true }),
-        supabaseAdmin
-          .from("subjects")
-          .select("id, name")
-          .eq("school_id", schoolId),
-        supabaseAdmin
-          .from("subject_grading_element_templates")
-          .select("school_id, subject_name, element_name, display_order")
-      ]);
-
-      if (elementsError) throw elementsError;
-      if (subjectsError) throw subjectsError;
-      if (templatesError) throw templatesError;
-
-      const normalize = (value: any) => String(value || "").toLowerCase().trim();
-      const normalizeSubject = (value: any) => normalizeGradingTemplateSubjectName(String(value || ""));
-      const subjectById = new Map<string, any>((subjects || []).map((subject: any) => [String(subject.id), subject]));
-      const templateOrder = new Map<string, number>();
-      const schoolTemplateOrder = new Map<string, number>();
-
-      for (const [subjectName, elementNames] of Object.entries(TEMPLATE_BY_SUBJECT)) {
-        elementNames.forEach((elementName, index) => {
-          templateOrder.set(`${normalizeSubject(subjectName)}:${normalize(elementName)}`, index);
-        });
-      }
-
-      for (const template of templates || []) {
-        const key = `${normalizeSubject(template.subject_name)}:${normalize(template.element_name)}`;
-        if (!template.school_id && !templateOrder.has(key)) {
-          templateOrder.set(key, Number(template.display_order ?? 9999));
-        } else if (String(template.school_id) === String(schoolId)) {
-          schoolTemplateOrder.set(key, Number(template.display_order ?? 9999));
-        }
-      }
-      for (const [key, value] of schoolTemplateOrder) {
-        templateOrder.set(key, value);
-      }
-
-      const grouped = new Map<string, any[]>();
-      for (const element of elements || []) {
-        const key = `${element.class_id}:${element.subject_id}:${normalize(element.name)}`;
-        if (!grouped.has(key)) grouped.set(key, []);
-        grouped.get(key)!.push(element);
-      }
-
-      const deleteIds: string[] = [];
-      const keptElements: any[] = [];
-      for (const group of grouped.values()) {
-        const sorted = [...group].sort((a, b) => {
-          const orderDiff = Number(a.display_order ?? 9999) - Number(b.display_order ?? 9999);
-          if (orderDiff !== 0) return orderDiff;
-          return String(a.created_at || "").localeCompare(String(b.created_at || ""));
-        });
-        keptElements.push(sorted[0]);
-        deleteIds.push(...sorted.slice(1).map(item => item.id));
-      }
-
-      let deleted = 0;
-      for (let i = 0; i < deleteIds.length; i += 100) {
-        const chunk = deleteIds.slice(i, i + 100);
-        const { error } = await supabaseAdmin
-          .from("grading_elements")
-          .delete()
-          .in("id", chunk);
-        if (error) throw error;
-        deleted += chunk.length;
-      }
-
-      let reordered = 0;
-      for (const element of keptElements) {
-        const subject = subjectById.get(String(element.subject_id));
-        const key = `${normalizeSubject(subject?.name)}:${normalize(element.name)}`;
-        if (!templateOrder.has(key)) continue;
-        const desiredOrder = templateOrder.get(key)!;
-        if (Number(element.display_order ?? 9999) === desiredOrder) continue;
-        const { error } = await supabaseAdmin
-          .from("grading_elements")
-          .update({ display_order: desiredOrder })
-          .eq("id", element.id);
-        if (error) throw error;
-        reordered += 1;
-      }
-
-      return { deleted, reordered };
-    }
-
-    // Run startup migrations for final exam defense schedule tables if supabase is available
-    if (supabaseAdmin) {
-      try {
-        console.log("[SERVER] Automatically checking and running startup DDL migrations for final exam defense schedules...");
-        const ddlQuery = `
-          CREATE TABLE IF NOT EXISTS public.final_exam_defense_schedule (
-            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-            school_id uuid NOT NULL,
-            school_year text NOT NULL,
-            class_id uuid NOT NULL REFERENCES public.classes(id) ON DELETE CASCADE,
-            defense_time text NOT NULL,
-            classroom text NOT NULL,
-            created_at timestamptz DEFAULT now(),
-            updated_at timestamptz DEFAULT now()
-          );
-
-          CREATE TABLE IF NOT EXISTS public.final_exam_defense_commission_members (
-            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-            schedule_id uuid NOT NULL REFERENCES public.final_exam_defense_schedule(id) ON DELETE CASCADE,
-            teacher_profile_id uuid NOT NULL REFERENCES public.user_profiles(id) ON DELETE CASCADE,
-            is_homeroom_teacher boolean DEFAULT false,
-            created_at timestamptz DEFAULT now(),
-            UNIQUE(schedule_id, teacher_profile_id)
-          );
-          
-          ALTER TABLE public.school_events ADD COLUMN IF NOT EXISTS classroom text;
-        `;
-        if (typeof supabaseAdmin.query === 'function') {
-          await supabaseAdmin.query(ddlQuery);
-          console.log("[SERVER] Startup migrations executed successfully.");
-        } else {
-          console.warn("[SERVER] supabaseAdmin.query is not a function. Table creation script skipped (falling back onto flat JSON).");
-        }
-      } catch (migrationErr: any) {
-        console.error("[SERVER] Startup migration error:", migrationErr.message);
-      }
-
-      try {
-        const { data: schoolsForElementRepair, error: schoolsForElementRepairError } = await supabaseAdmin
-          .from("schools")
-          .select("id")
-          .not("id", "is", null);
-        if (schoolsForElementRepairError) throw schoolsForElementRepairError;
-
-        let totalDeleted = 0;
-        let totalReordered = 0;
-        for (const school of schoolsForElementRepair || []) {
-          const result = await repairGradingElementsForSchool(String(school.id));
-          totalDeleted += result.deleted;
-          totalReordered += result.reordered;
-        }
-        console.log("[SERVER] Grading elements repaired on startup:", { totalDeleted, totalReordered });
-      } catch (gradingElementsErr: any) {
-        console.error("[SERVER] Grading elements startup repair error:", gradingElementsErr.message);
-      }
-    }
+    // Database migrations and data repairs run explicitly, never on a web-server cold start.
 
     // Middleware to log requests
     app.use((req, res, next) => {
-      console.log(`[${req.method}] ${req.url}`);
+      const started=Date.now(),requestId=crypto.randomUUID();res.setHeader('X-Request-Id',requestId);
+      res.once('finish',()=>console.log(JSON.stringify({requestId,method:req.method,path:req.path,status:res.statusCode,durationMs:Date.now()-started})));
       next();
     });
 
@@ -558,6 +342,7 @@ async function startServer() {
 
     app.use(provisioningCors);
     app.use(apiAccessGuard(resolveAuthenticatedUser, supabaseAdmin));
+    app.use(durableLegacyMiddleware(req=>userStorageClient(supabaseUrl,supabaseAnonKey,req)));
 
     app.post('/api/auth/complete-authenticator', async (req,res) => {
       try {
@@ -1982,7 +1767,7 @@ async function startServer() {
       let dbData: any[] = [];
       if (supabaseAdmin) {
         try {
-          let query = supabaseAdmin.from('final_thesis').select('*');
+          let query = userStorageClient(supabaseUrl,supabaseAnonKey,req).from('final_thesis').select('*');
           if (studentId) query = query.eq('student_id', studentId);
           if (mentorId) query = query.eq('mentor_id', mentorId);
           if (classId) query = query.eq('class_id', classId);
@@ -1991,34 +1776,23 @@ async function startServer() {
           const { data, error } = await query;
           if (data && !error) {
             dbData = data;
-          } else if (error && error.code !== 'PGRST205') {
-            console.error("Error reading final_thesis from DB:", error);
+          } else if (error) {
+            throw error;
           }
         } catch (err: any) {
-          if (err?.code !== 'PGRST205') console.error("Error connecting to DB for final_thesis:", err);
+          throw err;
         }
       }
 
-      // Merge with local fallback JSON to ensure full persistence
-      let localData = readJsonFile("final_thesis.json");
-      if (studentId) localData = localData.filter(d => d.student_id === studentId);
-      if (mentorId) localData = localData.filter(d => d.mentor_id === mentorId);
-      if (classId) localData = localData.filter(d => d.class_id === classId);
-      if (schoolId) localData = localData.filter(d => d.school_id === schoolId);
-
-      const mergedMap = new Map();
-      localData.forEach(item => mergedMap.set(item.id, item));
-      dbData.forEach(item => mergedMap.set(item.id, item));
-      const merged = Array.from(mergedMap.values());
-
-      res.json(merged);
+      res.json(dbData);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
   const ALLOWED_DB_FIELDS = [
-    'id', 'student_id', 'school_year_id', 'thesis_title', 'mentor_name',
+    'id', 'student_id', 'class_id', 'school_id', 'school_year_id', 'thesis_title', 'mentor_name',
+    'submitted_at','deregistered_at','deregistered_by','deregistration_note','deregistration_classification_number','deregistration_registry_number','deregistration_data_entered_at','deregistration_data_entered_by','application_data_entered_by',
     'creation_grade', 'defense_grade', 'creation_date', 'defense_date',
     'exam_period', 'created_at', 'mentor_id', 'status', 'final_grade',
     'final_grade_date', 'application_classification_number',
@@ -2088,9 +1862,9 @@ async function startServer() {
       if (supabaseAdmin) {
         try {
           const dbPayload = sanitizeForDb(appData);
-          console.log("FINAL THESIS SAVE PAYLOAD (POST)", dbPayload);
-          const { data, error } = await supabaseAdmin.from('final_thesis').insert(dbPayload).select();
-          console.log("FINAL THESIS SAVE RESULT (POST)", data, error);
+
+          const { data, error } = await userStorageClient(supabaseUrl,supabaseAnonKey,req).from('final_thesis').insert(dbPayload).select();
+
           if (!error) dbInserted = true;
           else if (error.code !== 'PGRST205') console.error("DB insert error for final thesis app:", error);
         } catch (dbErr: any) {
@@ -2098,11 +1872,8 @@ async function startServer() {
         }
       }
 
-      const apps = readJsonFile("final_thesis.json");
-      apps.push({ ...appData, db_persisted: dbInserted });
-      writeJsonFile("final_thesis.json", apps);
-
-      res.json({ success: true, data: appData, db_persisted: dbInserted });
+      if(dbInserted)return res.json({success:true,data:appData,db_persisted:true});
+      throw new Error('Završni rad nije spremljen u matičnu bazu. Provjerite aktivaciju i ovlasti.');
     } catch (err: any) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }
@@ -2120,9 +1891,10 @@ async function startServer() {
       if (supabaseAdmin) {
         try {
           const dbUpdates = sanitizeForDb(updates);
-          console.log("FINAL THESIS SAVE PAYLOAD (PUT)", dbUpdates);
-          const { data, error } = await supabaseAdmin.from('final_thesis').update(dbUpdates).eq('id', id).select();
-          console.log("FINAL THESIS SAVE RESULT (PUT)", data, error);
+
+          const { data, error } = await userStorageClient(supabaseUrl,supabaseAnonKey,req).from('final_thesis').update(dbUpdates).eq('id', id).select();
+          if(!error&&!data?.length)return res.status(404).json({error:'Završni rad nije dostupan.'});
+
           if (!error) dbUpdated = true;
           else if (error.code !== 'PGRST205') console.error("DB update error for final thesis app:", error);
         } catch (dbErr: any) {
@@ -2130,17 +1902,8 @@ async function startServer() {
         }
       }
 
-      const apps = readJsonFile("final_thesis.json");
-      const idx = apps.findIndex(a => a.id === id);
-      if (idx !== -1) {
-        apps[idx] = { ...apps[idx], ...updates, db_updated: dbUpdated };
-        writeJsonFile("final_thesis.json", apps);
-      } else {
-        apps.push({ id, ...updates, db_updated: dbUpdated });
-        writeJsonFile("final_thesis.json", apps);
-      }
-
-      res.json({ success: true, db_updated: dbUpdated });
+      if(dbUpdated)return res.json({success:true,db_updated:true});
+      throw new Error('Završni rad nije spremljen u matičnu bazu. Provjerite aktivaciju i ovlasti.');
     } catch (err: any) {
       res.status(err.statusCode || 500).json({ error: err.message });
     }
@@ -2152,7 +1915,8 @@ async function startServer() {
       let dbDeleted = false;
       if (supabaseAdmin) {
         try {
-          const { error } = await supabaseAdmin.from('final_thesis').delete().eq('id', id);
+          const { data,error } = await userStorageClient(supabaseUrl,supabaseAnonKey,req).from('final_thesis').delete().eq('id', id).select('id');
+          if(!error&&!data?.length)return res.status(404).json({error:'Završni rad nije dostupan.'});
           if (!error) dbDeleted = true;
           else if (error.code !== 'PGRST205') console.error("DB delete error for final thesis app:", error);
         } catch (dbErr: any) {
@@ -2160,11 +1924,8 @@ async function startServer() {
         }
       }
 
-      const apps = readJsonFile("final_thesis.json");
-      const filtered = apps.filter(a => a.id !== id);
-      writeJsonFile("final_thesis.json", filtered);
-
-      res.json({ success: true, db_deleted: dbDeleted });
+      if(dbDeleted)return res.json({success:true,db_deleted:true});
+      throw new Error('Završni rad nije spremljen u matičnu bazu. Provjerite aktivaciju i ovlasti.');
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -3248,7 +3009,8 @@ async function startServer() {
         }
       }
 
-      // Save to flat files for fallback persistence
+      if(dbSaved)return res.json({success:true,data:{...newSchedule,members:newMembers},db_persisted:true});
+      // Persist through the scoped transactional store if the legacy table is unavailable.
       const localSchedules = readJsonFile("final_exam_defense_schedule.json");
       localSchedules.push(newSchedule);
       writeJsonFile("final_exam_defense_schedule.json", localSchedules);
@@ -3310,7 +3072,8 @@ async function startServer() {
         }
       }
 
-      // Local JSON update
+      if(dbUpdated)return res.json({success:true,db_updated:true});
+      // Scoped transactional update
       const localSchedules = readJsonFile("final_exam_defense_schedule.json");
       const sIdx = localSchedules.findIndex(s => s.id === id);
       if (sIdx !== -1) {
@@ -4084,7 +3847,7 @@ async function startServer() {
           
           if (!error && data) {
             const merged = { ...data, program_adjustment: valAdjustment };
-            console.log("[PEDAGOGICAL_PROFILE] Database record upserted successfully:", merged);
+
             return res.json(merged);
           } else if (error) {
             console.error("[PEDAGOGICAL_PROFILE] Supabase student_pedagogical_profiles upsert returned error:", error);
@@ -4113,11 +3876,11 @@ async function startServer() {
       }
       
       writeJsonFile("student_pedagogical_profiles.json", list);
-      console.log("[PEDAGOGICAL_PROFILE] Fallback saved successfully:", newProfile);
+
       res.json(newProfile);
     } catch (err: any) {
       console.error("[PEDAGOGICAL_PROFILE] CRITICAL error inside handleStudentPedagogicalProfile handler:", err);
-      res.status(500).json({ error: err.message, stack: err.stack });
+      res.status(500).json({ error: "Pedagošku evidenciju nije moguće spremiti. Pokušajte ponovno." });
     }
   };
 
@@ -7648,15 +7411,6 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       list.push(newPlacement);
       writeJsonFile("practicum_placements.json", list);
 
-      // Try database upsert if table exists (ignore errors silently)
-      if (supabaseAdmin) {
-        try {
-          await supabaseAdmin.from("practicum_placements").upsert(newPlacement);
-        } catch (dbErr) {
-          console.warn("Db practicum_placements insert failed, fallback active:", dbErr);
-        }
-      }
-
       res.json(newPlacement);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -7723,8 +7477,8 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         date: payload.date,
         hours_worked: payload.hours_worked || 0,
         activity_description: payload.activity_description || "",
-        mentor_signature: payload.mentor_signature || "Nije potpisano", // "Nije potpisano" or "Potpisano"
-        signed_at: payload.signed_at || null,
+        mentor_signature: "Nije potpisano", // "Nije potpisano" or "Potpisano"
+        signed_at: null,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       };
@@ -7796,10 +7550,10 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
         id: idx >= 0 ? list[idx].id : crypto.randomUUID(),
         placement_id: payload.placement_id,
         student_id: payload.student_id,
-        engagement_grade: payload.engagement_grade || 5, // 1-5
-        expertise_grade: payload.expertise_grade || 5,   // 1-5
-        communication_grade: payload.communication_grade || 5, // 1-5
-        final_grade: payload.final_grade || 5,
+        engagement_grade: payload.engagement_grade, // 1-5
+        expertise_grade: payload.expertise_grade,   // 1-5
+        communication_grade: payload.communication_grade, // 1-5
+        final_grade: payload.final_grade,
         notes: payload.notes || "",
         evaluator_name: payload.evaluator_name || "Mentor škole",
         created_at: idx >= 0 ? list[idx].created_at : new Date().toISOString(),
@@ -7822,85 +7576,12 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
   // ==========================================================================
   // PRIORITY 4: REGISTRATIONS & TRANSFERS (UPISI I ISPISI)
   // ==========================================================================
-  app.get("/api/student-registrations", (req, res) => {
-    try {
-      const { studentId, schoolId } = req.query;
-      let list = readJsonFile("student_registrations.json");
-      if (studentId) list = list.filter(p => p.student_id === studentId);
-      if (schoolId) list = list.filter(p => p.school_id === schoolId);
-      res.json(list);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
+  app.get("/api/student-registrations", async (req,res) => {
+    if(typeof req.query.studentId!=='string'||typeof req.query.classId!=='string')return res.status(400).json({error:'Odaberite učenika i razred za pregled povijesti.'});
+    try{const client=userStorageClient(supabaseUrl,supabaseAnonKey,req);const {data,error}=await client.rpc('school_student_history',{_student:req.query.studentId,_class:req.query.classId});if(error)throw error;res.json(data);}catch(e:any){res.status(503).json({error:e.message||'Povijest nije dostupna.'});}
   });
 
-  app.post("/api/student-registrations", async (req, res) => {
-    try {
-      const payload = req.body;
-      if (!payload.student_id || !payload.action_type) {
-        return res.status(400).json({ error: "Missing student_id or action_type" });
-      }
-
-      const list = readJsonFile("student_registrations.json");
-      const record = {
-        id: crypto.randomUUID(),
-        student_id: payload.student_id,
-        action_type: payload.action_type, // 'UPIS', 'ISPIS', 'PREMJESTAJ', 'PRIJELAZ_IZ', 'PRIJELAZ_U'
-        date: payload.date || new Date().toISOString().split('T')[0],
-        reason: payload.reason || "",
-        school_id: payload.school_id || "",
-        former_class_id: payload.former_class_id || "",
-        former_class_name: payload.former_class_name || "",
-        new_class_id: payload.new_class_id || "",
-        new_class_name: payload.new_class_name || "",
-        other_school_name: payload.other_school_name || "",
-        details: payload.details || "",
-        registered_by: payload.registered_by || "Administrator",
-        created_at: new Date().toISOString()
-      };
-
-      list.push(record);
-      writeJsonFile("student_registrations.json", list);
-
-      // Save transfers permanently
-      if (payload.action_type === 'PREMJESTAJ' || payload.action_type === 'PRIJELAZ_IZ' || payload.action_type === 'PRIJELAZ_U') {
-        const transfers = readJsonFile("student_transfers.json");
-        transfers.push({
-          id: record.id,
-          date: record.date,
-          student_id: record.student_id,
-          action_type: record.action_type,
-          former_class_name: record.former_class_name,
-          new_class_name: record.new_class_name,
-          school_name: record.other_school_name || "Naša škola",
-          reason: record.reason,
-          created_at: record.created_at
-        });
-        writeJsonFile("student_transfers.json", transfers);
-      }
-
-      // If database is up, update user_profiles and user_school_roles status
-      if (supabaseAdmin) {
-        try {
-          if (payload.action_type === 'UPIS' || payload.action_type === 'PREMJESTAJ' || payload.action_type === 'PRIJELAZ_IZ') {
-            if (payload.new_class_id) {
-              await supabaseAdmin.from("user_profiles").update({ class_id: payload.new_class_id }).eq('id', payload.student_id);
-              await supabaseAdmin.from("user_school_roles").update({ status: 'ACTIVE' }).eq('user_id', payload.student_id);
-            }
-          } else if (payload.action_type === 'ISPIS' || payload.action_type === 'PRIJELAZ_U') {
-            await supabaseAdmin.from("user_profiles").update({ class_id: null }).eq('id', payload.student_id);
-            await supabaseAdmin.from("user_school_roles").update({ status: 'INACTIVE' }).eq('user_id', payload.student_id);
-          }
-        } catch (dbErr) {
-          console.warn("DB user profile registration update bypassed:", dbErr);
-        }
-      }
-
-      res.json(record);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
+  app.post("/api/student-registrations", (_req,res) => res.status(409).json({error:'Upis, ispis i premještaj provedite kroz provjereni postupak e-Matice. Povijest i ostale školske uloge ostaju očuvane.'}));
 
   app.get("/api/student-transfers", (req, res) => {
     try {
@@ -8012,16 +7693,22 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       }
 
       const list = readJsonFile("payments.json");
+      const amount=Number(payload.amount);
+      if(!Number.isFinite(amount)||amount<=0||Math.abs(amount*100-Math.round(amount*100))>0.000001)return res.status(400).json({error:'Unesite pozitivan iznos s najviše dvije decimale.'});
+      const paymentId=payload.client_request_id||crypto.randomUUID();
+      if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(paymentId))return res.status(400).json({error:'Neispravan identifikator zahtjeva.'});
+      const prior=list.find(p=>p.id===paymentId);
+      if(prior){if(prior.student_id===payload.student_id&&prior.amount===amount&&prior.purpose===payload.purpose)return res.json(prior);return res.status(409).json({error:'Zahtjev je već korišten za drugo zaduženje.'});}
       const newPayment = {
-        id: crypto.randomUUID(),
+        id: paymentId,
         student_id: payload.student_id,
         class_id: payload.class_id || "",
         school_id: payload.school_id || "",
         purpose: payload.purpose, // 'Ekskurzije', 'Izleti', 'Maturalna putovanja', 'Participacije', 'Ostale uplate'
-        amount: parseFloat(payload.amount),
+        amount,
         date: payload.date || new Date().toISOString().split('T')[0],
         status: payload.status || 'NIJE PLAĆENO', // 'PLAĆENO', 'DJELOMIČNO PLAĆENO', 'NIJE PLAĆENO'
-        receipt_number: "POT-" + Math.floor(100000 + Math.random() * 900000),
+        receipt_number: "EVID-" + paymentId,
         created_at: new Date().toISOString()
       };
 
@@ -8292,165 +7979,12 @@ Generiraj JSON objekt sa sljedećom strukturom:
       return app;
   }
 
-  const fixSpecificUsers = async () => {
-    if (!supabaseAdmin) return;
-    try {
-      const targetSchoolId = 'srednja-kola-glina-zagreb';
-      const DEFAULT_PIN_HASH = '$2b$10$EEbRoX3UU0AtHm3CMZSABOXxL9ghae0./0eeeBuKVpYEsAaDdXQ72'; // '1234'
-
-      console.log("[USER_FIX] Running specific users fix routine...");
-
-      // 1. Nikola Đurić
-      const { data: nikolaProf } = await supabaseAdmin
-        .from('user_profiles')
-        .select('*')
-        .eq('email', 'nikola.duric@skolehr.xyz')
-        .maybeSingle();
-
-      if (nikolaProf) {
-        await supabaseAdmin
-          .from('user_profiles')
-          .update({
-            name: 'Nikola Đurić',
-            role: 'MAIN_ADMIN',
-            access_role: 'MAIN_ADMIN',
-            school_id: null,
-            active_school_id: null,
-            pin_hash: nikolaProf.pin_hash || DEFAULT_PIN_HASH,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', nikolaProf.id);
-
-        await supabaseAdmin
-          .from('user_school_roles')
-          .upsert({
-            user_id: nikolaProf.id,
-            school_id: targetSchoolId,
-            role: 'SCHOOL_ADMIN',
-            status: 'ACTIVE',
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id,school_id,role' });
-        
-        console.log("[USER_FIX] Nikola Đurić verified as SCHOOL_ADMIN for", targetSchoolId);
-      }
-
-      // 2. Boris Srećković
-      const { data: borisProf } = await supabaseAdmin
-        .from('user_profiles')
-        .select('*')
-        .eq('email', 'boris.sreckovic@skolehr.xyz')
-        .maybeSingle();
-
-      if (borisProf) {
-        await supabaseAdmin
-          .from('user_profiles')
-          .update({
-            name: 'Boris Srećković',
-            role: 'SCHOOL_ADMIN',
-            access_role: 'SCHOOL_ADMIN',
-            school_id: targetSchoolId,
-            active_school_id: targetSchoolId,
-            pin_hash: borisProf.pin_hash || DEFAULT_PIN_HASH,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', borisProf.id);
-
-        await supabaseAdmin
-          .from('user_school_roles')
-          .upsert({
-            user_id: borisProf.id,
-            school_id: targetSchoolId,
-            role: 'SCHOOL_ADMIN',
-            status: 'ACTIVE',
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id,school_id,role' });
-
-        console.log("[USER_FIX] Boris Srećković verified as SCHOOL_ADMIN for", targetSchoolId);
-      }
-
-      // 3. Global Super Admin: skole@skolehr.xyz & skola@skolehr.xyz
-      for (const superEmail of ['skole@skolehr.xyz', 'skola@skolehr.xyz']) {
-        const { data: superProf } = await supabaseAdmin
-          .from('user_profiles')
-          .select('*')
-          .eq('email', superEmail)
-          .maybeSingle();
-
-        if (superProf) {
-          await supabaseAdmin
-            .from('user_profiles')
-            .update({
-              role: 'SUPER_ADMIN',
-              access_role: 'SUPER_ADMIN',
-              school_id: null,
-              active_school_id: null,
-              pin_hash: superProf.pin_hash || DEFAULT_PIN_HASH,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', superProf.id);
-          
-          console.log("[USER_FIX] Global admin verified:", superEmail);
-        }
-      }
-    } catch (err: any) {
-      console.error("[USER_FIX] Error running specific users fix:", err?.message || err);
-    }
-  };
-
-  const fixNullSchoolYears = async () => {
-    if (!supabaseAdmin) return;
-    try {
-      const { data: assignments, error } = await supabaseAdmin
-        .from("reading_assignments")
-        .select("id, class_id")
-        .is("school_year_id", null);
-
-      if (error) throw error;
-
-      if (assignments && assignments.length > 0) {
-        console.log(`[LEKTIRA FIX] Found ${assignments.length} assignments with null school_year_id. Repairing...`);
-        for (const item of assignments) {
-          if (!item.class_id) continue;
-          const { data: classData, error: classErr } = await supabaseAdmin
-            .from("classes")
-            .select("school_year_id")
-            .eq("id", item.class_id)
-            .maybeSingle();
-
-          if (classErr) {
-            console.error(`[LEKTIRA FIX] Error fetching class ${item.class_id}:`, classErr.message);
-            continue;
-          }
-
-          if (classData && classData.school_year_id) {
-            const { error: updateErr } = await supabaseAdmin
-              .from("reading_assignments")
-              .update({ school_year_id: classData.school_year_id })
-              .eq("id", item.id);
-
-            if (updateErr) {
-              console.error(`[LEKTIRA FIX] Error updating assignment ${item.id}:`, updateErr.message);
-            } else {
-              console.log(`[LEKTIRA FIX] Assignment ${item.id} successfully updated with school_year_id: ${classData.school_year_id}`);
-            }
-          }
-        }
-      }
-    } catch (err: any) {
-      console.error("[LEKTIRA FIX] Error running fallback check/fix:", err.message);
-    }
-  };
-
   if (isVercel) {
     console.log("[SERVER] Running in Vercel environment. Skipping app.listen.");
-    fixNullSchoolYears();
-    fixSpecificUsers();
   } else {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server running on http://localhost:${PORT}`);
-      fixNullSchoolYears();
-      fixSpecificUsers();
-    });
+        });
   }
   return app;
   } catch (err) {

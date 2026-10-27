@@ -46,8 +46,13 @@ jobs:
           node scripts/backup/archive.mjs decrypt skolehr-backup.enc "$backup_dir/verified.tar"
           cmp "$backup_dir/snapshot.tar" "$backup_dir/verified.tar"
       - uses: actions/upload-artifact@v4
+        id: upload
         with:
           name: skolehr-encrypted-${{ github.run_id }}
           path: skolehr-backup.enc
           retention-days: 14
           if-no-files-found: error
+      - name: Record verified uploaded backup
+        env:
+          BACKUP_ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+        run: node scripts/backup/record-evidence.mjs

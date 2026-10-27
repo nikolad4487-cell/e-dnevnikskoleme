@@ -1,3 +1,4 @@
+const NotificationCenterPage = lazy(() => import('./pages/shared/NotificationCenterPage'));
 import SchoolServicesPage from './components/services/SchoolServicesPage';
 import {resolvePortal} from './lib/portal';
 import React, { Suspense, lazy, useEffect, useRef } from 'react';
@@ -208,6 +209,7 @@ export default function App() {
                 </ProtectedRoute>
               } />
 
+              <Route path="/obavijesti" element={<ProtectedRoute><BasicLayout><NotificationCenterPage /></BasicLayout></ProtectedRoute>} />
               <Route path="/provjera-potvrde" element={<CertificateVerificationPage />} />
               <Route path="/" element={
                 <ProtectedRoute>

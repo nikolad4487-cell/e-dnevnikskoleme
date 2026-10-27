@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import {dossierFetch as fetch} from './dossierFetch';
+import React, { useState, useEffect, useRef } from 'react';
 import { Payment } from './DossierTypes';
 import { DollarSign, Printer, Plus, Trash2, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -14,6 +15,7 @@ interface DossierFinencesTabProps {
 export function DossierFinencesTab({ studentId, studentName, isStaff, schoolId, classId }: DossierFinencesTabProps) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(false);
+  const [saving,setSaving]=useState(false),sending=useRef(false),draftId=useRef(crypto.randomUUID());
   
   // Form states
   const [showPaymentForm, setShowPaymentForm] = useState(false);
@@ -25,14 +27,14 @@ export function DossierFinencesTab({ studentId, studentName, isStaff, schoolId, 
   const [receiptToPrint, setReceiptToPrint] = useState<Payment | null>(null);
 
   const fetchPayments = async () => {
-    setLoading(true);
+    setLoading(true);setPayments([]);
     try {
       const res = await fetch(`/api/payments?studentId=${studentId}`);
       if (res.ok) {
         setPayments(await res.json());
       }
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Evidenciju nije moguće učitati.');
     } finally {
       setLoading(false);
     }
@@ -49,11 +51,13 @@ export function DossierFinencesTab({ studentId, studentName, isStaff, schoolId, 
       return;
     }
 
+    if(sending.current)return;sending.current=true;setSaving(true);
     try {
       const res = await fetch('/api/payments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          client_request_id:draftId.current,
           student_id: studentId,
           class_id: classId,
           school_id: schoolId,
@@ -65,14 +69,15 @@ export function DossierFinencesTab({ studentId, studentName, isStaff, schoolId, 
       });
 
       if (res.ok) {
+        draftId.current=crypto.randomUUID();
         toast.success('Financijsko zaduženje uspješno kreirano.');
         setShowPaymentForm(false);
         setAmount('');
         fetchPayments();
       }
     } catch (err) {
-      console.error(err);
-    }
+      toast.error(err instanceof Error ? err.message : 'Promjena nije spremljena.');
+    } finally {sending.current=false;setSaving(false);}
   };
 
   const handleUpdateStatus = async (paymentId: string, newStatus: 'PLAĆENO' | 'DJELOMIČNO PLAĆENO' | 'NIJE PLAĆENO') => {
@@ -87,7 +92,7 @@ export function DossierFinencesTab({ studentId, studentName, isStaff, schoolId, 
         setPayments(payments.map(p => p.id === paymentId ? { ...p, status: newStatus } : p));
       }
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Evidenciju nije moguće učitati.');
     }
   };
 
@@ -100,7 +105,7 @@ export function DossierFinencesTab({ studentId, studentName, isStaff, schoolId, 
         setPayments(payments.filter(p => p.id !== id));
       }
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Evidenciju nije moguće učitati.');
     }
   };
 
@@ -187,7 +192,7 @@ export function DossierFinencesTab({ studentId, studentName, isStaff, schoolId, 
           </div>
           <div className="flex justify-end gap-2 pt-1">
             <button type="button" onClick={() => setShowPaymentForm(false)} className="px-4 py-2 border border-gray-300 text-gray-500 text-[10px] font-black uppercase rounded bg-white">Odustani</button>
-            <button type="submit" className="px-5 py-2 bg-[#005c8d] text-white text-[10px] font-black uppercase rounded shadow">Kreiraj financijsku stavku</button>
+            <button type="submit" disabled={saving} className="px-5 py-2 bg-[#005c8d] text-white text-[10px] font-black uppercase rounded shadow">Kreiraj financijsku stavku</button>
           </div>
         </form>
       )}

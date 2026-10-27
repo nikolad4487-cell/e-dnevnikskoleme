@@ -516,6 +516,7 @@ export default function FinalThesisTeacherPage() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6 font-sans">
+      {applications.some(app=>!app.class_id&&!app.school_year_id)&&<p role="status" className="border rounded p-3 mb-4">Postoje stare prijave bez potvrđenog razreda i školske godine. Sačuvane su za pregled; prije izmjene potrebno je uskladiti izvorne podatke s glavnim administratorom.</p>}
       <div className="border-b border-gray-200 pb-4 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black text-[#005c8d] uppercase tracking-tight">Pregled i odobrenje završnih radova</h1>

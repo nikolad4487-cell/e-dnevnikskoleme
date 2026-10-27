@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { useSelection } from "../../contexts/SelectionContext";
 import { supabase } from "../../lib/supabase";
@@ -13,7 +13,8 @@ const date = (s: string) =>
 const states: Record<string, string> = {
   SUBMITTED: "Zaprimljen",
   PROCESSING: "U obradi",
-  ISSUED: "Izdan",
+  NEEDS_INFORMATION: "Potrebna dopuna",
+  ISSUED: "Spremno za preuzimanje",
   REJECTED: "Odbijen",
 };
 const kinds: Record<string, string> = {
@@ -50,6 +51,7 @@ type Field = {
   type?: string;
   options?: { id: string; name: string }[];
   required?: boolean;
+  initialValue?: string;
 };
 function Form({
   fields,
@@ -71,7 +73,7 @@ function Form({
         e.preventDefault();
         setBusy(true);
         try {
-          await onSave(v);
+          await onSave(Object.fromEntries(fields.map(f => [f.key, v[f.key] ?? f.initialValue ?? ""])));
           setV({});
         } catch {
         } finally {
@@ -89,7 +91,7 @@ function Form({
                 className={box}
                 required={f.required !== false}
                 multiple={f.type === "multiple"}
-                value={v[f.key] || (f.type === "multiple" ? [] : "")}
+                value={v[f.key] ?? f.initialValue ?? (f.type === "multiple" ? [] : "")}
                 onChange={(e) =>
                   setV({
                     ...v,
@@ -115,7 +117,7 @@ function Form({
                 className={box}
                 required={f.required !== false}
                 maxLength={5000}
-                value={v[f.key] || ""}
+                value={v[f.key] ?? f.initialValue ?? ""}
                 onChange={(e) => setV({ ...v, [f.key]: e.target.value })}
               />
             ) : (
@@ -125,7 +127,7 @@ function Form({
                 type={f.type || "text"}
                 required={f.required !== false}
                 maxLength={2000}
-                value={v[f.key] || ""}
+                value={v[f.key] ?? f.initialValue ?? ""}
                 onChange={(e) => setV({ ...v, [f.key]: e.target.value })}
               />
             )}
@@ -146,6 +148,10 @@ export default function SchoolServicesPage({
   const { user, isParent } = useAuth(),
     { classId } = useParams(),
     selection = useSelection();
+  const [searchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const requestId = searchParams.get("request");
+  const itemId = searchParams.get("item"), linkedThread = searchParams.get("thread");
   const cls = classId || selection.selectedClassId,
     student = isParent ? selection.selectedChildId : user?.id;
   const [data, setData] = useState<any>(null),
@@ -154,6 +160,13 @@ export default function SchoolServicesPage({
     [loading, setLoading] = useState(false),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState(office ? "requests" : "messages");
+  useEffect(() => {
+    if (requestedTab && ["messages","consents","meetings","requests","exams","schedule"].includes(requestedTab)) setTab(office ? "requests" : requestedTab);
+  }, [requestedTab, requestId]);
+  useEffect(() => {
+    if (!data || tab !== "requests" || !requestId) return;
+    document.getElementById("request-" + requestId)?.scrollIntoView({ block: "center" });
+  }, [data, tab, requestId]);
   const threadRequest = useRef(0);
   const threadRevision = useRef(0),
     messageCursor = useRef<any>(null);
@@ -179,6 +192,16 @@ export default function SchoolServicesPage({
     },
     [office],
   );
+  useEffect(() => {
+    if (data && itemId) document.getElementById("service-item-" + itemId)?.scrollIntoView({block:"center"});
+  }, [data, tab, itemId]);
+  useEffect(() => {
+    let active=true;
+    if (!data || !linkedThread || tab!=="messages") return;
+    rpc("services_notification_thread", {_group:linkedThread,_class:cls,_student:classId?null:student})
+      .then(id=>{if(active)setThread(id);}).catch(e=>{if(active)setError(e.message);});
+    return ()=>{active=false;};
+  }, [data, linkedThread, tab, cls, student, classId]);
   const load = useCallback(async () => {
     const run = ++revision.current;
     setData(null);
@@ -637,7 +660,7 @@ export default function SchoolServicesPage({
                 />
               )}{" "}
               {data.consents.map((c: any) => (
-                <article key={c.id} className="border p-3 rounded space-y-2">
+                <article key={c.id} id={"service-item-" + c.id} className="border p-3 rounded space-y-2">
                   <h2 className="font-bold">{c.title}</h2>
                   <p className="whitespace-pre-wrap">{c.description}</p>
                   <p>
@@ -760,7 +783,7 @@ export default function SchoolServicesPage({
                 />
               )}{" "}
               {data.meetings.map((s: any) => (
-                <article key={s.id} className="border p-3 rounded space-y-2">
+                <article key={s.id} id={"service-item-" + s.id} className="border p-3 rounded space-y-2">
                   <strong>
                     {date(s.starts_at)} — {date(s.ends_at)}
                   </strong>
@@ -979,7 +1002,7 @@ export default function SchoolServicesPage({
                 />
               )}{" "}
               {data.substitutions.map((s: any) => (
-                <article key={s.id} className="border p-3 rounded">
+                <article key={s.id} id={"service-item-" + s.id} className="border p-3 rounded">
                   <strong>
                     {s.date} · {s.hour}. sat · {s.subject}
                   </strong>
@@ -1024,7 +1047,7 @@ export default function SchoolServicesPage({
                 />
               )}{" "}
               {data.requests.map((r: any) => (
-                <article key={r.id} className="border p-3 rounded space-y-2">
+                <article key={r.id} id={"request-" + r.id} className="border p-3 rounded space-y-2">
                   <strong>
                     {kinds[r.kind] || r.kind} — {states[r.status]}
                   </strong>
@@ -1032,8 +1055,19 @@ export default function SchoolServicesPage({
                     {r.student} {r.class} · {date(r.created_at)}
                   </p>
                   <p className="whitespace-pre-wrap">{r.purpose}</p>
-                  <p>{r.note}</p>
-                  {office && ["SUBMITTED", "PROCESSING"].includes(r.status) && (
+                  <p className="whitespace-pre-wrap">{r.note}</p>
+                  {r.updated_at && <p className="text-sm text-slate-500">Posljednja promjena: {date(r.updated_at)}</p>}
+                  {!office && r.status === "NEEDS_INFORMATION" && r.requested_by === user?.id && (
+                    <Form
+                      disabled={busy}
+                      label="Pošalji dopunu zahtjeva"
+                      fields={[{ key: "purpose", label: "Dopunjena svrha i napomena zahtjeva", type: "textarea", initialValue: r.purpose }]}
+                      onSave={(v) => act("services_supplement_request", {
+                        _id: r.id, _purpose: v.purpose, _updated_at: r.updated_at,
+                      })}
+                    />
+                  )}
+                  {office && ["SUBMITTED", "PROCESSING", "NEEDS_INFORMATION"].includes(r.status) && (
                     <>
                       <p>
                         Dokument najprije izdajte kroz postojeći postupak uz
@@ -1049,6 +1083,7 @@ export default function SchoolServicesPage({
                             label: "Status obrade",
                             options: [
                               { id: "PROCESSING", name: "U obradi" },
+                              { id: "NEEDS_INFORMATION", name: "Potrebna dopuna — navedi što nedostaje" },
                               { id: "ISSUED", name: "Izdan — poveži PDF" },
                               {
                                 id: "REJECTED",
@@ -1072,8 +1107,9 @@ export default function SchoolServicesPage({
                           },
                         ]}
                         onSave={(v) =>
-                          act("services_handle_request", {
+                          act("services_review_request", {
                             _id: r.id,
+                            _updated_at: r.updated_at,
                             _status: v.status,
                             _note: v.note || "",
                             _document: v.document || null,
@@ -1140,7 +1176,7 @@ export default function SchoolServicesPage({
                 />
               )}{" "}
               {data.exams.map((s: any) => (
-                <article key={s.id} className="border p-3 rounded space-y-2">
+                <article key={s.id} id={"service-item-" + s.id} className="border p-3 rounded space-y-2">
                   <strong>
                     {s.subject} · {examNames[s.exam_type] || s.exam_type}
                   </strong>
