@@ -36,3 +36,15 @@ Nakon aktivacije objaviti e-Dnevnik/obiteljski portal/Referadu i e-Maticu te pro
 - Preglednik: postojeći `test:family`, `test:roles`, `test:principal`, `test:browser`, `test:services`; novi `node tests/browser-reliability.mjs` (e-Matica checkout u susjednom direktoriju ili `EMATICA_SOURCE_DIR`).
 - e-Matica: `npm test`, `npm run build`, `npm run test:browser`, `npm run test:layout`.
 - Testovi koriste ogledne podatke. Izolirani PostgreSQL test izvršava objedinjenu SQL aktivaciju dva puta i provjerava opseg škola, atomsku pohranu, sukobe verzija, ovlasti, povijest i zaštite završnih radova. Preglednik provjerava obavijesti s jednakim vremenima, filtriranje, otvaranje pravog konteksta, nepostojanje izmišljenog backupa, kvalitetu podataka i uske prikaze.
+
+## Stvarno stanje aktivacije
+
+Povezan je Supabase projekt `hkqlbeetlvrplaeubncc`, PostgreSQL 17.6, plan Free. Kopija prethodnih definicija izmijenjenih funkcija i pravila završnih radova sačuvana je izvan repozitorija; to je evidencija za povrat sheme, ne cjelovita sigurnosna kopija podataka.
+
+Primjena `AKTIVACIJA-POUZDANOST-SUSTAVA.sql` zaustavljena je automatskom provjerom odobrenja prije izvršavanja. Stated reason: promjena produkcijske sheme, RLS/politika, privilegija i više workflow funkcija zahtijeva izričito odobrenje preciznog opsega i očekivanog učinka. Naknadni upit potvrdio je da nove tablice nisu instalirane i da su sve tri postojeće prijave završnih radova sačuvane.
+
+Predmet odobrenja: dvije nove zaštićene tablice, dodatna polja završnih radova, ograničenja pristupa i audit završnih radova, proširenje statusa zahtjeva i funkcija dopune, funkcije pregleda potpunosti/spremnosti, točniji kontekst obavijesti te povezani indeksi. Ne mijenjaju se postojeće ocjene, upisi, školske godine ni sadržaj starih završnih radova; ne šalju se obavijesti primjenom same migracije. Nova pravila onemogućuju izmjenu triju starih prijava bez provjerene pripadnosti.
+
+Osnovni Supabase sigurnosni pregled zabilježio je i 12 postojećih pogleda sa statusom SECURITY DEFINER te starija upozorenja o izvršavanju funkcija i search_path. Ta upozorenja nisu dokaz da svaki navedeni RPC ima ranjivost: više postojećih funkcija provodi vlastite provjere ovlasti. Ova nadogradnja nije slijepo prepisivala stare upisne module; taj dio zahtijeva zasebnu provjeru prije tvrdnje da je cijeli projekt sigurnosno certificiran. [Opis provjere pogleda](https://supabase.com/docs/guides/database/database-linter?lint=0010_security_definer_view).
+
+Za Free projekte ne treba pretpostavljati automatske dnevne kopije pružatelja; [službene upute za sigurnosne kopije](https://supabase.com/docs/guides/platform/backups) navode raspoloživost po planovima. Dodatni workflow nije označen aktivnim bez potvrđene konfiguracije i uspješnog prolaza. Plaćeni plan ili nova grana nisu uključeni niti naručeni.
