@@ -35,7 +35,7 @@ test('School services: real scope, communications, consents, bookings and shared
  await db.query("SELECT services_send($1,'Privatni prilog',$2)",[group,JSON.stringify({path:attachmentPath,name:'Ispricnica.pdf',type:'application/pdf',size:50})]);
  assert.equal((await db.query("DELETE FROM storage.objects WHERE bucket_id='family-files' AND name=$1 RETURNING id",[attachmentPath])).rows.length,0,'linked attachment cannot be deleted even under legacy open policies');
  const message=(await db.query("SELECT services_send($1,'Poruka roditelja') x",[group])).rows[0].x;
- await login(teacher);let msgs=(await db.query('SELECT services_messages($1) x',[group])).rows[0].x;assert.equal(msgs.length,2);
+ await login(teacher);const threadAlerts=(await db.query('SELECT link,student_id,class_id FROM portal_notifications WHERE user_id=$1',[teacher])).rows;assert(threadAlerts.some(n=>n.link.includes('thread='+group)&&n.student_id===student&&n.class_id==='ca'));let msgs=(await db.query('SELECT services_messages($1) x',[group])).rows[0].x;assert.equal(msgs.length,2);
  await db.query('SELECT services_read($1,$2)',[group,[message]]);
  const consent=(await db.query("SELECT services_consent('ca','Izlet','Uvjeti putovanja',now()+interval '7 days') x")).rows[0].x;
  const slot=(await db.query("SELECT services_meeting('ca',now()+interval '3 days',now()+interval '3 days 30 minutes','Učionica 2') x")).rows[0].x;
@@ -107,4 +107,48 @@ await login(admin);const absentSession=(await db.query("SELECT services_exam('ca
  await login(admin);const withdrawnSession=(await db.query("SELECT services_exam('ca','math','RAZLIKOVNI',now()+interval '7 days','A4',$1) x",[[teacher]])).rows[0].x;await db.query('SELECT services_register_exam($1,$2)',[withdrawnSession,student]);await db.query("SELECT services_resolve_exam_registration($1,$2,'WITHDRAWN','Povučeno na zahtjev roditelja.')",[withdrawnSession,student]);await login(parent);await assert.rejects(db.query('SELECT services_register_exam($1,$2,true)',[withdrawnSession,student]));
  await db.exec("RESET ROLE;SELECT set_config('request.jwt.claim.sub','',false)");await db.query("INSERT INTO user_school_roles(user_id,school_id,role,status)VALUES($1,'a','SCHOOL_ADMIN','ACTIVE')",[principal]);await login(principal);assert.equal((await db.query("SELECT school_services_context('ca') x")).rows[0].x.admin,false);await assert.rejects(db.query("SELECT services_resolve_exam_registration($1,$2,'WITHDRAWN','Ravnatelj ne uređuje')",[absentSession,student]));
  await login(teacher);await db.query('SELECT services_cancel_consent($1)',[consent]);await login(parent);await assert.rejects(db.query("SELECT services_consent_reply($1,$2,true,'')",[consent,student]));
+
+
+ // Durable operational records use actual user-scoped DB checks, atomic changes and no filesystem fallback.
+ const auxCommit=changes=>db.query('SELECT school_aux_commit($1)',[JSON.stringify(changes)]);
+ const snapshot=async()=> (await db.query('SELECT school_aux_snapshot() x')).rows[0].x;
+ const payment={id:uid(80),school_id:'a',class_id:'ca',student_id:student,purpose:'Izlet',amount:25,status:'NIJE PLAĆENO',date:'2026-10-27'};
+ await login(admin);await auxCommit([{collection:'payments',before:[],after:[payment]}]);
+ assert.deepEqual((await snapshot()).payments,[payment]);
+ const changed={...payment,status:'PLAĆENO'};
+ await auxCommit([{collection:'payments',before:[payment],after:[changed]}]);
+ await assert.rejects(auxCommit([{collection:'payments',before:[payment],after:[{...payment,amount:30}]}]),/promijenjen/);
+ await assert.rejects(auxCommit([{collection:'payments',before:[changed],after:[payment,{...payment,id:uid(81),amount:-1}]}]));
+ assert.deepEqual((await snapshot()).payments,[changed],'failure rolls back the entire batch');
+ await login(parent);assert.deepEqual((await snapshot()).payments,[changed]);await assert.rejects(auxCommit([{collection:'payments',before:[changed],after:[]}]),/ovlasti/);
+ await login(outsider);assert.deepEqual((await snapshot()).payments,[]);await assert.rejects(auxCommit([{collection:'payments',before:[changed],after:[]}]),/ovlasti/);
+ await assert.rejects(db.query('SELECT * FROM school_auxiliary_records'));
+ await login(admin);await assert.rejects(auxCommit([{collection:'payments',before:[],after:[{...payment,id:uid(82),school_id:'b'}]}]));
+ const quality=(await db.query("SELECT school_data_quality('a') x")).rows[0].x;
+ assert(quality.some(r=>r.student_id===student && r.missing.includes('ADDRESS') && r.missing.includes('DOB') && r.missing.includes('PROGRAM') && !r.missing.includes('GUARDIAN')));
+ await login(outsider);await assert.rejects(db.query("SELECT school_data_quality('a')"));await assert.rejects(db.query("SELECT school_system_readiness('a')"));
+ await login(admin);let readiness=(await db.query("SELECT school_system_readiness('a') x")).rows[0].x;
+ assert.equal(readiness.backup,null);assert.equal(readiness.restore,null);assert.equal(readiness.durable_storage,true);assert.equal(readiness.qualified_sealing_connected,false);
+ await assert.rejects(db.query("INSERT INTO system_recovery_evidence(kind,succeeded,artifact_id,sha256) VALUES('BACKUP',true,'fake',$1)",['a'.repeat(64)]));
+ await login(teacher);await db.query('SELECT services_notify($1,$2,$3)',[parent,'Nova suglasnost za roditelja','ca']).then(()=>{throw Error('internal notification helper must not be public')},()=>{});
+ await db.exec('RESET ROLE');const logged=(await db.query("SELECT actor_id,after_data FROM registry_change_log WHERE entity='AUXILIARY:payments' ORDER BY changed_at DESC")).rows;
+ assert.equal(logged.length,2);assert.equal(logged[0].actor_id,admin);
+
+ await db.exec('RESET ROLE');await db.query("INSERT INTO programs(id,school_id,name,duration_years) VALUES($1,'a','Ogledni program',3)",[uid(91)]);await db.query("UPDATE classes SET grade_level=3,program_id=$1 WHERE id='ca'",[uid(91)]);
+ // Canonical thesis fields and school boundaries remain enforced even under legacy permissive RLS.
+ await login(student);const thesis=uid(90);
+ await db.query("INSERT INTO final_thesis(id,student_id,class_id,school_id,mentor_id,thesis_title,status)VALUES($1,$2,'ca','a',$3,'Ogledni rad','CREATED')",[thesis,student,teacher]);
+ await assert.rejects(db.query('UPDATE final_thesis SET final_grade=5 WHERE id=$1',[thesis]));
+ await login(outsider);assert.equal((await db.query('SELECT id FROM final_thesis WHERE id=$1',[thesis])).rows.length,0);
+ await login(teacher);await db.query("UPDATE final_thesis SET status='ACCEPTED',application_registry_number='TEST-1' WHERE id=$1",[thesis]);
+ await login(student);assert.equal((await db.query('SELECT application_registry_number FROM final_thesis WHERE id=$1',[thesis])).rows[0].application_registry_number,'TEST-1');
+ await assert.rejects(db.query("UPDATE final_thesis SET thesis_title='Prepisano' WHERE id=$1",[thesis]));
+ await db.query("UPDATE final_thesis SET status='DEREGISTERED',deregistration_note='Odjava učenika' WHERE id=$1",[thesis]);
+ await assert.rejects(db.query('DELETE FROM final_thesis WHERE id=$1',[thesis]));
+
+ await db.exec("RESET ROLE;ALTER TABLE final_thesis DISABLE TRIGGER school_thesis_integrity");
+ await db.query("INSERT INTO final_thesis(id,student_id,mentor_id,status,thesis_title)VALUES($1,$2,$3,'CREATED','Stari rad bez pripadnosti')",[uid(92),student,teacher]);
+ await db.exec('ALTER TABLE final_thesis ENABLE TRIGGER school_thesis_integrity');
+ await login(student);assert.equal((await db.query('SELECT id FROM final_thesis WHERE id=$1',[uid(92)])).rows.length,1);await assert.rejects(db.query("UPDATE final_thesis SET thesis_title='Pogrešno pretpostavljen razred' WHERE id=$1",[uid(92)]));
+ await login(outsider);assert.equal((await db.query('SELECT id FROM final_thesis WHERE id=$1',[uid(92)])).rows.length,0);
  }finally{await db.close();}});

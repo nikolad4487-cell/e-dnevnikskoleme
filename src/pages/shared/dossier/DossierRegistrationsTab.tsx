@@ -1,3 +1,4 @@
+import {dossierFetch as fetch} from './dossierFetch';
 import React, { useState, useEffect } from 'react';
 import { StudentRegistration, Competition } from './DossierTypes';
 import { Award, RefreshCw, Plus, Trash2, ArrowUpRight, ArrowDownLeft, FileText } from 'lucide-react';
@@ -14,16 +15,7 @@ interface DossierRegistrationsTabProps {
 export function DossierRegistrationsTab({ studentId, isStaff, schoolId, currentClassId, currentClassName }: DossierRegistrationsTabProps) {
   const [registrations, setRegistrations] = useState<StudentRegistration[]>([]);
   const [competitions, setCompetitions] = useState<Competition[]>([]);
-  const [schoolClasses, setSchoolClasses] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(false);
-
-  // Status/Enrollment Action forms
-  const [showRegForm, setShowRegForm] = useState(false);
-  const [actionType, setActionType] = useState<'UPIS' | 'ISPIS' | 'PREMJESTAJ' | 'PRIJELAZ_IZ' | 'PRIJELAZ_U'>('PREMJESTAJ');
-  const [selectedClassId, setSelectedClassId] = useState('');
-  const [otherSchool, setOtherSchool] = useState('');
-  const [reason, setReason] = useState('');
-  const [details, setDetails] = useState('');
 
   // Competition forms
   const [showCompForm, setShowCompForm] = useState(false);
@@ -34,36 +26,18 @@ export function DossierRegistrationsTab({ studentId, isStaff, schoolId, currentC
   const [placement, setPlacement] = useState('');
   const [compDate, setCompDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // Fetch school classes for relocation dropdown
-  const fetchClasses = async () => {
-    try {
-      // Just mock search or pull from window variables or API
-      const res = await fetch('/api/classes'); 
-      // If we don't have a reliable `/api/classes` endpoint, we fall back to a reasonable hardcoded program list or let them type it.
-      // Wait, we have classes, let's read classes from API if available.
-      if (res.ok) {
-        const raw = await res.json();
-        // Fallback to array if it's an object or list
-        const list = Array.isArray(raw) ? raw : (raw.data || []);
-        setSchoolClasses(list);
-      }
-    } catch (e) {
-      console.warn("Could not load classes dropdown, falling back to empty:", e);
-    }
-  };
-
   const fetchData = async () => {
-    setLoading(true);
+    setLoading(true);setRegistrations([]);setCompetitions([]);
     try {
       const [regRes, compRes] = await Promise.all([
-        fetch(`/api/student-registrations?studentId=${studentId}`),
+        fetch(`/api/student-registrations?studentId=${encodeURIComponent(studentId)}&classId=${encodeURIComponent(currentClassId||'')}`),
         fetch(`/api/competitions?studentId=${studentId}`)
       ]);
 
       if (regRes.ok) setRegistrations(await regRes.json());
       if (compRes.ok) setCompetitions(await compRes.json());
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Evidenciju nije moguće učitati.');
     } finally {
       setLoading(false);
     }
@@ -71,51 +45,7 @@ export function DossierRegistrationsTab({ studentId, isStaff, schoolId, currentC
 
   useEffect(() => {
     fetchData();
-    if (isStaff) {
-      fetchClasses();
-    }
-  }, [studentId]);
-
-  // Handle Enrollment Action
-  const handleRecordAction = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (actionType === 'PREMJESTAJ' && !selectedClassId) {
-      toast.error('Molimo odaberite novi razred.');
-      return;
-    }
-
-    const newClassObj = schoolClasses.find(c => c.id === selectedClassId);
-    try {
-      const res = await fetch('/api/student-registrations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          student_id: studentId,
-          action_type: actionType,
-          reason,
-          school_id: schoolId,
-          former_class_id: currentClassId,
-          former_class_name: currentClassName || "Nije dodijeljeno",
-          new_class_id: selectedClassId || null,
-          new_class_name: newClassObj ? newClassObj.name : "",
-          other_school_name: otherSchool,
-          details,
-          registered_by: 'Administrator / Razrednik'
-        })
-      });
-
-      if (res.ok) {
-        toast.success(`Promjena statusa uplate i registracijskog usmjerenja ${actionType} upisana.`);
-        setShowRegForm(false);
-        setReason('');
-        setDetails('');
-        setOtherSchool('');
-        fetchData();
-      }
-    } catch (err) {
-      console.error(err);
-    }
-  };
+  }, [studentId,currentClassId]);
 
   // Record Competition Success
   const handleAddCompetition = async (e: React.FormEvent) => {
@@ -151,7 +81,7 @@ export function DossierRegistrationsTab({ studentId, isStaff, schoolId, currentC
         fetchData();
       }
     } catch (err) {
-      console.error(err);
+      toast.error(err instanceof Error ? err.message : 'Promjena nije spremljena.');
     }
   };
 
@@ -164,7 +94,7 @@ export function DossierRegistrationsTab({ studentId, isStaff, schoolId, currentC
         setCompetitions(competitions.filter(c => c.id !== id));
       }
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Evidenciju nije moguće učitati.');
     }
   };
 
@@ -178,62 +108,12 @@ export function DossierRegistrationsTab({ studentId, isStaff, schoolId, currentC
             <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide">Upisi, ispisi i premještaji razreda</h4>
             <p className="text-[10px] text-gray-400 font-bold uppercase tracking-tight">Registar upisa/ispisa i trajna evidencija povijesti premještaja</p>
           </div>
-          {isStaff && (
-            <button 
-              type="button"
-              id="add-reloc-btn"
-              onClick={() => setShowRegForm(!showRegForm)}
-              className="px-2.5 py-1 text-[9px] border border-[#005c8d] text-[#005c8d] bg-sky-50 font-black uppercase tracking-widest rounded"
-            >
-              Upiši promjenu
-            </button>
-          )}
+          {isStaff && <a href="https://e-matica.skolehr.xyz/" className="underline text-sm">Upis, ispis i premještaj u e-Matici</a>}
         </div>
 
-        {showRegForm && (
-          <form onSubmit={handleRecordAction} className="bg-slate-50 border p-4 rounded space-y-3 animate-in fade-in duration-200">
-            <div>
-              <label className="block text-[9px] font-bold uppercase text-gray-500 mb-0.5">Vrsta promjene</label>
-              <select id="r-action" className="w-full px-2 py-1 bg-white border border-gray-300 rounded text-xs font-black uppercase text-[#005c8d]" value={actionType} onChange={e => setActionType(e.target.value as any)}>
-                <option value="PREMJESTAJ">PREMJESTAJ U DRUGI RAZRED (INTERNO)</option>
-                <option value="UPIS">PRVI UPIS U ŠKOLU</option>
-                <option value="ISPIS">ISPIS IZ ŠKOLE</option>
-                <option value="PRIJELAZ_IZ">PRIJELAZ IZ DRUGE SREDNJE ŠKOLE</option>
-                <option value="PRIJELAZ_U">PRIJELAZ U DRUGU SREDNJU ŠKOLU</option>
-              </select>
-            </div>
 
-            {actionType === 'PREMJESTAJ' && (
-              <div>
-                <label className="block text-[9px] font-bold uppercase text-gray-500 mb-0.5">Odaberite ciljni razred</label>
-                <select id="r-target-class" className="w-full px-2 py-1 bg-white border border-gray-300 rounded text-xs" value={selectedClassId} onChange={e => setSelectedClassId(e.target.value)}>
-                  <option value="">-- Odaberite novi razred --</option>
-                  {schoolClasses.map(c => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
 
-            {(actionType === 'PRIJELAZ_IZ' || actionType === 'PRIJELAZ_U') && (
-              <div>
-                <label className="block text-[9px] font-bold uppercase text-gray-500 mb-0.5">Naziv druge škole</label>
-                <input id="r-other-school" type="text" placeholder="npr. Ugostiteljska škola Opatija" className="w-full px-2 py-1 border rounded text-xs" value={otherSchool} onChange={e => setOtherSchool(e.target.value)} />
-              </div>
-            )}
-
-            <div>
-              <label className="block text-[9px] font-bold uppercase text-gray-500 mb-0.5">Razlog promjene (Službeno obrazloženje):</label>
-              <input id="r-reason" type="text" required placeholder="npr. Preseljenje obitelji, promjena strukovnog smjera iz kuhara u konobara..." className="w-full px-2 py-1 border rounded text-xs bg-white" value={reason} onChange={e => setReason(e.target.value)} />
-            </div>
-
-            <div className="flex justify-end gap-2 text-[9px] font-black uppercase pt-1">
-              <button type="button" onClick={() => setShowRegForm(false)} className="px-3 py-1 border rounded bg-white text-gray-500">Zatvori</button>
-              <button type="submit" className="px-4 py-1 bg-[#005c8d] text-white rounded">Spremi</button>
-            </div>
-          </form>
-        )}
-
+        {registrations.length===100&&<p className="text-sm">Prikazano je zadnjih 100 promjena. Cjelovitu matičnu povijest pregledajte u e-Matici.</p>}
         <div className="max-h-[30rem] overflow-y-auto space-y-3 pr-1">
           {loading ? (
             <div className="text-center py-10 text-xs font-bold text-gray-400 uppercase tracking-widest animate-pulse">Učitavanje povijesti statusa...</div>
@@ -270,7 +150,7 @@ export function DossierRegistrationsTab({ studentId, isStaff, schoolId, currentC
             ))
           ) : (
             <div className="text-center py-20 text-xs font-bold text-gray-400 uppercase tracking-widest italic bg-slate-50 border rounded border-dashed">
-              Nema registrirane promjene statusa. Student ima zadani aktivni upis u razred.
+              Nema zabilježenih promjena u ovom prikazu. Status školovanja provjerite u matičnoj evidenciji.
             </div>
           )}
         </div>

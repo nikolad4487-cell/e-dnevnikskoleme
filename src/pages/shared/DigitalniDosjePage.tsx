@@ -960,10 +960,10 @@ export default function DigitalniDosjePage() {
 
             {/* T6: STRUČNA PRAKSA */}
             {activeTab === 'TRAINING' && (
-              <DossierPracticumTab 
+              <DossierPracticumTab key={studentId+':'+(studentProfile?.class_id||'')}
                 studentId={studentId} 
                 isStaff={isStaff} 
-                schoolYear="2025/2026" 
+                schoolYear={studentProfile?.classes?.school_year||''}
                 classId={studentProfile?.class_id}
                 schoolId={selectedSchoolId || studentProfile?.school_id}
               />
@@ -971,7 +971,7 @@ export default function DigitalniDosjePage() {
 
             {/* T7: FINANCIJSKE UPLATE */}
             {activeTab === 'FINANCE' && (
-              <DossierFinencesTab 
+              <DossierFinencesTab key={studentId+':'+(studentProfile?.class_id||'')}
                 studentId={studentId} 
                 studentName={studentProfile.name} 
                 isStaff={isStaff} 
@@ -982,7 +982,7 @@ export default function DigitalniDosjePage() {
 
             {/* T8: PRIJELAZI & NATJECANJA */}
             {activeTab === 'REGISTRATIONS' && (
-              <DossierRegistrationsTab 
+              <DossierRegistrationsTab key={studentId+':'+(studentProfile?.class_id||'')}
                 studentId={studentId} 
                 isStaff={isStaff} 
                 schoolId={selectedSchoolId || studentProfile?.school_id}

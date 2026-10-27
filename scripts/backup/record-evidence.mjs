@@ -1,0 +1,10 @@
+import {createClient} from '@supabase/supabase-js';
+import {createHash} from 'node:crypto';
+import {createReadStream} from 'node:fs';
+const {SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY,BACKUP_ARTIFACT_ID,GITHUB_REPOSITORY,GITHUB_RUN_ID}=process.env;
+if(!SUPABASE_URL||!SUPABASE_SERVICE_ROLE_KEY||!BACKUP_ARTIFACT_ID||!GITHUB_REPOSITORY||!GITHUB_RUN_ID)throw Error('Missing backup evidence configuration.');
+const hash=createHash('sha256');for await(const chunk of createReadStream('skolehr-backup.enc'))hash.update(chunk);
+const client=createClient(SUPABASE_URL,SUPABASE_SERVICE_ROLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
+const {error}=await client.from('system_recovery_evidence').insert({kind:'BACKUP',succeeded:true,artifact_id:BACKUP_ARTIFACT_ID,sha256:hash.digest('hex'),details:`Verified encrypted database and Storage archive uploaded by https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}. This is not a restore test.`});
+if(error)throw Error('Archive uploaded, but recording backup evidence failed. Check the database migration and workflow logs.');
+console.log('Recorded evidence of the uploaded, verified archive.');

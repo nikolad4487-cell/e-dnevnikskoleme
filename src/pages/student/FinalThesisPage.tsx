@@ -219,6 +219,7 @@ export default function FinalThesisPage() {
 
   return (
     <div className="p-4 md:p-5 w-full min-h-full bg-white font-sans">
+      {applications.some(app=>!app.class_id&&!app.school_year_id)&&<p role="status" className="border rounded p-3 mb-4">Postoje stare prijave bez potvrđenog razreda i školske godine. Sačuvane su za pregled; prije izmjene potrebno je uskladiti izvorne podatke s glavnim administratorom.</p>}
       <div className="flex items-center justify-between gap-4 mb-10">
         <h1 className="text-lg font-normal text-slate-950">
           {showCreateForm || activeApp?.status === 'CREATED' || latestDeregistered ? 'PRIJAVA ZAVRŠNOG RADA' : 'ZAVRŠNI RAD'}

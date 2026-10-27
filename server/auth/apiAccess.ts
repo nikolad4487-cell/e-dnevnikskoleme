@@ -54,6 +54,10 @@ export function apiAccessGuard(authenticate:(req:any)=>Promise<any>, database?:a
      if(!student&&database){const link=await database.from('parent_child_relationships').select('id').eq('parent_id',auth.userId).eq('child_id',person).limit(1);if(!link.error&&link.data?.length)continue;}
      return res.status(403).json({error:'Učenik nije povezan s vašim računom.'});
     }
+    if(student&&req.method!=='GET'&&/^\/api\/matura-registrations\//.test(req.path)){
+     const id=req.path.split('/')[3],record=database?await database.from('matura_registrations').select('student_id').eq('id',id).maybeSingle():null;
+     if(record?.error||record?.data?.student_id!==auth.userId)return res.status(403).json({error:'Prijava mature nije dostupna vašem računu.'});
+    }
     if(student&&req.method!=='GET'&&/^\/api\/final-thesis\//.test(req.path)){
      const id=req.path.split('/')[3],record=database?await database.from('final_thesis').select('student_id').eq('id',id).maybeSingle():null;
      if(record?.error||record?.data?.student_id!==auth.userId)return res.status(403).json({error:'Završni rad nije dostupan vašem računu.'});

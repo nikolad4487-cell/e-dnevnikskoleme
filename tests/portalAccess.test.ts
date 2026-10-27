@@ -50,3 +50,10 @@ test('Reader accounts cannot mutate school metadata, finances, unrelated pupils 
   const read=await fetch(url+'/api/final-thesis');assert.equal(read.status,200);assert.equal((await read.json()).query.studentId,'own');
  }finally{await new Promise<void>(r=>server.close(()=>r()));}
 });
+
+test('Student cannot cancel a foreign matura registration by omitting student_id',async()=>{
+ let owner='foreign';const q:any={select:()=>q,eq:()=>q,maybeSingle:async()=>({data:{student_id:owner},error:null})};
+ const app=express();app.use(express.json());app.use(apiAccessGuard(async()=>({userId:'own',profile:{role:'STUDENT',school_id:'a'},roles:[{role:'STUDENT',school_id:'a',status:'ACTIVE'}]}),{from:()=>q}));app.put('/api/matura-registrations/:id/cancel',(_req,res)=>res.json({ok:true}));
+ const server=app.listen(0,'127.0.0.1');await new Promise<void>(r=>server.once('listening',r));const url='http://127.0.0.1:'+(server.address() as any).port+'/api/matura-registrations/registration/cancel';
+ try{assert.equal((await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:'{}'})).status,403);owner='own';assert.equal((await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:'{}'})).status,200);}finally{await new Promise<void>(r=>server.close(()=>r()));}
+});

@@ -191,7 +191,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
           )}
         </div>
 
-        <div className="flex items-center gap-3 relative shrink-0" ref={menuRef}>
+        <div className="flex items-center gap-3 relative shrink-0" ref={menuRef}><Link to="/obavijesti" aria-label="Obavijesti i zadaci" className="p-2 rounded border"><Bell size={20}/></Link>
           <div className="text-right hidden sm:block">
             <div className="text-base font-bold leading-tight">{formatPersonName(user)}</div>
           </div>
@@ -331,7 +331,7 @@ export function Header({ showNav = true, hideClass = false }: HeaderProps) {
           
           {isNotifOpen && (
             <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-white text-gray-800 border border-gray-200 shadow-xl rounded py-2 z-[100] animate-in fade-in zoom-in-95 duration-100 max-h-[350px] overflow-y-auto">
-              <div className="px-4 pb-2 border-b border-gray-100 font-bold text-sm">Obavijesti</div>
+              <div className="px-4 pb-2 border-b border-gray-100 font-bold text-sm">Obavijesti <Link to="/obavijesti" className="underline ml-2" onClick={()=>setIsNotifOpen(false)}>Sve obavijesti i zadaci</Link></div>
               {notifications.length === 0 ? (
                 <div className="px-4 py-6 text-center text-sm text-gray-500">Nema novih obavijesti.</div>
               ) : (

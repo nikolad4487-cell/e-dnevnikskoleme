@@ -151,6 +151,7 @@ export default function SchoolServicesPage({
   const [searchParams] = useSearchParams();
   const requestedTab = searchParams.get("tab");
   const requestId = searchParams.get("request");
+  const itemId = searchParams.get("item"), linkedThread = searchParams.get("thread");
   const cls = classId || selection.selectedClassId,
     student = isParent ? selection.selectedChildId : user?.id;
   const [data, setData] = useState<any>(null),
@@ -160,7 +161,7 @@ export default function SchoolServicesPage({
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState(office ? "requests" : "messages");
   useEffect(() => {
-    if (requestedTab === "requests") setTab("requests");
+    if (requestedTab && ["messages","consents","meetings","requests","exams","schedule"].includes(requestedTab)) setTab(office ? "requests" : requestedTab);
   }, [requestedTab, requestId]);
   useEffect(() => {
     if (!data || tab !== "requests" || !requestId) return;
@@ -191,6 +192,16 @@ export default function SchoolServicesPage({
     },
     [office],
   );
+  useEffect(() => {
+    if (data && itemId) document.getElementById("service-item-" + itemId)?.scrollIntoView({block:"center"});
+  }, [data, tab, itemId]);
+  useEffect(() => {
+    let active=true;
+    if (!data || !linkedThread || tab!=="messages") return;
+    rpc("services_notification_thread", {_group:linkedThread,_class:cls,_student:classId?null:student})
+      .then(id=>{if(active)setThread(id);}).catch(e=>{if(active)setError(e.message);});
+    return ()=>{active=false;};
+  }, [data, linkedThread, tab, cls, student, classId]);
   const load = useCallback(async () => {
     const run = ++revision.current;
     setData(null);
@@ -649,7 +660,7 @@ export default function SchoolServicesPage({
                 />
               )}{" "}
               {data.consents.map((c: any) => (
-                <article key={c.id} className="border p-3 rounded space-y-2">
+                <article key={c.id} id={"service-item-" + c.id} className="border p-3 rounded space-y-2">
                   <h2 className="font-bold">{c.title}</h2>
                   <p className="whitespace-pre-wrap">{c.description}</p>
                   <p>
@@ -772,7 +783,7 @@ export default function SchoolServicesPage({
                 />
               )}{" "}
               {data.meetings.map((s: any) => (
-                <article key={s.id} className="border p-3 rounded space-y-2">
+                <article key={s.id} id={"service-item-" + s.id} className="border p-3 rounded space-y-2">
                   <strong>
                     {date(s.starts_at)} — {date(s.ends_at)}
                   </strong>
@@ -991,7 +1002,7 @@ export default function SchoolServicesPage({
                 />
               )}{" "}
               {data.substitutions.map((s: any) => (
-                <article key={s.id} className="border p-3 rounded">
+                <article key={s.id} id={"service-item-" + s.id} className="border p-3 rounded">
                   <strong>
                     {s.date} · {s.hour}. sat · {s.subject}
                   </strong>
@@ -1165,7 +1176,7 @@ export default function SchoolServicesPage({
                 />
               )}{" "}
               {data.exams.map((s: any) => (
-                <article key={s.id} className="border p-3 rounded space-y-2">
+                <article key={s.id} id={"service-item-" + s.id} className="border p-3 rounded space-y-2">
                   <strong>
                     {s.subject} · {examNames[s.exam_type] || s.exam_type}
                   </strong>

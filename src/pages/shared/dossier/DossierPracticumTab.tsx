@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import {dossierFetch as fetch} from './dossierFetch';
+import React, { useState, useEffect, useRef } from 'react';
 import { Placement, PracticumLog, PracticumEvaluation } from './DossierTypes';
 import { ClipboardList, Award, Plus, Trash2, CheckCircle2, ChevronDown, Check, User } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -40,11 +41,13 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
   const [finalGrade, setFinalGrade] = useState('5');
   const [evalNotes, setEvalNotes] = useState('');
 
+  const currentScope=useRef('');currentScope.current=studentId+'|'+selectedPlacementId;
   // Fetch placements
   const fetchPlacements = async () => {
     try {
       const res = await fetch(`/api/practicum-placements?studentId=${studentId}`);
       if (res.ok) {
+        if(currentScope.current!==studentId+'|'+selectedPlacementId)return;
         const data = await res.json();
         setPlacements(data);
         if (data.length > 0 && !selectedPlacementId) {
@@ -52,7 +55,7 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
         }
       }
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Evidenciju nije moguće učitati.');
     }
   };
 
@@ -68,6 +71,7 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
       return;
     }
 
+    let active=true;setLogs([]);setEvaluation(null);
     const fetchLogsAndEvals = async () => {
       setLoading(true);
       try {
@@ -78,20 +82,21 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
 
         if (logsRes.ok) {
           const lData = await logsRes.json();
-          setLogs(lData);
+          if(active)setLogs(lData);
         }
         if (evalsRes.ok) {
           const eData = await evalsRes.json();
-          setEvaluation(eData.length > 0 ? eData[0] : null);
+          if(active)setEvaluation(eData.length > 0 ? eData[0] : null);
         }
       } catch (e) {
-        console.error(e);
+        toast.error(e instanceof Error ? e.message : 'Evidenciju nije moguće učitati.');
       } finally {
-        setLoading(false);
+        if(active)setLoading(false);
       }
     };
 
     fetchLogsAndEvals();
+    return()=>{active=false;};
   }, [selectedPlacementId, studentId]);
 
   // Submit placement
@@ -126,6 +131,7 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
       });
 
       if (res.ok) {
+        if(currentScope.current!==studentId+'|'+selectedPlacementId)return;
         toast.success('Ugovor o stručnoj praksi uspješno kreiran.');
         setShowPlacementForm(false);
         setCompanyName('');
@@ -138,7 +144,7 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
         toast.error('Pogreška pri spremanju ugovora.');
       }
     } catch (err) {
-      console.error(err);
+      toast.error(err instanceof Error ? err.message : 'Promjena nije spremljena.');
       toast.error('Veza sa serverom nije uspjela.');
     }
   };
@@ -166,6 +172,7 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
       });
 
       if (res.ok) {
+        if(currentScope.current!==studentId+'|'+selectedPlacementId)return;
         toast.success('Dnevni izvještaj spremljen.');
         setShowLogForm(false);
         setActivityDescription('');
@@ -174,7 +181,7 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
         if (logsRes.ok) setLogs(await logsRes.json());
       }
     } catch (err) {
-      console.error(err);
+      toast.error(err instanceof Error ? err.message : 'Promjena nije spremljena.');
     }
   };
 
@@ -184,12 +191,13 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
     try {
       const res = await fetch(`/api/practicum-placements/${id}`, { method: 'DELETE' });
       if (res.ok) {
+        if(currentScope.current!==studentId+'|'+selectedPlacementId)return;
         toast.success('Ugovor raskinut.');
         setSelectedPlacementId('');
         fetchPlacements();
       }
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Evidenciju nije moguće učitati.');
     }
   };
 
@@ -205,12 +213,13 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
       });
 
       if (res.ok) {
-        toast.success(newSig === 'Potpisano' ? 'Izvješće potpisano.' : 'Potpis uklonjen.');
+        if(currentScope.current!==studentId+'|'+selectedPlacementId)return;
+        toast.success(newSig === 'Potpisano' ? 'Evidencija potvrđena.' : 'Potvrda evidencije uklonjena.');
         const updatedLogs = logs.map(l => l.id === log.id ? { ...l, mentor_signature: newSig as any } : l);
         setLogs(updatedLogs);
       }
     } catch (e) {
-      console.error(e);
+      toast.error(e instanceof Error ? e.message : 'Evidenciju nije moguće učitati.');
     }
   };
 
@@ -236,13 +245,14 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
       });
 
       if (res.ok) {
+        if(currentScope.current!==studentId+'|'+selectedPlacementId)return;
         toast.success('Ocjena o stručnoj praksi uspješno upisana u svjedodžbu.');
         setShowEvalForm(false);
         const data = await res.json();
         setEvaluation(data);
       }
     } catch (err) {
-      console.error(err);
+      toast.error(err instanceof Error ? err.message : 'Promjena nije spremljena.');
       toast.error('Pogreška pri ocjenjivanju.');
     }
   };
@@ -416,6 +426,7 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
                 </form>
               )}
 
+              <p className="text-xs text-slate-600">Oznaka potvrde bilježi radnju škole i ne predstavlja elektronički potpis vanjskog mentora.</p>
               {loading ? (
                 <div className="text-center py-4 text-xs font-bold uppercase tracking-widest text-gray-400">Učitavanje dnevnika...</div>
               ) : logs.length > 0 ? (
@@ -437,7 +448,7 @@ export function DossierPracticumTab({ studentId, isStaff, schoolYear, classId, s
                             : "bg-red-50 text-red-600 border-red-200"
                         } ${isStaff ? "cursor-pointer hover:opacity-85" : "cursor-not-allowed"}`}
                       >
-                        <Check size={8} /> {log.mentor_signature === 'Potpisano' ? 'POTPISANO' : 'ČEKA POTPIS'}
+                        <Check size={8} /> {log.mentor_signature === 'Potpisano' ? 'POTVRĐENO U ŠKOLI' : 'ČEKA POTVRDU'}
                       </button>
                     </div>
                   ))}

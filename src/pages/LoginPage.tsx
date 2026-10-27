@@ -89,7 +89,7 @@ export default function LoginPage() {
     // Clear force logout flag to allow this manual sign-in attempt
     localStorage.removeItem('forceLoggedOut');
     
-    // Virtual MFA simulation for staff
+    // Staff authentication uses the server-side PIN and authenticator verification.
     if (loginType === 'STAFF' && password.length !== 4) {
       setError('PIN mora imati točno 4 znamenke.');
       return;
@@ -418,28 +418,9 @@ export default function LoginPage() {
           
           <div className="flex justify-center flex-col items-center gap-4">
             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest text-center max-w-[200px]">
-              Samo ovlašteni korisnici s važećim certifikatom imaju pristup.
+              Pristup je omogućen ovlaštenim korisnicima ustanove.
             </p>
-            <button 
-              type="button"
-              onClick={async () => {
-                if (!confirm('Ovo će resetirati ili inicijalizirati demo podatke. Nastaviti?')) return;
-                setLoading(true);
-                try {
-                  const res = await fetch('/api/seed', { method: 'POST' });
-                  const data = await res.json();
-                  if (res.ok) toast.success('Baza podataka uspješno inicijalizirana!');
-                  else throw new Error(data.error);
-                } catch (err: any) {
-                  toast.error('Greška pri inicijalizaciji: ' + err.message);
-                } finally {
-                  setLoading(false);
-                }
-              }}
-              className="text-[8px] font-bold text-gray-300 hover:text-gray-500 uppercase tracking-tighter transition-colors"
-            >
-              Inicijaliziraj demo podatke
-            </button>
+
           </div>
         </div>
       </div>
