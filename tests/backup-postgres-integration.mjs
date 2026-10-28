@@ -19,7 +19,9 @@ const dir=await mkdtemp(join(tmpdir(),'school-real-restore-'));let container;
 try{
  container=docker(['run','--detach','--rm','--network','none','--env','POSTGRES_HOST_AUTH_METHOD=trust','postgres:17']).toString().trim();
  const deadline=Date.now()+30000;
- while(true){try{docker(['exec',container,'pg_isready','-U','postgres']);break;}catch(error){if(Date.now()>deadline)throw error;await new Promise(resolve=>setTimeout(resolve,200));}}
+ // The image's temporary initialization server only listens on a Unix
+ // socket; wait for TCP so the real server cannot restart during pg_dump.
+ while(true){try{docker(['exec',container,'pg_isready','-h','127.0.0.1','-U','postgres']);break;}catch(error){if(Date.now()>deadline)throw error;await new Promise(resolve=>setTimeout(resolve,200));}}
  const sql=(query,database='postgres')=>docker(['exec','-i',container,'psql','-X','-U','postgres','--dbname',database,'--no-align','--tuples-only','--set','ON_ERROR_STOP=1'],query).toString().trim();
  sql("CREATE TABLE public.pupils(id int PRIMARY KEY,name text); INSERT INTO public.pupils VALUES(1,'Ogledna učenica Čić'); CREATE SCHEMA storage; CREATE TABLE storage.buckets(id text PRIMARY KEY); CREATE TABLE storage.objects(id text PRIMARY KEY,bucket_id text,name text); INSERT INTO storage.buckets VALUES('absence-notes'); INSERT INTO storage.objects VALUES('source-object','absence-notes','note.pdf');");
  const dump=docker(['exec',container,'pg_dump','-U','postgres','--format=custom','--no-owner','--dbname=postgres']);
