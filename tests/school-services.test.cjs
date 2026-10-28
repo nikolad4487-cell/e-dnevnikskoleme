@@ -151,4 +151,16 @@ await login(admin);const absentSession=(await db.query("SELECT services_exam('ca
  await db.exec('ALTER TABLE final_thesis ENABLE TRIGGER school_thesis_integrity');
  await login(student);assert.equal((await db.query('SELECT id FROM final_thesis WHERE id=$1',[uid(92)])).rows.length,1);await assert.rejects(db.query("UPDATE final_thesis SET thesis_title='Pogrešno pretpostavljen razred' WHERE id=$1",[uid(92)]));
  await login(outsider);assert.equal((await db.query('SELECT id FROM final_thesis WHERE id=$1',[uid(92)])).rows.length,0);
+ // A legacy aggregate must not bypass the real 48-hour family policy or
+ // reveal another school's pupil, even if the view itself has SELECT grants.
+ await db.exec('RESET ROLE');
+ await db.query("INSERT INTO final_grades(student_id,class_id,subject_id,teacher_id,value,school_year_id,created_at) VALUES($1,'ca','math',$2,'5',$3,now())",[student,teacher,year]);
+ await db.exec("CREATE POLICY legacy_final_read ON final_grades FOR SELECT TO authenticated USING(true);CREATE VIEW enrollment_grade_summary AS SELECT student_id,class_id,school_year_id,count(*) AS total_subjects,avg(value::numeric) AS average_grade FROM final_grades GROUP BY student_id,class_id,school_year_id;GRANT SELECT ON enrollment_grade_summary TO anon,authenticated");
+ await login(parent);assert.equal((await db.query('SELECT * FROM enrollment_grade_summary')).rows.length,1,'legacy owner view leaks a fresh final grade');
+ await db.exec('RESET ROLE');await db.exec(read('../migrations/20261028170521_enforce_view_rls.sql'));
+ await login(parent);assert.equal((await db.query('SELECT * FROM enrollment_grade_summary')).rows.length,0,'parent waits 48 hours through the view too');
+ await login(student);assert.equal((await db.query('SELECT * FROM enrollment_grade_summary')).rows.length,1,'pupil can read own grade immediately');
+ await login(outsider);assert.equal((await db.query('SELECT * FROM enrollment_grade_summary')).rows.length,0,'other school remains excluded');
+ await login(teacher);assert.equal((await db.query('SELECT * FROM enrollment_grade_summary')).rows.length,1,'authorized teacher retains access');
+ await db.exec("RESET ROLE;UPDATE final_grades SET created_at=now()-interval '49 hours'");await login(parent);assert.equal((await db.query('SELECT * FROM enrollment_grade_summary')).rows.length,1);
  }finally{await db.close();}});
