@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { Role } from '../../types';
 import { sortStudentsBySurname } from '../../lib/utils';
+import EmaticaClassImport from '../../components/EmaticaClassImport';
 
 interface StudentProfile {
   id: string; // user profile id
@@ -489,6 +490,8 @@ export default function StudentsPage() {
             </button>
           </div>
         </div>
+
+        {schoolId && <EmaticaClassImport key={schoolId} client={supabase} classes={classes} onSaved={fetchData} />}
 
         {/* Filters panel */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
