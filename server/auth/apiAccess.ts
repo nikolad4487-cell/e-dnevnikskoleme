@@ -1,8 +1,9 @@
 import {canManageSchool,canManageProfileIdentity,STAFF_ROLES} from './userProvisioning.js';
+import {isWebmailStudentLoginRequest} from './webmailStudent.js';
 import type {Request,Response,NextFunction} from 'express';
 export function apiAccessGuard(authenticate:(req:any)=>Promise<any>, database?:any){
  return async(req:Request,res:Response,next:NextFunction)=>{
-  if(!req.path.startsWith('/api/')||req.path==='/api/auth/login'||req.path==='/api/health/env')return next();
+  if(!req.path.startsWith('/api/')||req.path==='/api/auth/login'||req.path==='/api/health/env'||isWebmailStudentLoginRequest(req))return next();
   try{
    const auth=await authenticate(req);
    if(auth.error)return res.status(auth.status||401).json({error:'Za ovu radnju potrebna je valjana prijava.'});

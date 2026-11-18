@@ -3,6 +3,8 @@ import {provisioningCors} from './server/auth/provisioningCors.js';
 import {creationCredentials, userManagementScope, canManageSchool, STAFF_ROLES} from './server/auth/userProvisioning.js';
 import {staffSession} from './server/auth/staffSession.js';
 import {apiAccessGuard} from './server/auth/apiAccess.js';
+import {webmailStudentLogin,WEBMAIL_STUDENT_LOGIN_PATH,isWebmailStudentLoginRequest} from './server/auth/webmailStudent.js';
+import {resolveLoginEmail} from './server/auth/loginEmail.js';
 import { schoolCalendarRoutes, legacyCalendarGuard } from './server/calendar/routes.js';
 import express from "express";
 import path from "path";
@@ -219,6 +221,7 @@ async function startServer() {
     const INACTIVITY_LIMIT_MS = 45 * 60 * 1000;
 
     app.use(async (req, res, next) => {
+      if(isWebmailStudentLoginRequest(req))return next();
       // 1. Only intercept /api/* routes, excluding non-session/pre-session setup endpoints
       if (!req.url.startsWith("/api/")) {
         return next();
@@ -342,6 +345,7 @@ async function startServer() {
 
     app.use(provisioningCors);
     app.use(apiAccessGuard(resolveAuthenticatedUser, supabaseAdmin));
+    app.post(WEBMAIL_STUDENT_LOGIN_PATH,webmailStudentLogin({database:supabaseAdmin,signIn:signInWithPasswordDirect,getToken:()=>process.env.WEBMAILHR_STUDENT_LOGIN_TOKEN}));
     app.use(durableLegacyMiddleware(req=>userStorageClient(supabaseUrl,supabaseAnonKey,req)));
 
     app.post('/api/auth/complete-authenticator', async (req,res) => {
@@ -5738,22 +5742,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       }
 
       // 0. Smart username/domain resolution before lookup
-      let DemoresolvedEmail = email.trim().toLowerCase();
-      const localPart = DemoresolvedEmail.split('@')[0];
-      
-      // Let's attempt to look up the profile in user_profiles by local part first
-      // to resolve their actual stored email (e.g. if we get "boris.sreckovic@eskole.me" 
-      // or "boris.sreckovic", we find "boris.sreckovic@skolehr.xyz")
-      const { data: dbResolvedProfile } = await supabaseAdmin
-        .from('user_profiles')
-        .select('email')
-        .ilike('email', `${localPart}@%`)
-        .maybeSingle();
-        
-      if (dbResolvedProfile && dbResolvedProfile.email) {
-        console.log(`[LOGIN_API] Smart-resolved email: ${DemoresolvedEmail} -> ${dbResolvedProfile.email}`);
-        DemoresolvedEmail = dbResolvedProfile.email;
-      }
+      const DemoresolvedEmail = await resolveLoginEmail(supabaseAdmin,email);
 
       // The PIN and Auth password are separate. Mint a private, single-use
       // Auth token only after checking this staff account's PIN on the server.
