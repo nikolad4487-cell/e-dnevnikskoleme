@@ -50,6 +50,7 @@ test('Valid student uses the existing password verifier and returns only the Sup
  assert.deepEqual(state.calls,[['lookup','pupil@%'],['signIn','pupil@skolehr.xyz',state.password]]);
  assert.notEqual(r.body.user_id,'different-profile-id');assert.equal(state.guardCalls,0);
  assert.equal((await call({body:{username:'pupil',password:'incorrect'}})).status,401);
+ state.accessRole='user';assert.equal((await call()).status,200,'legacy neutral access_role is not a staff role');
 }));
 
 test('Staff, parent, mixed identities and revoked student memberships cannot use pupil login',()=>fixture(async({state,call})=>{

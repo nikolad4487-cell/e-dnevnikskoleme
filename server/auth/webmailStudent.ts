@@ -47,7 +47,9 @@ export function webmailStudentLogin({database,signIn,getToken}:Dependencies):Req
    const {data:roles,error:roleError}=await database.from('user_school_roles').select('role,status').eq('user_id',profile.id);
    if(roleError)return res.status(503).json(unavailable);
    const active=(roles||[]).filter((r:any)=>r.status==='ACTIVE').map((r:any)=>roleName(r.role));
-   const primary=[roleName(profile.role),roleName(profile.access_role)].filter(Boolean);
+   // Legacy profiles use access_role='user' as a neutral account marker,
+   // alongside role='STUDENT'. It does not itself grant a school role.
+   const primary=[roleName(profile.role),roleName(profile.access_role)].filter(role=>role&&role!=='USER');
    // Staff/parent/mixed accounts must not use the pupil password adapter to
    // bypass their own sign-in requirements. Revoked student roles do not count.
    const student=active.includes('STUDENT')||primary.includes('STUDENT')&&!(roles||[]).some((r:any)=>roleName(r.role)==='STUDENT');
