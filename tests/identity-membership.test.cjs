@@ -1,0 +1,17 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),{PGlite}=require('@electric-sql/pglite'),fs=require('node:fs'),path=require('node:path');
+test('Enrollment renewal is derived from its school year, covers repeaters and is idempotent; issuance preserves expiry and secrets never enter audit',async()=>{
+ const db=new PGlite(),p='10000000-0000-4000-8000-000000000001',y='20000000-0000-4000-8000-000000000001',next='20000000-0000-4000-8000-000000000002',issue='30000000-0000-4000-8000-000000000001';
+ try{
+ await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;CREATE TABLE user_profiles(id uuid PRIMARY KEY,auth_user_id uuid);CREATE TABLE schools(id text PRIMARY KEY);CREATE TABLE school_years(id uuid PRIMARY KEY,school_id text,name text,label text);CREATE TABLE classes(id text PRIMARY KEY,school_id text,school_year_id uuid,grade_level int);CREATE TABLE student_class_enrollments(id int PRIMARY KEY,student_id uuid,class_id text,school_year_id uuid,status text);CREATE TABLE user_school_roles(user_id uuid,school_id text,role text,status text);CREATE TABLE registry_change_log(school_id text,entity text,entity_id text,action text,actor_id uuid,after_data jsonb);CREATE FUNCTION registry_admin(s text) RETURNS boolean LANGUAGE sql AS $$SELECT current_setting('test.school',true)=s$$;`);
+ const sql=fs.readFileSync(path.join(__dirname,'../migrations/20261120190240_electronic_identity_memberships.sql'),'utf8');await db.exec(sql);await db.exec(sql);
+ await db.query('INSERT INTO user_profiles VALUES($1,$1)',[p]);await db.exec("INSERT INTO schools VALUES('a'),('b')");await db.query("INSERT INTO school_years VALUES($1,'a','2026/2027',NULL),($2,'a','2027/2028',NULL)",[y,next]);await db.query("INSERT INTO classes VALUES('old','a',$1,2),('repeater','a',$2,2)",[y,next]);await db.query("INSERT INTO user_school_roles VALUES($1,'a','STUDENT','ACTIVE')",[p]);
+ await db.query("INSERT INTO student_class_enrollments VALUES(1,$1,'old',$2,'ACTIVE')",[p,y]);
+ const until=async()=>(await db.query('SELECT valid_until::text FROM electronic_identity_memberships')).rows[0].valid_until;
+ assert.equal(await until(),'2027-10-31');await db.query("INSERT INTO student_class_enrollments VALUES(2,$1,'repeater',$2,'ACTIVE')",[p,next]);assert.equal(await until(),'2028-10-31');
+ await db.exec("UPDATE student_class_enrollments SET status='ACTIVE' WHERE id=2");assert.equal(await until(),'2028-10-31');await db.exec("UPDATE student_class_enrollments SET status='ACTIVE' WHERE id=1");assert.equal(await until(),'2028-10-31');
+ await db.query("SELECT identity_reserve_issue($1,'a','STUDENT',$2,'2028-10-31',$3)",[p,next,issue]);await assert.rejects(db.query("SELECT identity_reserve_issue($1,'a','STUDENT',$2,'2028-10-31',$3)",[p,next,issue]));
+ await db.query("SELECT identity_finish_issue($1,'a','STUDENT',$2,$1,true)",[p,issue]);assert.equal(await until(),'2028-10-31');assert.equal((await db.query("SELECT after_data FROM registry_change_log")).rows[0].after_data.relationship,'STUDENT');
+ await db.exec("GRANT USAGE ON SCHEMA public TO authenticated;SET ROLE authenticated;SELECT set_config('test.school','b',false)");assert.equal((await db.query('SELECT * FROM electronic_identity_memberships')).rows.length,0);await assert.rejects(db.query("SELECT identity_reserve_issue($1,'a','STUDENT',$2,'2028-10-31',$3)",[p,next,issue]));
+ await db.exec("SELECT set_config('test.school','a',false)");assert.equal((await db.query('SELECT * FROM electronic_identity_memberships')).rows.length,1);
+ }finally{await db.close();}
+});
