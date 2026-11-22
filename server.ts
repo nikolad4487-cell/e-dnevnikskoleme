@@ -5,6 +5,8 @@ import {staffSession} from './server/auth/staffSession.js';
 import {apiAccessGuard} from './server/auth/apiAccess.js';
 import {webmailStudentLogin,WEBMAIL_STUDENT_LOGIN_PATH,isWebmailStudentLoginRequest} from './server/auth/webmailStudent.js';
 import {resolveLoginEmail} from './server/auth/loginEmail.js';
+import {electronicIdentityRoutes} from './server/auth/electronicIdentityRoutes.js';
+import {identityPassword,identityContext,issueElectronicIdentity,identityBridge,canonicalIdentity,expiryForYear} from './server/auth/electronicIdentity.js';
 import { schoolCalendarRoutes, legacyCalendarGuard } from './server/calendar/routes.js';
 import express from "express";
 import path from "path";
@@ -345,6 +347,7 @@ async function startServer() {
 
     app.use(provisioningCors);
     app.use(apiAccessGuard(resolveAuthenticatedUser, supabaseAdmin));
+    electronicIdentityRoutes(app,resolveAuthenticatedUser,supabaseAdmin);
     app.post(WEBMAIL_STUDENT_LOGIN_PATH,webmailStudentLogin({database:supabaseAdmin,signIn:signInWithPasswordDirect,getToken:()=>process.env.WEBMAILHR_STUDENT_LOGIN_TOKEN}));
     app.use(durableLegacyMiddleware(req=>userStorageClient(supabaseUrl,supabaseAnonKey,req)));
 
@@ -5110,11 +5113,27 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           console.log("[ADMIN_CREATE] Generirana jedinstvena e-mail adresa:", email);
       }
 
+      const identityMode=req.body.electronicIdentity===true;
+      if(identityMode){
+        res.setHeader('Cache-Control','no-store');
+        if(roles.length!==1||!['STUDENT','TEACHER'].includes(roles[0])||req.body.authOnly)return res.status(400).json({success:false,error:'Identitet se izdaje uz zaseban učenički ili nastavnički račun.'});
+        try{
+          identityBridge().configured();
+          const installed=await supabaseAdmin.from('electronic_identity_memberships').select('profile_id').limit(0);
+          if(installed.error)throw new Error('Prvo aktivirajte SQL nadogradnju elektroničkog identiteta. Račun nije stvoren.');
+          const school=await supabaseAdmin.from('schools').select('*').eq('id',schoolId).single();
+          const yearId=studentData?.schoolYearId||req.body.schoolYearId;
+          const year=await supabaseAdmin.from('school_years').select('*').eq('id',yearId).eq('school_id',schoolId).single();
+          if(school.error||year.error)throw new Error('Odaberite dodijeljenu školsku godinu matične škole.');
+          if(isStudent){const cls=await supabaseAdmin.from('classes').select('school_year_id').eq('id',classId).eq('school_id',schoolId).single();if(cls.error||cls.data.school_year_id!==year.data.id)throw new Error('Razred ne pripada odabranoj školskoj godini.');}
+          canonicalIdentity({email,name:[name,surname].filter(Boolean).join(' '),oib:oib||studentData?.oib,dob:studentData?.dob||req.body.dob,gender:studentData?.gender||req.body.gender},school.data,null,roles[0],expiryForYear(year.data));
+        }catch(error:any){return res.status(409).json({success:false,error:error.message});}
+      }
       let credentials;
-      try {credentials=creationCredentials(req.body.password,roles,()=>isStudent?'yupu8Ev4':crypto.randomBytes(18).toString('base64url'));}
+      try {credentials=identityMode?{password:identityPassword()}:creationCredentials(req.body.password,roles,()=>isStudent?'yupu8Ev4':crypto.randomBytes(18).toString('base64url'));}
       catch(error:any){return res.status(400).json({success:false,error:error.message});}
       const finalPassword = credentials.password;
-      const requiresPasswordChange = true;
+      const requiresPasswordChange = !identityMode;
       const authenticatorSecret = isStaff ? authenticator.generateSecret() : null;
       const requiresAuthenticatorSetup = isStaff;
       const passwordType = isStaff ? 'staff_with_authenticator' : isStudent&&!req.body.password ? 'student_static' : 'standard';
@@ -5177,6 +5196,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           address: address || studentData?.address,
           oib: oib || studentData?.oib,
           dob,
+          gender: studentData?.gender || req.body.gender,
           pob,
           mobile,
           role: isStudent ? 'STUDENT' : (globalRole || roles[0] || 'PARENT'),
@@ -5184,7 +5204,7 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
           pin_hash: initialPinHash,
           class_id: classId || studentData?.classId,
           school_id: schoolId || studentData?.schoolId,
-          school_year_id: studentData?.schoolYearId,
+          school_year_id: studentData?.schoolYearId || req.body.schoolYearId,
           is_first_login: true,
           requires_password_change: requiresPasswordChange,
           password_type: passwordType,
@@ -5254,6 +5274,12 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
       }
 
       console.log("[ADMIN_CREATE - KORAK 4: prije slanja response-a] Sve operacije uspješne. Slanje JSON odgovora.");
+      if(identityMode){
+        try{
+          const ctx=await identityContext(supabaseAdmin,profile.id,schoolId,studentData?.schoolYearId||req.body.schoolYearId);
+          return res.json({...await issueElectronicIdentity(supabaseAdmin,ctx,(req as any).workflowActor.userId,identityBridge(),finalPassword),profileId:profile.id,userId});
+        }catch(error:any){return res.status(409).json({success:false,createdProfileId:profile.id,error:'Račun je stvoren, ali identitet nije izdan. '+(error.status?error.message:'Provjerite povezivanje s WebmailHR-om. Ne stvarajte račun ponovno; dovršite povezivanje i izdajte novu lozinku postojećem računu.')});}
+      }
       return res.json({ 
         success: true, 
         userId, 
@@ -6095,63 +6121,15 @@ function generateUniqueEmail(firstName: string, lastName: string, existingEmails
     }
   });
 
-  // Reset student password endpoint
-  app.post("/api/admin/reset-student-password", async (req, res) => {
-    try {
-      if (!supabaseAdmin) throw new Error("Supabase Admin client not initialized.");
-      const { profileId, type } = req.body; // type: 'DEFAULT' or 'GENERATE'
-
-      const { data: profile } = await supabaseAdmin
-        .from('user_profiles')
-        .select('*')
-        .eq('id', profileId)
-        .maybeSingle();
-
-      if (!profile) throw new Error("Profil nije pronađen.");
-
-      if(profile.role!=='STUDENT')return res.status(400).json({error:'Ovaj postupak služi samo za učeničke račune.'});
-      let newPassword = 'yupu8Ev4';
-      if (type === 'GENERATE') {
-        const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        const numbers = "0123456789";
-        const symbols = "!?-" ;
-        const all = letters + numbers;
-        
-        let pass = "";
-        // 6 characters from letters/numbers
-        for (let i = 0 ; i < 6; i++) {
-          pass += all.charAt(Math.floor(Math.random() * all.length));
-        }
-        // 1 number (to be sure)
-        pass += numbers.charAt(Math.floor(Math.random() * numbers.length));
-        // 1 symbol
-        pass += symbols.charAt(Math.floor(Math.random() * symbols.length));
-        
-        // Shuffle
-        newPassword = pass.split('').sort(() => Math.random() - 0.5).join('');
-      }
-
-      // Update Auth Password
-      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(profile.auth_user_id, {
-        password: newPassword
-      });
-
-      if (authError) throw authError;
-
-      // Update profile flags just in case they were set
-      await supabaseAdmin.from('user_profiles').update({
-        requires_password_change: false,
-        password_type: 'student_static'
-      }).eq('id', profileId);
-
-      res.json({
-        success: true,
-        newPassword
-      });
-    } catch (err: any) {
-      console.error("[RESET_STUDENT_PASS] Error:", err);
-      res.status(500).json({ error: err.message });
-    }
+  // Preserve the old entry point, using the same verified issuance workflow.
+  app.post("/api/admin/reset-student-password", userManagementScope(resolveAuthenticatedUser,supabaseAdmin), async (req,res)=>{
+    res.setHeader('Cache-Control','no-store');
+    try{
+      const ctx=await identityContext(supabaseAdmin,req.body.profileId,req.body.schoolId);
+      if(ctx.relationship!=='STUDENT')return res.status(400).json({success:false,error:'Ovaj postupak služi samo učenicima.'});
+      const issued=await issueElectronicIdentity(supabaseAdmin,ctx,(req as any).workflowActor.userId);
+      return res.json({...issued,newPassword:issued.password});
+    }catch(error:any){return res.status(error.status||503).json({success:false,error:error.status?error.message:'Izdavanje lozinke nije dovršeno.',credentialMayHaveChanged:!!error.changed});}
   });
 
   async function authorizeClassAdmin(token: string, schoolId: string) {
