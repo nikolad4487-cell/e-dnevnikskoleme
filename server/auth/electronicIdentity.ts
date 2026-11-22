@@ -20,13 +20,14 @@ export function canonicalIdentity(profile:any,school:any,personal:any,relationsh
  const email=String(profile.email||'').toLowerCase();
  if(!/^[a-z0-9][a-z0-9._-]*@skolehr\.xyz$/.test(email))throw new IdentityError('Račun mora imati stvarno dodijeljenu korisničku oznaku @skolehr.xyz.');
  let addressMeta:any={};try{addressMeta=typeof school.address==='string'&&school.address.startsWith('{')?JSON.parse(school.address):typeof school.address==='object'?school.address:{};}catch{}
- const street=printableSchoolAddress(school.address),postal=String(school.postal_code||school.zip||addressMeta.postal_code||addressMeta.postalCode||'').replace(/^HR-/,''),city=String(school.city||addressMeta.city||'').replace(/^HR-/,''),gender=role(personal?.gender||profile.gender);
+ let street='';try{street=printableSchoolAddress(school.address);}catch{}
+ const postal=String(school.postal_code||school.zip||addressMeta.postal_code||addressMeta.postalCode||'').replace(/^HR-/,''),city=String(school.city||addressMeta.city||'').replace(/^HR-/,''),gender=role(personal?.gender||profile.gender);
  const g=['M','MALE','MUŠKI','MUSKI'].includes(gender)?'M':['Ž','Z','F','FEMALE','ŽENSKI','ZENSKI'].includes(gender)?'Ž':'';
  const dob=personal?.date_of_birth||personal?.dob||profile.dob;
  const name=personal?.first_name&&personal?.last_name?`${personal.first_name} ${personal.last_name}`:profile.name;
  const oib=personal?.oib||profile.oib;
- if(!name||!/^\d{11}$/.test(oib||'')||!dob||!g||!school.name||!street||!/^\d{5}$/.test(postal)||!city)throw new IdentityError('Prije izdavanja dopunite ime, OIB, datum rođenja i spol korisnika te naziv, adresu, mjesto i poštanski broj škole.');
- return {name,oib,username:email.split('@')[0],email,birthDate:hrDate(dob),gender:g,relationship,validUntil:hrDate(validUntil),school:{name:school.name,id:school.id,address:street.includes(postal)?street:`${street}, ${postal} ${city}`,locality:'HR-'+city,postalCode:'HR-'+postal}};
+ if(!name||!/^\d{11}$/.test(oib||'')||!dob||!g||!school.name||!/^\d{5}$/.test(postal)||!city)throw new IdentityError('Prije izdavanja dopunite ime, OIB, datum rođenja i spol korisnika te naziv, mjesto i poštanski broj škole.');
+ return {name,oib,username:email.split('@')[0],email,birthDate:hrDate(dob),gender:g,relationship,validUntil:hrDate(validUntil),school:{name:school.name,id:school.id,address:!street?'':street.includes(postal)?street:`${street}, ${postal} ${city}`,locality:'HR-'+city,postalCode:'HR-'+postal}};
 }
 export async function identityContext(database:any,profileId:string,schoolId:string,schoolYearId?:string){
  const get=async(table:string,key:string,value:any)=>{const r=await database.from(table).select('*').eq(key,value).maybeSingle();if(r.error)throw new IdentityError('Dohvat podataka identiteta nije uspio.',503);return r.data;};

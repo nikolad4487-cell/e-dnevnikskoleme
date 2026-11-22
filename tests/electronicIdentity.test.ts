@@ -6,6 +6,7 @@ test('Generated credentials have exactly 8 characters and all required classes; 
  const passwords=new Set();for(let i=0;i<2000;i++){const p=identityPassword();assert.match(p,/^[a-zA-Z0-9]{8}$/);assert.match(p,/[A-Z]/);assert.match(p,/[a-z]/);assert.match(p,/[0-9]/);passwords.add(p);}assert.equal(passwords.size,2000);
  assert.equal(expiryForYear({label:'2026./2027.'}),'2027-10-31');assert.equal(expiryForYear({name:'2027/2028'}),'2028-10-31');assert.throws(()=>expiryForYear({name:'2026/2028'}));
  const x=canonicalIdentity(profile,school,null,'STUDENT','2027-10-31');assert.equal(x.username,'luka.kovac2');assert.equal(x.birthDate,'06.03.2010.');assert.equal(x.school.locality,'HR-Zagreb');assert.equal(x.school.postalCode,'HR-10000');assert.equal(x.validUntil,'31.10.2027.');
+ for(const address of [null,'',JSON.stringify({phone:'private'})])assert.equal(canonicalIdentity(profile,{...school,address},null,'STUDENT','2027-10-31').school.address,'');
  assert.throws(()=>canonicalIdentity({...profile,gender:null},school,null,'STUDENT','2027-10-31'));
 });
 test('Pupil password is verified on both systems; teacher issuance never changes Auth password, PIN or TOTP',async()=>{
